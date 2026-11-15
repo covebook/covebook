@@ -161,6 +161,13 @@ void main() {
             }
         }
         expect(r, isNotNull, reason: '모르는 연산 $op');
+        // Flutter에서만 고친 것(2026-11-15 QA): 끼울 자리로 한쪽만 비켜서 안 되면 그 차례에 끼우고 양옆을 민다.
+        // 지금 앱이 '공간 부족'이던 끼우기가 Flutter에서는 될 수 있다: 그때는 결과가 공간 검사를 지나는지만 본다
+        final insertOp = op == 'moveX' || op == 'dropTarget' || (op == 'swapTarget' && (extra as SwapTarget).kind == 'place');
+        if (insertOp && s['ok'] == false && s['reason'] == 'no-space' && r!.ok) {
+          expect(checkSpace(r.layout!, books), isNull, reason: '밀어 끼운 배치');
+          return;
+        }
         expect(r!.ok, s['ok'], reason: '성공 여부(지금 앱 까닭 ${s['reason']}, Flutter ${r.reason})');
         if (!r.ok) {
           expect(r.reason, s['reason'], reason: '실패 까닭');

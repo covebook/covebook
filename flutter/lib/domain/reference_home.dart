@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'layout.dart';
 import 'types.dart';
 
 /// 설치 표시 키(지금 앱 HOME_REFERENCE_KEY와 같다: 지금 앱에서 넘어온 서재는 다시 설치하지 않는다)
@@ -67,4 +68,21 @@ ReferenceHome referenceHomeOf(Map<String, Object?> j) {
     books[b.id] = b;
   }
   return ReferenceHome(jsonEncode(j['layout']), books, j['profile']);
+}
+
+/// 내 책이 생기면 예시 책을 전부 치운 배치(2026-11-15 사용자 결정: 첫 책을 넣는 순간 전부, 섞여 있으면 헷갈린다).
+/// 예시 자리·서랍을 빼고, 책이 남은 선반을 위로 모은 뒤 빈 선반은 기본 칸 수(3)까지만 남긴다. 치울 예시가 없으면 null
+ShelfLayout? withoutSamples(ShelfLayout layout, bool Function(String id) isSample) {
+  if (!layout.placements.any((p) => isSample(p.bookId)) && !layout.drawer.any(isSample)) return null;
+  final placements = [for (final p in layout.placements) if (!isSample(p.bookId)) p];
+  final used = {for (final p in placements) p.shelfId};
+  final shelves = sortedShelves(layout);
+  final full = [for (final s in shelves) if (used.contains(s.id)) s];
+  final empty = [for (final s in shelves) if (!used.contains(s.id)) s];
+  final keep = [...full, ...empty.take((homeShelfCount - full.length).clamp(0, empty.length))];
+  return normalize(ShelfLayout(
+    [for (final (i, s) in keep.indexed) Shelf(s.id, i)],
+    placements,
+    [for (final id in layout.drawer) if (!isSample(id)) id],
+  ));
 }

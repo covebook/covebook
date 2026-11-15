@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chaekjang/domain/book_look.dart';
+import 'package:chaekjang/domain/layout.dart';
+import 'package:chaekjang/domain/types.dart';
 import 'package:chaekjang/domain/layout_json.dart';
 import 'package:chaekjang/domain/reference_home.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,5 +27,27 @@ void main() {
     expect(lookOf(night).picture, isTrue);
     expect(lookOf(h.books['home-reference-b02']!).ribbons, 2);
     expect(lookOf(h.books['home-reference-b02']!).material, 'linen');
+  });
+
+  test('내 책이 생기면 예시 책을 전부 치운다(2026-11-15 사용자 결정)', () {
+    final h = referenceHomeOf(jsonDecode(File('assets/reference_home.json').readAsStringSync()) as Map<String, Object?>);
+    final sample = layoutFromJson(h.layoutJson)!;
+    bool isSample(String id) => h.books.containsKey(id);
+    // 첫 책: 예시 자리만 있으면 빈 선반 세 칸이 남는다
+    final fresh = withoutSamples(sample, isSample)!;
+    expect(fresh.placements, isEmpty);
+    expect(fresh.shelves.length, 3);
+    // 예시 세 칸 아래 내 책이 꽂힌 넷째·다섯째 칸(예전 설치): 내 책 선반을 위로 모으고 빈 선반은 세 칸까지
+    final mine = ShelfLayout(
+      [...sample.shelves, const Shelf('mine-4', 3), const Shelf('mine-5', 4)],
+      [...sample.placements, const BookPlacement(bookId: 'me1', shelfId: 'mine-4', order: 0, pos: 0), const BookPlacement(bookId: 'me2', shelfId: 'mine-5', order: 0, pos: 0)],
+      const [],
+    );
+    final cleaned = withoutSamples(mine, isSample)!;
+    expect([for (final s in sortedShelves(cleaned)) s.id].take(2), ['mine-4', 'mine-5']);
+    expect(cleaned.shelves.length, 3);
+    expect([for (final p in cleaned.placements) p.bookId], ['me1', 'me2']);
+    // 치울 예시가 없으면 그대로
+    expect(withoutSamples(cleaned, isSample), isNull);
   });
 }

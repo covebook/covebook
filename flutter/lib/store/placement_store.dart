@@ -95,20 +95,20 @@ class PlacementStore {
   static String _spot(BookPlacement p) =>
       jsonEncode([p.shelfId, p.pose.index, p.tilt, _r2(p.pos), _r2(p.depth), _r2(p.spin), _r2(p.pitch), p.stackId, p.stackOrder, _r2(p.leanAngle), p.leanOn]);
 
-  bool _undisturbed(ShelfLayout next) {
-    final after = {for (final p in resolveLeans(ensureShelves(next), books).placements) p.bookId: p};
+  bool _undisturbed(ShelfLayout next, String shelfId) {
+    final after = {for (final p in resolveLeans(ensureShelves(next), books, shelfId).placements) p.bookId: p};
     return layout!.placements.every((p) {
       final q = after[p.bookId];
       return q != null && _spot(q) == _spot(p);
     });
   }
 
-  /// 책장에 놓기(서랍에 있든 처음이든). 놓았으면 true, 자리가 없으면 false
+  /// 책장에 놓기(서랍에 있든 처음이든). 선반마다 끝, 그다음 줄 안의 빈 틈(fitCandidates). 놓았으면 true, 자리가 없으면 false
   Future<bool> placeOnShelf(String bookId) async {
     final l = layout;
     if (l == null || placementOf(l, bookId) != null) return l != null;
-    for (final next in firstFitCandidates(l, books, bookId)) {
-      if (_undisturbed(next)) return commit(next);
+    for (final next in fitCandidates(l, books, bookId)) {
+      if (_undisturbed(next, placementOf(next, bookId)!.shelfId)) return commit(next);
     }
     return false;
   }

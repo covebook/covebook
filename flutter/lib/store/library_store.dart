@@ -3,7 +3,7 @@
 library;
 
 import '../db/library_write.dart' show LibKind, libTable, localDataChanged, nextRevisionIn, putPendingIn, writeLibraryItem;
-import '../domain/reference_home.dart' show referenceBooks;
+import '../domain/reference_home.dart' show referenceBooks, withoutSamples;
 import '../domain/library.dart' as dl show Library;
 import '../db/local_db.dart';
 import '../domain/layout_json.dart';
@@ -103,7 +103,15 @@ Future<Library> loadLibrary() async {
   final books = [for (final r in rows) _bookOf(r)];
 
   final shown = {for (final b in books) b.id};
-  final all = await loadLayout();
+  var all = await loadLayout();
+  // 내 책이 하나라도 생기면(숨긴 책 포함) 예시 책은 전부 치운다(2026-11-15 사용자 결정). 배치를 저장해 동기화도 된다
+  if (referenceBooks.isNotEmpty && (shown.isNotEmpty || (await db.rawQuery('SELECT 1 FROM my_books LIMIT 1')).isNotEmpty)) {
+    final cleaned = withoutSamples(all, (id) => referenceBooks.containsKey(id) && !shown.contains(id));
+    if (cleaned != null) {
+      await saveLayout(all, cleaned);
+      all = cleaned;
+    }
+  }
   // 새 서재 예시 책(표시 전용, domain/reference_home): 서재에 없고 자리만 있는 것을 책장에 그린다(전체 책·통계·동기화 책 목록에는 없다)
   for (final id in [...all.placements.map((p) => p.bookId), ...all.drawer]) {
     final sample = shown.contains(id) ? null : referenceBooks[id];

@@ -22,6 +22,8 @@ import 'year_pager.dart';
 import '../../domain/bookcase.dart' show Bookcase;
 import '../../store/bookcase_store.dart';
 import '../../app/app_shell.dart' show tabBarHidden;
+import '../../app/app_nav.dart' show AppNav;
+import '../../app/startup.dart' show shelfReady;
 import '../../domain/geometry.dart' show maxFrontSpin, maxSpin;
 import '../../domain/layout.dart' show ShelfLayout, placementOf, shelfItems, sortedShelves;
 import '../../domain/book3_physics.dart' show fromPlaced;
@@ -41,6 +43,8 @@ import '../../domain/shelf_row.dart';
 import '../../services/cover_cache.dart';
 import '../../store/files.dart' show imageDir;
 import '../../store/library_store.dart';
+import '../../store/library_model.dart';
+import '../../domain/library.dart' as dl show Library;
 import '../../store/first_shelf.dart';
 import '../../ui/artwork_images.dart' show loadArtworkImages;
 import '../../ui/bake.dart';
@@ -61,6 +65,7 @@ import '../../ui/ribbons.dart';
 import '../../ui/row_bake.dart';
 import '../../ui/scene.dart';
 import '../../ui/theme.dart';
+import '../../ui/a11y_text.dart';
 import '../book/add_book_screen.dart' show openAddBook;
 
 /// 앱이 깨어난 때(main이 채운다). 켜고 책장이 다 될 때까지를 잰다
@@ -120,15 +125,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   /// 정보 시트를 연 책(시트가 열린 동안 윤곽 빛)
   String? _popId;
 
-  /// 그 책이 있는 줄이 화면 가운데쯤 오게 넘기고 2.5초 윤곽을 빛낸다
+  /// 보여 달라는 책(막 넣은 책은 책장을 새로 굽는 동안 아직 줄에 없다: 굽기가 끝난 뒤 다시 찾는다)
+  String? _pendingFocus;
+
   void _focusBook() {
-    final id = focusBookOnShelf.value, g = _geom, c = _case;
-    if (id == null || g == null || c == null) return;
+    final id = focusBookOnShelf.value;
+    if (id == null) return;
     focusBookOnShelf.value = null;
+    _pendingFocus = id;
+    _tryFocus();
+  }
+
+  /// 그 책이 있는 줄이 화면 가운데쯤 오게 넘기고 2.5초 윤곽을 빛낸다(2026-11-15 QA: 책을 넣고 '책장에서 보기'를 눌러도 맨 위에 머물렀다)
+  void _tryFocus() {
+    final id = _pendingFocus, g = _geom, c = _case;
+    if (id == null || g == null || c == null) return;
     // 지난 책장을 보고 있었으면 지금 책장으로
     _pagerKey.currentState?.goTo(0);
     final i = [for (var k = 0; k < c.rows.length; k++) if (c.rows[k].books.any((b) => b.id == id)) k].firstOrNull;
-    if (i == null || i >= g.geo.length) return;
+    if (i == null || i >= g.geo.length) {
+      // 굽는 중이거나 다시 구울 차례면 끝난 뒤 다시 찾는다(_run 끝). 아니면 책장에 없는 책이다
+      if (!_busy && !_again && !_rebuild) _pendingFocus = null;
+      return;
+    }
+    _pendingFocus = null;
     if (_scroll.hasClients) {
       final r = g.geo[i];
       final p = _scroll.position;
@@ -170,8 +190,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   ui.Path? _outlineOf(String? id) => id == null ? null : _outlines(id).firstOrNull?.path;
 
-  Future<void> _onTap(Offset p) async {
-    final id = _hitBook(p);
+  Future<void> _onTap(Offset p) => _tapBook(_hitBook(p));
+
+  /// 책 누르기(화면 읽기의 책 칸도 같다): 꾸미는 중이면 고르기, 아니면 책 정보 시트
+  Future<void> _tapBook(String? id) async {
     if (_decorating) {
       setState(() {
         _drag = null;
@@ -185,6 +207,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() => _popId = id);
     await showBookSheet(context, id);
     if (mounted) setState(() => _popId = null);
+  }
+
+  /// 책장 책마다 화면 읽기 칸(책장은 그림이라 책이 화면 구조에 잡히지 않았다, 2026-11-15 QA): 윤곽 상자 자리에 제목·저자.
+  /// 책장 그림·자리가 그대로면 지난번 것을 쓴다
+  ({Object key, List<({String id, Rect rect, String label})> list})? _semCache;
+  List<({String id, Rect rect, String label})> _bookSemantics() {
+    final g = _geom, c = _case;
+    if (g == null || c == null) return const [];
+    final key = (c, _libBooks, g.contentTop, g.m.scale, g.m.originX, g.geo.length, g.lockedFrom);
+    final hit = _semCache;
+    if (hit != null && hit.key == key) return hit.list;
+    final byId = {for (final b in _libBooks) b.id: b};
+    final list = [
+      for (final o in _outlines())
+        if (byId[o.id] case final b?) (id: o.id, rect: o.path.getBounds(), label: a11yLabel([b.title, ?b.author].join(', '))),
+    ];
+    _semCache = (key: key, list: list);
+    return list;
   }
 
   Future<void> _enterDecorate([String? id]) async {
@@ -399,12 +439,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _endDrag() async {
     _stopAutoScroll();
-    if (_drag == null) return;
+    final d = _drag;
+    if (d == null) return;
     final r = _dropAt(_dragNow);
     setState(() => _drag = null);
     _dragTarget = null;
-    // 성공은 알리지 않는다(바뀐 책장이 보이고, 바로 위에 되돌리기). 놓았으면 새로 굽기가 끝날 때까지 미리 보기를 그대로 둔다(옛 자리로 튀지 않게)
-    if (!await _apply(r)) _clearPreview();
+    // 성공은 알리지 않는다(바뀐 책장이 보이고, 바로 위에 되돌리기)
+    if (!await _apply(r)) {
+      _clearPreview();
+      return;
+    }
+    // 놓은 책은 바로 보이게: 확정 배치로 미리 보기를 바꿔 그린다(끄는 동안의 미리 보기는 든 책을 뺀 줄이라, 새로 굽기가 끝날 때까지 빈칸이었다.
+    // 2026-11-15 QA 6.6초). 빛은 지난 그림에서 면 이름으로 옮겨 쓰고, 새로 구운 그림이 오면 바뀐다(_run 끝에서 미리 보기를 걷는다)
+    final l = PlacementStore.instance.layout;
+    final to = l == null ? null : placementOf(l, d.id)?.shelfId;
+    if (mounted && l != null && to != null) _showPreview(l, {d.shelfId, to}, key: 'dropped:${DateTime.now().microsecondsSinceEpoch}', bake: false);
   }
 
   // ---------- 미리 보기(끄는 동안 바뀐 선반만 그 배치로 그린다, 지금 앱 previewShelf) ----------
@@ -416,7 +465,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   /// 그릴 줄 목록(미리 보는 줄을 끼운 것). 미리 보기가 바뀔 때만 새로 만든다(손가락이 움직일 때마다 책장을 다시 그리지 않게)
   ({List<RowCase> rows, List<ui.Image> atlases, List<List<Spot>> spots, List<({PlaneKey wall, PlaneKey floor})> keys, List<Map<String, BookKey>> bookKeys})? _shown;
 
-  void _showPreview(ShelfLayout l, Set<String> shelfIds, {String? hide, required String key}) {
+  /// bake: 잠시 뒤 그 배치로 구워 빛(빠진 책 그늘 등)을 바로잡는다. 책을 끄는 동안은 손가락이 0.7초 머물 때만 굽는다: 굽기는 GPU를 몇 초씩 써서
+  /// 자리를 지날 때마다 구우면 끄는 손이 끊겼다(2026-11-15 QA: 미리 보기 굽기 0.1~5초, 8초 동안 화면 22장). 그사이 빛은 지난 그림에서 면 이름으로 옮겨 쓴다
+  void _showPreview(ShelfLayout l, Set<String> shelfIds, {String? hide, required String key, bool bake = true}) {
     final c = _case, s = PlacementStore.instance, committed = s.layout;
     if (c == null || committed == null || key == _previewKey) return;
     final shelves = sortedShelves(committed);
@@ -436,7 +487,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _previewKey = key;
     _setPreviewRows(next);
     _previewBake?.cancel();
-    _previewBake = Timer(const Duration(milliseconds: 150), () => _bakePreview(key));
+    if (bake) _previewBake = Timer(Duration(milliseconds: _drag != null ? 700 : 150), () => _bakePreview(key));
   }
 
   Future<void> _bakePreview(String key) async {
@@ -586,11 +637,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _clearPreview();
   }
 
-  /// 표지 책 뒤로 젖힌 각도 글자(조작부)
+  /// 표지 책 뒤로 젖힌 각도 글자(조작부). 끄는 동안만 '젖혔어요', 가만히 있을 때는 지금 상태와 바꾸는 법
+  /// (2026-11-15 QA: 표지로 세우자마자 끌지도 않았는데 '머리를 끌어 뒤로 12° 젖혔어요'가 나왔다. 표지 책은 처음에 벽에 기대 젖혀 선다)
   String? get _anglesText {
     final s = PlacementStore.instance, l = s.layout, id = _editId;
     final pitch = _head != null ? _headCur?.pitch : (l == null || id == null ? null : frontStateOf(l, s.books, id)?.state.pitch);
-    return pitch != null && pitch >= 0.5 ? '머리를 끌어 뒤로 ${jsRound(pitch).toInt()}° 젖혔어요' : null;
+    if (pitch == null) return null;
+    final deg = jsRound(pitch).toInt();
+    if (_head != null) return '뒤로 $deg° 젖혔어요';
+    return pitch >= 0.5 ? '뒤로 $deg° 젖혀 있어요. 책 머리를 위아래로 끌면 바꿀 수 있어요.' : '책 머리를 위아래로 끌면 뒤로 젖힐 수 있어요.';
   }
 
   Future<void> _undo() async {
@@ -598,6 +653,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() => _editMsg = null);
     _computePanel();
+  }
+
+  /// 지난 책장이 없는데 옆으로 밀었다: 언제 생기는지 알린다(10초에 한 번만)
+  DateTime? _pastHintAt;
+  void _noPastShelf(DragEndDetails d) {
+    if (d.primaryVelocity == null || d.primaryVelocity!.abs() < 400) return;
+    final now = DateTime.now();
+    if (_pastHintAt != null && now.difference(_pastHintAt!).inSeconds < 10) return;
+    _pastHintAt = now;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+      content: Text('해가 바뀌면 올해 책장이 지난 책장으로 남아요. 그때부터 옆으로 넘겨 볼 수 있어요.'),
+      duration: Duration(seconds: 3),
+    ));
   }
 
   /// 책장 그림(입력이 같으면 다시 쓰고, 바뀌면 다시 그린다)
@@ -746,6 +814,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (_shown != null || _tweening || !_frozen || !ShelfPainter.ready || h > 8192 || w > 8192) return CustomPaint(painter: painter);
     final key = (
       _runs.length,
+      painter.look,
       painter.rows,
       painter.atlases,
       painter.rowSpots,
@@ -815,10 +884,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     shelfRefresh.addListener(_refresh);
     spineLook.addListener(_spineLookChanged);
     focusBookOnShelf.addListener(_focusBook);
+    LibraryModel.instance.addListener(_libraryChanged);
     BookcaseStore.instance.addListener(_bookcasesChanged);
     if (!BookcaseStore.instance.loaded) BookcaseStore.instance.load();
     _loadSnap();
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
+  }
+
+  /// 서재(갈피·장정·책 정보)가 바뀌면 책장 모습도 바뀔 수 있다: 책장에 보이는 값만 모은 열쇠가 바뀌었을 때만 다시 만든다
+  /// (2026-11-15 QA: 갈피를 남겨도 책을 하나 더 넣기 전까지 갈피 탭이 안 보였다). 바뀌지 않은 줄의 구운 그림은 그대로 쓴다
+  String? _lookSig;
+  void _libraryChanged() {
+    final model = LibraryModel.instance;
+    if (!model.loaded) return;
+    final sig = shelfLookSignature(model.lib);
+    final changed = _lookSig != null && sig != _lookSig;
+    _lookSig = sig;
+    // DB에 다 쓴 뒤 읽는다(서재 모델은 먼저 바뀌고 쓰기는 뒤따른다)
+    if (changed) model.flushPending().then((_) => _refresh());
   }
 
   // 표지 색·두께·갈피 색이 새로 맞춰졌다: 줄을 서재에서 다시 만들어 굽는다(굽는 중이면 끝난 뒤)
@@ -905,6 +988,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final run = Run(rows, loadMs, DateTime.now().difference(bootAt).inMilliseconds);
     // ignore: avoid_print
     print('[fltotal] rows ${rows.length} bake ${run.bakeTotal}ms (grid ${run.gridTotal}) load ${run.loadMs}ms sinceBoot ${run.sinceBoot}ms');
+    // 첫 책장을 다 그렸다: 앱 틀의 시작 그림 덮개를 걷는다(app/startup.dart)
+    shelfReady.value = true;
 
     if (!mounted) {
       for (final i in images) {
@@ -947,27 +1032,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _again = false;
       _refresh();
     }
+    // 보여 달라던 책이 이번 굽기로 줄에 들어왔으면 그리로(줄 자리는 다음 화면을 그릴 때 정해진다)
+    if (_pendingFocus != null) WidgetsBinding.instance.addPostFrameCallback((_) => _tryFocus());
   }
 
-  // 잠긴 선반 시트(지금 앱 LockedShelfSheet): 결제는 아직 붙이지 않아 무료로 연다
-  void _openLocked() => showSheet<void>(
-    context,
-    title: '선반 한 칸 더 열기',
-    description: '책을 더 진열할 수 있는 선반이 한 칸 늘어나요. 한 번 열면 계속 쓸 수 있어요.',
-    builder: (ctx) => Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Btn(
-        label: '무료로 열기',
-        size: 'l',
-        onPress: () async {
-          Navigator.pop(ctx);
-          final ok = await PlacementStore.instance.addShelf();
-          if (!mounted) return;
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(ok ? '선반을 열었어요.' : '지금은 바꿀 수 없어요.'), duration: const Duration(seconds: 2)));
-        },
+  // 잠긴 선반 시트(지금 앱 LockedShelfSheet): 세 칸까지는 바로 열고, 그 위는 유료 예정이라 준비 중으로 알린다(2026-11-15 사용자 결정).
+  // '무료로'는 쓰지 않는다(QA: 곧 돈 받겠다는 뜻으로 읽혔다). 남은 칸 수를 알린다
+  void _openLocked() {
+    final shelves = PlacementStore.instance.layout?.shelves.length ?? _rowSpots.length - _lockedCount;
+    final free = openableShelfCount(shelves);
+    if (free == 0) {
+      showSheet<void>(
+        context,
+        title: '선반 더 열기',
+        description: '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 전체 책에 그대로 보관돼요.',
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx)),
+        ),
+      );
+      return;
+    }
+    showSheet<void>(
+      context,
+      title: '선반 한 칸 더 열기',
+      description: '책을 더 진열할 수 있는 선반이 한 칸 늘어나요. 앞으로 $free칸 더 열 수 있어요.',
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Btn(
+          label: '선반 열기',
+          size: 'l',
+          onPress: () async {
+            Navigator.pop(ctx);
+            final ok = await PlacementStore.instance.addShelf();
+            if (!mounted) return;
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(ok ? '선반을 열었어요.' : '지금은 바꿀 수 없어요.'), duration: const Duration(seconds: 2)));
+          },
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   /// 책등 모양(스토어)이 바뀌었다: 표지 사진을 그 모양으로 다시 준비한다(실물 측면이면 책등 사진도 받는다). 오는 대로 바꿔 그린다
   void _spineLookChanged() {
@@ -1007,6 +1111,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     shelfRefresh.removeListener(_refresh);
     spineLook.removeListener(_spineLookChanged);
     focusBookOnShelf.removeListener(_focusBook);
+    LibraryModel.instance.removeListener(_libraryChanged);
     BookcaseStore.instance.removeListener(_bookcasesChanged);
     for (final i in _atlases) {
       i.dispose();
@@ -1091,6 +1196,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       bottomInset: bottomInset,
                                       viewport: box.maxHeight,
                                       frostedFrom: lockedFrom,
+                                      look: '${skinChoice.key}|${spineLook.value.name}',
                                     ),
                                     Size(box.maxWidth, height),
                                     MediaQuery.devicePixelRatioOf(context),
@@ -1143,6 +1249,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   },
                                 ),
                               ),
+                              // 화면 읽기용 책 칸(누르기는 아래 누르기 층이 받는다: 이 칸은 손가락을 가로채지 않는다)
+                              if (_drag == null && _head == null)
+                                for (final b in _bookSemantics())
+                                  Positioned.fromRect(
+                                    key: ValueKey('sem:${b.id}'),
+                                    rect: b.rect,
+                                    child: Semantics(button: true, label: b.label, onTap: () => _tapBook(b.id), child: const SizedBox.expand()),
+                                  ),
                               // 표지 책 머리 손잡이: 보이는 점은 작게, 잡는 칸은 넓게. 끄는 동안 손가락을 따라 실제로 된 각도만큼 옮겨 가고, 제자리와 가는 선으로 잇는다
                               if (_handlePoint() case final hp?) ...[
                                 if (_headOff.distance >= 2)
@@ -1208,7 +1322,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   },
                 ),
               );
-    return ColoredBox(
+    // 꾸미는 중 기기 뒤로 = 꾸미기 끝내기(끄던 책은 제자리로). 앱 껍데기는 꾸미는 동안(탭 바가 숨은 동안) 뒤로를 홈에 맡긴다(2026-11-15 QA 민혁 F2)
+    return PopScope(
+      canPop: !_decorating,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !_decorating) return;
+        if (_drag != null) {
+          _stopAutoScroll();
+          setState(() => _drag = null);
+          _dragTarget = null;
+        }
+        _exitDecorate();
+      },
+      child: ColoredBox(
       color: AppColors.bg,
       child: Stack(
         children: [
@@ -1228,7 +1354,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Positioned.fill(
               // 지난 연도 책장이 있으면 옆으로 넘기고 두 손가락으로 모아 본다(지금 앱 YearPager)
               child: _bookcases.isEmpty
-                  ? shelfPage(1)
+                  // 지난 책장이 아직 없을 때 옆으로 밀면 짧게 알린다(2026-11-15 QA: 밀어도 아무 반응이 없었다). 꾸미는 중에는 책 끌기와 겹치지 않게 듣지 않는다
+                  ? GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragEnd: _decorating ? null : _noPastShelf,
+                      child: shelfPage(1),
+                    )
                   : YearPager(
                       key: _pagerKey,
                       bookcases: _bookcases,
@@ -1306,6 +1437,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
         ],
+      ),
       ),
     );
   }
@@ -1448,6 +1580,28 @@ class _RowDone {
 
 /// 책장에서 이 책을 보여 달라(책 정보 '책장 위치로 이동', 지금 앱 uiBus.focusBook): 홈이 그 줄로 넘기고 잠깐 윤곽을 빛낸다
 final focusBookOnShelf = ValueNotifier<String?>(null);
+
+/// 책장에서 이 책 보기: 홈(첫 화면)까지 닫고 그 책 줄로 넘긴다(책 정보 '책장 위치로 이동'·책 추가 결과 '책장에서 보기'가 같이 쓴다)
+void showBookOnShelf(BuildContext context, String id) {
+  focusBookOnShelf.value = id;
+  Navigator.of(context).popUntil((r) => r.isFirst);
+  // 다른 탭(읽기·갈피 등)에서 책을 넣었어도 책장 탭으로
+  AppNav.instance.goTab(0);
+}
+
+/// 책장에 보이는 서재 값만 모은 열쇠(장정·판본은 고친 때, 갈피 수·갈피 색·숨김). 이것이 바뀌면 홈이 줄을 다시 만든다
+String shelfLookSignature(dl.Library lib) {
+  final marks = <String, int>{};
+  for (final m in lib.bookmarks.values) {
+    marks[m.myBookId] = (marks[m.myBookId] ?? 0) + 1;
+  }
+  final b = StringBuffer();
+  for (final x in lib.books.values) {
+    final d = x.bindingId == null ? null : lib.bindings[x.bindingId];
+    b.write('${x.id}|${x.hiddenAt}|${x.ribbonColor}|${x.bindingId}|${lib.editions[x.editionId]?.updatedAt}|${d?.updatedAt}|${marks[x.id] ?? 0};');
+  }
+  return b.toString();
+}
 
 /// 시작 사진 파일(굳힌 책장 그림, 다음에 켤 때 먼저 보인다)
 Future<File> homeSnapshotFile() async => File('${(await imageDir()).parent.path}/home_snapshot.png');
@@ -1618,7 +1772,12 @@ class ShelfPainter extends CustomPainter {
     this.bottomInset = 0,
     this.viewport,
     this.frostedFrom = 1 << 30,
+    this.look = '',
   });
+
+  /// 스킨·책 측면(그릴 때 셰이더 값으로 읽는다): 바뀌면 굽기를 기다리지 않고 지난 그림 위에 새 색으로 바로 다시 그린다
+  /// (2026-11-15 QA: 선반·벽지 적용하기 뒤 2~4초 옛 모습이었다. 새로 구운 빛은 끝나는 대로 바뀐다)
+  final String look;
 
   /// 줄 자리를 정하는 화면 높이(스크롤해도 줄 자리는 화면 기준, 지금 앱 computeRows)
   final double? viewport;
@@ -1710,5 +1869,6 @@ class ShelfPainter extends CustomPainter {
       old.contentTop != contentTop ||
       old.bottomInset != bottomInset ||
       old.viewport != viewport ||
-      old.frostedFrom != frostedFrom;
+      old.frostedFrom != frostedFrom ||
+      old.look != look;
 }

@@ -708,8 +708,11 @@ EditResult moveBook(ShelfLayout layout, BookMap books, String bookId, DropTarget
     if (target.x == null) return _finish(layout, _insertItem(base, proto, target.shelfId, target.index!, books), books);
     final x = _clampX(base, books, target.shelfId, _insertItem(base, proto, target.shelfId, 0), bookId, target.x!);
     final r = pushOneSide(base, books, target.shelfId, (i) => _insertItem(base, proto, target.shelfId, i), bookId, x, _itemXs(base, books, target.shelfId));
-    if (r == null) return const EditResult.fail('no-space');
-    return _finish(layout, r.layout, books);
+    if (r != null) return _finish(layout, r.layout, books);
+    // 한쪽으로만 비켜서는 안 될 때(꽉 찬 줄): 그 차례에 끼우고 양옆 책을 밀어 맞춘다. 줄 안에서 먼 자리로 옮기면 사이 책들이 밀린다
+    // (Flutter 2026-11-15 QA: 미리보기와 달리 놓으면 '공간이 부족해요'였다. 지금 앱도 같다)
+    final packed = _finish(layout, _insertItem(base, proto, target.shelfId, target.index!, books, x), books);
+    return packed.ok ? packed : const EditResult.fail('no-space');
   }
   ShelfItem? item;
   for (final it in shelfItems(base, target.shelfId)) {
@@ -1150,17 +1153,29 @@ bool _samePos(ShelfLayout a, ShelfLayout b) {
   return true;
 }
 
-/// 책장에 놓기 후보: 선반 순서대로, 그 선반 맨 끝에 세워 꽂아 넘치지 않는 배치들
-List<ShelfLayout> firstFitCandidates(ShelfLayout layout, BookMap books, String bookId) {
+/// 책장에 놓기 후보(빈 틈까지): 선반 순서대로, 그 선반 맨 끝 다음에 줄 안의 틈(왼쪽부터 각 항목 바로 뒤)에 세워 꽂아 넘치지 않는 배치들.
+/// 기댄 책·표지 책 때문에 줄 가운데 생긴 틈에도 들어간다(2026-11-15 QA: 틈이 보이는데 '빈 자리가 없어요'). 다른 책이 밀리는지는 부르는 쪽이 본다
+/// 다른 책 가로 자리가 그대로인 것만 낸다(밀리는 자리는 건너뛴다. 기대기까지 그대로인지는 부르는 쪽이 본다). 앞에서부터 하나씩 만든다(첫 후보에서 멈출 수 있게)
+Iterable<ShelfLayout> fitCandidates(ShelfLayout layout, BookMap books, String bookId) sync* {
   final base = ShelfLayout(layout.shelves, layout.placements, [for (final id in layout.drawer) if (id != bookId) id]);
   final xs = bookXs(base, books);
-  final out = <ShelfLayout>[];
+  final book = books[bookId];
+  final need = book == null ? 0.0 : bookThickness(book);
+  final b = _bounds();
   for (final shelf in sortedShelves(base)) {
-    final raw = _insertItem(base, BookPlacement(bookId: bookId, shelfId: '', order: 0), shelf.id, shelfItems(base, shelf.id).length);
-    final next = settle(raw, books, xs, shelf.id);
-    if (checkSpace(next, books, shelf.id) == null) out.add(next);
+    final items = shelfItems(base, shelf.id);
+    // 남은 폭 합이 책 두께보다 좁은 선반은 자리를 하나하나 재 보지 않는다(꽉 찬 책장에 여러 권을 넣을 때 느려지지 않게)
+    final used = itemPositions(items, base, books).fold(0.0, (a, q) => a + q.width);
+    if (b.hi - b.lo - used < need - 0.01) continue;
+    final ids = [for (final it in items) ...it.bookIds];
+    for (final at in [items.length, for (var i = 0; i < items.length; i++) i]) {
+      final next = settle(_insertItem(base, BookPlacement(bookId: bookId, shelfId: '', order: 0), shelf.id, at), books, xs, shelf.id);
+      if (checkSpace(next, books, shelf.id) != null) continue;
+      final after = bookXs(next, books);
+      if (ids.any((id) => ((after[id] ?? double.infinity) - (xs[id] ?? double.negativeInfinity)).abs() > 0.05)) continue;
+      yield next;
+    }
   }
-  return out;
 }
 
 /// 같은 선반의 다른 자리와 서로 위치를 바꾼다

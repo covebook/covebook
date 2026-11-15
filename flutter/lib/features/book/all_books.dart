@@ -79,3 +79,20 @@ String deleteNote(({int rounds, int marks, int sessions}) n) {
   final gone = [if (n.marks > 0) '갈피 ${n.marks}개', if (n.rounds > 0) '읽은 기록 ${n.rounds}회'].join('와 ');
   return [if (gone.isNotEmpty) '$gone도 지워져요.', if (n.sessions > 0) '독서 시간은 통계에 남아요.', '되돌릴 수 없어요.'].join('\n');
 }
+
+/// 같은 판(판본)을 두 권 이상 넣은 책: 책 id → '소장본 N'(넣은 차례). 한 권뿐인 판은 없다(2026-11-15 QA: 별도 소장본 두 권이 목록에서 같아 보였다)
+Map<String, String> copyLabels(Library lib) {
+  final byEdition = <String, List<MyBook>>{};
+  for (final b in shownBooks(lib)) {
+    (byEdition[b.editionId] ??= []).add(b);
+  }
+  final out = <String, String>{};
+  for (final list in byEdition.values) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    for (final (i, b) in list.indexed) {
+      out[b.id] = '소장본 ${i + 1}';
+    }
+  }
+  return out;
+}

@@ -27,7 +27,7 @@ import '../bookmark/new_bookmark_screen.dart';
 import '../../domain/layout.dart' show placementOf;
 import '../../store/library_store.dart' show archivedYears;
 import '../../store/placement_store.dart';
-import '../home/home_screen.dart' show focusBookOnShelf;
+import '../home/home_screen.dart' show showBookOnShelf;
 import 'all_books.dart' show deleteNote, deleteSummary;
 import '../bookmark/board_screen.dart' show openBookmarkBoard;
 import 'binding_screen.dart' show openBindingEditor;
@@ -146,8 +146,7 @@ class _BookScreenState extends State<BookScreen> {
         if (onShelf)
           ListItem(label: '책장 위치로 이동', onPress: () {
             Navigator.pop(ctx);
-            focusBookOnShelf.value = id;
-            Navigator.of(context).popUntil((r) => r.isFirst);
+            showBookOnShelf(context, id);
           }),
         // 책장에서 빼기는 배치만 푼다(책 정보·장정·독서 기록·갈피 그대로). 삭제(빨간 글자)는 책 데이터 자체를 지운다
         if (onShelf)

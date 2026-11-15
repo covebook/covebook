@@ -13,6 +13,7 @@ import '../../domain/types.dart' show Book;
 import '../../ui/standalone_book.dart' show StandaloneBook;
 import '../book/add_book_screen.dart' show openAddBook;
 import '../../store/library_model.dart';
+import '../../store/placement_store.dart';
 import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
@@ -159,6 +160,21 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                       Navigator.pop(ctx);
                       openNewBookmark(context, book: bookId);
                     }),
+                    // 책장에서 빼기 바로가기(2026-11-15 QA: 책 정보 › 더 보기 안쪽에만 있어 세 단계였다). 책은 전체 책에 남고, 바로 되돌릴 수 있다
+                    if (canOpen) ...[
+                      Container(width: 1, height: 18, color: AppColors.line),
+                      _textAction('책장에서 빼기', () async {
+                        Navigator.pop(ctx);
+                        final place = PlacementStore.instance;
+                        await place.ensure();
+                        if (!await place.toDrawer(bookId) || !context.mounted) return;
+                        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+                          content: const Text('책장에서 뺐어요. 전체 책에 그대로 있어요.'),
+                          duration: const Duration(seconds: 4),
+                          action: SnackBarAction(label: '되돌리기', onPressed: () => place.undo()),
+                        ));
+                      }),
+                    ],
                   ]),
                 ),
               ]),

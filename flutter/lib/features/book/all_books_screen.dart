@@ -4,6 +4,7 @@
 // 아래에 '삭제'와 '진열'. 고른 책이 모두 연도 책장에 있으면 '삭제' 대신 '숨기기'(숨긴 책은 필터 › 숨긴 책 보기에서 되돌린다)
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -71,6 +72,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
 
   @override
   void dispose() {
+    _messageTimer?.cancel();
     LibraryModel.instance.removeListener(_changed);
     shelfRefresh.removeListener(_changed);
     super.dispose();
@@ -100,7 +102,21 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     final r = await placeWithChoice(context, ids);
     if (!mounted) return;
     _stopSelecting();
-    if (r.placed > 0) setState(() => _message = r.kept > 0 ? '${r.placed}권을 책장에 진열했어요. ${r.kept}권은 보관해 두었어요.' : '${r.placed}권을 책장에 진열했어요.');
+    // 못 놓은 책이 있으면 까닭까지(2026-11-15 QA: 꽉 찬 책장에서 진열을 누르면 아무 말 없이 끝났다)
+    final why = r.full ? '책장이 꽉 차서' : '자리가 없어';
+    _say(r.placed > 0
+        ? (r.kept > 0 ? '${r.placed}권을 책장에 진열했어요. ${r.kept}권은 $why 보관해 두었어요.' : '${r.placed}권을 책장에 진열했어요.')
+        : r.full
+            ? '책장이 꽉 차서 진열하지 못했어요. ${keptNote(full: true)}'
+            : '진열할 자리가 없어 보관해 두었어요.');
+  }
+
+  /// 머리 아래 안내 한 줄: 5초 뒤 지운다(다른 데를 만져도 지운다). 지난 안내가 남아 지금 일처럼 보이지 않게
+  Timer? _messageTimer;
+  void _say(String? m) {
+    _messageTimer?.cancel();
+    setState(() => _message = m);
+    if (m != null) _messageTimer = Timer(const Duration(seconds: 5), () => mounted ? setState(() => _message = null) : null);
   }
 
   Future<void> _deleteNow(List<String> ids) async {
@@ -113,7 +129,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     await PlacementStore.instance.forget(ids);
     if (!mounted) return;
     _stopSelecting();
-    setState(() => _message = hid > 0 && removed > 0 ? '$removed권을 삭제하고 $hid권을 숨겼어요.' : hid > 0 ? '$hid권을 숨겼어요.' : '$removed권을 삭제했어요.');
+    _say(hid > 0 && removed > 0 ? '$removed권을 삭제하고 $hid권을 숨겼어요.' : hid > 0 ? '$hid권을 숨겼어요.' : '$removed권을 삭제했어요.');
   }
 
   @override
@@ -136,8 +152,12 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     final kept = pickedBooks.where(_archived.contains).length;
     final hideOnly = kept > 0 && kept == pickedBooks.length;
     final filtered = _q.trim().isNotEmpty || _status != null || _offShelfOnly || _year != null;
+    // 머리 숫자: 필터로 거른 것이면 무엇을 거른 것인지 함께(2026-11-15 QA: '전체' 탭인데 '책 3권'이라 전체가 3권으로 읽혔다)
+    final countLabel = [if (_year != null) '$_year년 완독', if (_offShelfOnly) '책장에 없는 책'].join(' · ');
+    // 같은 판을 두 권 넣었으면(별도 소장본) 몇 번째 소장본인지(넣은 차례)
+    final copyOf = copyLabels(lib);
 
-    String subOf(AllBooksRow r) => [?statusLabel[lib.books[r.book.id]?.status], if (r.onShelf) '책장'].join(' · ');
+    String subOf(AllBooksRow r) => [?statusLabel[lib.books[r.book.id]?.status], ?copyOf[r.book.id], if (r.onShelf) '책장'].join(' · ');
 
     final header = Padding(
       padding: EdgeInsets.only(bottom: rows.isEmpty ? 0 : (_grid ? Space.m : Space.xs)),
@@ -148,7 +168,10 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
           child: Tabs<ReadStatus?>(
             items: [(id: null, label: '전체'), for (final s in _statuses) (id: s, label: statusLabel[s]!)],
             value: _status,
-            onChange: (v) => setState(() => _status = v),
+            onChange: (v) {
+              _say(null);
+              setState(() => _status = v);
+            },
           ),
         ),
         if (_selecting != null)
@@ -161,15 +184,15 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             padding: const EdgeInsets.only(top: Space.xs),
             // 지금 앱: 마지막 아이콘 marginRight −10(오른쪽 묶음이 10 더 오른쪽), 진열 글자 오른쪽 8(Flutter TextLink는 안쪽 여백 8이 이미 있다)
             child: Row(children: [
-              Expanded(child: Text('책 ${rows.length}권', style: AppType.sub, maxLines: 1)),
+              Expanded(child: Text(countLabel.isEmpty ? '책 ${rows.length}권' : '$countLabel ${rows.length}권', style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis)),
               Transform.translate(
                 offset: const Offset(10, 0),
                 child: Row(children: [
                   if (canPlace)
-                    TextLink(label: '책장에 진열', onPress: () => setState(() {
-                          _selecting = _Pick.place;
-                          _message = null;
-                        })),
+                    TextLink(label: '책장에 진열', onPress: () {
+                      _say(null);
+                      setState(() => _selecting = _Pick.place);
+                    }),
                   FilterIcon(active: _offShelfOnly || _sort != AllBooksSort.recent || _year != null, onPress: () => _openFilter(years, offCount, hiddenCount)),
                   IconBtn(
                     label: _grid ? '목록으로 보기' : '표지 격자로 보기',
@@ -226,6 +249,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     lib: lib,
                     book: r.book,
                     width: cellW,
+                    sub: [?r.book.author, ?copyOf[r.book.id], if (r.onShelf && _selecting == null) '책장'].join(' · '),
                     label: [r.book.title, ?r.book.author, subOf(r)].where((t) => t.isNotEmpty).join(', '),
                     state: _selecting == null
                         ? _CellState.normal
@@ -269,7 +293,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             row = _BookListRow(
               lib: lib,
               book: r.book,
-              sub: [?r.book.author, ?statusLabel[b?.status]].join(' · '),
+              sub: [?r.book.author, ?statusLabel[b?.status], ?copyOf[r.book.id], if (r.onShelf) '책장'].join(' · '),
               note: b?.note,
               memos: memos[r.book.id] ?? const [],
               onPress: () => openBook(context, r.book.id),
@@ -295,7 +319,13 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
         // 제목 대신 뒤로 옆에 검색창(권수는 안내 글자에)
         headerField: _selecting != null
             ? null
-            : SearchField(value: _q, onChange: (v) => setState(() => _q = v), placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '전체 책에서 찾기'),
+            : SearchField(value: _q, onChange: (v) {
+                _messageTimer?.cancel();
+                setState(() {
+                  _q = v;
+                  _message = null;
+                });
+              }, placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '전체 책에서 찾기'),
         right: _selecting != null ? null : IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const LucideIcon('Plus')),
         footer: switch (_selecting) {
           _Pick.manage => Row(children: [
@@ -451,7 +481,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                       await PlacementStore.instance.reload();
                       await PlacementStore.instance.addToDrawer(b.id);
                       if (!mounted) return;
-                      setState(() => _message = '‘$title’ 책을 다시 보이게 했어요. 책장에 없는 책에 있어요.');
+                      _say('‘$title’ 책을 다시 보이게 했어요. 책장에 없는 책에 있어요.');
                       if (last && ctx.mounted) Navigator.pop(ctx);
                     },
                   ),
@@ -469,10 +499,13 @@ enum _CellState { normal, free, picked, onShelf }
 /// 격자 한 칸: 표지 + 제목·저자 한 줄씩. 고르는 중: 고를 수 있는 책은 표지 오른쪽 위 모서리에 원, 고른 책은 테마색 테두리,
 /// 이미 책장에 있는 책은 흐린 표지 + '책장에 있음'
 class _GridCell extends StatelessWidget {
-  const _GridCell({required this.lib, required this.book, required this.width, required this.label, required this.state, this.onPress, this.onLongPress});
+  const _GridCell({required this.lib, required this.book, required this.width, required this.sub, required this.label, required this.state, this.onPress, this.onLongPress});
   final Library lib;
   final Book book;
   final double width;
+
+  /// 제목 아래 한 줄(저자 · 소장본 · 책장)
+  final String sub;
   final String label;
   final _CellState state;
   final VoidCallback? onPress;
@@ -526,10 +559,10 @@ class _GridCell extends StatelessWidget {
                 padding: const EdgeInsets.only(top: Space.s),
                 child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.row.copyWith(fontSize: 15, height: 21 / 15)),
               ),
-              if (book.author != null)
+              if (sub.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 1),
-                  child: Text(book.author!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13)),
+                  child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13)),
                 ),
             ]),
           ),
