@@ -41,7 +41,10 @@ jobs:
           bundler-cache: true
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
+      # Reference fixtures were generated in Asia/Seoul.
       - run: flutter test
+        env:
+          TZ: Asia/Seoul
       - name: Sign and upload to TestFlight
         run: bundle exec fastlane ios beta
       - name: Remove signing material
