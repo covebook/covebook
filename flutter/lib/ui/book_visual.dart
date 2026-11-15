@@ -14,25 +14,30 @@ const _bookPad = 4.0; // 캔버스 여백(DU): 갈피·가장자리가 잘리지
 const _estimated = (widthMm: 128.0, heightMm: 188.0); // 판형을 모를 때(지금 앱 ESTIMATED_SIZE)
 
 /// 폭 width로 그렸을 때 표지 자리(여백 edge 안쪽의 폭·높이)
-({double edge, double w, double h}) coverRect(num? widthMm, num? heightMm, double width) {
-  final known = widthMm != null && heightMm != null;
+/// uniform: 판형과 상관없이 같은 크기(추정 판형 128×188 비율)로 — 내 책 격자·목록처럼 나란히 놓을 때(표지는 그 틀에 맞춰 잘린다).
+/// 2026-11-16 사용자 '책들 크기가 동일하지 않아서 높낮이가 다 다른데'
+({double edge, double w, double h}) coverRect(num? widthMm, num? heightMm, double width, {bool uniform = false}) {
+  final known = !uniform && widthMm != null && heightMm != null;
   final fw = mm((known ? widthMm : _estimated.widthMm).toDouble()), fh = mm((known ? heightMm : _estimated.heightMm).toDouble());
   final scale = width / (fw + _bookPad * 2);
   return (edge: _bookPad * scale, w: fw * scale, h: fh * scale);
 }
 
 class BookVisual extends StatelessWidget {
-  const BookVisual({super.key, required this.lib, required this.id, required this.width});
+  const BookVisual({super.key, required this.lib, required this.id, required this.width, this.uniform = false});
   final Library lib;
   final String id;
   final double width;
+
+  /// 모든 책을 같은 크기 틀로(coverRect uniform)
+  final bool uniform;
 
   @override
   Widget build(BuildContext context) {
     final b = lib.books[id];
     final e = b == null ? null : lib.editions[b.editionId];
     if (b == null || e == null) return const SizedBox.shrink();
-    final r = coverRect(e.widthMm, e.heightMm, width);
+    final r = coverRect(e.widthMm, e.heightMm, width, uniform: uniform);
     final radius = width * 0.025;
     final color = themeColorOf(lib, id);
     return Semantics(

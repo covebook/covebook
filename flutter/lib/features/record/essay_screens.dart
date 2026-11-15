@@ -57,33 +57,66 @@ class EssayRow extends StatelessWidget {
         onPress: onOpen ?? () => openEssay(context, essay.id),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.l),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (showBook && b != null) ...[
-              IgnorePointer(child: LinkedCover(lib: lib, id: b.id, width: 56)),
-              const SizedBox(width: Space.l),
-            ],
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (showBook && e != null) ...[
-                  Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label.copyWith(fontFamily: AppFonts.uiBold)),
-                  if (author.isNotEmpty) Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption),
-                  const SizedBox(height: Space.s),
-                ],
-                Text(head.isEmpty ? '(빈 감상)' : head, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section.copyWith(fontSize: 18, height: 26 / 18)),
-                if (preview.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink)),
-                  ),
-                Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(essayDateLine(essay), style: AppType.caption)),
-              ]),
-            ),
-          ]),
+          child: showBook && b != null && e != null ? _withCover(b.id, e.title, author, head, preview) : _text(head, preview),
         ),
       ),
     );
   }
+
+  Widget _headline(String head, {int lines = 2, double size = 18}) => Text(head.isEmpty ? '(빈 감상)' : head,
+      maxLines: lines, overflow: TextOverflow.ellipsis, style: AppType.section.copyWith(fontSize: size, height: (size + 7) / size));
+
+  Widget _date() => Text(essayDateLine(essay), maxLines: 1, style: AppType.caption.copyWith(fontSize: 14, height: 20 / 14));
+
+  /// 책 정보 화면 안(표지 없이): 감상 제목 · 미리보기 · 쓴 날
+  Widget _text(String head, String preview) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _headline(head),
+        if (preview.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink)),
+          ),
+        Padding(padding: const EdgeInsets.only(top: Space.s), child: _date()),
+      ]);
+
+  /// 기록 탭 목록: 표지 높이와 글 묶음 높이를 맞춘다(위는 표지 위 끝, 쓴 날은 표지 아래 끝에).
+  /// 2026-11-16 사용자 '책 크기랑 옆에 글 내용이랑 맞춰야': 작은 표지 옆에 다섯 줄이 길게 내려가던 것을 책 줄 하나·제목 한 줄·미리보기 두 줄·날짜로 줄이고 표지를 키움
+  Widget _withCover(String bookId, String title, String author, String head, String preview) => IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SizedBox(width: essayCoverW, child: Align(alignment: Alignment.topCenter, child: IgnorePointer(child: LinkedCover(lib: lib, id: bookId, width: essayCoverW)))),
+          const SizedBox(width: Space.l),
+          Expanded(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: essayCoverW / 0.68),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: title, style: const TextStyle(fontFamily: AppFonts.uiBold, color: AppColors.ink)),
+                      if (author.isNotEmpty) TextSpan(text: ' · $author', style: const TextStyle(color: AppColors.inkSoft)),
+                    ]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.caption.copyWith(fontSize: 14, height: 20 / 14),
+                  ),
+                  const SizedBox(height: 6),
+                  _headline(head, lines: 1, size: 17),
+                  if (preview.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(color: AppColors.ink)),
+                    ),
+                ]),
+                Padding(padding: const EdgeInsets.only(top: Space.xs), child: _date()),
+              ]),
+            ),
+          ),
+        ]),
+      );
 }
+
+/// 기록 탭 감상 목록 표지 폭(높이는 폭/0.68 ≈ 118: 책 줄·제목·미리보기 두 줄·쓴 날을 합한 높이)
+const essayCoverW = 80.0;
 
 /// 감상 읽기: 책 줄 · 제목 · 날짜 · 본문. 고치기·지우기는 머리줄에서
 class EssayScreen extends StatefulWidget {

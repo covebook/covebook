@@ -333,7 +333,8 @@ class _StatsScreenState extends State<StatsScreen> {
               child: Row(children: [
                 if (lead != null) ...[SizedBox(width: 36, child: lead), const SizedBox(width: Space.m)],
                 Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.row)),
-                if (_book == id) const LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2.2),
+                const SizedBox(width: Space.m),
+                RadioMark(on: _book == id),
               ]),
             ),
           ),

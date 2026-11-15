@@ -1033,7 +1033,28 @@ class FilterGroup extends StatelessWidget {
       );
 }
 
-/// 필터 항목: 고른 항목만 진한 글씨와 체크. chevron은 다른 시트로 넘어가는 항목, right는 스위치 등
+/// 고르는 표시 원(필터·책 고르기 시트 줄 오른쪽): 안 고르면 빈 원, 고르면 갈색 원에 흰 체크(목표 시간·여러 권 고르기와 같은 원).
+/// 2026-11-16 사용자 '조건 선택은 원으로': 고른 줄에만 체크가 뜨던 것을 모든 선택지에 원을 두는 방식으로
+class RadioMark extends StatelessWidget {
+  const RadioMark({super.key, required this.on, this.size = 22});
+  final bool on;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: on ? AppColors.accent : AppColors.white,
+          border: Border.all(color: on ? AppColors.accent : AppColors.line, width: 1.5),
+        ),
+        child: on ? Center(child: LucideIcon('Check', size: size * 0.58, color: AppColors.onAccent, stroke: 3)) : null,
+      );
+}
+
+/// 필터 항목: 고른 항목은 진한 글씨, 오른쪽에 고르는 원(RadioMark). chevron은 다른 시트로 넘어가는 항목, right는 스위치 등
 class FilterOption extends StatelessWidget {
   const FilterOption({super.key, required this.label, this.sub, this.selected = false, this.chevron = false, this.right, this.onPress});
   final String label;
@@ -1062,12 +1083,7 @@ class FilterOption extends StatelessWidget {
                 ]),
               ),
               const SizedBox(width: Space.m),
-              right ??
-                  (selected
-                      ? const LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2.2)
-                      : chevron
-                          ? const LucideIcon('ChevronRight', size: 22, color: AppColors.inkFaint)
-                          : const SizedBox.shrink()),
+              right ?? (chevron ? const LucideIcon('ChevronRight', size: 22, color: AppColors.inkFaint) : RadioMark(on: selected)),
             ]),
           ),
         ),
@@ -1872,15 +1888,70 @@ class _TimeBodyState extends State<_TimeBody> {
   }
 }
 
+/// 걸리는 시간 고르기 시트(시간 0~5 · 분 5분 단위): 고른 분을 돌려준다(닫으면 null). 0분은 5분으로
+Future<int?> showMinutesSheet(BuildContext context, {required String title, String? description, int initial = 45}) =>
+    showSheet<int>(context, title: title, description: description, builder: (_) => _MinutesBody(initial: initial));
+
+class _MinutesBody extends StatefulWidget {
+  const _MinutesBody({required this.initial});
+  final int initial;
+
+  @override
+  State<_MinutesBody> createState() => _MinutesBodyState();
+}
+
+class _MinutesBodyState extends State<_MinutesBody> {
+  static const _maxH = 5;
+  late int _h = math.min(_maxH, widget.initial ~/ 60), _m = ((widget.initial % 60) / 5).round().clamp(0, 11);
+
+  int get _total => math.max(5, _h * 60 + _m * 5);
+
+  @override
+  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(
+          height: _wheelRow * _wheelVisible,
+          child: Stack(children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              top: _wheelRow * (_wheelVisible - 1) / 2,
+              height: _wheelRow,
+              child: DecoratedBox(decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(10))),
+            ),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _Wheel(count: _maxH + 1, index: _h, unit: '시간', text: (i) => '$i', onChange: (h) => setState(() => _h = h)),
+              const Text('시간', style: TextStyle(fontFamily: AppFonts.ui, fontSize: 17, color: AppColors.inkSoft)),
+              const SizedBox(width: Space.l),
+              _Wheel(count: 12, index: _m, unit: '분', text: (i) => '${i * 5}', onChange: (m) => setState(() => _m = m)),
+              const Text('분', style: TextStyle(fontFamily: AppFonts.ui, fontSize: 17, color: AppColors.inkSoft)),
+            ]),
+          ]),
+        ),
+        const SizedBox(height: Space.l),
+        Btn(label: '${minutesLabel(_total)}으로 정하기', onPress: () => Navigator.pop(context, _total)),
+      ]);
+}
+
+/// 분을 '45분' · '1시간' · '1시간 30분'으로(60분까지는 분으로: 목표 60분 칸과 같게)
+String minutesLabel(num min) {
+  final m = min.round();
+  if (m <= 60) return '$m분';
+  final h = m ~/ 60, r = m % 60;
+  return r == 0 ? '$h시간' : '$h시간 $r분';
+}
+
 const _wheelRow = 44.0;
 const _wheelVisible = 5;
 
 /// 돌리는 목록 하나: 가운데 줄이 고른 값. 손을 떼면 가까운 줄에 멈춘다. 화면 읽기에서는 위아래로 쓸어 한 칸씩 바꾼다
 class _Wheel extends StatefulWidget {
-  const _Wheel({required this.count, required this.index, required this.unit, required this.onChange});
+  const _Wheel({required this.count, required this.index, required this.unit, required this.onChange, this.text});
   final int count, index;
   final String unit;
   final ValueChanged<int> onChange;
+
+  /// 줄 글자(없으면 두 자리 번호)
+  final String Function(int i)? text;
 
   @override
   State<_Wheel> createState() => _WheelState();
@@ -1904,7 +1975,7 @@ class _WheelState extends State<_Wheel> {
   @override
   Widget build(BuildContext context) => Semantics(
         slider: true,
-        label: '$_cur${widget.unit}',
+        label: '${widget.text?.call(_cur) ?? _cur}${widget.unit}',
         onIncrease: () => _step(1),
         onDecrease: () => _step(-1),
         child: SizedBox(
@@ -1926,7 +1997,7 @@ class _WheelState extends State<_Wheel> {
                 onTap: () => _step(i - _cur),
                 child: Center(
                   child: Text(
-                    i.toString().padLeft(2, '0'),
+                    widget.text?.call(i) ?? i.toString().padLeft(2, '0'),
                     style: TextStyle(fontFamily: i == _cur ? AppFonts.uiBold : AppFonts.ui, fontSize: 20, color: i == _cur ? AppColors.ink : AppColors.inkFaint, fontFeatures: const [FontFeature.tabularFigures()]),
                   ),
                 ),

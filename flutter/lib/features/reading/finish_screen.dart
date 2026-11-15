@@ -1,6 +1,7 @@
 // 독서 종료 기록(지금 앱 app/reading/finish.tsx): 연결된 책(바꾸거나 연결하기), 실제 독서 시간, 선택 입력(시작 쪽·도달한 쪽·짧은 메모) → 개인 기록 저장 또는 버리기.
 // 적는 중인 쪽수·메모는 종료 초안에 함께 저장돼 앱이 꺼져도 이어서 쓴다. 분량은 시작 쪽과 도달한 쪽을 둘 다 알 때만 보인다.
-// 저장 후: 이번 기록 요약 → 이어서 할 수 있는 일(줄 목록) → 아래 '확인' 하나
+// 저장 후: 읽기 탭으로 돌아가 그 위에 '저장했어요' 시트(이번 기록 요약 → 이어서 할 수 있는 일 → '확인').
+// 2026-11-16 사용자 '페이지보다 팝업 느낌이 낫지 않나': 저장 뒤 화면 하나를 통째로 바꾸던 것을 시트로
 library;
 
 import 'dart:async';
@@ -19,7 +20,6 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart';
 import '../book/book_screen.dart';
-import '../stats/stats_screen.dart';
 import '../bookmark/new_bookmark_screen.dart';
 
 int? _page(String? v) {
@@ -47,6 +47,9 @@ class _FinishScreenState extends State<FinishScreen> {
   final _lib = LibraryModel.instance;
   late String _startPage, _pages, _memo;
   ({String? bookId, String sessionId})? _saved;
+
+  /// 저장한 초안(저장 뒤 화면이 닫히며 미끄러지는 동안 같은 입력 화면을 그대로 그린다)
+  FinishDraft? _savedDraft;
   bool _saving = false;
   bool _leaving = false;
   Timer? _notes;
@@ -127,12 +130,23 @@ class _FinishScreenState extends State<FinishScreen> {
   static String _digits(String v) => v.replaceAll(RegExp(r'[^\d]'), '');
 
   Future<void> _save(FinishDraft pending, int? sp, int? ep) async {
-    if (_saving) return;
+    // 저장 뒤 화면이 닫히는 동안 다시 눌러도 두 번 저장하지 않는다
+    if (_saving || _saved != null) return;
     setState(() => _saving = true);
     try {
       await saveFinishedReading(pending, startPage: pending.myBookId != null ? sp : null, pagesRead: pending.myBookId != null ? ep : null, memo: _memo.trim().isEmpty ? null : _memo.trim());
       Ambient.instance.stop();
-      setState(() => _saved = (bookId: pending.myBookId, sessionId: pending.id));
+      final saved = (bookId: pending.myBookId, sessionId: pending.id);
+      _saved = saved;
+      _savedDraft = pending;
+      if (!mounted) return;
+      final nav = Navigator.of(context);
+      _toRead();
+      // 읽기 탭이 보인 뒤 그 위에 시트(화면은 이미 닫히는 중이라 앱 Navigator의 오버레이로 띄운다)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final o = nav.overlay;
+        if (o != null && o.mounted) showSavedSheet(o.context, bookId: saved.bookId, sessionId: saved.sessionId);
+      });
     } catch (e) {
       if (mounted) appAlert(context, '저장하지 못했어요', '독서 기록을 유지하고 있어요. 다시 시도해 주세요.\n$e');
     } finally {
@@ -140,7 +154,7 @@ class _FinishScreenState extends State<FinishScreen> {
     }
   }
 
-  void _discard(FinishDraft pending) => appAlert(context, '이번 독서 기록을 버릴까요?', '${withJosa(formatDurationPrecise(pending.durationMs), '이', '가')} 저장되지 않아요.', [
+  void _discard(FinishDraft pending) => _saved != null ? null : appAlert(context, '이번 독서 기록을 버릴까요?', '${withJosa(formatDurationPrecise(pending.durationMs), '이', '가')} 저장되지 않아요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('버리기', style: AlertStyle.destructive, onPress: () {
           if (_leaving) return;
@@ -159,49 +173,8 @@ class _FinishScreenState extends State<FinishScreen> {
   @override
   Widget build(BuildContext context) {
     final lib = _lib.lib;
-    final saved = _saved;
-    if (saved != null) {
-      final ss = lib.sessions[saved.sessionId];
-      final sb = saved.bookId == null ? null : lib.books[saved.bookId];
-      final se = sb == null ? null : lib.editions[sb.editionId];
-      final pagesText = ss != null && ss.startPage != null && ss.pagesRead != null && ss.pagesRead! >= ss.startPage!
-          ? '${ss.startPage}→${ss.pagesRead}쪽(${ss.pagesRead! - ss.startPage!}쪽)'
-          : ss?.pagesRead != null && ss!.pagesRead != 0
-              ? '${ss.pagesRead}쪽까지'
-              : null;
-      return Screen(
-        title: '저장했어요',
-        back: false,
-        footer: Btn(label: '확인', size: 'l', onPress: _toRead),
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: Space.l),
-            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 1 / MediaQuery.devicePixelRatioOf(context)))),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(se?.title ?? '책 없이 읽은 시간', maxLines: 2, style: AppType.rowStrong),
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  [if (ss != null) ss.durationMs < 60000 ? formatDurationPrecise(ss.durationMs) : formatDuration(ss.durationMs), ?pagesText].join(' · '),
-                  style: AppType.sub,
-                ),
-              ),
-            ]),
-          ),
-          const H2('이어서 할 수 있어요', first: true),
-          ListGroup(children: [
-            if (saved.bookId != null) ListItem(label: '이 책에 갈피 남기기', sub: '이번 기록과 연결돼요', chevron: true, onPress: () => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/bookmark/new'), builder: (_) => NewBookmarkScreen(book: saved.bookId, session: saved.sessionId)))),
-            if (saved.bookId != null) ListItem(label: '책 정보 보기', chevron: true, onPress: () => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book'), builder: (_) => BookScreen(id: saved.bookId!)))),
-            ListItem(
-              label: '내 기록 보기',
-              chevron: true,
-              onPress: () => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => const StatsScreen(tab: false))),
-            ),
-          ]),
-        ],
-      );
-    }
-    final pending = _reading.pending;
+    // 저장 뒤 닫히는 동안에는 저장한 초안으로 같은 화면을 그린다(초안은 저장과 함께 비워진다)
+    final pending = _reading.pending ?? _savedDraft;
     if (pending == null) {
       return Screen(title: '독서 기록', children: [Empty(title: '끝낸 독서가 없어요', action: '읽기로', onAction: _toRead)]);
     }
@@ -297,4 +270,54 @@ class _FinishScreenState extends State<FinishScreen> {
     );
     return PopScope(canPop: _leaving, onPopInvokedWithResult: (didPop, _) => didPop ? null : _askLeave(), child: screen);
   }
+}
+
+
+/// 독서 기록 저장 뒤 시트: 이번 기록(책 · 시간 · 쪽) → 이어서 할 수 있는 일(갈피 남기기 · 책 정보 · 통계) → 확인
+Future<void> showSavedSheet(BuildContext context, {required String? bookId, required String sessionId}) {
+  final nav = Navigator.of(context);
+  final lib = LibraryModel.instance.lib;
+  final ss = lib.sessions[sessionId];
+  final sb = bookId == null ? null : lib.books[bookId];
+  final se = sb == null ? null : lib.editions[sb.editionId];
+  final pagesText = ss != null && ss.startPage != null && ss.pagesRead != null && ss.pagesRead! >= ss.startPage!
+      ? '${ss.startPage}→${ss.pagesRead}쪽(${ss.pagesRead! - ss.startPage!}쪽)'
+      : ss?.pagesRead != null && ss!.pagesRead != 0
+          ? '${ss.pagesRead}쪽까지'
+          : null;
+  final summary = [if (ss != null) ss.durationMs < 60000 ? formatDurationPrecise(ss.durationMs) : formatDuration(ss.durationMs), ?pagesText].join(' · ');
+  return showSheet<void>(
+    context,
+    title: '저장했어요',
+    builder: (ctx) {
+      // 시트를 닫고 그 화면으로(시트가 내려간 뒤 연다)
+      void go(VoidCallback open) {
+        Navigator.pop(ctx);
+        open();
+      }
+
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          padding: const EdgeInsets.only(bottom: Space.l),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 1 / MediaQuery.devicePixelRatioOf(ctx)))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(se?.title ?? '책 없이 읽은 시간', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
+            if (summary.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(summary, style: AppType.sub)),
+          ]),
+        ),
+        const SizedBox(height: Space.s),
+        if (bookId != null)
+          ListItem(
+            label: '이 책에 갈피 남기기',
+            sub: '이번 기록과 연결돼요',
+            chevron: true,
+            onPress: () => go(() => nav.push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/bookmark/new'), builder: (_) => NewBookmarkScreen(book: bookId, session: sessionId)))),
+          ),
+        if (bookId != null) ListItem(label: '책 정보 보기', chevron: true, onPress: () => go(() => nav.push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book'), builder: (_) => BookScreen(id: bookId))))),
+        ListItem(label: '통계에서 보기', chevron: true, onPress: () => go(() => AppNav.instance.goTab(AppTab.stats))),
+        const SizedBox(height: Space.l),
+        Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx)),
+      ]);
+    },
+  );
 }

@@ -578,7 +578,7 @@ class _GridCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = lib.editions[lib.books[book.id]?.editionId];
-    final r = coverRect(e?.widthMm, e?.heightMm, width);
+    final r = coverRect(e?.widthMm, e?.heightMm, width, uniform: true);
     final onShelf = state == _CellState.onShelf;
     return Semantics(
       button: true,
@@ -595,7 +595,7 @@ class _GridCell extends StatelessWidget {
             width: width,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Stack(clipBehavior: Clip.none, children: [
-                Opacity(opacity: onShelf ? 0.45 : 1, child: BookVisual(lib: lib, id: book.id, width: width)),
+                Opacity(opacity: onShelf ? 0.45 : 1, child: BookVisual(lib: lib, id: book.id, width: width, uniform: true)),
                 if (state == _CellState.picked)
                   Positioned(
                     left: r.edge - 2,
@@ -653,11 +653,10 @@ class _PickMark extends StatelessWidget {
       );
 }
 
-/// 작은 앞모습(목록 줄 왼쪽, 칸 폭 64): 지금 앱 StandaloneBook 앞면 배율 0.42(설계 단위 → dp)와 같은 크기
+/// 작은 앞모습(목록 줄 왼쪽, 칸 폭 64): 지금 앱 StandaloneBook 앞면 배율 0.42(설계 단위 → dp). 판형과 상관없이 모든 책을 같은 크기로(격자와 같은 규칙)
 Widget _thumb(Library lib, String id) {
-  final e = lib.editions[lib.books[id]?.editionId];
-  final w = (mm((e?.widthMm ?? 128).toDouble()) + 8) * 0.42; // 표지 폭 + 둘레 여백 4DU×2
-  return SizedBox(width: 64, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w))));
+  final w = (mm(128) + 8) * 0.42; // 추정 판형 폭 + 둘레 여백 4DU×2
+  return SizedBox(width: 64, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w, uniform: true))));
 }
 
 /// 목록 한 줄(시안): 표지 + 제목 + 저자·상태 + 한 줄 감상 두 줄. 메모가 있으면 오른쪽 위 메모 아이콘을 눌러 작은 상자로 본다

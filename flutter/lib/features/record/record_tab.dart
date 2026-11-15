@@ -516,7 +516,7 @@ class _RecordTabState extends State<RecordTab> {
   }
 }
 
-/// 책 선택 줄: 표지 · 이름(고르면 굵게) · 수 · 체크
+/// 책 선택 줄: 표지 · 이름(고르면 굵게) · 수 · 고르는 원
 class _BookChoice extends StatelessWidget {
   const _BookChoice({required this.label, required this.sub, required this.on, required this.onPress, this.cover});
   final String label, sub;
@@ -545,7 +545,8 @@ class _BookChoice extends StatelessWidget {
                     Text(sub, style: AppType.caption),
                   ]),
                 ),
-                if (on) ...[const SizedBox(width: 14), const LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2.2)],
+                const SizedBox(width: 14),
+                RadioMark(on: on),
               ]),
             ),
           ),

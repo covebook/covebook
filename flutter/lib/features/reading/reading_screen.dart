@@ -223,6 +223,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           final big = MediaQuery.textScalerOf(ctx).scale(10) >= 16 || MediaQuery.sizeOf(ctx).width < 330;
           final goal = _settings.goalMin;
           final tiles = [for (final m in _goals) Choice(label: '$m분', compact: !big, selected: goal == m, onPress: () => pick(m))];
+          // 직접 정하기(2026-11-16 사용자 '사용자가 시간 지정은 못 하나'): 15·30·60분 밖의 목표면 이 칸이 골라진 상태로 그 시간을 보인다
+          final custom = goal != null && !_goals.contains(goal);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             Choice(label: '목표 없이 읽기', selected: goal == null, onPress: () => pick(null)),
             const SizedBox(height: Space.s),
@@ -230,6 +232,16 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               for (final (i, t) in tiles.indexed) ...[if (i > 0) const SizedBox(height: Space.s), t]
             else
               Row(children: [for (final (i, t) in tiles.indexed) ...[if (i > 0) const SizedBox(width: Space.s), Expanded(child: t)]]),
+            const SizedBox(height: Space.s),
+            Choice(
+              label: custom ? '직접 정하기 · ${minutesLabel(goal)}' : '직접 정하기',
+              selected: custom,
+              onPress: () async {
+                Navigator.pop(ctx);
+                final m = await showMinutesSheet(context, title: '목표 시간', description: '목표를 바꿔도 읽은 시간은 유지돼요.', initial: (goal ?? 45).round());
+                if (m != null) _settings.set({'goalMin': m});
+              },
+            ),
           ]);
         },
       );
@@ -519,7 +531,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               if (!soundOnly)
                 Semantics(
                   button: true,
-                  label: '목표 시간 설정, ${goalMin != null ? '$goalMin분' : '자유롭게 시간 재기'}',
+                  label: '목표 시간 설정, ${goalMin != null ? minutesLabel(goalMin) : '자유롭게 시간 재기'}',
                   child: GestureDetector(
                     onTap: _goalSheet,
                     child: Padding(
@@ -537,7 +549,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                                 active != null && !running
                                     ? '일시정지'
                                     : goalMs != null
-                                        ? (ms >= goalMs ? '목표 $goalMin분을 채웠어요' : '목표 $goalMin분')
+                                        ? (ms >= goalMs ? '목표 ${minutesLabel(goalMin!)}을 채웠어요' : '목표 ${minutesLabel(goalMin!)}')
                                         : ' ',
                                 textAlign: TextAlign.center,
                                 style: AppType.caption,
@@ -567,7 +579,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                   Expanded(
                     child: soundOnly
                         ? const SizedBox.shrink()
-                        : _Side(icon: 'Timer', text: goalMin != null ? '목표 $goalMin분' : '목표 없음', label: '목표 시간, ${goalMin != null ? '$goalMin분' : '목표 없음'}', onPress: _goalSheet),
+                        : _Side(icon: 'Timer', text: goalMin != null ? '목표 ${minutesLabel(goalMin)}' : '목표 없음', label: '목표 시간, ${goalMin != null ? minutesLabel(goalMin) : '목표 없음'}', onPress: _goalSheet),
                   ),
                 ]),
               ),

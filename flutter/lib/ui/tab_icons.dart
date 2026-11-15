@@ -36,12 +36,14 @@ Widget shelfIcon(Color color, {double size = 26, bool filled = false}) {
   return _svg('${bar(0.6)}${bar(9.8)}${bar(24.46 - bookW / 2, 'transform="rotate(-18 24.46 13.5)"')}', _boxOf(size, 33, 13.5));
 }
 
-/// 내 책: 닫힌 책 한 권(앞에서 본 표지, 왼쪽에 책등 접힘 선). 찬 모양은 접힘 선을 바탕색 선으로 나눈다(읽기·통계 아이콘과 같은 규칙)
+/// 내 책: 닫힌 책 한 권(예전 책장 머리 '전체 책' 아이콘처럼 위에서 내려온 가름끈 + 아래 책장 면 줄).
+/// 찬 모양은 가름끈·책장 면 줄을 바탕색으로 뺀다(읽기·통계 아이콘과 같은 규칙). 2026-11-16 사용자 '하단바 책 디자인 별로, 원래 디자인과 유사하게'
 Widget myBooksTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
-  final c = _hex(color);
+  final c = _hex(color), b = _hex(bg);
   return _svg(
     '<rect x="1.2" y="1.2" width="17.6" height="21.6" rx="3.6" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="$_w" $_round/>'
-    '<path d="M6 1.8 V22.2" fill="none" stroke="${filled ? _hex(bg) : c}" stroke-width="${filled ? 1.6 : _w}" $_round/>',
+    '<path d="M1.8 17.4 H18.2" fill="none" stroke="${filled ? b : c}" stroke-width="${filled ? 1.6 : _w}" $_round/>'
+    '${filled ? '<path d="M11.2 1.2 V10.4 L13.6 8.5 L16 10.4 V1.2 Z" fill="$b"/>' : '<path d="M11.6 2.2 V9.8 L13.6 8.2 L15.6 9.8 V2.2" fill="none" stroke="$c" stroke-width="$_w" $_round/>'}',
     _boxOf(size, 20, 12, 1.04),
   );
 }

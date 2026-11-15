@@ -1,6 +1,6 @@
 // 앱 시작 화면(지금 앱 ui/LoadingScreen과 같은 몫): 켤 때 준비(굽기 셰이더·스킨·예시 책장 읽기)와 첫 책장 굽기 동안 흰 화면만 보이던 것을 바꾼다
 // (2026-11-15 QA 지민 F4: 새 설치 첫 실행 8초 넘게 아무 표시 없는 흰 화면).
-// 지난번에 굳힌 책장 사진(home_snapshot.png)이 있으면 그 사진을, 없으면 '느린 계절' 책이 선반에 선 그림 + '책장 한켠' + 준비 단계 점 세 개를 보인다.
+// 지난번에 굳힌 책장 사진(home_snapshot.png)이 있으면 그 사진을, 없으면 지금 앱 시작 그림('느린 계절' 책이 선반에 선 그림 + '책장 한켠') 위에 준비 단계 점 세 개를 보인다.
 // 1단계: 앱 준비 · 2단계: 책장 그리는 중 · 3단계: 다 됨(홈이 첫 책장을 다 그리면 shelfReady를 켠다)
 library;
 
@@ -57,9 +57,14 @@ class StartApp extends StatelessWidget {
   }
 }
 
-/// 시작 그림: 선반 위 책 한 권, 이름, 안내, 준비 단계 점
+/// 시작 그림(지금 앱 ui/LoadingScreen과 같은 그림 assets/loading/quiet-start.png 853×1844를 가운데 맞춤).
+/// 그림에서는 점을 지웠고 준비 단계(startStep)만큼 채운 점 세 개를 그림 위 같은 자리(가운데 426,1286 · 간격 37.5 · 지름 16)에 그린다.
+/// 2026-11-16 사용자 '시작 화면 디자인도 바뀐 거 같은데': 그림을 흉내 내 그리던 것을 지금 앱 그림 그대로로 되돌림
 class StartCover extends StatelessWidget {
   const StartCover({super.key});
+
+  static const _art = Size(853, 1844);
+  static const _dotX = 426.0, _dotY = 1286.0, _gap = 37.5, _d = 16.0;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -67,51 +72,28 @@ class StartCover extends StatelessWidget {
         child: ColoredBox(
           color: AppColors.bg,
           child: LayoutBuilder(builder: (context, c) {
-            final w = c.maxWidth.isFinite ? c.maxWidth : 400.0;
-            final bookW = (w * 0.34).clamp(110.0, 170.0);
-            final plankW = bookW * 1.85;
-            return Column(children: [
-              const Spacer(flex: 5),
-              SizedBox(
-                width: plankW,
-                child: Column(children: [
-                  // 책: 앞표지 그림(예시 책장 '느린 계절')에 얇은 그늘
-                  Container(
-                    width: bookW,
-                    decoration: const BoxDecoration(boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(2, 4))]),
-                    child: ClipRRect(borderRadius: BorderRadius.circular(3), child: Image.asset('assets/reference/night.png', fit: BoxFit.fitWidth)),
-                  ),
-                  // 선반 판
-                  Container(
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFDDC4),
-                      borderRadius: BorderRadius.circular(2),
-                      boxShadow: const [BoxShadow(color: Color(0x1F5A3B1E), blurRadius: 12, offset: Offset(0, 6))],
-                    ),
-                  ),
-                ]),
-              ),
-              const SizedBox(height: 44),
-              const Text('책장 한켠', style: TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 30, height: 1.2, color: AppColors.ink)),
-              const SizedBox(height: 10),
-              const Text('책장을 준비하고 있어요', style: TextStyle(fontFamily: AppFonts.ui, fontSize: 16, height: 1.4, color: AppColors.inkSoft)),
-              const SizedBox(height: 22),
+            final w = c.maxWidth.isFinite ? c.maxWidth : 400.0, h = c.maxHeight.isFinite ? c.maxHeight : 860.0;
+            final k = (w / _art.width) < (h / _art.height) ? w / _art.width : h / _art.height;
+            final x0 = (w - _art.width * k) / 2, y0 = (h - _art.height * k) / 2;
+            final d = _d * k;
+            return Stack(children: [
+              Positioned(left: x0, top: y0, width: _art.width * k, height: _art.height * k, child: Image.asset('assets/loading/quiet-start.png', fit: BoxFit.fill, gaplessPlayback: true)),
               ValueListenableBuilder<int>(
                 valueListenable: startStep,
-                builder: (context, step, _) => Row(mainAxisSize: MainAxisSize.min, children: [
-                  for (var i = 1; i <= 3; i++) ...[
-                    if (i > 1) const SizedBox(width: 10),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: i <= step ? AppColors.ink : AppColors.line),
+                builder: (context, step, _) => Stack(children: [
+                  for (var i = 0; i < 3; i++)
+                    Positioned(
+                      left: x0 + (_dotX + (i - 1) * _gap) * k - d / 2,
+                      top: y0 + _dotY * k - d / 2,
+                      width: d,
+                      height: d,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: i < step ? const Color(0xFF7C6253) : const Color(0xFFDBCDC1)),
+                      ),
                     ),
-                  ],
                 ]),
               ),
-              const Spacer(flex: 4),
             ]);
           }),
         ),
