@@ -765,11 +765,6 @@ vec4 _tex2(vec2 q) {
     if (abs(tN.x) < 0.5 && tN.y > -0.5) c.x += coveB(P.x - 0.00000000, 0.785398163) - coveB(366.000000 - P.x, 0.785398163);
     return c;
   }
-  // 판 윗면 쪽 곡면만(아래 모서리): 옆벽·천장 모서리를 이어 그리는 곳에서도 판 쪽 곡면은 그대로 둔다
-  float coveFloor(vec3 P) {
-    if (env.x < 1.5 || false || P.z < -56.9250000 || (abs(tN.z) > 0.5 && P.z < -52.8750000) || abs(tN.y) > 0.5) return 0.0;
-    return coveB(P.y - env.y, 0.436332313);
-  }
   
 void main() {
   vec2 p = FlutterFragCoord().xy;
@@ -783,49 +778,7 @@ void main() {
     float b1 = slope(arc(bev1.w - dot(P, bev1.xyz), PLANKR));
     // 판 앞면 양 끝: 윤곽(PLANK_END_R)과 같은 반지름으로 법선이 옆으로 돈다. 윤곽만 둥글고 빛이 평면이면 곡면으로 보이지 않는다(2026-11-05 사용자 '선반 끝 곡선')
     float be = endR > 0.0 ? slope(arc(366.000000 - P.x, endR)) - slope(arc(P.x - 0.00000000, endR)) : 0.0;
-    // 안쪽 모서리 곡면(Flutter 2026-11-15 사용자 '벽 이음새가 부자연스럽다'): 옆벽·천장·뒷벽이 맞닿은 모서리 선 위 점은 두 면에 같은 점이고
-    // 곡면에서는 같은 법선(두 면의 이등분)이라 빛이 같아야 한다. 면마다 평평한 법선으로 따로 구워 모서리에서 값이 어긋났다(옆벽 188 / 뒷벽 201, 천장 150 / 옆벽 180).
-    // 곡면 폭(COVE_R) 안에서는 법선과 가림을 모서리 선 위 점(이등분 법선)에서 잰 값으로 옮겨 간다: 두 면이 같은 식이라 모서리에서 값이 같다.
-    // 책·접촉 그늘 몫(구운 값 − 둘레 몫)은 그 면 것을 그대로 더한다. 판 윗면 쪽 모서리는 하지 않는다(책 뒤 그늘이 모이는 곳)
-    // 두 모서리가 만나는 꼭지점 근처는 두 모서리를 거리 비율로 함께 섞는다(가까운 하나만 고르면 거리가 같은 대각선에서 값이 바뀌어 밝은 대각선이 생겼다)
-    float filA = 0.0;
-    float filB = 0.0;
-    vec3 filPA = P;
-    vec3 filNA = tN;
-    vec3 filPB = P;
-    vec3 filNB = tN;
-    if (env.x > 1.5 && P.z > -FFRONT + 0.5) {
-      float R = 9.15000000;
-      float h = 0.70710678;
-      float dl = max(0.0, P.x - 0.00000000);
-      float dr = max(0.0, 366.000000 - P.x);
-      float dc = max(0.0, env.z - P.y);
-      float db = max(0.0, DEPTH - P.z);
-      // A: 세로 모서리(옆벽 쪽), B: 위 모서리(천장 쪽). 천장 자신은 A = 옆벽 쪽, B = 뒷벽 쪽
-      if (tN.z < -0.5 && P.z > DEPTH - 1.0) {
-        if (dl < dr) { filA = 1.0 - dl / R; filPA = vec3(0.00000000, P.y, DEPTH); filNA = vec3(h, 0.0, -h); }
-        else { filA = 1.0 - dr / R; filPA = vec3(366.000000, P.y, DEPTH); filNA = vec3(-h, 0.0, -h); }
-        filB = 1.0 - dc / R; filPB = vec3(P.x, env.z, DEPTH); filNB = vec3(0.0, -h, -h);
-      } else if (abs(tN.x) > 0.5) {
-        float xs = tN.x > 0.0 ? 0.00000000 : 366.000000;
-        filA = 1.0 - db / R; filPA = vec3(xs, P.y, DEPTH); filNA = vec3(tN.x * h, 0.0, -h);
-        filB = 1.0 - dc / R; filPB = vec3(xs, env.z, P.z); filNB = vec3(tN.x * h, -h, 0.0);
-      } else if (tN.y < -0.5) {
-        if (dl < dr) { filA = 1.0 - dl / R; filPA = vec3(0.00000000, env.z, P.z); filNA = vec3(h, -h, 0.0); }
-        else { filA = 1.0 - dr / R; filPA = vec3(366.000000, env.z, P.z); filNA = vec3(-h, -h, 0.0); }
-        filB = 1.0 - db / R; filPB = vec3(P.x, env.z, DEPTH); filNB = vec3(0.0, -h, -h);
-      }
-      // 섞는 몫은 부드러운 계단(smoothstep): 곧은 몫(1 − d/R)이면 곡면 폭 끝에서 밝기 기울기가 꺾여 세로 선(마하 띠)으로 보였다
-      filA = clamp(filA, 0.0, 1.0);
-      filB = clamp(filB, 0.0, 1.0);
-      filA = filA * filA * (3.0 - 2.0 * filA);
-      filB = filB * filB * (3.0 - 2.0 * filB);
-    }
-    float filT = max(filA, filB);
-    vec3 n0 = normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + vec3(be, 0.0, 0.0));
-    vec3 n = filT > 0.0
-      ? normalize(n0 + (filNA - tN) * filA + (filNB - tN) * filB + vec3(0.0, coveFloor(P), 0.0))
-      : normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + coveOf(P) + vec3(be, 0.0, 0.0));
+    vec3 n = normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + coveOf(P) + vec3(be, 0.0, 0.0));
     float rimLoss = 0.0;
     // 구멍 앞 끝 둥근 테(반지름 RIMR): 구멍(둥근 사각형, 모서리 RIMC)까지 거리 d로 벽 법선이 구멍 안쪽 면 법선 쪽으로 돈다
     if (rim.x < rim.y) {
@@ -861,17 +814,7 @@ void main() {
     vec3 loss = liveEnv > 0.5 ? envLoss(Pb, tN) : lossDec(vec3(_tex(pb).rgb), skyIrr(tN));
     if (liveEnv < 0.5 && mixT < 1.0) loss = mix(lossDec(vec3(_tex2(pb).rgb), skyIrr(tN)), loss, mixT);
     if (rimLoss > 0.0) loss += rimLoss * (skyIrr(tN) + KEYC * (DIFF * max(0.0, dot(tN, LU)))) / OCC;
-    vec3 nfF = tN;
-    if (filT > 0.0) {
-      // 모서리 선 위 점은 두 면 위에 있어 그대로 재면 면이 자기를 가린다: 이등분 법선 쪽으로 조금 띄운다. 두 모서리 값은 섞는 몫대로 평균
-      vec3 own = max(vec3(0.0), loss - envLoss(P, tN));
-      vec3 tgt = vec3(0.0);
-      if (filA > 0.0) tgt += envLoss(filPA + filNA * 0.3, filNA) * filA;
-      if (filB > 0.0) tgt += envLoss(filPB + filNB * 0.3, filNB) * filB;
-      loss = mix(loss, tgt / (filA + filB) + own, filT);
-      nfF = normalize(tN + (filNA - tN) * filA + (filNB - tN) * filB);
-    }
-    vec4 g = shade(P, n, nfF, normalize(vec3(cam4.x, cam4.y, cam4.z - cam4.w) - P), loss, albedo, eref, ms.w, ms.z, float(_keyTex(vec2(dot(P, kU), dot(P, kV)) + kO).a), sref, kS);
+    vec4 g = shade(P, n, tN, normalize(vec3(cam4.x, cam4.y, cam4.z - cam4.w) - P), loss, albedo, eref, ms.w, ms.z, float(_keyTex(vec2(dot(P, kU), dot(P, kV)) + kO).a), sref, kS);
     if (DODGE > 1.5) {
       float softA = softR.y > 0.0 ? softEdge(P) : 1.0;
       { fragColor = vec4(vec3(min(base * vec3(g.rgb), vec3(1.0))) * softA, softA); return; }
