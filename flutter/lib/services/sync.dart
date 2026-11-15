@@ -84,8 +84,8 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   String? lastAt, lastError;
   int pending = 0;
   bool paused = false, deletionPending = false;
-  ({bool kakao, bool google, String nickname}) account = (kakao: false, google: false, nickname: '');
-  ({bool kakao, bool google, bool accountDeletion}) providers = (kakao: false, google: false, accountDeletion: false);
+  ({bool kakao, bool google, bool apple, String nickname}) account = (kakao: false, google: false, apple: false, nickname: '');
+  ({bool kakao, bool google, bool apple, bool accountDeletion}) providers = (kakao: false, google: false, apple: false, accountDeletion: false);
 
   Future<void>? _pauseLoaded;
   bool _running = false, _again = false, _linking = false, _accountChecked = false, _providersChecked = false, _bookcasesSupported = false, _started = false;
@@ -132,7 +132,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _refreshProviders() async {
     try {
       final a = (await api('GET', '/auth/providers', null) as Map?) ?? const {};
-      providers = (google: a['google'] == true, kakao: a['kakao'] == true, accountDeletion: a['accountDeletion'] == true);
+      providers = (google: a['google'] == true, apple: a['apple'] == true, kakao: a['kakao'] == true, accountDeletion: a['accountDeletion'] == true);
       _providersChecked = true;
       notifyListeners();
     } catch (_) {
@@ -140,9 +140,9 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  void _setAccount(({bool kakao, bool google, String nickname}) a) {
+  void _setAccount(({bool kakao, bool google, bool apple, String nickname}) a) {
     account = a;
-    KvStore.set(_accountKey, jsonEncode({'kakao': a.kakao, 'google': a.google, 'nickname': a.nickname})).ignore();
+    KvStore.set(_accountKey, jsonEncode({'kakao': a.kakao, 'google': a.google, 'apple': a.apple, 'nickname': a.nickname})).ignore();
     notifyListeners();
   }
 
@@ -465,7 +465,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       await KvStore.remove(_filesKey);
       _verifiedToken = null;
       _accountChecked = false;
-      _setAccount((kakao: false, google: false, nickname: ''));
+      _setAccount((kakao: false, google: false, apple: false, nickname: ''));
       _set(state: SyncState.off, error: null);
     } finally {
       _linking = false;
@@ -483,7 +483,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     paused = false;
     _verifiedToken = null;
     _accountChecked = false;
-    _setAccount((kakao: false, google: false, nickname: ''));
+    _setAccount((kakao: false, google: false, apple: false, nickname: ''));
     _set(state: SyncState.idle, error: null);
     await syncNow();
   }
@@ -492,6 +492,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   // 공급자의 코드는 서버에서 교환한다. 앱은 기기 토큰에 묶인 일회용 티켓만 받는다
 
   Future<({bool ok, bool cancelled, bool switched, String message})> linkKakao() => _linkSocial('kakao');
+  Future<({bool ok, bool cancelled, bool switched, String message})> linkApple() => _linkSocial('apple');
   Future<({bool ok, bool cancelled, bool switched, String message})> linkGoogle() => _linkSocial('google');
 
   Future<({bool ok, bool cancelled, bool switched, String message})> _linkSocial(String provider) async {
@@ -509,6 +510,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       final returnUrl = 'chaekjang://auth/$provider';
       final start = (await api('POST', '/auth/$provider/start', token, {'returnUrl': returnUrl, 'accountLifecycle': '1'}))! as Map;
       final back = await openAuthSession(start['url']! as String);
+      if (back != null && (back.scheme != 'chaekjang' || back.host != 'auth' || back.path != '/$provider')) return fail('로그인 응답 주소가 올바르지 않아요');
       if (back == null) return fail('로그인을 취소했어요', cancelled: true);
       final q = back.queryParameters;
       if (q['error'] != null) return fail(q['error'] == 'denied' ? '로그인을 취소했어요' : '로그인을 마치지 못했어요. 잠시 뒤 다시 시도해 주세요', cancelled: q['error'] == 'denied');
@@ -527,8 +529,8 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       await KvStore.set(_tokenKey, c['token']! as String);
       _verifiedToken = null;
       _setAccount(switched
-          ? (kakao: provider == 'kakao', google: provider == 'google', nickname: nickname)
-          : (kakao: account.kakao || provider == 'kakao', google: account.google || provider == 'google', nickname: nickname));
+          ? (kakao: provider == 'kakao', google: provider == 'google', apple: provider == 'apple', nickname: nickname)
+          : (kakao: account.kakao || provider == 'kakao', google: account.google || provider == 'google', apple: account.apple || provider == 'apple', nickname: nickname));
       syncAfter = true;
       return (ok: true, cancelled: false, switched: switched, message: nickname);
     } catch (e) {
@@ -546,7 +548,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final me = (await api('GET', '/me', token))! as Map;
       if (await KvStore.get(_tokenKey) != token) return;
-      final a = (kakao: me['kakao'] == true, google: me['google'] == true, nickname: (me['nickname'] as String?) ?? '');
+      final a = (kakao: me['kakao'] == true, google: me['google'] == true, apple: me['apple'] == true, nickname: (me['nickname'] as String?) ?? '');
       if (a != account) _setAccount(a);
     } catch (_) {
       // 표시용이라 실패해도 동기화는 계속한다
@@ -573,7 +575,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       try {
         if (raw == null) return;
         final a = jsonDecode(raw) as Map;
-        account = (kakao: a['kakao'] == true, google: a['google'] == true, nickname: (a['nickname'] as String?) ?? '');
+        account = (kakao: a['kakao'] == true, google: a['google'] == true, apple: a['apple'] == true, nickname: (a['nickname'] as String?) ?? '');
         notifyListeners();
       } catch (_) {
         // 깨진 값은 무시
