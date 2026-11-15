@@ -274,8 +274,9 @@ class _ReadListState extends State<ReadList> {
                 ]),
               ),
               const SizedBox(width: Space.m),
+              // 책마다 시간은 세미볼드(2026-11-15 사용자 '숫자 좀 더 두껍게'): 위 큰 타이머(굵게)와 한 무리로 읽힌다
               Text(hms(ms),
-                  style: TextStyle(fontFamily: AppFonts.ui, fontSize: 18, height: 26 / 18, color: ms == 0 && !isActive ? AppColors.inkSoft : AppColors.ink, fontFeatures: _tabular)),
+                  style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 18, height: 26 / 18, color: ms == 0 && !isActive ? AppColors.inkSoft : AppColors.ink, fontFeatures: _tabular)),
               const SizedBox(width: Space.m - Space.s),
               SizedBox(
                 width: 28 - Space.s,

@@ -224,6 +224,46 @@ ui.Path _polyPath(List<ui.Offset> pts) {
   return p..close();
 }
 
+/// 책 그리는 차례(줄 안 번호): 눈(eyeX)에서 옆으로 먼 책부터, 가까운 책이 나중에 그려져 덮는다.
+/// 책끼리 깊이 시험 없이 한 권씩 윤곽 안을 칠하므로, 줄 차례(왼쪽부터)로 그리면 눈 오른쪽 책의 왼쪽 옆면이
+/// 실제로는 왼쪽 책에 가려 안 보이는데도 왼쪽 책 책등 위에 덧그려졌다(2026-11-15 사용자 '겹칠 때 표현이 애매').
+/// 기댄 책도 이웃보다 먼저 그려져 기댄 아래쪽이 이웃 책등 뒤로 들어간다. 눕혀 쌓은 책(가로 범위가 거의 겹치는 이웃)은 한 덩이로 묶어 줄 차례(아래 책부터)를 지킨다
+List<int> bookPaintOrder(List<Book3> books, double eyeX) {
+  final spans = [
+    for (final b in books)
+      () {
+        final xs = corners(b).map((v) => v.x);
+        return (lo: xs.reduce(math.min), hi: xs.reduce(math.max));
+      }(),
+  ];
+  // 덩이: 줄 차례로 이웃한 책의 가로 범위가 좁은 쪽 폭의 80% 넘게 겹치면 같은 덩이(쌓은 책). 기댄 책은 이웃 머리 모서리에 닿기만 해 겹침이 작다(따로 먼 차례로 그려 이웃이 덮는다)
+  final groups = <List<int>>[];
+  for (var i = 0; i < books.length; i++) {
+    if (groups.isNotEmpty) {
+      final j = groups.last.last;
+      final a = spans[i], b = spans[j];
+      final overlap = math.min(a.hi, b.hi) - math.max(a.lo, b.lo);
+      final narrow = math.min(a.hi - a.lo, b.hi - b.lo);
+      if (narrow > 0 && overlap > 0.8 * narrow) {
+        groups.last.add(i);
+        continue;
+      }
+    }
+    groups.add([i]);
+  }
+  double far(List<int> g) {
+    final lo = g.map((i) => spans[i].lo).reduce(math.min), hi = g.map((i) => spans[i].hi).reduce(math.max);
+    return ((lo + hi) / 2 - eyeX).abs();
+  }
+
+  final keyed = [for (var k = 0; k < groups.length; k++) (k: k, d: far(groups[k]))];
+  keyed.sort((a, b) {
+    final c = b.d.compareTo(a.d);
+    return c != 0 ? c : a.k.compareTo(b.k);
+  });
+  return [for (final e in keyed) ...groups[e.k]];
+}
+
 /// 줄 하나를 그린다(지금 앱 ShelfScene 차례): 틀 안쪽 면 → 뒷벽 → 판 윗면·앞면 → 책.
 /// 틀 면은 뒷벽 아래에 깔려 뒷벽 둥근 꼭지점으로 깎인 자리와 양옆에만 보인다. 판은 이 줄 책 아래(책이 판 위에 선다)
 void drawRow(
@@ -354,8 +394,8 @@ void drawRow(
           ..imageFilter = ui.ImageFilter.blur(sigmaX: 9, sigmaY: 9, tileMode: ui.TileMode.decal)
           ..color = const ui.Color.fromRGBO(0, 0, 0, 0.82));
   }
-  // 책(면마다 아틀라스 자리는 이름으로 찾는다)
-  for (var i = 0; i < row.books.length; i++) {
+  // 책(면마다 아틀라스 자리는 이름으로 찾는다). 눈에서 옆으로 먼 책부터 그린다(bookPaintOrder)
+  for (final i in bookPaintOrder(row.books, c.eye.x)) {
     final b = row.books[i];
     final spots3 = <FaceId, Spot>{
       for (final f in FaceId.values) f: ?spotOf(faceKey(b.id, f)),
