@@ -61,8 +61,10 @@ void main() {
       expect([a, b], strs(c['tabs']), reason: '$color 갈피 색');
       final (a2, b2) = tabColors(null, 'k$color');
       expect([a2, b2], strs(c['tabsNone']), reason: '$color 기본 갈피 색');
-      expect(bookToneOf(jacketColor(color), photo: true).toUpperCase(), (c['photoTone'] as String).toUpperCase(), reason: '$color 사진 책 재질 색');
-      for (final (key, hex) in [('albedo', bookToneOf(jacketColor(color))), ('albedoPhoto', bookToneOf(jacketColor(color), photo: true))]) {
+      expect(photoToneOf(jacketColor(color)).toUpperCase(), (c['photoTone'] as String).toUpperCase(), reason: '$color 사진 책 재질 색');
+      // Flutter만 사진 책에 무광 인쇄 보정을 더한다(2026-11-16 사용자 '인쇄 느낌으로')
+      expect(bookToneOf(jacketColor(color), photo: true).toUpperCase(), printedHex(c['photoTone'] as String).toUpperCase(), reason: '$color 사진 책 인쇄 색');
+      for (final (key, hex) in [('albedo', bookToneOf(jacketColor(color))), ('albedoPhoto', photoToneOf(jacketColor(color)))]) {
         final want = (c[key] as List).map((e) => (e as num).toDouble()).toList();
         final got = bookAlbedo(hex);
         expect([got.r, got.g, got.b], [for (final w in want) closeTo(w, 1e-9)], reason: '$color $key 반사율');

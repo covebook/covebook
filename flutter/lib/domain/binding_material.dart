@@ -94,9 +94,21 @@ List<List<double>> saturationMatrix(double s) => [
 List<double> saturated(List<double> c, double s) =>
     saturationMatrix(s).map((m) => m[0] * c[0] + m[1] * c[1] + m[2] * c[2]).toList();
 
-/// 책 몸체 색: 재질 색(사진 책은 사진과 같은 채도로)
+/// 무광 인쇄(2026-11-16 사용자 '인쇄 느낌으로'): 잉크 검정이 종이에 먹혀 완전한 검정이 안 되고 흰색은 종이 색이다.
+/// 화면 값 v(0~255) → photoInkBlack + photoContrast·v(검정 0 → 18, 흰색 255 → 248). 표지 사진과 사진 책 몸체 색이 같은 식이다.
+/// 표지 사진 검정(3)이 같은 빛 아래 그린 검은 책등(19)보다 깊어 사진만 오려 붙인 것처럼 튀었다(채도만 낮추면 검은 책은 그대로)
+const photoContrast = 0.9;
+const photoInkBlack = 18.0;
+List<double> printed(List<double> c) => [for (final v in c) photoInkBlack + photoContrast * v];
+
+/// 사진 책 재질 색(지금 앱 값: 사진과 같은 채도만)
+String photoToneOf(String face) => _hex(saturated(_rgb(bindingSurfaceTone(face)).map((v) => v.toDouble()).toList(), photoSaturation));
+
+/// 책 몸체 색: 재질 색(사진 책은 사진과 같은 채도·인쇄 보정으로)
 String bookToneOf(String face, {bool photo = false}) {
-  final tone = bindingSurfaceTone(face);
-  if (!photo) return tone;
-  return _hex(saturated(_rgb(tone).map((v) => v.toDouble()).toList(), photoSaturation));
+  if (!photo) return bindingSurfaceTone(face);
+  return _hex(printed(_rgb(photoToneOf(face)).map((v) => v.toDouble()).toList()));
 }
+
+/// 화면 색 하나에 인쇄 보정(시험·사진 색 맞추기)
+String printedHex(String hex) => _hex(printed(_rgb(hex).map((v) => v.toDouble()).toList()));

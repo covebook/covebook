@@ -170,13 +170,15 @@ Future<CoverPhoto?> loadCoverPhoto(String uri) {
   }();
 }
 
-/// 사진 채도 행렬(휘도는 그대로 두고 회색 쪽으로), Flutter 색 행렬(5×4)
+/// 사진 색 행렬(Flutter 색 행렬 5×4): 채도(휘도는 그대로 두고 회색 쪽으로) 뒤 무광 인쇄 보정(binding_material printed와 같은 식).
+/// 2026-11-16 사용자가 세 안(지금·채도 0.7·인쇄 느낌) 가운데 인쇄 느낌을 골랐다
 final _photoMatrix = () {
   final m = saturationMatrix(photoSaturation);
+  const a = photoContrast, b = photoInkBlack;
   return <double>[
-    m[0][0], m[0][1], m[0][2], 0, 0, //
-    m[1][0], m[1][1], m[1][2], 0, 0, //
-    m[2][0], m[2][1], m[2][2], 0, 0, //
+    a * m[0][0], a * m[0][1], a * m[0][2], 0, b, //
+    a * m[1][0], a * m[1][1], a * m[1][2], 0, b, //
+    a * m[2][0], a * m[2][1], a * m[2][2], 0, b, //
     0, 0, 0, 1, 0,
   ];
 }();
