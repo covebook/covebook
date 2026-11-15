@@ -19,11 +19,13 @@ void main() {
       LibKind.sessions: lib.sessions,
       LibKind.bookmarks: lib.bookmarks,
       LibKind.bindings: lib.bindings,
+      LibKind.essays: lib.essays,
     };
     var n = 0;
     for (final kind in LibKind.values) {
       final cols = libColumns[kind]!;
-      for (final r in rows[libTable[kind]]!) {
+      // 긴 감상(essays)은 Flutter만 있는 표라 지금 앱 행이 없다(test/essay_test.dart가 따로 본다)
+      for (final r in rows[libTable[kind]] ?? const <Map<String, dynamic>>[]) {
         final v = valuesOf(kind, items[kind]![r['id']]!);
         expect({for (final (i, c) in cols.indexed) c: v[i]}, {for (final c in cols) c: r[c]}, reason: '${kind.name} ${r['id']}');
         n++;

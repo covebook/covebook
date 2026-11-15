@@ -3,6 +3,14 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+/// 하단 탭 차례(goTab 번호, 앱 틀 _tabs와 같은 차례): 책장 · 내 책 · 읽기 · 기록 · 통계(2026-11-16 메뉴 구조 개편)
+abstract final class AppTab {
+  static const shelf = 0, books = 1, read = 2, records = 3, stats = 4;
+}
+
+/// 기록 탭 안 글자 탭
+enum RecordSection { marks, essays }
+
 class AppNav extends ChangeNotifier {
   AppNav._();
   static final instance = AppNav._();
@@ -21,23 +29,42 @@ class AppNav extends ChangeNotifier {
   /// 읽기 탭에 넘겨준 책(읽기 탭이 읽고 비운다)
   String? readBook;
 
-  /// 갈피 탭에 넘겨준 책 거르기(갈피 탭이 읽고 비운다)
+  /// 갈피 목록에 넘겨준 책 거르기(기록 탭 갈피가 읽고 비운다)
   String? bookmarkBook;
+
+  /// 기록 탭에서 열 글자 탭(기록 탭이 읽고 비운다): 갈피로 보낼 때 marks, 감상으로 보낼 때 essays
+  RecordSection? recordSection;
 
   void goTab(int i) {
     tab = i;
     notifyListeners();
   }
 
-  /// 갈피 탭으로 가서 그 책 갈피만(지금 앱 보드 '목록 보기': dismissTo('/bookmarks', {book}))
+  /// 내 책 탭에 넘겨준 조건: 책장에 없는 책만(내 책 탭이 읽고 비운다)
+  bool booksOffShelf = false;
+
+  /// 내 책 탭으로(책 추가 결과 '내 책 보기'·꽉 차서 보관했을 때: 책장에 없는 책만 걸러 보인다)
+  void goBooks({bool offShelf = false}) {
+    booksOffShelf = offShelf;
+    goTab(AppTab.books);
+  }
+
+  /// 기록 탭 갈피로 가서 그 책 갈피만(지금 앱 보드 '목록 보기': dismissTo('/bookmarks', {book}))
   void goBookmarks(String bookId) {
     bookmarkBook = bookId;
-    goTab(1);
+    recordSection = RecordSection.marks;
+    goTab(AppTab.records);
+  }
+
+  /// 기록 탭의 갈피·감상으로
+  void goRecords(RecordSection section) {
+    recordSection = section;
+    goTab(AppTab.records);
   }
 
   /// 읽기 탭으로 가서 그 책을 맨 앞에(시작은 재생을 눌러서)
   void goRead(String bookId) {
     readBook = bookId;
-    goTab(2);
+    goTab(AppTab.read);
   }
 }

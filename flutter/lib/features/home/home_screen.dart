@@ -15,14 +15,14 @@ import '../../services/cover_colors.dart';
 import '../../ui/kit.dart' show Btn, PullUp, showSheet;
 import 'locked_rows.dart';
 import 'book_sheet.dart';
-import '../book/all_books_screen.dart' show openAllBooks;
+import '../settings/settings_screen.dart' show openProfile;
 import '../store/store_screen.dart' show openStore;
 import 'decorate_panel.dart';
 import 'year_pager.dart';
 import '../../domain/bookcase.dart' show Bookcase;
 import '../../store/bookcase_store.dart';
 import '../../app/app_shell.dart' show tabBarHidden;
-import '../../app/app_nav.dart' show AppNav;
+import '../../app/app_nav.dart' show AppNav, AppTab;
 import '../../app/startup.dart' show shelfReady;
 import '../../domain/geometry.dart' show maxFrontSpin, maxSpin;
 import '../../domain/layout.dart' show ShelfLayout, placementOf, shelfItems, sortedShelves;
@@ -1045,7 +1045,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       showSheet<void>(
         context,
         title: '선반 더 열기',
-        description: '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 전체 책에 그대로 보관돼요.',
+        description: '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.',
         builder: (ctx) => Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx)),
@@ -1434,6 +1434,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 onDepth: _editDepth,
                 onUndo: _undo,
                 onDone: _exitDecorate,
+                onSkin: () => openStore(context),
               ),
             ),
         ],
@@ -1586,7 +1587,7 @@ void showBookOnShelf(BuildContext context, String id) {
   focusBookOnShelf.value = id;
   Navigator.of(context).popUntil((r) => r.isFirst);
   // 다른 탭(읽기·갈피 등)에서 책을 넣었어도 책장 탭으로
-  AppNav.instance.goTab(0);
+  AppNav.instance.goTab(AppTab.shelf);
 }
 
 /// 책장에 보이는 서재 값만 모은 열쇠(장정·판본은 고친 때, 갈피 수·갈피 색·숨김). 이것이 바뀌면 홈이 줄을 다시 만든다
@@ -1648,15 +1649,12 @@ class _Header extends StatelessWidget {
       button: true,
       label: label,
       child: _Pressable(
-        onTap: name == 'decorate' && onDecorate != null
-            ? onDecorate!
-            : name == 'books'
-                ? () => openAllBooks(context)
-                : name == 'store'
-                    ? () => openStore(context)
-                    : name == 'add'
-                        ? () => openAddBook(context)
-                        : () => ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('$label: 아직 옮기는 중이에요'), duration: const Duration(seconds: 1))),
+        onTap: switch (name) {
+          'decorate' => onDecorate,
+          'add' => () => openAddBook(context),
+          'profile' => () => openProfile(context),
+          _ => null,
+        },
         child: SizedBox(
           width: _headerCell,
           height: 44,
@@ -1692,7 +1690,8 @@ class _Header extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 2.5),
-            child: icons ? Row(children: [icon('store', '스토어'), icon('decorate', '꾸미기'), icon('books', '전체 책'), icon('add', '책 추가')]) : const SizedBox(height: 44),
+            // 꾸미기 · 추가 · 프로필(2026-11-16 메뉴 구조 개편: 전체 책은 하단 '내 책' 탭과 겹쳐 빼고, 스토어(선반·벽지)는 꾸미기 안에서 연다)
+            child: icons ? Row(children: [icon('decorate', '꾸미기'), icon('add', '책 추가'), icon('profile', '내 정보')]) : const SizedBox(height: 44),
           ),
         ],
       ),

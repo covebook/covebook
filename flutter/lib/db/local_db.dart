@@ -205,6 +205,27 @@ CREATE TABLE IF NOT EXISTS bookcase_placements (
 )
 ''';
 
+/// 긴 감상 표(Flutter만, 2026-11-16 기록 > 감상). 지금 앱 구조(librarySchema·user_version 10)는 그대로 두고, 열 때마다 없으면 만든다:
+/// 지금 앱 DB를 그대로 이어받은 기기·예전 Flutter DB도 버전 올리기 없이 이 표가 생긴다(지금 앱이 다시 열어도 모르는 표라 건드리지 않는다)
+const essaySchema = '''
+CREATE TABLE IF NOT EXISTS essays (
+  id TEXT PRIMARY KEY NOT NULL,
+  my_book_id TEXT NOT NULL,
+  title TEXT,
+  body TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS essays_book_idx ON essays (my_book_id, created_at)
+''';
+
+/// 감상 표가 없으면 만든다(열 때마다, 여러 번 해도 같다)
+Future<void> ensureEssayTable(DatabaseExecutor d) async {
+  for (final stmt in essaySchema.split(';')) {
+    if (stmt.trim().isNotEmpty) await d.execute(stmt);
+  }
+}
+
 Database? _db;
 
 /// 지금 앱(expo-sqlite)이 서재를 두는 곳: 안드로이드 files/SQLite, iOS Documents/SQLite
@@ -232,6 +253,7 @@ Future<Database> openLibrary({String? path}) async {
       }
       await d.execute('INSERT OR IGNORE INTO sync_meta(id) VALUES(1)');
     },
+    onOpen: ensureEssayTable,
   );
   return _db!;
 }

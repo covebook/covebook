@@ -36,6 +36,16 @@ Widget shelfIcon(Color color, {double size = 26, bool filled = false}) {
   return _svg('${bar(0.6)}${bar(9.8)}${bar(24.46 - bookW / 2, 'transform="rotate(-18 24.46 13.5)"')}', _boxOf(size, 33, 13.5));
 }
 
+/// 내 책: 닫힌 책 한 권(앞에서 본 표지, 왼쪽에 책등 접힘 선). 찬 모양은 접힘 선을 바탕색 선으로 나눈다(읽기·통계 아이콘과 같은 규칙)
+Widget myBooksTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
+  final c = _hex(color);
+  return _svg(
+    '<rect x="1.2" y="1.2" width="17.6" height="21.6" rx="3.6" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="$_w" $_round/>'
+    '<path d="M6 1.8 V22.2" fill="none" stroke="${filled ? _hex(bg) : c}" stroke-width="${filled ? 1.6 : _w}" $_round/>',
+    _boxOf(size, 20, 12, 1.04),
+  );
+}
+
 /// 갈피: 위가 둥글고 아래가 V로 파인 가름끈 종이
 Widget bookmarkTabIcon(Color color, {double size = 26, bool filled = false}) {
   final c = _hex(color);
@@ -55,7 +65,7 @@ Widget readTabIcon(Color color, Color bg, {double size = 26, bool filled = false
   );
 }
 
-/// 기록: 달력(찬 모양은 머리줄을 바탕색 선으로 나눈다)
+/// 통계(예전 기록 탭): 달력(찬 모양은 머리줄을 바탕색 선으로 나눈다)
 Widget recordTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
   final c = _hex(color);
   return _svg(

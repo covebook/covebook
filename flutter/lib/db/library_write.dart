@@ -9,7 +9,8 @@ import 'package:sqflite/sqflite.dart';
 import '../domain/library.dart';
 import 'local_db.dart';
 
-enum LibKind { editions, books, rounds, sessions, bookmarks, bindings }
+/// 서재 항목 종류. essays(긴 감상)는 Flutter만 있다(지금 앱에는 없는 표)
+enum LibKind { editions, books, rounds, sessions, bookmarks, bindings, essays }
 
 const libTable = {
   LibKind.editions: 'editions',
@@ -18,6 +19,7 @@ const libTable = {
   LibKind.sessions: 'sessions',
   LibKind.bookmarks: 'bookmarks',
   LibKind.bindings: 'bindings',
+  LibKind.essays: 'essays',
 };
 
 const libColumns = {
@@ -28,6 +30,7 @@ const libColumns = {
   LibKind.rounds: ['id', 'my_book_id', 'idx', 'started_on', 'finished_on', 'paused', 'created_at', 'updated_at'],
   LibKind.sessions: ['id', 'my_book_id', 'round_id', 'started_at', 'ended_at', 'duration_ms', 'start_page', 'pages_read', 'memo', 'created_at', 'updated_at'],
   LibKind.bookmarks: ['id', 'my_book_id', 'body', 'page', 'memo', 'photo_uri', 'photo_ratio', 'session_id', 'saved_at', 'board_x', 'board_y', 'board_rot', 'board_w', 'created_at', 'updated_at'],
+  LibKind.essays: ['id', 'my_book_id', 'title', 'body', 'created_at', 'updated_at'],
 };
 
 String _upsert(LibKind k) {
@@ -61,6 +64,9 @@ List<Object?> valuesOf(LibKind kind, Object item) {
     case LibKind.bookmarks:
       final m = item as Bookmark;
       return [m.id, m.myBookId, m.text, m.page, m.memo, m.photoUri, m.photoRatio, m.sessionId, m.savedAt, m.boardX, m.boardY, m.boardRot, m.boardW, m.createdAt, m.updatedAt];
+    case LibKind.essays:
+      final e = item as Essay;
+      return [e.id, e.myBookId, e.title, e.body, e.createdAt, e.updatedAt];
   }
 }
 

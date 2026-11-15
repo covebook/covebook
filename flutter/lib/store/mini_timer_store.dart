@@ -16,7 +16,7 @@ class MiniTimerPlace extends ChangeNotifier {
   /// 맨 위 화면 이름('/'는 하단 탭 화면, '/reading/…'은 읽기 화면)
   String route = '/';
 
-  /// 하단 탭 화면에서 고른 탭('/', '/bookmarks', '/read', '/stats', '/me')
+  /// 하단 탭 화면에서 고른 탭('/', '/books', '/read', '/records', '/stats')
   String tab = '/';
   double? bottom;
   bool hidden = false;

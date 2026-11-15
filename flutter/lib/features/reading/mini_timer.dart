@@ -18,7 +18,8 @@ import 'reading_screen.dart';
 
 const _actionsW = 112.0; // 펼친 왼쪽 부분(바로가기 + 재생/일시정지)
 const _gap = 12.0;
-const _tabs = ['/', '/bookmarks', '/stats', '/community', '/me'];
+// 하단 탭 화면(앱 틀 tabPaths에서 읽기 탭만 뺀 것: 읽기 탭에서는 타이머를 띄우지 않는다)
+const _tabs = ['/', '/books', '/records', '/stats'];
 
 bool miniTimerHidden(String path) => path == '/read' || path.startsWith('/reading');
 

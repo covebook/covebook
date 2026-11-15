@@ -1,4 +1,5 @@
-// 앱 틀: 하단 탭(책장 · 갈피 · 읽기 · 기록 · [커뮤니티: 서버가 열었을 때만] · 내 정보). 지금 앱 app/(tabs)/_layout.tsx와 ui/tabBar.ts를 옮긴 것.
+// 앱 틀: 하단 탭(책장 · 내 책 · 읽기 · 기록 · 통계). 지금 앱 app/(tabs)/_layout.tsx와 ui/tabBar.ts를 옮긴 뒤 2026-11-16 메뉴 구조 개편:
+// 갈피는 기록 탭 안(갈피 | 감상)으로, 예전 기록 화면은 통계로, 내 정보는 책장 머리 프로필로 옮겼다. 커뮤니티는 이번에 하단에 넣지 않는다(코드는 그대로 둔다).
 // 하단바는 화면 양옆·아래에서 띄운 흰 알약(옅은 그림자), 글자 없이 아이콘만: 고르지 않은 탭은 속이 빈 회색, 고른 탭은 검정으로 속이 찬 모양
 library;
 
@@ -8,14 +9,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../features/bookmark/bookmarks_screen.dart';
-import '../features/community/community_screens.dart' show CommunityTab, communityOpen, watchCommunityOpen;
+import '../features/book/my_books_tab.dart' show MyBooksTab;
+import '../features/record/record_tab.dart' show RecordTab;
+import '../features/community/community_screens.dart' show watchCommunityOpen;
 import '../domain/library.dart';
 import 'app_nav.dart';
 import '../features/home/home_screen.dart';
 import '../domain/reading.dart' show askGapMs, withJosa;
 import '../features/reading/finish_screen.dart';
-import '../features/settings/settings_screen.dart';
 import '../features/reading/reading_screen.dart';
 import '../services/ambient.dart';
 import '../services/cover_colors.dart';
@@ -58,18 +59,14 @@ class _Tab {
 
 final _tabs = <_Tab>[
   _Tab('책장', (c, f) => shelfIcon(c, size: TabBarStyle.icon, filled: f), (_) => const HomeScreen()),
-  _Tab('갈피', (c, f) => bookmarkTabIcon(c, size: TabBarStyle.icon, filled: f), (_) => const BookmarksScreen()),
+  _Tab('내 책', (c, f) => myBooksTabIcon(c, AppColors.bg, size: TabBarStyle.icon, filled: f), (_) => const MyBooksTab()),
   _Tab('읽기', (c, f) => readTabIcon(c, AppColors.bg, size: TabBarStyle.icon, filled: f), (_) => const ReadList()),
-  _Tab('기록', (c, f) => recordTabIcon(c, AppColors.bg, size: TabBarStyle.icon, filled: f), (_) => const StatsScreen()),
-  _Tab('커뮤니티', (c, f) => communityTabIcon(c, AppColors.bg, size: TabBarStyle.icon, filled: f), (_) => const CommunityTab()),
-  _Tab('내 정보', (c, f) => profileTabIcon(c, size: TabBarStyle.icon, filled: f), (_) => const SettingsScreen(tab: true)),
+  _Tab('기록', (c, f) => bookmarkTabIcon(c, size: TabBarStyle.icon, filled: f), (_) => const RecordTab()),
+  _Tab('통계', (c, f) => recordTabIcon(c, AppColors.bg, size: TabBarStyle.icon, filled: f), (_) => const StatsScreen()),
 ];
 
-/// 탭마다 지금 앱 경로(작은 타이머 자리·숨김을 정한다)
-const _tabPaths = ['/', '/bookmarks', '/read', '/stats', '/community', '/me'];
-
-/// 커뮤니티 탭 자리: 서버가 열었을 때만 하단바에 보인다(서버 스위치, 지금 앱 _layout href null)
-const _communityTab = 4;
+/// 탭마다 경로(작은 타이머 자리·숨김을 정한다, mini_timer.dart 탭 목록과 같게)
+const tabPaths = ['/', '/books', '/read', '/records', '/stats'];
 
 /// 시험 빌드 전용: --dart-define=QA_SEED_YEAR=2025로 빌드하면 켤 때 지금 책장을 그해 책장으로 남긴다(지난 책장 화면 확인용)
 const _qaSeedYear = int.fromEnvironment('QA_SEED_YEAR');
@@ -99,7 +96,6 @@ class _AppShellState extends State<AppShell> {
     }
     // 지난 독서가 중간에 멈췄거나 끝낸 기록을 저장하지 않았으면 다시 켰을 때 묻는다(지금 앱 RecoveryDialog)
     AppNav.instance.addListener(_nav);
-    communityOpen.addListener(_communityChanged);
     final reading = ReadingStore.instance;
     // 서재는 첫 화면이 뜬 뒤 미리 읽어 둔다(복구 창·다른 탭이 책을 바로 찾게)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -140,18 +136,8 @@ class _AppShellState extends State<AppShell> {
   void _select(int i) => setState(() {
         _index = i;
         _opened.add(i);
-        MiniTimerPlace.instance.setTab(_tabPaths[i]);
+        MiniTimerPlace.instance.setTab(tabPaths[i]);
       });
-
-  // 커뮤니티가 닫히면(서버 스위치) 그 탭을 보고 있던 사람은 책장으로
-  void _communityChanged() {
-    if (!mounted) return;
-    if (!communityOpen.value && _index == _communityTab) {
-      _select(0);
-    } else {
-      setState(() {});
-    }
-  }
 
   void _shelfChanged() {
     if (shelfReady.value) _dropCover();
@@ -180,8 +166,8 @@ class _AppShellState extends State<AppShell> {
   // (끝내면 다시 열 때 엔진이 새로 떠 읽던 독서가 '중간에 멈췄어요'로 바뀌고 시간이 빠졌다, 2026-11-15 QA 민혁 F1·F2). 꾸미기 중이면 홈이 꾸미기를 끝낸다
   void _back() {
     if (tabBarHidden.value) return;
-    if (_index != 0) {
-      _select(0);
+    if (_index != AppTab.shelf) {
+      _select(AppTab.shelf);
       return;
     }
     if (Platform.isAndroid) {
@@ -192,7 +178,6 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     AppNav.instance.removeListener(_nav);
-    communityOpen.removeListener(_communityChanged);
     ReadingStore.instance.removeListener(_readingChanged);
     shelfReady.removeListener(_shelfChanged);
     _coverTimer?.cancel();
@@ -294,7 +279,6 @@ class _AppShellState extends State<AppShell> {
                 child: Row(
                   children: [
                     for (var i = 0; i < _tabs.length; i++)
-                      if (i != _communityTab || communityOpen.value)
                       Expanded(
                         child: Semantics(
                           button: true,

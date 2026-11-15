@@ -235,7 +235,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
               Navigator.pop(ctx);
             })
           else
-            Btn(label: '전체 책 보기', onPress: () {
+            Btn(label: '내 책 보기', onPress: () {
               next = 'books';
               Navigator.pop(ctx);
             }),

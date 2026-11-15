@@ -58,7 +58,7 @@ class LibraryModel extends ChangeNotifier {
   /// 합친 뒤 저장 사이에 바뀐 다른 항목을 잃지 않게, 받은 항목만 지금 서재에 덮어쓴다
   Future<void> applyRemote(List<({LibKind kind, Object item, String id})> writes, List<({LibKind kind, String id})> erases) async {
     if (writes.isEmpty && erases.isEmpty) return;
-    final ed = {...lib.editions}, bk = {...lib.books}, rd = {...lib.rounds}, ss = {...lib.sessions}, bm = {...lib.bookmarks}, bd = {...lib.bindings};
+    final ed = {...lib.editions}, bk = {...lib.books}, rd = {...lib.rounds}, ss = {...lib.sessions}, bm = {...lib.bookmarks}, bd = {...lib.bindings}, es = {...lib.essays};
     Map<String, Object> table(LibKind k) => switch (k) {
           LibKind.editions => ed,
           LibKind.books => bk,
@@ -66,6 +66,7 @@ class LibraryModel extends ChangeNotifier {
           LibKind.sessions => ss,
           LibKind.bookmarks => bm,
           LibKind.bindings => bd,
+          LibKind.essays => es,
         };
     for (final w in writes) {
       table(w.kind)[w.id] = w.item;
@@ -73,7 +74,7 @@ class LibraryModel extends ChangeNotifier {
     for (final e in erases) {
       table(e.kind).remove(e.id);
     }
-    lib = Library(editions: ed, books: bk, rounds: rd, sessions: ss, bookmarks: bm, bindings: bd);
+    lib = Library(editions: ed, books: bk, rounds: rd, sessions: ss, bookmarks: bm, bindings: bd, essays: es);
     notifyListeners();
     final done = _writes.catchError((_) {}).then((_) => applyRemoteChanges([
           for (final w in writes) LocalChange.put(w.kind, w.id, w.item, ''),
@@ -84,7 +85,7 @@ class LibraryModel extends ChangeNotifier {
   }
 
   Library _withBookmarks(Map<String, Bookmark> bookmarks) =>
-      Library(editions: lib.editions, books: lib.books, rounds: lib.rounds, sessions: lib.sessions, bookmarks: bookmarks, bindings: lib.bindings);
+      lib.copy(bookmarks: bookmarks);
 
   /// 아껴둔 갈피(아껴둔 순서)
   List<String> get savedIds => ([for (final m in lib.bookmarks.values) if (m.savedAt != null) m]..sort((a, b) => a.savedAt!.compareTo(b.savedAt!))).map((m) => m.id).toList();
@@ -107,6 +108,7 @@ class LibraryModel extends ChangeNotifier {
     kind<Session>(LibKind.sessions, lib.sessions, next.sessions, (x) => x.updatedAt);
     kind<Bookmark>(LibKind.bookmarks, lib.bookmarks, next.bookmarks, (x) => x.updatedAt);
     kind<Binding>(LibKind.bindings, lib.bindings, next.bindings, (x) => x.updatedAt);
+    kind<Essay>(LibKind.essays, lib.essays, next.essays, (x) => x.updatedAt);
     return out;
   }
 
@@ -317,6 +319,45 @@ class LibraryModel extends ChangeNotifier {
     return commitLib(lib.copy(bookmarks: {...lib.bookmarks, id: next}));
   }
 
+  // ---------- 긴 감상(2026-11-16 기록 > 감상, Flutter만) ----------
+
+  /// 책의 긴 감상(최근에 쓴 순). bookId가 없으면 모든 책(갈피 목록처럼 책이 있는 것만, 숨긴 책 것도 남긴다)
+  List<Essay> essaysOf([String? bookId]) {
+    final list = [
+      for (final e in lib.essays.values)
+        if ((bookId == null || e.myBookId == bookId) && lib.books[e.myBookId] != null) e,
+    ]..sort((a, b) {
+        final c = b.createdAt.compareTo(a.createdAt);
+        return c != 0 ? c : a.id.compareTo(b.id);
+      });
+    return list;
+  }
+
+  /// 긴 감상 쓰기: 새 id를 돌려준다. 저장이 끝날 때까지 기다린다(실패하면 던진다: 화면은 쓴 글을 그대로 둔다)
+  Future<String> addEssay({required String myBookId, String? title, required String body}) async {
+    await load();
+    final t = nowIso();
+    final e = Essay(id: newId('es'), myBookId: myBookId, title: (title ?? '').trim().isEmpty ? null : title!.trim(), body: body, createdAt: t, updatedAt: t);
+    await _commit(lib.copy(essays: {...lib.essays, e.id: e}), [LocalChange.put(LibKind.essays, e.id, e, t)]);
+    return e.id;
+  }
+
+  /// 긴 감상 고치기(제목을 비우면 제목 없이)
+  Future<void> updateEssay(String id, {String? title, required String body}) {
+    final e = lib.essays[id];
+    if (e == null) return Future.value();
+    final t = nowIso();
+    final next = e.edit(title: title, body: body, updated: t);
+    return _commit(lib.copy(essays: {...lib.essays, id: next}), [LocalChange.put(LibKind.essays, id, next, t)]);
+  }
+
+  /// 긴 감상 지우기
+  Future<void> deleteEssay(String id) {
+    if (!lib.essays.containsKey(id)) return Future.value();
+    final t = nowIso();
+    return _commit(lib.copy(essays: {...lib.essays}..remove(id)), [LocalChange.delete(LibKind.essays, id, t)]);
+  }
+
   /// 갈피 지우기
   Future<void> deleteBookmark(String id) {
     if (!lib.bookmarks.containsKey(id)) return Future.value();
@@ -329,7 +370,7 @@ class LibraryModel extends ChangeNotifier {
   List<MyBook> get hiddenBooks => [for (final b in lib.books.values) if (b.hiddenAt != null) b]..sort((a, b) => a.hiddenAt!.compareTo(b.hiddenAt!));
 
   /// 책 지우기. 연도 책장(archived)에 있는 책은 지우지 않고 숨긴다(장정·회차·갈피·독서 기록 연결이 그대로 남는다).
-  /// 지우면 장정·회차·갈피도 지우고, 독서 기록은 책 연결만 비워 통계에 남긴다. 같은 판본을 쓰는 책이 없으면 판본도 지운다
+  /// 지우면 장정·회차·갈피·긴 감상도 지우고, 독서 기록은 책 연결만 비워 통계에 남긴다. 같은 판본을 쓰는 책이 없으면 판본도 지운다
   Future<void> deleteBook(String id, {required bool archived}) {
     final b = lib.books[id];
     if (b == null) return Future.value();
@@ -341,6 +382,7 @@ class LibraryModel extends ChangeNotifier {
     final rounds = {...lib.rounds}..removeWhere((_, r) => r.myBookId == id);
     final bookmarks = {...lib.bookmarks}..removeWhere((_, m) => m.myBookId == id);
     final bindings = {...lib.bindings}..removeWhere((_, x) => x.myBookId == id);
+    final essays = {...lib.essays}..removeWhere((_, x) => x.myBookId == id);
     final sessions = {
       for (final e in lib.sessions.entries)
         e.key: e.value.myBookId != id
@@ -357,7 +399,7 @@ class LibraryModel extends ChangeNotifier {
                 memo: e.value.memo,
               ),
     };
-    return commitLib(Library(editions: editions, books: books, rounds: rounds, sessions: sessions, bookmarks: bookmarks, bindings: bindings));
+    return commitLib(Library(editions: editions, books: books, rounds: rounds, sessions: sessions, bookmarks: bookmarks, bindings: bindings, essays: essays));
   }
 
   /// 숨긴 책을 다시 보이게(숨긴 때만 지운다). 책장 자리는 부르는 쪽이 '책장에 없는 책'으로 넣는다

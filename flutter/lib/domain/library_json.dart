@@ -1,5 +1,5 @@
 // 서재 JSON(지금 앱 Library 모양 그대로: 백업 파일이 쓴다). 쓰기는 항목마다의 toJson, 읽기는 여기.
-// { editions: {id: Edition}, books: {...}, rounds, sessions, bookmarks, bindings }
+// { editions: {id: Edition}, books: {...}, rounds, sessions, bookmarks, bindings, essays(Flutter만, 있을 때만) }
 library;
 
 import 'library.dart';
@@ -125,6 +125,15 @@ Binding bindingFromJson(Json j) => Binding(
       spineArtUri: _s(j['spineArtUri']),
     );
 
+Essay essayFromJson(Json j) => Essay(
+      id: _s(j['id']) ?? '',
+      myBookId: _s(j['myBookId']) ?? '',
+      title: _s(j['title']),
+      body: _s(j['body']) ?? '',
+      createdAt: _s(j['createdAt']) ?? _s(j['updatedAt']) ?? '',
+      updatedAt: _s(j['updatedAt']) ?? '',
+    );
+
 Json libraryToJson(Library lib) => {
       'editions': {for (final e in lib.editions.entries) e.key: e.value.toJson()},
       'books': {for (final e in lib.books.entries) e.key: e.value.toJson()},
@@ -132,6 +141,8 @@ Json libraryToJson(Library lib) => {
       'sessions': {for (final e in lib.sessions.entries) e.key: e.value.toJson()},
       'bookmarks': {for (final e in lib.bookmarks.entries) e.key: e.value.toJson()},
       'bindings': {for (final e in lib.bindings.entries) e.key: e.value.toJson()},
+      // 긴 감상(Flutter만). 없으면 키를 만들지 않는다: 지금 앱 백업과 같은 모양이고, 지금 앱도 모르는 키를 건너뛴다
+      if (lib.essays.isNotEmpty) 'essays': {for (final e in lib.essays.entries) e.key: e.value.toJson()},
     };
 
 /// 초기 백업에는 나중에 생긴 기록 종류가 없을 수 있다
@@ -144,6 +155,8 @@ Library libraryFromJson(Json j) {
     sessions: kind('sessions', sessionFromJson),
     bookmarks: kind('bookmarks', bookmarkFromJson),
     bindings: kind('bindings', bindingFromJson),
+    // 감상이 생기기 전 백업(지금 앱 백업 포함)에는 이 표가 없다
+    essays: kind('essays', essayFromJson),
   );
 }
 

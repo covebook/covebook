@@ -89,6 +89,9 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void>? _pauseLoaded;
   bool _running = false, _again = false, _linking = false, _accountChecked = false, _providersChecked = false, _bookcasesSupported = false, _started = false;
+
+  /// 서버가 긴 감상을 아는지(V19부터: 받기 응답에 'essays'가 있다). 모르는 서버(재배포 전)에는 감상을 보내지 않고 올릴 표시를 남겨 둔다
+  bool _essaysSupported = false;
   Completer<void>? _runningDone;
   Timer? _timer;
   String? _verifiedToken;
@@ -272,7 +275,9 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     final dirty = {for (final e in pendingRows.entries) e.key: (deleted: e.value.deleted, at: e.value.at)};
     final dir = await _imageDir();
     final built = buildPush(model.lib, dirty, dir);
-    final body = built.body;
+    // 감상을 모르는 서버에는 감상을 빼고 보낸다. 보내지 않은 감상은 확인하지 않아 서버가 알게 되면 그때 올라간다
+    final body = _essaysSupported ? built.body : withoutEssays(built.body);
+    final ackable = _essaysSupported ? pendingRows : ackableWithoutEssays(pendingRows);
     await _dropMissingFiles(body);
     if (built.count != dirty.length) throw StateError('올릴 서재 기록을 찾지 못했어요');
     final saved = await layoutState();
@@ -287,8 +292,13 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       await acknowledgePending(pendingRows, layoutRevision);
       return;
     }
+    // 보낼 것이 감상뿐인데 서버가 감상을 모르면 빈 요청을 보내지 않는다
+    if (!body.values.any((l) => l.isNotEmpty) && layout == null && bookcases == null) {
+      await acknowledgePending(ackable, layoutRevision);
+      return;
+    }
     // 서버는 종류별 한 요청에 1,000개까지만 받는다. 큰 서재는 참조 순서대로 나눠 보내고 성공한 묶음만 확인한다
-    const kinds = ['editions', 'books', 'bindings', 'rounds', 'sessions', 'bookmarks'];
+    const kinds = ['editions', 'books', 'bindings', 'rounds', 'sessions', 'bookmarks', 'essays'];
     if (kinds.any((k) => (body[k]?.length ?? 0) > 1000)) {
       for (final kind in kinds) {
         final items = body[kind] ?? const <Wire>[];
@@ -308,7 +318,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     }
     await _uploadFiles(token, _filesIn(body));
     await _pushBatch(token, {...body, 'layout': ?layout, 'bookcases': ?bookcases});
-    await acknowledgePending(pendingRows, layoutRevision);
+    await acknowledgePending(ackable, layoutRevision);
     await markBookcasesSynced(sentCases);
   }
 
@@ -323,6 +333,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     for (var guard = 0; guard < 200; guard++) {
       final p = (await api('GET', '/sync/pull?since=$since&limit=500', token))! as Map<String, Object?>;
       if (p['bookcases'] is List) _bookcasesSupported = true;
+      if (serverKnowsEssays(p)) _essaysSupported = true;
       // 새 서버에서 예전 커서가 놓쳤을 수 있는 기록을 한 번 처음부터 다시 받는다
       if (((p['syncEpoch'] as num?) ?? 0) >= 2 && epoch < 2) {
         await KvStore.set(_revKey, '0');
@@ -378,6 +389,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     if (_verifiedToken == token) return;
     final r = (await api('GET', '/sync/pull?since=0&limit=1', token))! as Map;
     if (r['bookcases'] is List) _bookcasesSupported = true;
+    if (serverKnowsEssays(r)) _essaysSupported = true;
     // 낮은 revision이 나중에 커밋되면 변경을 놓칠 수 있는 구 서버에는 쓰지 않는다
     if (((r['syncEpoch'] as num?) ?? 0) < 2) throw StateError('서버 동기화 업데이트가 필요해요. 기록은 기기에 보관하고 있어요.');
     _verifiedToken = token;

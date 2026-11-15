@@ -51,7 +51,7 @@ class _BackupScreenState extends State<BackupScreen> {
     return '${t.month}월 ${t.day}일 ${p(t.hour)}:${p(t.minute)}';
   }
 
-  String _countsText(Counts c) => '책 ${c.books}권 · 갈피 ${c.bookmarks}개 · 독서 회차 ${c.rounds}개 · 독서 기록 ${c.sessions}개 · 장정 ${c.bindings}개 · 사진 ${c.images}장';
+  String _countsText(Counts c) => '책 ${c.books}권 · 갈피 ${c.bookmarks}개${c.essays > 0 ? ' · 감상 ${c.essays}편' : ''} · 독서 회차 ${c.rounds}개 · 독서 기록 ${c.sessions}개 · 장정 ${c.bindings}개 · 사진 ${c.images}장';
 
   Future<void> _saveToDownloads() async {
     setState(() => _busy = 'export');
@@ -89,7 +89,7 @@ class _BackupScreenState extends State<BackupScreen> {
     appAlert(
       context,
       '백업으로 바꿀까요?',
-      '백업(${(r.data!['exportedAt']! as String).substring(0, 10)}): 책 ${c.books}권 · 갈피 ${c.bookmarks}개 · 독서 기록 ${c.sessions}개 · 사진 ${c.images}장\n지금 기기의 기록은 이 백업 내용으로 바뀌어요.',
+      '백업(${(r.data!['exportedAt']! as String).substring(0, 10)}): 책 ${c.books}권 · 갈피 ${c.bookmarks}개${c.essays > 0 ? ' · 감상 ${c.essays}편' : ''} · 독서 기록 ${c.sessions}개 · 사진 ${c.images}장\n지금 기기의 기록은 이 백업 내용으로 바뀌어요.',
       [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('복원', style: AlertStyle.destructive, onPress: () async {

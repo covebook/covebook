@@ -58,9 +58,9 @@ Future<({int placed, int kept, bool full})> placeWithChoice(BuildContext context
 }
 
 /// 책장에 못 놓고 보관했을 때 결과 제목·설명(책 추가 결과·전체 책 진열이 같이 쓴다)
-String keptTitle({required bool full}) => full ? '책장이 꽉 차서 전체 책에 보관했어요' : '전체 책에만 보관했어요';
+String keptTitle({required bool full}) => full ? '책장이 꽉 차서 내 책에 보관했어요' : '내 책에만 보관했어요';
 String keptNote({required bool full}) =>
-    full ? '선반 $freeShelfSlots칸이 다 찼어요. 책장에서 책을 빼면 그 자리에 진열할 수 있어요.' : '책장에는 아직 없어요. 전체 책에서 진열할 수 있어요.';
+    full ? '선반 $freeShelfSlots칸이 다 찼어요. 책장에서 책을 빼면 그 자리에 진열할 수 있어요.' : '책장에는 아직 없어요. 내 책에서 진열할 수 있어요.';
 
 /// 자리가 없을 때 전용 시트: 진열하려던 책이 선반 판 위에 서 있고, 아래에서 선반을 열거나 보관한다. true = 선반 열기. free: 더 열 수 있는 칸 수
 Future<bool?> _askNoRoom(BuildContext context, List<String> ids, int free) {

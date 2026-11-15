@@ -97,7 +97,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
     if (!mounted) return;
     _released = true;
     final nav = Navigator.of(context);
-    if (moved > 0) await appAlert(context, '선반 크기가 바뀌어 들어가지 않는 책 $moved권을 책장에서 뺐어요. 전체 책에서 다시 진열할 수 있어요.');
+    if (moved > 0) await appAlert(context, '선반 크기가 바뀌어 들어가지 않는 책 $moved권을 책장에서 뺐어요. 내 책에서 다시 진열할 수 있어요.');
     // 저장했으니 PopScope(고친 내용 버릴까요)를 거치지 않고 닫는다
     nav.pop();
   }
@@ -182,7 +182,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
             const SizedBox(width: Space.m),
             Expanded(child: Field(label: '판형 세로(mm)', value: _f['height']!, onChange: (t) => _set('height', t), number: true)),
           ]),
-          Text('크기를 바꾸면 책장에서 책 크기도 바뀌어요. 자리가 모자라면 그 선반 끝 책이 책장에서 빠질 수 있어요(전체 책에는 그대로 있어요).', style: AppType.sub),
+          Text('크기를 바꾸면 책장에서 책 크기도 바뀌어요. 자리가 모자라면 그 선반 끝 책이 책장에서 빠질 수 있어요(내 책에는 그대로 있어요).', style: AppType.sub),
         ],
       ),
     );

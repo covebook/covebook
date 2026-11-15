@@ -1,9 +1,12 @@
-// 전체 책(지금 앱 app/books.tsx, 2026-11-05 사용자 시안): 등록한 모든 책을 보고 관리하는 곳(책장에 놓인 책도 여기 있다). 책장은 그중 골라 놓고 꾸미는 곳.
-// 뒤로·검색·더하기, 밑줄 탭(읽기 상태), '책 N권'과 '책장에 진열'·필터·보기 전환. 정렬과 '책장에 없는 책'·완독한 해·숨긴 책은 필터 시트에.
-// '책장에 진열'을 누르면 고르는 상태(이미 책장에 있는 책은 못 고른다), 아래 '선택한 N권 진열'. 책을 꾹 누르면 어떤 책이든 고르는 상태가 되고
-// 아래에 '삭제'와 '진열'. 고른 책이 모두 연도 책장에 있으면 '삭제' 대신 '숨기기'(숨긴 책은 필터 › 숨긴 책 보기에서 되돌린다)
+// 내 책(지금 앱 app/books.tsx 전체 책, 2026-11-05 사용자 시안 → 2026-11-16 메뉴 개편으로 하단 둘째 탭): 등록한 모든 책을 보고 관리하는 곳
+// (책장에 놓인 책도, 책장에 없는 책도 여기 있다). 책장은 그중 골라 놓고 꾸미는 곳.
+// 탭: '내 책' 제목과 검색·추가, 밑줄 글자 탭(읽기 상태), '책 N권'과 선택·보기 전환·필터. 정렬과 '책장에 없는 책'·완독한 해·숨긴 책은 필터 시트에,
+// 조건이 걸렸을 때만 그 조건과 해제 줄을 보인다. 밀어 넣은 화면(openAllBooks)은 뒤로·검색창 머리줄로 같은 목록.
+// '선택'이나 책을 꾹 누르면 어떤 책이든 고르는 상태가 되고 아래에 '삭제'와 '진열'(진열은 고른 책 중 책장에 없는 책만 센다: 책장에 있는 책 제한은
+// 책장에 꽂기에만). 고른 책이 모두 연도 책장에 있으면 '삭제' 대신 '숨기기'(숨긴 책은 필터 › 숨긴 책 보기에서 되돌린다)
 library;
 
+import '../../app/app_nav.dart' show AppNav;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -13,10 +16,13 @@ import '../../domain/geometry.dart' show mm;
 import '../../domain/layout.dart' show placementOf;
 import '../../domain/library.dart';
 import '../../domain/types.dart' show Book;
+import '../../app/app_shell.dart' show tabBarHidden;
 import '../../services/cover_colors.dart' show shelfRefresh;
 import '../../store/library_model.dart';
 import '../../store/library_store.dart' show archivedBookIds, archivedYears;
+import '../../store/mini_timer_store.dart' show miniTimerSpace;
 import '../../store/placement_store.dart';
+import '../../store/reading_store.dart';
 import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
@@ -31,20 +37,23 @@ import 'add_book_screen.dart' show openAddBook;
 const _statuses = [ReadStatus.want, ReadStatus.reading, ReadStatus.read, ReadStatus.paused];
 const _cellMin = 96.0; // 격자 칸 최소 폭: 휴대폰은 3칸, 넓은 화면은 칸을 늘린다
 const _gap = 14.0; // 격자 칸 사이(가로)
-const _hiddenWhere = '전체 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.';
+const _hiddenWhere = '내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.';
 
 /// 보기 방식은 앱을 켜 둔 동안 기억한다
 var _lastGrid = true;
 
-/// 전체 책 열기(offShelf: 책장에 없는 책만)
-Future<void> openAllBooks(BuildContext context, {bool offShelf = false}) => Navigator.of(context, rootNavigator: true)
-    .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/books'), builder: (_) => AllBooksScreen(offShelf: offShelf)));
-
-enum _Pick { place, manage }
+/// 내 책 열기(offShelf: 책장에 없는 책만): 하단 '내 책' 탭으로 간다(2026-11-16 메뉴 개편: 전체 책은 독립 탭이 됐다). 밀어 넣은 화면은 모두 닫는다
+Future<void> openAllBooks(BuildContext context, {bool offShelf = false}) async {
+  Navigator.of(context, rootNavigator: true).popUntil((r) => r.isFirst);
+  AppNav.instance.goBooks(offShelf: offShelf);
+}
 
 class AllBooksScreen extends StatefulWidget {
-  const AllBooksScreen({super.key, this.offShelf = false});
+  const AllBooksScreen({super.key, this.offShelf = false, this.tab = false});
   final bool offShelf;
+
+  /// 하단 '내 책' 탭(뒤로 없음, 제목·검색·추가 머리줄, 탭 바 높이만큼 아래를 비운다)
+  final bool tab;
 
   @override
   State<AllBooksScreen> createState() => _AllBooksScreenState();
@@ -57,21 +66,38 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
   AllBooksSort _sort = AllBooksSort.recent;
   int? _year;
   bool _grid = _lastGrid;
-  _Pick? _selecting;
+  bool _selecting = false;
+
+  /// 탭 머리줄의 검색 칸(닫으면 검색어도 지운다. 탭을 오가도 그대로 남는다)
+  bool _searching = false;
   final List<String> _picked = [];
   String? _message;
   Set<String> _archived = const {};
+
+  /// 다른 화면이 내 책 탭으로 보내며 '책장에 없는 책만'을 걸었으면 받는다(AppNav.goBooks)
+  void _nav() {
+    final nav = AppNav.instance;
+    if (!nav.booksOffShelf) return;
+    nav.booksOffShelf = false;
+    if (mounted) setState(() => _offShelfOnly = true);
+  }
 
   @override
   void initState() {
     super.initState();
     LibraryModel.instance.addListener(_changed);
     shelfRefresh.addListener(_changed);
+    if (widget.tab) {
+      AppNav.instance.addListener(_nav);
+      _nav();
+    }
     Future.wait([LibraryModel.instance.load(), PlacementStore.instance.ensure(), archivedBookIds().then((a) => _archived = a)]).then((_) => _changed());
   }
 
   @override
   void dispose() {
+    AppNav.instance.removeListener(_nav);
+    if (widget.tab && _selecting) tabBarHidden.value = false;
     _messageTimer?.cancel();
     LibraryModel.instance.removeListener(_changed);
     shelfRefresh.removeListener(_changed);
@@ -84,16 +110,23 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
 
   void _toggle(String id) => setState(() => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
 
+  /// 고르는 동안 탭 바를 숨긴다(아래 삭제·진열 버튼이 탭 바에 가리지 않게. 기기 뒤로는 이 화면이 받아 고르기만 끝낸다: 앱 틀은 탭 바가 숨으면 뒤로를 넘긴다)
+  void _setSelecting(bool on) {
+    _selecting = on;
+    if (widget.tab) tabBarHidden.value = on;
+  }
+
   void _stopSelecting() => setState(() {
-        _selecting = null;
+        _setSelecting(false);
         _picked.clear();
       });
 
-  void _startManage(String id) => setState(() {
-        _selecting = _Pick.manage;
+  /// 고르기 시작('선택' 또는 책을 꾹 누름). 처음 고른 책이 있으면 그 책부터
+  void _startManage([String? id]) => setState(() {
+        _setSelecting(true);
         _picked
           ..clear()
-          ..add(id);
+          ..addAll([?id]);
         _message = null;
       });
 
@@ -146,14 +179,13 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     final offCount = shown.where(layout.drawer.contains).length;
     final hiddenCount = LibraryModel.instance.hiddenBooks.length;
     final pickedBooks = [for (final id in _picked) if (lib.books[id] != null) id];
-    // 진열할 책: 고른 책 중 책장에 없는 책(그사이 놓인 책도 뺀다)
+    // 진열할 책: 고른 책 중 책장에 없는 책(그사이 놓인 책도 뺀다). 책장에 있는 책 제한은 진열에만(삭제·숨기기는 고른 책 모두)
     final chosen = [for (final id in pickedBooks) if (placementOf(layout, id) == null) id];
-    final canPlace = shown.any((id) => placementOf(layout, id) == null);
     final kept = pickedBooks.where(_archived.contains).length;
     final hideOnly = kept > 0 && kept == pickedBooks.length;
     final filtered = _q.trim().isNotEmpty || _status != null || _offShelfOnly || _year != null;
-    // 머리 숫자: 필터로 거른 것이면 무엇을 거른 것인지 함께(2026-11-15 QA: '전체' 탭인데 '책 3권'이라 전체가 3권으로 읽혔다)
-    final countLabel = [if (_year != null) '$_year년 완독', if (_offShelfOnly) '책장에 없는 책'].join(' · ');
+    // 필터 시트에서 건 조건: 걸렸을 때만 숫자 아래에 이름과 해제(2026-11-15 QA: '전체' 탭인데 '책 3권'이라 전체가 3권으로 읽혔다)
+    final conditions = filterConditions(offShelfOnly: _offShelfOnly, year: _year, sort: _sort);
     // 같은 판을 두 권 넣었으면(별도 소장본) 몇 번째 소장본인지(넣은 차례)
     final copyOf = copyLabels(lib);
 
@@ -174,35 +206,51 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             },
           ),
         ),
-        if (_selecting != null)
+        if (_selecting)
           Padding(
             padding: const EdgeInsets.only(top: Space.m, bottom: Space.s),
-            child: Text(_selecting == _Pick.manage ? '삭제하거나 진열할 책을 골라주세요.' : '책장에 진열할 책을 골라주세요.', textAlign: TextAlign.center, style: AppType.sub),
+            child: Text('삭제하거나 진열할 책을 골라주세요.', textAlign: TextAlign.center, style: AppType.sub),
           )
-        else
+        else ...[
           Padding(
             padding: const EdgeInsets.only(top: Space.xs),
-            // 지금 앱: 마지막 아이콘 marginRight −10(오른쪽 묶음이 10 더 오른쪽), 진열 글자 오른쪽 8(Flutter TextLink는 안쪽 여백 8이 이미 있다)
+            // 왼쪽 '책 N권'(지금 검색·필터 결과), 오른쪽 선택 · 보기 전환 · 필터(지금 앱: 마지막 아이콘 marginRight −10, Flutter TextLink는 안쪽 여백 8이 이미 있다)
             child: Row(children: [
-              Expanded(child: Text(countLabel.isEmpty ? '책 ${rows.length}권' : '$countLabel ${rows.length}권', style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text('책 ${rows.length}권', style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis)),
               Transform.translate(
                 offset: const Offset(10, 0),
                 child: Row(children: [
-                  if (canPlace)
-                    TextLink(label: '책장에 진열', onPress: () {
+                  if (rows.isNotEmpty)
+                    TextLink(label: '선택', onPress: () {
                       _say(null);
-                      setState(() => _selecting = _Pick.place);
+                      _startManage();
                     }),
-                  FilterIcon(active: _offShelfOnly || _sort != AllBooksSort.recent || _year != null, onPress: () => _openFilter(years, offCount, hiddenCount)),
                   IconBtn(
                     label: _grid ? '목록으로 보기' : '표지 격자로 보기',
                     onPress: () => setState(() => _lastGrid = _grid = !_grid),
                     child: LucideIcon(_grid ? 'ListIcon' : 'LayoutGrid'),
                   ),
+                  FilterIcon(active: conditions.isNotEmpty, onPress: () => _openFilter(years, offCount, hiddenCount)),
                 ]),
               ),
             ]),
           ),
+          if (conditions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: Space.xs),
+              child: Row(children: [
+                Expanded(child: Text(conditions.join(' · '), style: AppType.sub.copyWith(color: AppColors.ink), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                Transform.translate(
+                  offset: const Offset(8, 0),
+                  child: TextLink(label: '조건 해제', soft: true, onPress: () => setState(() {
+                    _offShelfOnly = false;
+                    _year = null;
+                    _sort = AllBooksSort.recent;
+                  })),
+                ),
+              ]),
+            ),
+        ],
         if (_message != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(_message!, style: AppType.sub.copyWith(color: AppColors.ink))),
       ]),
     );
@@ -228,14 +276,17 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             ),
     );
 
+    // 탭에서는 아래 탭 바(와 독서 중이면 작은 타이머) 높이만큼 비운다. 고르는 중에는 탭 바가 숨고 아래 버튼 줄이 있다
+    final bottomPad = widget.tab && !_selecting ? TabBarStyle.contentPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) : Space.section;
+
     Widget body(double width) {
-      if (rows.isEmpty) return ListView(padding: EdgeInsets.zero, children: [header, empty]);
+      if (rows.isEmpty) return ListView(padding: EdgeInsets.only(bottom: bottomPad), children: [header, empty]);
       if (_grid) {
         final cols = math.max(3, ((width + _gap) / (_cellMin + _gap)).floor());
         final cellW = (width - _gap * (cols - 1)) / cols;
         final lines = (rows.length + cols - 1) ~/ cols;
         return ListView.builder(
-          padding: const EdgeInsets.only(bottom: Space.section),
+          padding: EdgeInsets.only(bottom: bottomPad),
           itemCount: lines + 1,
           itemBuilder: (_, i) {
             if (i == 0) return header;
@@ -249,22 +300,16 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     lib: lib,
                     book: r.book,
                     width: cellW,
-                    sub: [?r.book.author, ?copyOf[r.book.id], if (r.onShelf && _selecting == null) '책장'].join(' · '),
+                    sub: [?r.book.author, ?copyOf[r.book.id], if (r.onShelf) '책장'].join(' · '),
                     label: [r.book.title, ?r.book.author, subOf(r)].where((t) => t.isNotEmpty).join(', '),
-                    state: _selecting == null
+                    state: !_selecting
                         ? _CellState.normal
-                        : _selecting == _Pick.place && r.onShelf
-                            ? _CellState.onShelf
-                            : _picked.contains(r.book.id)
-                                ? _CellState.picked
-                                : _CellState.free,
-                    onPress: _selecting == null
-                        ? () => openBook(context, r.book.id)
-                        : _selecting == _Pick.place && r.onShelf
-                            ? null
-                            : () => _toggle(r.book.id),
+                        : _picked.contains(r.book.id)
+                            ? _CellState.picked
+                            : _CellState.free,
+                    onPress: !_selecting ? () => openBook(context, r.book.id) : () => _toggle(r.book.id),
                     onLongPress: () {
-                      if (_selecting == null) _startManage(r.book.id);
+                      if (!_selecting) _startManage(r.book.id);
                     },
                   ),
                 ],
@@ -274,20 +319,16 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
         );
       }
       return ListView.builder(
-        padding: const EdgeInsets.only(bottom: Space.section),
+        padding: EdgeInsets.only(bottom: bottomPad),
         itemCount: rows.length + 1,
         itemBuilder: (_, i) {
           if (i == 0) return header;
           final r = rows[i - 1];
           final b = lib.books[r.book.id];
           final Widget row;
-          if (_selecting != null) {
+          if (_selecting) {
             final on = _picked.contains(r.book.id);
-            final locked = _selecting == _Pick.place && r.onShelf;
-            row = Opacity(
-              opacity: locked ? 0.45 : 1,
-              child: _BookRow(lib: lib, book: r.book, sub: subOf(r), selected: locked ? null : on, onPress: locked ? null : () => _toggle(r.book.id), right: locked ? null : _PickMark(on: on)),
-            );
+            row = _BookRow(lib: lib, book: r.book, sub: subOf(r), selected: on, onPress: () => _toggle(r.book.id), right: _PickMark(on: on));
           } else {
             // 시안: 제목 · 저자·상태 · 한 줄 감상 두 줄, 메모가 있으면 메모 아이콘
             row = _BookListRow(
@@ -305,30 +346,52 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       );
     }
 
+    void onQuery(String v) {
+      _messageTimer?.cancel();
+      setState(() {
+        _q = v;
+        _message = null;
+      });
+    }
+
+    final search = SearchField(value: _q, onChange: onQuery, autofocus: widget.tab, placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '내 책에서 찾기');
+    final addBtn = IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const LucideIcon('Plus'));
+    // 탭 머리줄(고르는 중이 아닐 때): '내 책' 제목 · 검색 · 추가. 검색을 누르면 머리줄 아래 검색 칸(갈피 탭과 같은 방식)
+    final tabHead = widget.tab && !_selecting;
+
     return PopScope(
       // 고르는 중에 기기 뒤로를 누르면 화면을 떠나지 않고 고르기만 끝낸다
-      canPop: _selecting == null,
+      canPop: !_selecting,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _stopSelecting();
+        if (!didPop && _selecting) _stopSelecting();
       },
       child: Screen(
         scroll: false,
-        compact: _selecting != null,
-        title: _selecting == null ? null : _selectedTitle(_selecting == _Pick.manage ? pickedBooks.length : chosen.length),
-        left: _selecting == null ? null : TextLink(label: '취소', soft: true, onPress: _stopSelecting),
-        // 제목 대신 뒤로 옆에 검색창(권수는 안내 글자에)
-        headerField: _selecting != null
+        back: !tabHead,
+        compact: _selecting,
+        title: tabHead ? '내 책' : (_selecting ? _selectedTitle(pickedBooks.length) : null),
+        left: _selecting ? TextLink(label: '취소', soft: true, onPress: _stopSelecting) : null,
+        // 밀어 넣은 화면: 제목 대신 뒤로 옆에 검색창(권수는 안내 글자에)
+        headerField: _selecting || widget.tab ? null : search,
+        right: _selecting
             ? null
-            : SearchField(value: _q, onChange: (v) {
-                _messageTimer?.cancel();
-                setState(() {
-                  _q = v;
-                  _message = null;
-                });
-              }, placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '전체 책에서 찾기'),
-        right: _selecting != null ? null : IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const LucideIcon('Plus')),
-        footer: switch (_selecting) {
-          _Pick.manage => Row(children: [
+            : tabHead
+                ? Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconBtn(
+                      label: _searching ? '내 책 검색 닫기' : '내 책 검색',
+                      onPress: () => setState(() {
+                        if (_searching) _q = '';
+                        _searching = !_searching;
+                      }),
+                      child: LucideIcon(_searching ? 'X' : 'Search'),
+                    ),
+                    const SizedBox(width: 4),
+                    addBtn,
+                  ])
+                : addBtn,
+        footer: !_selecting
+            ? null
+            : Row(children: [
               Expanded(
                 child: Btn(
                   size: 'l',
@@ -341,10 +404,11 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
               const SizedBox(width: Space.s),
               Expanded(child: Btn(size: 'l', label: chosen.isNotEmpty ? '진열 ${chosen.length}권' : '진열', disabled: chosen.isEmpty, onPress: () => _placeNow(chosen))),
             ]),
-          _Pick.place => Btn(size: 'l', label: chosen.isNotEmpty ? '선택한 ${chosen.length}권 진열' : '선택한 책 진열', disabled: chosen.isEmpty, onPress: () => _placeNow(chosen)),
-          null => null,
-        },
-        children: [Expanded(child: LayoutBuilder(builder: (_, box) => body(box.maxWidth)))],
+        children: [
+          if (tabHead && _searching)
+            Padding(padding: const EdgeInsets.only(top: Space.tight, bottom: Space.item), child: search),
+          Expanded(child: LayoutBuilder(builder: (_, box) => body(box.maxWidth))),
+        ],
       ),
     );
   }

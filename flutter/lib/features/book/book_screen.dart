@@ -35,6 +35,7 @@ import 'book_share_screen.dart' show openBookShare;
 import 'edit_book_screen.dart' show openEditBook;
 import 'place_books.dart' show placeWithChoice;
 import '../community/book_reviews.dart';
+import '../record/essay_screens.dart' show EssayRow, openNewEssay;
 
 const _views = [('info', '책 정보'), ('rate', '평가'), ('mine', '내 기록')];
 const _statuses = [ReadStatus.want, ReadStatus.reading, ReadStatus.read, ReadStatus.paused];
@@ -150,9 +151,9 @@ class _BookScreenState extends State<BookScreen> {
           }),
         // 책장에서 빼기는 배치만 푼다(책 정보·장정·독서 기록·갈피 그대로). 삭제(빨간 글자)는 책 데이터 자체를 지운다
         if (onShelf)
-          ListItem(label: '책장에서 빼기', sub: '기록은 그대로, 전체 책에 남아요', onPress: () async {
+          ListItem(label: '책장에서 빼기', sub: '기록은 그대로, 내 책에 남아요', onPress: () async {
             Navigator.pop(ctx);
-            if (await place.toDrawer(id) && mounted) appAlert(context, '책장에서 뺐어요. 전체 책에 그대로 있어요.');
+            if (await place.toDrawer(id) && mounted) appAlert(context, '책장에서 뺐어요. 내 책에 그대로 있어요.');
           })
         else
           ListItem(label: '책장에 진열', onPress: () {
@@ -180,7 +181,7 @@ class _BookScreenState extends State<BookScreen> {
     appAlert(
       context,
       hide ? '책을 숨길까요?' : '책을 삭제할까요?',
-      hide ? '지금 책장과 책 목록에서 빠지고, ${years.join('·')}년 책장에는 그대로 남아요.\n전체 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id])),
+      hide ? '지금 책장과 책 목록에서 빠지고, ${years.join('·')}년 책장에는 그대로 남아요.\n내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id])),
       [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton(hide ? '숨기기' : '삭제', style: hide ? AlertStyle.normal : AlertStyle.destructive, onPress: () async {
@@ -214,6 +215,7 @@ class _BookScreenState extends State<BookScreen> {
     final pub = [?e.publisher, if (e.publishedAt != null && e.publishedAt!.length >= 4) e.publishedAt!.substring(0, 4)].where((x) => x.isNotEmpty).join(' · ');
     final last = rounds.isEmpty ? null : rounds.last;
     final reviews = _reviewsOf(e.isbn13);
+    final essays = _model.essaysOf(id);
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
     final readLabel = b.status == ReadStatus.reading || b.status == ReadStatus.paused
         ? '이어서 읽기'
@@ -295,6 +297,23 @@ class _BookScreenState extends State<BookScreen> {
                 },
               ),
             ),
+          ),
+          // 긴 감상(기록 > 감상과 같은 데이터, 이 책 것만): 별점·한 줄 감상과 따로 둔다
+          Padding(padding: const EdgeInsets.only(top: Space.xl), child: Container(height: 0.5, color: AppColors.line)),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.l),
+            child: Row(children: [
+              Expanded(child: Semantics(header: true, child: Text('긴 감상', style: AppType.label))),
+              if (essays.isNotEmpty) Text('${essays.length}편', style: AppType.caption),
+            ]),
+          ),
+          if (essays.isEmpty)
+            Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text('이 책을 읽고 든 생각을 길게 남겨요. 별점·한 줄 감상은 그대로예요.', style: AppType.sub))
+          else
+            for (final (i, x) in essays.indexed) ...[if (i > 0) const AppDivider(), EssayRow(key: ValueKey(x.id), lib: lib, essay: x, showBook: false)],
+          Padding(
+            padding: const EdgeInsets.only(top: Space.m),
+            child: Btn(label: essays.isEmpty ? '긴 감상 쓰기' : '감상 더 쓰기', kind: 'secondary', onPress: () => openNewEssay(context, book: id)),
           ),
           if (reviews.available) ...[
             const SectionBand(),

@@ -331,6 +331,8 @@ Future<void> replaceAllLibrary(dl.Library lib, {required String? layoutJson, req
       LibKind.sessions: lib.sessions,
       LibKind.bookmarks: lib.bookmarks,
       LibKind.bindings: lib.bindings,
+      // 긴 감상: 감상이 없는 예전 백업(지금 앱 백업 포함)이면 빈 표로 바뀐다(백업 내용 그대로)
+      LibKind.essays: lib.essays,
     };
     for (final e in tables.entries) {
       final table = libTable[e.key]!;

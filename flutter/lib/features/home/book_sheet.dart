@@ -169,7 +169,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                         await place.ensure();
                         if (!await place.toDrawer(bookId) || !context.mounted) return;
                         ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-                          content: const Text('책장에서 뺐어요. 전체 책에 그대로 있어요.'),
+                          content: const Text('책장에서 뺐어요. 내 책에 그대로 있어요.'),
                           duration: const Duration(seconds: 4),
                           action: SnackBarAction(label: '되돌리기', onPressed: () => place.undo()),
                         ));

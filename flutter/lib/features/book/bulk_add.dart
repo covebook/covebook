@@ -194,7 +194,7 @@ Future<String?> showBulkDone(BuildContext context, BulkResult r) {
   final lines = [
     if (r.placed > 0) '책장에 ${r.placed}권 진열했어요.',
     // 꽉 차서 보관했으면 사실대로(2026-11-15 QA 정우 F1)
-    if (r.kept > 0) r.full ? '${r.kept}권은 책장이 꽉 차서 전체 책에 보관했어요.' : '${r.kept}권은 전체 책에만 보관했어요.',
+    if (r.kept > 0) r.full ? '${r.kept}권은 책장이 꽉 차서 내 책에 보관했어요.' : '${r.kept}권은 내 책에만 보관했어요.',
     if (r.failed.isNotEmpty) '${r.failed.length}권은 추가하지 못했어요: ${r.failed.take(3).join(', ')}${r.failed.length > 3 ? ' 외' : ''}',
   ];
   return showSheet<void>(
@@ -209,7 +209,7 @@ Future<String?> showBulkDone(BuildContext context, BulkResult r) {
           Navigator.pop(ctx);
         })
       else if (added > 0)
-        Btn(label: '전체 책 보기', onPress: () {
+        Btn(label: '내 책 보기', onPress: () {
           next = 'books';
           Navigator.pop(ctx);
         }),

@@ -36,6 +36,7 @@ class DecoratePanel extends StatelessWidget {
     required this.onUndo,
     required this.onDone,
     this.bookKey,
+    this.onSkin,
   });
 
   final String? title;
@@ -60,6 +61,9 @@ class DecoratePanel extends StatelessWidget {
 
   /// 고른 책이 바뀌면 막대 상태를 새로
   final Object? bookKey;
+
+  /// 선반·벽지 고르기(스토어) 열기
+  final VoidCallback? onSkin;
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +91,20 @@ class DecoratePanel extends StatelessWidget {
                 style: title != null ? AppType.title.copyWith(fontSize: 23, height: 30 / 23) : AppType.row.copyWith(color: AppColors.inkSoft),
               ),
             ),
+            // 선반·벽지(스토어): 2026-11-16 메뉴 구조 개편으로 책장 머리에서 빼고 꾸미기 안에서 연다
+            if (onSkin != null) ...[
+              Semantics(
+                button: true,
+                label: '선반·벽지',
+                onTap: onSkin,
+                excludeSemantics: true,
+                child: Pressable(
+                  onPress: onSkin,
+                  child: const SizedBox(height: 40, child: Center(child: Text('선반·벽지', style: TextStyle(fontFamily: AppFonts.ui, fontSize: 15.5, color: AppColors.inkSoft)))),
+                ),
+              ),
+              const SizedBox(width: 14),
+            ],
             Semantics(
               button: true,
               enabled: canUndo,

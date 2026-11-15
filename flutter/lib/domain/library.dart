@@ -357,6 +357,45 @@ class Bookmark {
   }
 }
 
+/// 긴 감상(2026-11-16 기록 > 감상): 책 한 권에 여러 편 쓸 수 있는 긴 글. 별점·한 줄 감상(MyBook.note)·갈피 메모·독서 메모와 따로 둔다(덮거나 합치지 않는다).
+/// 제목은 고르지 않아도 된다(없으면 본문 첫 부분을 미리보기로)
+class Essay {
+  Essay({required this.id, required this.myBookId, required this.body, required this.createdAt, required this.updatedAt, this.title});
+  final String id, myBookId, body, createdAt, updatedAt;
+  final String? title;
+
+  /// 제목·본문을 고친 사본(제목을 비우면 null)
+  Essay edit({String? title, required String body, required String updated}) =>
+      Essay(id: id, myBookId: myBookId, title: (title ?? '').trim().isEmpty ? null : title!.trim(), body: body, createdAt: createdAt, updatedAt: updated);
+
+  Json toJson() {
+    final m = <String, Object?>{'id': id, 'myBookId': myBookId, 'body': body, 'createdAt': createdAt, 'updatedAt': updatedAt};
+    _put(m, 'title', title);
+    return m;
+  }
+}
+
+/// 감상 목록에 보일 제목: 쓴 제목, 없으면 본문 첫 줄(길면 줄임)
+String essayHeadline(Essay e, [int max = 40]) {
+  final t = e.title?.trim() ?? '';
+  if (t.isNotEmpty) return t;
+  final first = e.body.trim().split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => '').trim();
+  // 글자(코드 포인트) 단위로 자른다(그림 글자가 반으로 갈리지 않게)
+  final r = first.runes;
+  return r.length > max ? '${String.fromCharCodes(r.take(max))}…' : first;
+}
+
+/// 감상 목록 미리보기 글: 제목이 있으면 본문 앞부분, 없으면 첫 줄 다음부터(제목 자리에 첫 줄을 이미 썼다)
+String essayPreview(Essay e) {
+  final body = e.body.trim();
+  if ((e.title?.trim() ?? '').isNotEmpty) return body.replaceAll(RegExp(r'\s*\n+\s*'), ' ');
+  final lines = body.split('\n').where((l) => l.trim().isNotEmpty).toList();
+  if (lines.isEmpty) return '';
+  final rest = lines.skip(1).join(' ').trim();
+  // 첫 줄이 제목 자리에서 잘렸으면 첫 줄부터 보인다
+  return rest.isEmpty ? (lines.first.trim().runes.length > 40 ? lines.first.trim() : '') : rest;
+}
+
 class Binding {
   Binding({
     required this.id,
@@ -439,13 +478,14 @@ class Binding {
 /// 서재 한 벌(종류마다 id → 항목)
 class Library {
   Library({Map<String, Edition>? editions, Map<String, MyBook>? books, Map<String, Round>? rounds, Map<String, Session>? sessions,
-      Map<String, Bookmark>? bookmarks, Map<String, Binding>? bindings})
+      Map<String, Bookmark>? bookmarks, Map<String, Binding>? bindings, Map<String, Essay>? essays})
       : editions = editions ?? {},
         books = books ?? {},
         rounds = rounds ?? {},
         sessions = sessions ?? {},
         bookmarks = bookmarks ?? {},
-        bindings = bindings ?? {};
+        bindings = bindings ?? {},
+        essays = essays ?? {};
   final Map<String, Edition> editions;
   final Map<String, MyBook> books;
   final Map<String, Round> rounds;
@@ -453,9 +493,12 @@ class Library {
   final Map<String, Bookmark> bookmarks;
   final Map<String, Binding> bindings;
 
+  /// 긴 감상(Flutter만: 지금 앱에는 없다)
+  final Map<String, Essay> essays;
+
   /// 몇 가지 표만 바꾼 새 서재(나머지는 같은 표를 함께 쓴다)
   Library copy({Map<String, Edition>? editions, Map<String, MyBook>? books, Map<String, Round>? rounds, Map<String, Session>? sessions,
-          Map<String, Bookmark>? bookmarks, Map<String, Binding>? bindings}) =>
+          Map<String, Bookmark>? bookmarks, Map<String, Binding>? bindings, Map<String, Essay>? essays}) =>
       Library(
         editions: editions ?? this.editions,
         books: books ?? this.books,
@@ -463,8 +506,10 @@ class Library {
         sessions: sessions ?? this.sessions,
         bookmarks: bookmarks ?? this.bookmarks,
         bindings: bindings ?? this.bindings,
+        essays: essays ?? this.essays,
       );
 
+  // 감상은 있을 때만 적는다(지금 앱 서재와 같은 모양으로 견주는 시험·지금 앱 백업 형식 그대로)
   Json toJson() => {
         'editions': {for (final e in editions.entries) e.key: e.value.toJson()},
         'books': {for (final e in books.entries) e.key: e.value.toJson()},
@@ -472,6 +517,7 @@ class Library {
         'sessions': {for (final e in sessions.entries) e.key: e.value.toJson()},
         'bookmarks': {for (final e in bookmarks.entries) e.key: e.value.toJson()},
         'bindings': {for (final e in bindings.entries) e.key: e.value.toJson()},
+        if (essays.isNotEmpty) 'essays': {for (final e in essays.entries) e.key: e.value.toJson()},
       };
 }
 

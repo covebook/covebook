@@ -28,10 +28,14 @@ const _motion = [
 /// 서버 동기화를 쓸 수 있는지(서버 주소가 있는 빌드)
 bool get _syncAvailable => SyncService.instance.available;
 
+/// 내 정보(설정·백업 및 복원·계정·진동·움직임 줄이기·문의·개인정보): 책장 머리 프로필에서 연다(2026-11-16 메뉴 구조 개편, 하단 '내 정보' 탭을 뺐다)
+Future<void> openProfile(BuildContext context) => Navigator.of(context, rootNavigator: true)
+    .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/me'), builder: (_) => const SettingsScreen()));
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.tab = false});
 
-  /// 하단 '내 정보' 탭(뒤로 없음, 떠 있는 탭 바만큼 아래 여백)
+  /// 하단 탭으로 둘 때(뒤로 없음, 떠 있는 탭 바만큼 아래 여백). 지금은 머리 프로필에서 밀어 넣어 연다
   final bool tab;
 
   @override
@@ -119,7 +123,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final tab = widget.tab;
     return Screen(
-      title: tab ? '내 정보' : '설정',
+      title: '내 정보',
       back: !tab,
       bottomPad: tab ? TabBarStyle.contentPad - Space.section : 0,
       children: [

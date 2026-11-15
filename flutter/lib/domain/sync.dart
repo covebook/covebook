@@ -154,6 +154,25 @@ Wire bookmarkToWire(Bookmark m, String imageDir) => _clean({
       'updatedAt': m.updatedAt,
     });
 
+/// 긴 감상(Flutter만, 서버 V19부터)
+Wire essayToWire(Essay e) => _clean({
+      'id': e.id,
+      'myBookId': e.myBookId,
+      'title': e.title,
+      'body': e.body,
+      'createdAt': e.createdAt,
+      'updatedAt': e.updatedAt,
+    });
+
+/// 감상을 모르는 서버(V19 전, 재배포 전)에 보낼 묶음: 감상만 뺀다. 감상의 올릴 표시는 남겨 두고(ackableWithoutEssays) 서버가 알게 되면 그때 보낸다
+Map<String, List<Wire>> withoutEssays(Map<String, List<Wire>> body) => {for (final e in body.entries) if (e.key != LibKind.essays.name) e.key: e.value};
+
+/// 올림 완료로 칠 변경(감상을 보내지 않았으면 감상 표시는 남긴다: 확인하면 그 감상은 다시 올라가지 않는다)
+Map<String, T> ackableWithoutEssays<T>(Map<String, T> pending) => {for (final e in pending.entries) if (!e.key.startsWith('${LibKind.essays.name}:')) e.key: e.value};
+
+/// 서버가 감상을 아는지: 감상을 아는 서버는 받기 응답에 늘 'essays' 목록을 넣는다(비어 있어도)
+bool serverKnowsEssays(Map<Object?, Object?> pull) => pull['essays'] is List;
+
 /// 올릴 변경 묶음: 바뀐 항목(현재 값)과 삭제 표시. 이미 사라진 항목이 삭제도 아니면 건너뛴다. 종류 이름 → 목록
 ({Map<String, List<Wire>> body, int count}) buildPush(Library lib, Dirty dirty, String imageDir) {
   final body = {for (final k in LibKind.values) k.name: <Wire>[]};
@@ -175,6 +194,7 @@ Wire bookmarkToWire(Bookmark m, String imageDir) => _clean({
       LibKind.rounds => lib.rounds[id] == null ? null : roundToWire(lib.rounds[id]!),
       LibKind.sessions => lib.sessions[id] == null ? null : sessionToWire(lib.sessions[id]!),
       LibKind.bookmarks => lib.bookmarks[id] == null ? null : bookmarkToWire(lib.bookmarks[id]!, imageDir),
+      LibKind.essays => lib.essays[id] == null ? null : essayToWire(lib.essays[id]!),
     };
     if (w == null) continue;
     body[kind.name]!.add(w);
@@ -191,6 +211,7 @@ Dirty fullDirty(Library lib) => {
       for (final x in lib.sessions.values) dirtyKey(LibKind.sessions, x.id): (deleted: false, at: x.updatedAt),
       for (final x in lib.bookmarks.values) dirtyKey(LibKind.bookmarks, x.id): (deleted: false, at: x.updatedAt),
       for (final x in lib.bindings.values) dirtyKey(LibKind.bindings, x.id): (deleted: false, at: x.updatedAt),
+      for (final x in lib.essays.values) dirtyKey(LibKind.essays, x.id): (deleted: false, at: x.updatedAt),
     };
 
 // ---------- 서버 → 앱 ----------
@@ -323,6 +344,15 @@ Bookmark bookmarkFromWire(Wire w, String imageDir, [Bookmark? local]) {
   );
 }
 
+Essay essayFromWire(Wire w) => Essay(
+      id: w['id']! as String,
+      myBookId: (w['myBookId'] as String?) ?? '',
+      title: _str(w['title']),
+      body: (w['body'] as String?) ?? '',
+      createdAt: _created(w),
+      updatedAt: w['updatedAt']! as String,
+    );
+
 typedef Merge = ({Library lib, List<({LibKind kind, Object item, String id})> writes, List<({LibKind kind, String id})> erases, List<String> files});
 
 /// 받은 변경을 서재에 합친다. 더 새로운 쪽이 이긴다. 받아 와야 할 사진 파일 id도 돌려준다
@@ -334,6 +364,7 @@ Merge mergeRemote(Library lib, Map<String, Object?> pull, String imageDir, [Dirt
     sessions: {...lib.sessions},
     bookmarks: {...lib.bookmarks},
     bindings: {...lib.bindings},
+    essays: {...lib.essays},
   );
   final writes = <({LibKind kind, Object item, String id})>[];
   final erases = <({LibKind kind, String id})>[];
@@ -365,6 +396,7 @@ Merge mergeRemote(Library lib, Map<String, Object?> pull, String imageDir, [Dirt
   apply<Round>(LibKind.rounds, next.rounds, roundFromWire, (x) => x.updatedAt);
   apply<Session>(LibKind.sessions, next.sessions, sessionFromWire, (x) => x.updatedAt);
   apply<Bookmark>(LibKind.bookmarks, next.bookmarks, (w) => bookmarkFromWire(w, imageDir, lib.bookmarks[w['id']]), (x) => x.updatedAt);
+  apply<Essay>(LibKind.essays, next.essays, essayFromWire, (x) => x.updatedAt);
   final files = <String>{};
   for (final w in writes) {
     final it = w.item;

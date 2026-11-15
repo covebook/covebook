@@ -139,6 +139,15 @@ Bookmark bookmarkOf(DbRow r) => Bookmark(
       boardW: _n(r['board_w']),
     );
 
+Essay essayOf(DbRow r) => Essay(
+      id: _s(r['id']),
+      myBookId: _s(r['my_book_id']),
+      title: _so(r['title']),
+      body: _s(r['body']),
+      createdAt: _s(r['created_at']),
+      updatedAt: _s(r['updated_at']),
+    );
+
 /// 표마다 행(SELECT * 차례 그대로) → 서재. 저자는 edition_id·position 차례
 Library libraryFromRows(Map<String, List<DbRow>> t) {
   final authors = <String, List<String>>{};
@@ -157,6 +166,7 @@ Library libraryFromRows(Map<String, List<DbRow>> t) {
     sessions: {for (final r in t['sessions'] ?? const <DbRow>[]) _s(r['id']): sessionOf(r)},
     bookmarks: {for (final r in t['bookmarks'] ?? const <DbRow>[]) _s(r['id']): bookmarkOf(r)},
     bindings: {for (final r in t['bindings'] ?? const <DbRow>[]) _s(r['id']): bindingOf(r)},
+    essays: {for (final r in t['essays'] ?? const <DbRow>[]) _s(r['id']): essayOf(r)},
   );
 }
 
@@ -166,6 +176,10 @@ const libraryTables = ['editions', 'edition_authors', 'my_books', 'rounds', 'ses
 /// 표들을 한 트랜잭션에서 읽는다(읽는 사이에 다른 쓰기가 끼어 판본 없이 책만 읽히는 일이 없게)
 Future<Library> loadFullLibrary([Database? d]) async {
   final db = d ?? await openLibrary();
-  final rows = await db.transaction((t) async => {for (final name in libraryTables) name: await t.rawQuery('SELECT * FROM $name')});
+  final rows = await db.transaction((t) async {
+    // 감상 표는 Flutter만 있다(지금 앱 표 목록과 따로). 열 때 만들지만 다른 연결로 연 DB(시험 등)도 있게 여기서도 확인한다
+    await ensureEssayTable(t);
+    return {for (final name in [...libraryTables, 'essays']) name: await t.rawQuery('SELECT * FROM $name')};
+  });
   return libraryFromRows(rows);
 }

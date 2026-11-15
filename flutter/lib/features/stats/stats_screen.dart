@@ -1,4 +1,5 @@
-// 기록 탭: 캘린더(날마다 읽은 책) · 기록(기간 독서 시간·시간대·한 번 길이·요일·많이 읽은 책·완독·갈피). 지금 앱 features/stats/StatsScreen.tsx를 옮긴 것.
+// 통계 탭(2026-11-16 메뉴 구조 개편 전 하단 '기록'): 캘린더(날마다 읽은 책) · 분석(기간 독서 시간·시간대·한 번 길이·요일·많이 읽은 책·완독·갈피).
+// 지금 앱 features/stats/StatsScreen.tsx를 옮긴 것. 안쪽 틀은 그대로, 화면 제목·메뉴 이름만 바꿨다.
 // 책을 고르면 달력·그래프·숫자가 그 책만으로 바뀐다. 오늘이 든 달(해) 다음으로는 가지 않는다
 library;
 
@@ -19,7 +20,7 @@ String _shortMs(num ms) => ms < 60000 ? formatDurationPrecise(ms) : formatDurati
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key, this.tab = true, this.initialBook});
 
-  /// 하단 '기록' 탭(뒤로 없음, 탭 바만큼 아래를 비운다)
+  /// 하단 '통계' 탭(뒤로 없음, 탭 바만큼 아래를 비운다). 아니면 책·독서 끝에서 여는 '내 기록'
   final bool tab;
   final String? initialBook;
 
@@ -81,7 +82,7 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     final lib = _lib;
-    if (lib == null) return const Screen(back: false, title: '기록', children: [Loading()]);
+    if (lib == null) return Screen(back: !widget.tab, title: widget.tab ? '통계' : '내 기록', children: const [Loading()]);
     final now = DateTime.now();
     final monthly = _monthly;
     final book = _book != null && lib.books.containsKey(_book) ? _book : null;
@@ -125,7 +126,7 @@ class _StatsScreenState extends State<StatsScreen> {
       Padding(
         padding: EdgeInsets.only(top: widget.tab ? Space.s : 0),
         child: Segmented<String>(
-          items: const [('calendar', '캘린더'), ('records', '기록')],
+          items: const [('calendar', '캘린더'), ('records', '분석')],
           value: _view,
           onChange: (v) => setState(() {
             _view = v;
@@ -217,7 +218,7 @@ class _StatsScreenState extends State<StatsScreen> {
     ];
     return Screen(
       back: !widget.tab,
-      title: widget.tab ? null : '내 기록',
+      title: widget.tab ? '통계' : '내 기록',
       // 떠 있는 하단바 아래까지 내용이 내려가게
       bottomPad: widget.tab ? TabBarStyle.contentPad - Space.section : 0,
       children: children,

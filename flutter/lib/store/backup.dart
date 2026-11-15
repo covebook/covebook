@@ -1,5 +1,5 @@
 // 데이터 내보내기·복원(지금 앱 store/backup.ts, 같은 파일 형식이라 지금 앱 백업도 복원된다).
-// 백업 범위: 내 서재 전부(판본·내 책·회차·세션·갈피·장정, 숨긴 책 포함), 책장 배치, 연도 책장, 보기 설정, 설정,
+// 백업 범위: 내 서재 전부(판본·내 책·회차·세션·갈피·장정·긴 감상, 숨긴 책 포함), 책장 배치, 연도 책장, 보기 설정, 설정,
 // 그리고 앱 폴더에 보관한 사진(실제 표지 사진·갈피 페이지 사진·장정 그림). 진행 중 독서(타이머)는 넣지 않는다.
 // 파일 하나(JSON)에 사진을 base64로 담는다. 사진 주소는 'img:이름'으로 바꿔 저장해 다른 기기·재설치에서도 복원된다.
 // 복원 안전장치: ① 파일 전체를 먼저 검사하고 틀리면 아무것도 바꾸지 않는다. ② 바꾸기 전에 지금 상태를 메모리에 떠 두고, 도중에 실패하면 그 상태로 되돌린다.
@@ -29,12 +29,13 @@ const _channel = MethodChannel('app.covebook/files');
 const _viewKey = 'view-settings:v3'; // 지금 앱 보기 설정(이 앱은 쓰지 않지만 백업에는 그대로 담는다)
 const _emptyLayout = '{"version":2,"shelves":[],"placements":[],"drawer":[]}';
 
-typedef Counts = ({int books, int bookmarks, int rounds, int sessions, int bindings, int images});
+typedef Counts = ({int books, int bookmarks, int rounds, int sessions, int bindings, int essays, int images});
 
 Counts countsOf(Json d) {
   final lib = (d['library'] as Map?) ?? const {};
   int n(String k) => ((lib[k] as Map?) ?? const {}).length;
-  return (books: n('books'), bookmarks: n('bookmarks'), rounds: n('rounds'), sessions: n('sessions'), bindings: n('bindings'), images: ((d['images'] as Map?) ?? const {}).length);
+  // 감상(essays)은 감상이 생긴 뒤 백업에만 있다(없으면 0)
+  return (books: n('books'), bookmarks: n('bookmarks'), rounds: n('rounds'), sessions: n('sessions'), bindings: n('bindings'), essays: n('essays'), images: ((d['images'] as Map?) ?? const {}).length);
 }
 
 Future<String> _imagePrefix() async => Uri.directory((await imageDir()).path).toString();
@@ -134,6 +135,9 @@ String? validateBackup(Object? x) {
   }
   for (final m in t('bookmarks').values) {
     if (!_has(t('books'), '${m['myBookId']}') || m['text'] is! String) return '갈피 정보가 올바르지 않아요.';
+  }
+  for (final e in t('essays').values) {
+    if (!_has(t('books'), '${e['myBookId']}') || e['body'] is! String || (e['title'] != null && e['title'] is! String)) return '감상 정보가 올바르지 않아요.';
   }
   for (final s in t('sessions').values) {
     final dur = s['durationMs'];

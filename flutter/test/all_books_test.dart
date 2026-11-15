@@ -38,8 +38,24 @@ void main() {
     expect(listAllBooks(lib, books, layout).firstWhere((r) => r.book.id == 'a').onShelf, isTrue);
   });
   test('삭제 문구: 0개인 것은 빼고 한 줄에 한 문장', () {
-    expect(deleteNote((rounds: 2, marks: 3, sessions: 1)), '갈피 3개와 읽은 기록 2회도 지워져요.\n독서 시간은 통계에 남아요.\n되돌릴 수 없어요.');
-    expect(deleteNote((rounds: 1, marks: 0, sessions: 0)), '읽은 기록 1회도 지워져요.\n되돌릴 수 없어요.');
-    expect(deleteNote((rounds: 0, marks: 0, sessions: 0)), '되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 2, marks: 3, essays: 0, sessions: 1)), '갈피 3개와 읽은 기록 2회도 지워져요.\n독서 시간은 통계에 남아요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 1, marks: 0, essays: 0, sessions: 0)), '읽은 기록 1회도 지워져요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 0, marks: 0, essays: 0, sessions: 0)), '되돌릴 수 없어요.');
+    // 긴 감상도 책과 함께 지워진다(2026-11-16 기록 > 감상). 조사는 받침대로
+    expect(deleteNote((rounds: 1, marks: 0, essays: 3, sessions: 0)), '감상 3편과 읽은 기록 1회도 지워져요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 1, marks: 2, essays: 1, sessions: 0)), '갈피 2개, 감상 1편과 읽은 기록 1회도 지워져요.\n되돌릴 수 없어요.');
+  });
+
+  test('내 책 필터 조건 줄: 기본(모든 책·최근순)이면 비고, 건 조건만 이름으로', () {
+    expect(filterConditions(), isEmpty);
+    expect(filterConditions(offShelfOnly: true, year: 2025, sort: AllBooksSort.title), ['책장에 없는 책', '2025년 완독', '제목순']);
+    expect(filterConditions(sort: AllBooksSort.recent, year: 2024), ['2024년 완독']);
+  });
+
+  test('내 책 개수는 검색·상태·필터를 모두 적용한 결과 수와 같다', () {
+    final r = listAllBooks(lib, books, layout, q: '다', status: ReadStatus.read, offShelfOnly: true);
+    // c(다리, 완독)는 책장 서랍에도 없고 배치에도 없어 책장에 없는 책. b(가방)는 '다'가 없다
+    expect(ids(r), ['c']);
   });
 }
+
