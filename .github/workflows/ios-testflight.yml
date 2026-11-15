@@ -1,0 +1,52 @@
+name: "iOS: private TestFlight"
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['flutter/**', '.github/workflows/ios-testflight.yml', '.github/scripts/ios-signing.py']
+permissions:
+  contents: read
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+jobs:
+  testflight:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.IOS_RELEASE == 'true')
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: flutter
+    env:
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+      IOS_DISTRIBUTION_P12: ${{ secrets.IOS_DISTRIBUTION_P12 }}
+      IOS_DISTRIBUTION_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_PASSWORD }}
+      IOS_PROVISION_PROFILE: ${{ secrets.IOS_PROVISION_PROFILE }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare isolated signing keychain
+        run: python3 ../.github/scripts/ios-signing.py
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          working-directory: flutter
+          bundler-cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test
+      - name: Sign and upload to TestFlight
+        run: bundle exec fastlane ios beta
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/ios-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/distribution.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist"
+          if [ -n "$IOS_INSTALLED_PROFILE" ]; then rm -f "$IOS_INSTALLED_PROFILE"; fi
