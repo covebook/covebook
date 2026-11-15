@@ -6,6 +6,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/widgets.dart';
 
 import '../db/kv_store.dart';
@@ -15,6 +16,9 @@ const _stateKey = 'reading-state:v2';
 const _oldKey = 'active-reading:v1';
 const _oldPendingKey = 'finished-reading:v1';
 const _beatMs = 5000;
+
+/// 통화 등으로 소리가 이만큼 넘게 끊겼을 때만 그 시간을 넣을지 묻는다(짧은 알림음·안내 음성은 그대로 센다)
+const _askSpanMs = 30000;
 
 num _now() => DateTime.now().millisecondsSinceEpoch;
 
@@ -33,6 +37,11 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _beat;
   Future<void> _writeTail = Future.value();
   Future<void>? _loading;
+
+  /// 통화 등으로 소리가 끊긴 동안(읽는 중이었을 때): 끝나면 넣을지 묻는다(앱 틀이 창을 띄운다)
+  ({num start, num end})? spanGap;
+  num? _spanStart;
+  StreamSubscription<AudioInterruptionEvent>? _interruptions;
 
   bool get running => active?.runningSince != null;
   num get elapsed => active == null ? 0 : elapsedMs(active!, _now());
@@ -106,6 +115,8 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     final t = _now();
     active = Active(id: newId('ss'), myBookId: myBookId, startedAt: isoOf(t), accumulatedMs: 0, runningSince: t, lastBeat: t, startPage: myBookId != null ? startPage : null);
     interrupted = null;
+    spanGap = null;
+    _spanStart = null;
     notifyListeners();
     _save();
     _startBeat();
@@ -141,6 +152,64 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     _save();
   }
 
+  /// 복구 창에서 이어 읽기: 꺼져 있던 시간을 넣거나 뺀다(사용자 결정 2026-11-15 '물어보기')
+  void resumeInterrupted({required bool includeGap}) {
+    final it = interrupted;
+    if (it == null || active == null) return resume();
+    final t = _now();
+    active = resumeInterruptedActive(it, includeGap: includeGap, now: t);
+    interrupted = null;
+    notifyListeners();
+    _save();
+    _startBeat();
+  }
+
+  /// 복구 창에서 끝내기: 넣으면 지금 끝낸 것으로(꺼진 시간 포함), 빼면 마지막 확인 시각에 끝낸 것으로
+  FinishDraft? finishInterrupted({required bool includeGap}) {
+    final it = interrupted;
+    if (it == null || active == null) return finish();
+    if (!includeGap) return finish(it.lastBeat);
+    active = resumeInterruptedActive(it, includeGap: true, now: _now());
+    return finish();
+  }
+
+  /// 오디오가 끊겼다 이어지는 것(통화·다른 앱 소리)을 지켜본다. 앱을 켤 때 한 번
+  Future<void> watchInterruptions() async {
+    if (_interruptions != null) return;
+    try {
+      final session = await AudioSession.instance;
+      _interruptions = session.interruptionEventStream.listen(_interruption);
+    } catch (_) {
+      // 오디오 세션을 못 얻는 기기(시험 등)는 통화 시간을 묻지 않는다
+    }
+  }
+
+  void _interruption(AudioInterruptionEvent e) {
+    if (e.type == AudioInterruptionType.duck) return;
+    final t = _now();
+    if (e.begin) {
+      if (running) _spanStart = t;
+      return;
+    }
+    final start = _spanStart;
+    _spanStart = null;
+    if (start == null || active == null || t - start < _askSpanMs) return;
+    spanGap = (start: start, end: t);
+    notifyListeners();
+  }
+
+  /// 통화 등으로 끊긴 동안을 넣을지 답하기(넣으면 그대로 둔다)
+  void answerSpan({required bool include}) {
+    final g = spanGap;
+    spanGap = null;
+    final a = active;
+    if (g != null && a != null && !include) {
+      active = excludeSpan(a, g.end - g.start, _now());
+      _save();
+    }
+    notifyListeners();
+  }
+
   /// 복구 창을 닫기(일시정지로 둠. 표시는 남겨 다음 실행에서 다시 묻는다)
   void dismissInterrupted() {
     interrupted = null;
@@ -152,9 +221,11 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     final a = active;
     if (a == null) return null;
     _stopBeat();
-    final p = finishActive(a, _now(), endAt);
+    final p = wholeSeconds(finishActive(a, _now(), endAt));
     active = null;
     interrupted = null;
+    spanGap = null;
+    _spanStart = null;
     pending = p;
     pendingRestored = false;
     notifyListeners();

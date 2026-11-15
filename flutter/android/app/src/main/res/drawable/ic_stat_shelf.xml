@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 알림 작은 아이콘(배경 재생 '빗소리 · 책장 한켠'): 하단 탭 책장 아이콘과 같은 책 세 권(세 번째는 −18° 기댐), 한 색 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="33" android:viewportHeight="33">
+  <group android:translateY="3">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M2.60,1.10 h3.60 a2,2 0 0 1 2,2 v20.90 a2,2 0 0 1 -2,2 h-3.60 a2,2 0 0 1 -2,-2 v-20.90 a2,2 0 0 1 2,-2 z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M11.80,1.10 h3.60 a2,2 0 0 1 2,2 v20.90 a2,2 0 0 1 -2,2 h-3.60 a2,2 0 0 1 -2,-2 v-20.90 a2,2 0 0 1 2,-2 z"/>
+    <group android:rotation="-18" android:pivotX="24.46" android:pivotY="13.5">
+      <path android:fillColor="#FFFFFFFF" android:pathData="M22.66,1.10 h3.60 a2,2 0 0 1 2,2 v20.90 a2,2 0 0 1 -2,2 h-3.60 a2,2 0 0 1 -2,-2 v-20.90 a2,2 0 0 1 2,-2 z"/>
+    </group>
+  </group>
+</vector>

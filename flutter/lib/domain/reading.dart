@@ -210,12 +210,59 @@ class Active {
       );
 }
 
-/// 강제 종료 뒤 복구: 마지막 확인 시각까지 센 시간과 그 뒤 지난 시간
+/// 강제 종료 뒤 복구: 마지막 확인 시각까지 센 시간과 그 뒤 지난 시간(gapMs = 다시 연 시각 − 마지막 확인 시각)
 class Interrupted {
   const Interrupted(this.active, this.countedMs, this.lastBeat, this.gapMs);
   final Active active;
   final num countedMs, lastBeat, gapMs;
+
+  /// 앱을 다시 연 시각(꺼져 있던 시간의 끝)
+  num get reopenAt => lastBeat + gapMs;
 }
+
+/// 꺼져 있던 시간을 물을 만큼 길었는지(1분 미만은 묻지 않고 넣는다: 사용자가 읽고 있었을 가능성이 크고 묻는 것이 더 번거롭다)
+const askGapMs = 60000;
+
+/// 복구 창에서 고른 대로 이어 읽기: 꺼져 있던 시간을 넣으면 마지막 확인 시각부터, 빼면 다시 연 시각부터 잰다.
+/// 어느 쪽이든 안내창이 떠 있던 동안(다시 연 뒤)은 읽은 시간에 들어간다(2026-11-15 QA: 창이 떠 있던 54초가 빠졌다)
+Active resumeInterruptedActive(Interrupted it, {required bool includeGap, required num now}) =>
+    it.active.copyWith(runningSince: includeGap ? it.lastBeat : it.reopenAt, lastBeat: now, interruptedAt: null);
+
+/// 통화 등으로 소리가 끊긴 동안을 빼기: 달리는 중이면 시작 시각을 그만큼 뒤로, 멈춰 있으면 쌓인 시간에서 뺀다(0 아래로는 안 간다)
+Active excludeSpan(Active a, num spanMs, num now) {
+  final span = math.max(0, spanMs);
+  if (a.runningSince != null) {
+    final shifted = math.min(now, a.runningSince! + span);
+    final overflow = a.runningSince! + span - shifted; // 이번 달린 시간보다 길면 남는 몫은 쌓인 시간에서
+    return a.copyWith(runningSince: shifted, accumulatedMs: math.max(0, a.accumulatedMs - overflow));
+  }
+  return a.copyWith(accumulatedMs: math.max(0, a.accumulatedMs - span));
+}
+
+/// 저장하는 독서 시간은 초 단위로 내린다(읽기 탭 시계(내림)와 기록 화면(초 반올림)이 1초씩 달랐다, 2026-11-15 QA)
+FinishDraft wholeSeconds(FinishDraft p) => FinishDraft(
+      id: p.id,
+      startedAt: p.startedAt,
+      endedAt: p.endedAt,
+      durationMs: (p.durationMs ~/ 1000) * 1000,
+      myBookId: p.myBookId,
+      startPage: p.startPage,
+      notes: p.notes,
+    );
+
+/// 받침에 맞는 조사(이/가, 을/를, 은/는): 마지막 글자가 한글이 아니면 받침 없음으로 본다
+String josa(String word, String withFinal, String withoutFinal) {
+  final t = word.trimRight();
+  if (t.isEmpty) return withoutFinal;
+  final c = t.runes.last;
+  if (c >= 0xAC00 && c <= 0xD7A3) return (c - 0xAC00) % 28 != 0 ? withFinal : withoutFinal;
+  // 숫자로 끝나면 읽는 소리로(0 영, 1 일, 3 삼, 6 육, 7 칠, 8 팔은 받침, 2 이, 4 사, 5 오, 9 구는 없음)
+  if (c >= 0x30 && c <= 0x39) return '013678'.contains(String.fromCharCode(c)) ? withFinal : withoutFinal;
+  return withoutFinal;
+}
+
+/// 단어 + 조사
+String withJosa(String word, String withFinal, String withoutFinal) => '$word${josa(word, withFinal, withoutFinal)}';
 
 /// 종료 화면에 적는 중인 값(입력 그대로의 글자)
 class FinishNotes {

@@ -3,11 +3,39 @@
 // 화면을 꺼도 이어 듣고 잠금 화면에 '빗소리 · 책장 한켠'처럼 보인다(just_audio_background)
 library;
 
+import 'dart:io';
+
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import '../store/settings_store.dart';
+
+const _app = MethodChannel('app.covebook/app');
+
+/// 배경 재생(잠금 화면·알림 조작) 준비: 앱을 켤 때 바로 시작해 두고(플레이어를 만들기 전에 끝나야 한다, 패키지 안내대로) 재생 때 기다린다.
+/// 2026-11-15 QA: 앱을 뒤로 보내고 화면을 끄면 1분쯤 뒤 소리가 멈췄고 알림이 없었다(화면 앞 서비스 0번, 알림 권한 없음).
+/// 첫 재생 때에야 준비하던 것을 켤 때로 옮기고 Android 13+ 알림 권한을 묻는다(실기기 확인 필요)
+Future<void>? _bg;
+Future<void> initAmbientBackground() => _bg ??= _initBackground().catchError((Object e) {
+      _bg = null; // 다음 재생 때 다시 해 본다
+      throw e;
+    });
+
+Future<void> _initBackground() => () async {
+      await JustAudioBackground.init(
+        androidNotificationChannelId: 'app.covebook.ambient',
+        androidNotificationChannelName: '환경음',
+        androidNotificationOngoing: true,
+        // 알림 작은 아이콘: 책장 탭 모양 한 색(기본 앱 아이콘은 흰 동그라미로만 보였다)
+        androidNotificationIcon: 'drawable/ic_stat_shelf',
+      );
+      // 통화·다른 앱 소리에 멈췄다 이어지게(음악 재생 세션)
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+    }();
 
 class SceneInfo {
   const SceneInfo(this.id, this.name, this.sound, this.asset);
@@ -35,18 +63,33 @@ class Ambient extends ChangeNotifier {
   bool playing = false;
   String? error;
   AudioPlayer? _player;
-  static bool _bgReady = false;
+  static bool _askedNotify = false;
 
   void _applyVolume() {
     final s = SettingsStore.instance;
     _player?.setVolume(outputVolume(s.volume, s.muted));
   }
 
+  /// 사용자가 켜 둔 소리(앱이 꺼졌다 켜져도 이어 읽을 때 다시 켠다). 설정에 남긴다
+  void _want(bool on) {
+    if (SettingsStore.instance.soundOn != on) SettingsStore.instance.set({'soundOn': on});
+  }
+
+  /// 소리를 켜 둔 채 앱이 꺼졌으면 다시 켠다(이어 읽기)
+  Future<void> resumeIfWanted() async {
+    final s = SettingsStore.instance;
+    await s.load();
+    if (s.soundOn && !playing) await play(s.scene);
+  }
+
   Future<void> play(String id) async {
     try {
-      if (!_bgReady) {
-        await JustAudioBackground.init(androidNotificationChannelId: 'app.covebook.ambient', androidNotificationChannelName: '환경음', androidNotificationOngoing: true);
-        _bgReady = true;
+      _want(true);
+      await initAmbientBackground();
+      // Android 13+: 알림(잠금 화면 조작)을 보이려면 권한이 필요하다. 처음 소리를 켤 때 한 번 묻는다
+      if (!_askedNotify && !kIsWeb && Platform.isAndroid) {
+        _askedNotify = true;
+        _app.invokeMethod<void>('requestNotifications').catchError((_) {});
       }
       if (scene != id || _player == null) {
         // 이전 장면 소리를 먼저 멈춘다(두 소리가 겹치지 않게)
@@ -78,13 +121,17 @@ class Ambient extends ChangeNotifier {
     }
   }
 
-  void pause() => _player?.pause();
+  void pause() {
+    _want(false);
+    _player?.pause();
+  }
 
   /// 소리 크기 막대를 끄는 동안: 저장하지 않고 지금 나는 소리에만 바로 반영(손을 떼면 설정에 저장 → _applyVolume)
   void preview(double volume) => _player?.setVolume(outputVolume(volume, false));
 
   /// 소리 끄고 나가기: 플레이어를 놓아 잠금 화면 표시도 거둔다
   Future<void> stop() async {
+    _want(false);
     final p = _player;
     _player = null;
     scene = null;

@@ -26,6 +26,7 @@ import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';
 import 'play_icons.dart';
 import 'reading_screen.dart';
+import 'switch_book.dart';
 
 const _week = ['일', '월', '화', '수', '목', '금', '토'];
 const _coverW = 42.0; // 표지 폭(높이는 표지 비율대로 약 62)
@@ -142,20 +143,25 @@ class _ReadListState extends State<ReadList> {
       return _openScene();
     }
     final lib = _lib.lib;
-    String title(String? b) => bookTitle(lib, b) ?? '책 없이 읽기';
-    appAlert(context, '이 책을 읽을까요?', '지금 ‘${title(cur.myBookId)}’ 시간을 재는 중이에요.', [
-      const AlertButton('계속 읽기', style: AlertStyle.cancel),
-      AlertButton('이 기록의 책을 바꾸기', onPress: () {
-        _reading.setBook(id, id == null ? null : lib.books[id]?.currentPage);
-        _openScene();
-      }),
-      AlertButton('지금까지 저장하고 새로 읽기', onPress: () {
+    askSwitchBook(
+      context,
+      lib: lib,
+      curId: cur.myBookId,
+      nextId: id,
+      elapsedMs: _reading.elapsed,
+      onSaveNew: () {
         saveAndStartOther(id).then((_) => _openScene(), onError: (Object e) {
           if (mounted) appAlert(context, '저장하지 못했어요', '$e');
         });
-      }),
-    ]);
+      },
+      onMove: () {
+        _reading.setBook(id, id == null ? null : lib.books[id]?.currentPage);
+        _openScene();
+      },
+    );
   }
+
+  void _openPending() => Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
 
   // 줄을 누르면: 재는 책은 장면으로 돌아가고, 아니면 재생과 같다
   void _tapRow(String? id) => _reading.active != null && _reading.active!.myBookId == id ? _openScene() : _begin(id);
@@ -346,6 +352,17 @@ class _ReadListState extends State<ReadList> {
             ),
           ]),
         ),
+        // 끝냈지만 저장하지 않은 기록(독서 끝 화면에서 뒤로 나왔을 때 등): 여기서 다시 연다(2026-11-15 QA 민혁 F3)
+        if (_reading.pending != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Space.m),
+            child: ListItem(
+              label: '저장하지 않은 독서 기록이 있어요',
+              sub: [bookTitle(lib, _reading.pending!.myBookId) ?? '책 없이 읽기', formatDurationPrecise(_reading.pending!.durationMs)].join(' · '),
+              chevron: true,
+              onPress: _openPending,
+            ),
+          ),
         SizedBox(
           height: 1 / MediaQuery.devicePixelRatioOf(context),
           child: OverflowBox(maxWidth: double.infinity, child: Container(width: MediaQuery.sizeOf(context).width, color: AppColors.line)),

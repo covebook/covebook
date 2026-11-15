@@ -26,6 +26,7 @@ import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';
 import 'play_icons.dart';
 import 'read_list.dart' show bookTitle;
+import 'switch_book.dart';
 
 const _light = NightColors.ink;
 const _goals = [15, 30, 60];
@@ -107,22 +108,28 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   void _askSwitch(String? nextId) {
     final cur = _reading.active;
     if (cur == null) return;
-    String title(String? id) => bookTitle(lib, id) ?? '책 없음';
-    appAlert(context, '읽는 책을 바꿀까요?', '지금 ‘${title(cur.myBookId)}’를 읽는 중이에요.', [
-      const AlertButton('계속 읽기', style: AlertStyle.cancel),
-      AlertButton('이 기록의 책을 바꾸기', onPress: () {
-        setState(() => _draftBookId = nextId);
-        _reading.setBook(nextId, nextId == null ? null : lib.books[nextId]?.currentPage);
-      }),
-      AlertButton('지금까지 저장하고 새로 읽기', onPress: () {
+    askSwitchBook(
+      context,
+      lib: lib,
+      curId: cur.myBookId,
+      nextId: nextId,
+      elapsedMs: _reading.elapsed,
+      onSaveNew: () {
         setState(() => _draftBookId = nextId);
         saveAndStartOther(nextId).catchError((Object e) {
           if (mounted) appAlert(context, '저장하지 못했어요', '$e');
           return null;
         });
-      }),
-    ]);
+      },
+      onMove: () {
+        setState(() => _draftBookId = nextId);
+        _reading.setBook(nextId, nextId == null ? null : lib.books[nextId]?.currentPage);
+      },
+    );
   }
+
+  /// 이 화면에서 읽는 중인데 소리가 꺼져 있다(앱이 꺼졌다 켜진 뒤 등): 화면도 꺼짐으로 보인다(2026-11-15 QA 수아 F2)
+  bool get _soundOff => !widget.soundOnly && _reading.active != null && !_audio.playing;
 
   void _finish() {
     if (_reading.active == null) return;
@@ -165,8 +172,13 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     _chooseScene(scenes[(i + dir + scenes.length) % scenes.length].id);
   }
 
-  // 스피커: 닫혀 있으면 막대를 연다(음소거였으면 소리를 켠다), 열려 있으면 음소거하고 닫는다
+  // 스피커: 닫혀 있으면 막대를 연다(음소거였으면 소리를 켠다), 열려 있으면 음소거하고 닫는다. 소리가 꺼져 있으면 켠다
   void _tapSpeaker() {
+    if (_soundOff) {
+      if (_settings.muted) _settings.set({'muted': false});
+      _audio.play(_settings.scene);
+      return;
+    }
     if (!_volOpen) {
       if (_settings.muted) _settings.set({'muted': false});
       setState(() => _volOpen = true);
@@ -419,9 +431,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: Row(children: [
-              const LucideIcon('AudioLines', size: 18, color: _light, stroke: 1.9),
+              LucideIcon(_soundOff ? 'VolumeX' : 'AudioLines', size: 18, color: _light, stroke: 1.9),
               const SizedBox(width: 8),
-              Text(sceneName(scene), style: AppType.sub.copyWith(color: _light, shadows: _shade)),
+              Text(_soundOff ? '${sceneName(scene)} · 소리 꺼짐' : sceneName(scene), style: AppType.sub.copyWith(color: _light, shadows: _shade)),
               const SizedBox(width: Space.m),
               Expanded(
                 child: !soundOnly && bookId != null
@@ -460,7 +472,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                         constraints: const BoxConstraints(minHeight: 60),
                         child: Row(children: [
                           if (!soundOnly && bookId != null)
-                            IgnorePointer(child: LinkedCover(lib: lib, id: bookId, width: 44))
+                            // 책을 바꾸면 표지도 새로 그린다(같은 자리 위젯이 이전 책 표지를 들고 있었다, 2026-11-15 QA 수아 F5)
+                            IgnorePointer(child: LinkedCover(key: ValueKey(bookId), lib: lib, id: bookId, width: 44))
                           else
                             Container(
                               width: 44,
@@ -544,9 +557,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 child: Row(children: [
                   Expanded(
                     child: _Side(
-                      icon: 'AudioLines',
-                      text: sceneName(scene),
-                      label: '분위기 고르기, ${sceneName(scene)}, ${_settings.muted ? '음소거' : '소리 ${(_settings.volume * 100).round()}%'}',
+                      icon: _soundOff ? 'VolumeX' : 'AudioLines',
+                      text: _soundOff ? '${sceneName(scene)} · 꺼짐' : sceneName(scene),
+                      label: '분위기 고르기, ${sceneName(scene)}, ${_soundOff ? '소리 꺼짐' : _settings.muted ? '음소거' : '소리 ${(_settings.volume * 100).round()}%'}',
                       onPress: _moodSheet,
                     ),
                   ),
@@ -656,7 +669,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               Semantics(
                 button: true,
                 expanded: _volOpen,
-                label: _settings.muted
+                label: _settings.muted || _soundOff
                     ? '소리 꺼짐, 눌러서 소리 켜기'
                     : _volOpen
                         ? '소리 ${(_settings.volume * 100).round()}%, 눌러서 음소거'
@@ -666,7 +679,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                   child: SizedBox(
                     width: Space.touch,
                     height: Space.touch,
-                    child: Center(child: LucideIcon(_settings.muted ? 'VolumeX' : 'Volume2', size: 26, color: _settings.muted ? NightColors.inkSoft : NightColors.ink)),
+                    child: Center(child: LucideIcon(_settings.muted || _soundOff ? 'VolumeX' : 'Volume2', size: 26, color: _settings.muted || _soundOff ? NightColors.inkSoft : NightColors.ink)),
                   ),
                 ),
               ),

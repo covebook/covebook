@@ -59,6 +59,21 @@ class MainActivity : AudioServiceActivity() {
     // 홈 화면 위젯 칸 넘기기(services/shelf_widget.dart)
     app.covebook.shelfwidget.ShelfWidgetChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
     authChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.covebook/auth")
+    // 앱 수명: 맨 아래 화면에서 뒤로 키 = 앱을 끝내지 않고 뒤로 보낸다(읽던 독서·소리가 그대로 이어진다).
+    // 알림 권한(Android 13+): 환경음 잠금 화면·알림 조작을 보이려면 필요하다(처음 소리를 켤 때 한 번 묻는다)
+    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.covebook/app").setMethodCallHandler { call, result ->
+      when (call.method) {
+        "moveToBack" -> result.success(moveTaskToBack(true))
+        "requestNotifications" -> {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7032)
+          }
+          result.success(null)
+        }
+        else -> result.notImplemented()
+      }
+    }
     // 백업 파일: 다운로드/책장한켠에 저장(Android 10+는 MediaStore로 권한 없이), 파일 고르기(문서 열기)
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.covebook/files").setMethodCallHandler { call, result ->
       when (call.method) {

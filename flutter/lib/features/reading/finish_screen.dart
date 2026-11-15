@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/app_nav.dart';
 import '../../domain/library.dart';
 import '../../domain/reading.dart';
 import '../../services/ambient.dart';
@@ -93,7 +94,37 @@ class _FinishScreenState extends State<FinishScreen> {
     });
   }
 
-  void _toRead() => Navigator.of(context).popUntil((r) => r.isFirst);
+  // 읽기 탭으로: 연달아 눌러도 한 번만, 닫히는 동안 아래 탭 바가 눌리지 않게(2026-11-15 QA 민혁 F6)
+  bool _closing = false;
+  void _toRead() {
+    if (_closing) return;
+    _closing = true;
+    AppNav.instance.blockTabs();
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    AppNav.instance.goTab(2);
+  }
+
+  /// 적는 중인 값을 바로 초안에 남긴다(나갈 때)
+  void _flushNotes() {
+    _notes?.cancel();
+    if (_saved == null) _reading.setPendingNotes(startPage: _startPage, pages: _pages, memo: _memo);
+  }
+
+  // 저장하지 않고 뒤로: 갈피 화면처럼 묻는다. 나가도 기록은 읽기 탭에 남아 나중에 저장·버릴 수 있다(2026-11-15 QA 민혁 F3)
+  void _askLeave() => appAlert(context, '저장하지 않고 나갈까요?', '이 기록은 읽기 탭에 남아 있어 나중에 저장하거나 버릴 수 있어요.', [
+        const AlertButton('계속 쓰기', style: AlertStyle.cancel),
+        AlertButton('나가기', onPress: () {
+          if (!mounted) return;
+          _flushNotes();
+          setState(() => _leaving = true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.of(context).maybePop();
+          });
+        }),
+      ]);
+
+  /// 숫자 칸에는 숫자만(붙여 넣은 글자가 섞여 '61rainy…'가 613쪽이 됐다, 2026-11-15 QA 수아 F6)
+  static String _digits(String v) => v.replaceAll(RegExp(r'[^\d]'), '');
 
   Future<void> _save(FinishDraft pending, int? sp, int? ep) async {
     if (_saving) return;
@@ -109,7 +140,7 @@ class _FinishScreenState extends State<FinishScreen> {
     }
   }
 
-  void _discard(FinishDraft pending) => appAlert(context, '이번 독서 기록을 버릴까요?', '${formatDurationPrecise(pending.durationMs)}이 저장되지 않아요.', [
+  void _discard(FinishDraft pending) => appAlert(context, '이번 독서 기록을 버릴까요?', '${withJosa(formatDurationPrecise(pending.durationMs), '이', '가')} 저장되지 않아요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('버리기', style: AlertStyle.destructive, onPress: () {
           if (_leaving) return;
@@ -177,13 +208,17 @@ class _FinishScreenState extends State<FinishScreen> {
     final b = pending.myBookId == null ? null : lib.books[pending.myBookId];
     final e = b == null ? null : lib.editions[b.editionId];
     final sp = _page(_startPage), ep = _page(_pages);
-    final amount = sp != null && ep != null && ep >= sp ? ep - sp : null;
+    // 전체 쪽수를 넘는 쪽은 막는다(234쪽 책에 613쪽 → '이번에 588쪽'으로 저장됐다)
+    final total = e?.pageCount != null && e!.pageCount! > 0 ? e.pageCount!.toInt() : null;
+    final startOver = total != null && sp != null && sp > total;
+    final endOver = total != null && ep != null && ep > total;
     final badRange = sp != null && ep != null && ep < sp;
+    final amount = sp != null && ep != null && ep >= sp && !endOver && !startOver ? ep - sp : null;
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
-    return Screen(
+    final screen = Screen(
       title: '독서 끝',
       back: false,
-      footer: Btn(label: '개인 기록 저장', busy: _saving, disabled: !_lib.loaded || _saving || pending.durationMs < 1000 || badRange, onPress: () => _save(pending, sp, ep)),
+      footer: Btn(label: '개인 기록 저장', busy: _saving, disabled: !_lib.loaded || _saving || pending.durationMs < 1000 || badRange || startOver || endOver, onPress: () => _save(pending, sp, ep)),
       children: [
         if (_reading.error != null) Text('독서 기록을 기기에 저장하지 못했어요. 저장을 다시 시도해 주세요.', style: AppType.sub),
         Semantics(
@@ -222,8 +257,9 @@ class _FinishScreenState extends State<FinishScreen> {
                 number: true,
                 value: _startPage,
                 placeholder: b.currentPage != null && b.currentPage != 0 ? '지난번 ${b.currentPage}' : null,
+                error: startOver ? '전체 $total쪽보다 커요' : null,
                 onChange: (v) {
-                  _startPage = v;
+                  _startPage = _digits(v);
                   _edited();
                 },
               ),
@@ -235,9 +271,9 @@ class _FinishScreenState extends State<FinishScreen> {
                 unit: '쪽',
                 number: true,
                 value: _pages,
-                error: badRange ? '시작 쪽보다 앞이에요' : null,
+                error: badRange ? '시작 쪽보다 앞이에요' : endOver ? '전체 $total쪽보다 커요' : null,
                 onChange: (v) {
-                  _pages = v;
+                  _pages = _digits(v);
                   _edited();
                 },
               ),
@@ -259,5 +295,6 @@ class _FinishScreenState extends State<FinishScreen> {
         Padding(padding: const EdgeInsets.only(top: Space.s), child: TextLink(label: '이 기록 버리기', soft: true, onPress: () => _discard(pending))),
       ],
     );
+    return PopScope(canPop: _leaving, onPopInvokedWithResult: (didPop, _) => didPop ? null : _askLeave(), child: screen);
   }
 }

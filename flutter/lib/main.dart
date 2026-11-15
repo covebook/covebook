@@ -9,9 +9,11 @@ import 'store/skin_store.dart';
 import 'package:flutter/services.dart';
 
 import 'app/app_shell.dart';
+import 'app/startup.dart';
+import 'services/ambient.dart';
 import 'services/cover_colors.dart';
 import 'features/reading/mini_timer.dart';
-import 'features/home/home_screen.dart' show bootAt;
+import 'features/home/home_screen.dart' show bootAt, homeSnapshotFile;
 import 'ui/bake.dart';
 import 'store/mini_timer_store.dart';
 import 'ui/theme.dart';
@@ -29,6 +31,15 @@ Future<void> main() async {
   if (_qaProxy.isNotEmpty) HttpOverrides.global = _QaProxy();
   bootAt = DateTime.now();
   WidgetsFlutterBinding.ensureInitialized();
+  // 시작 화면부터 그린다: 아래 준비가 몇 초 걸려 그동안 흰 화면만 보였다(지난 책장 사진이 있으면 그 사진)
+  final snap = await usableSnapshot(homeSnapshotFile);
+  startedWithSnapshot = snap != null;
+  runApp(StartApp(snapshot: snap));
+  // 환경음 배경 재생(잠금 화면·알림): 플레이어를 만들기 전에 준비해 둔다(기다리지 않는다)
+  initAmbientBackground().catchError((Object e) {
+    // ignore: avoid_print
+    print('환경음 배경 재생 준비 실패 $e');
+  });
   await initBake();
   // 기기에 재 둔 책등 비율·갈피 색(책장 책 크기·갈피 색)
   await loadCoverMeasures();
@@ -37,6 +48,7 @@ Future<void> main() async {
   await loadSpineLook();
   // 새 서재 예시 책장(표시 전용 예시 책): 책장을 읽기 전에
   await loadReferenceHome();
+  startStep.value = 2;
   runApp(const ChaekjangApp());
 }
 

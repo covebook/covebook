@@ -263,15 +263,55 @@ class Screen extends StatelessWidget {
               tabHead(),
             Expanded(child: body),
             if (footer != null)
-              Container(
-                color: AppColors.bg,
-                padding: EdgeInsets.fromLTRB(Space.page, 12, Space.page, 12 + insets.bottom),
-                child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer))),
+              // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
+              _FooterReport(
+                child: Container(
+                  color: AppColors.bg,
+                  padding: EdgeInsets.fromLTRB(Space.page, 12, Space.page, 12 + insets.bottom),
+                  child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer))),
+                ),
               ),
           ],
         ),
       ),
     );
+  }
+}
+
+/// 화면 아래 고정 버튼 줄의 높이를 그 화면(경로) 몫으로 작은 타이머에 알린다
+class _FooterReport extends StatefulWidget {
+  const _FooterReport({required this.child});
+  final Widget child;
+
+  @override
+  State<_FooterReport> createState() => _FooterReportState();
+}
+
+class _FooterReportState extends State<_FooterReport> {
+  Route<dynamic>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final r = ModalRoute.of(context);
+    if (!identical(r, _route) && _route != null) MiniTimerPlace.instance.setFooter(_route!, null);
+    _route = r;
+  }
+
+  @override
+  void dispose() {
+    final r = _route;
+    if (r != null) MiniTimerPlace.instance.setFooter(r, null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final r = _route, h = mounted ? context.size?.height : null;
+      if (r != null && h != null) MiniTimerPlace.instance.setFooter(r, h);
+    });
+    return widget.child;
   }
 }
 
@@ -1051,6 +1091,7 @@ class SearchField extends StatefulWidget {
 
 class _SearchFieldState extends State<SearchField> {
   late final _c = TextEditingController(text: widget.value);
+  final _focus = FocusNode();
 
   @override
   void didUpdateWidget(SearchField old) {
@@ -1061,7 +1102,18 @@ class _SearchFieldState extends State<SearchField> {
   @override
   void dispose() {
     _c.dispose();
+    _focus.dispose();
     super.dispose();
+  }
+
+  /// 돋보기: 검색어가 있으면 찾고, 없으면 입력칸을 연다(2026-11-15 QA 민혁 F8 '돋보기를 눌러도 아무 반응이 없다')
+  void _magnifier() {
+    if (_c.text.trim().isEmpty || widget.onSubmit == null) {
+      _focus.requestFocus();
+    } else {
+      _focus.unfocus();
+      widget.onSubmit!();
+    }
   }
 
   @override
@@ -1071,10 +1123,10 @@ class _SearchFieldState extends State<SearchField> {
         decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
         child: Row(children: [
           Semantics(
-            button: widget.onSubmit != null,
-            label: widget.onSubmit != null ? '검색' : null,
+            button: true,
+            label: '검색',
             child: Pressable(
-              onPress: widget.onSubmit,
+              onPress: _magnifier,
               child: const SizedBox(width: Space.touch + 4, height: 46, child: Center(child: LucideIcon('Search', size: 22, color: AppColors.inkSoft))),
             ),
           ),
@@ -1084,6 +1136,7 @@ class _SearchFieldState extends State<SearchField> {
               textField: true,
               child: TextField(
                 controller: _c,
+                focusNode: _focus,
                 autofocus: widget.autofocus,
                 onChanged: widget.onChange,
                 onSubmitted: (_) => widget.onSubmit?.call(),

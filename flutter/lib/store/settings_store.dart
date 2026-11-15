@@ -19,6 +19,8 @@ const defaultSettings = <String, Object?>{
   'volume': 0.6,
   'muted': false,
   'readList': <String>[],
+  // 환경음을 켜 둔 채인지(앱이 꺼졌다 켜져 이어 읽을 때 다시 켠다, services/ambient)
+  'soundOn': false,
 };
 
 /// 예전에 있던 장면('room' 등)이 남아 있으면 빗소리로
@@ -41,6 +43,7 @@ class SettingsStore extends ChangeNotifier {
   double get volume => (_s['volume'] as num? ?? 0.6).toDouble();
   bool get muted => _s['muted'] == true;
   List<String> get readList => ((_s['readList'] as List?) ?? const []).cast<String>();
+  bool get soundOn => _s['soundOn'] == true;
 
   Future<void> load() => _loading ??= () async {
         try {
@@ -57,6 +60,11 @@ class SettingsStore extends ChangeNotifier {
   Map<String, Object?> get raw => {..._s};
 
   void set(Map<String, Object?> patch) {
+    // 읽기 전에 바꾸면 저장본 대신 기본값 위에 덮어써 목표·소리 크기가 사라진다: 다 읽은 뒤에 반영한다
+    if (!loaded) {
+      load().then((_) => set(patch));
+      return;
+    }
     _s = {..._s, ..._fixScene(patch)};
     notifyListeners();
     KvStore.set(_key, jsonEncode(_s)).catchError((_) {});

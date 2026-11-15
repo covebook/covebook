@@ -24,6 +24,24 @@ class MiniTimerPlace extends ChangeNotifier {
   /// 시트·확인창이 떠 있다(지금 앱은 시트가 따로 된 창이라 작은 타이머를 덮는다)
   bool modal = false;
 
+  /// 화면마다 아래 고정 버튼 줄 높이(공통 Screen의 footer가 알린다): 작은 타이머가 그 위에 뜬다
+  /// (2026-11-15 QA 민혁 F9: 타이머가 '갈피 저장' 버튼 오른쪽 끝을 가렸다)
+  final _footers = <Route<dynamic>, double>{};
+  Route<dynamic>? _page;
+
+  /// 맨 위 화면의 아래 고정 버튼 줄 높이(없으면 null)
+  double? get footer => _page == null ? null : _footers[_page];
+
+  void setFooter(Route<dynamic> page, double? height) {
+    final old = _footers[page];
+    if (height == null) {
+      _footers.remove(page);
+    } else {
+      _footers[page] = height;
+    }
+    if (old != height && identical(page, _page)) notifyListeners();
+  }
+
   String get path => route == '/' ? tab : route;
 
   void setTab(String t) {
@@ -46,7 +64,12 @@ class MiniTimerPlace extends ChangeNotifier {
 
   void _route(Route<dynamic>? page, bool overlay) {
     final name = page?.settings.name ?? '/other';
-    if (name == route && overlay == modal) return;
+    final samePage = identical(page, _page);
+    _page = page;
+    if (name == route && overlay == modal) {
+      if (!samePage) notifyListeners();
+      return;
+    }
     route = name;
     modal = overlay;
     notifyListeners();

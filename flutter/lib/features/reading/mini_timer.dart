@@ -95,7 +95,7 @@ class _MiniTimerState extends State<MiniTimer> {
     final s = SettingsStore.instance;
     final reduce = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && mq.disableAnimations);
     final onTabs = _place.route == '/' && _tabs.contains(path);
-    final bottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? mq.padding.bottom) + _gap;
+    final bottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? _place.footer ?? mq.padding.bottom) + _gap;
     final hair = 2 / mq.devicePixelRatio;
     Widget divider() => Container(width: hair, height: 22, color: AppColors.line);
     return Stack(children: [
