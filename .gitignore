@@ -22,3 +22,6 @@ service-account*.json
 
 __pycache__/
 .codex-leftover/
+
+# 페르소나 QA 결과(.claude/commands/persona-qa.md)
+.qa-runs/
