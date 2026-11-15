@@ -29,6 +29,8 @@ var kinds = []kind{
 	{"rounds", "rounds", []field{{"myBookId", "my_book_id", "string", true}, {"index", "idx", "number", true}, {"startedAt", "started_on", "date", false}, {"finishedAt", "finished_on", "date", false}, {"paused", "paused", "bool", false}}},
 	{"sessions", "sessions", []field{{"myBookId", "my_book_id", "string", false}, {"roundId", "round_id", "string", false}, {"startedAt", "started_at", "time", true}, {"endedAt", "ended_at", "time", true}, {"durationMs", "duration_ms", "number", true}, {"startPage", "start_page", "number", false}, {"pagesRead", "pages_read", "number", false}, {"memo", "memo", "string", false}}},
 	{"bookmarks", "bookmarks", []field{{"myBookId", "my_book_id", "string", true}, {"text", "body", "text", false}, {"page", "page", "number", false}, {"memo", "memo", "string", false}, {"photoFileId", "photo_file_id", "string", false}, {"photoRatio", "photo_ratio", "number", false}, {"sessionId", "session_id", "string", false}, {"savedAt", "saved_at", "time", false}, {"boardX", "board_x", "number", false}, {"boardY", "board_y", "number", false}, {"boardRot", "board_rot", "number", false}, {"boardW", "board_w", "number", false}}},
+	// 긴 감상(V19). 받기 응답에 늘 'essays' 목록이 있어 앱이 이 서버가 감상을 아는지 안다(모르는 서버에는 앱이 감상을 보내지 않고 남겨 둔다)
+	{"essays", "essays", []field{{"myBookId", "my_book_id", "string", true}, {"title", "title", "string", false}, {"body", "body", "text", false}}},
 }
 
 func fields(k kind) []field { out := append([]field{}, k.fields...); return append(out, common...) }
@@ -156,7 +158,7 @@ func (s *Server) push(w http.ResponseWriter, r *http.Request) error {
 		applied += n
 	}
 	var rev int64
-	e := tx.QueryRow(ctx, `SELECT COALESCE(MAX(r),0) FROM (SELECT MAX(rev) r FROM editions WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM my_books WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM bindings WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM rounds WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM sessions WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM bookmarks WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM shelf_layouts WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM bookcases WHERE user_id=$1) t`, user).Scan(&rev)
+	e := tx.QueryRow(ctx, `SELECT COALESCE(MAX(r),0) FROM (SELECT MAX(rev) r FROM editions WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM my_books WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM bindings WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM rounds WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM sessions WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM bookmarks WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM essays WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM shelf_layouts WHERE user_id=$1 UNION ALL SELECT MAX(rev) FROM bookcases WHERE user_id=$1) t`, user).Scan(&rev)
 	if e != nil {
 		return e
 	}

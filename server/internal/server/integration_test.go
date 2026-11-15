@@ -122,6 +122,21 @@ func TestIntegration(t *testing.T) {
 	if _, out := request("GET", "/sync/pull", one, nil); len(out["editions"].([]any)) != 1 {
 		t.Fatalf("transaction not rolled back %+v", out)
 	}
+	// V19 긴 감상: 제목 없이도 저장되고, 받기에 늘 'essays' 목록이 있다(앱이 감상을 아는 서버인지 이것으로 안다)
+	essay := map[string]any{"essays": []any{map[string]any{"id": "essay1", "myBookId": "book1", "body": "긴 감상 본문", "createdAt": at, "updatedAt": at}}}
+	if status, out := request("POST", "/sync/push", one, essay); status != 200 || out["applied"] != float64(1) {
+		t.Fatalf("essay push %d %+v", status, out)
+	}
+	if _, out := request("GET", "/sync/pull", one, nil); len(out["essays"].([]any)) != 1 || out["essays"].([]any)[0].(map[string]any)["body"] != "긴 감상 본문" || out["essays"].([]any)[0].(map[string]any)["title"] != nil {
+		t.Fatalf("essay pull %+v", out["essays"])
+	}
+	if _, out := request("GET", "/sync/pull", two, nil); out["essays"] == nil || len(out["essays"].([]any)) != 0 {
+		t.Fatalf("essay list must exist and be per user %+v", out["essays"])
+	}
+	orphan := map[string]any{"essays": []any{map[string]any{"id": "essay2", "myBookId": "missing", "body": "x", "updatedAt": at}}}
+	if status, out := request("POST", "/sync/push", one, orphan); status != 409 {
+		t.Fatalf("essay missing book %d %+v", status, out)
+	}
 
 	extended := map[string]any{
 		"bindings": []any{map[string]any{"id": "binding1", "myBookId": "book1", "spineColor": "#abcdef", "motif": "leaf", "material": "linen", "coverArtId": "cover1", "source": "custom", "status": "ready", "seed": 12, "updatedAt": at}},
