@@ -4,7 +4,7 @@
 
 ## 현재 연결 상태
 
-2026-11-14 Apple Developer 활성화와 Team ID `8R7ZQBT9G2`를 확인했다. 앱 ID의 Sign in with Apple, Services ID `app.covebook.signin`, 아래 도메인·Return URL 등록을 완료했다. 2026-11-15 App Store Connect에 책장 한켠(Apple ID `6835054912`)을 생성하고 자동 배포를 켠 Internal 테스트 그룹을 등록했다. 2026-11-15 로그인 키를 발급하고 KoDeploy Covebook 앱에 Apple 환경변수 5개를 저장한 뒤 서버 재배포를 완료했다. 운영 `/auth/providers`에서 `apple: true`를 확인했다. KoDeploy 소스 주소도 `covebook/covebook`으로 갱신했다. App Store Connect API 접근권한 승인을 받았고 Developer 역할 업로드 키와 배포 인증서·프로파일을 발급해 GitHub Secrets 6개를 저장했다. 첫 수동 iOS 빌드는 실행 중이며 실제 TestFlight 업로드·실기기 로그인 확인은 아직 남아 있다. 필요한 값이 채워지기 전에는 자동 배포를 켜지 않는다. 코드·설정 테스트와 실기기/Apple 실연동 검증은 별개다.
+2026-11-14 Apple Developer 활성화와 Team ID `8R7ZQBT9G2`를 확인했다. 앱 ID의 Sign in with Apple, Services ID `app.covebook.signin`, 아래 도메인·Return URL 등록을 완료했다. 2026-11-15 App Store Connect에 책장 한켠(Apple ID `6835054912`)을 생성하고 자동 배포를 켠 Internal 테스트 그룹을 등록했다. 2026-11-15 로그인 키를 발급하고 KoDeploy Covebook 앱에 Apple 환경변수 5개를 저장한 뒤 서버 재배포를 완료했다. 운영 `/auth/providers`에서 `apple: true`를 확인했다. KoDeploy 소스 주소도 `covebook/covebook`으로 갱신했다. App Store Connect API 접근권한 승인을 받았고 Developer 역할 업로드 키와 배포 인증서·프로파일을 발급해 GitHub Secrets 6개를 저장했다. 첫 서명 빌드와 업로드가 성공했고, TestFlight 내부 그룹에서 `0.1.0 (1794741859)`의 `Testing` 상태를 확인했다. 내부 테스터는 소유자 본인 1명이며 `IOS_RELEASE=true`로 자동 업로드를 활성화했다. 첫 성공 실행: https://github.com/covebook/covebook/actions/runs/43708736750 . 실기기 로그인 확인은 남아 있다. 코드·설정 테스트와 실기기/Apple 실연동 검증은 별개다.
 
 ## Apple 로그인
 
@@ -45,7 +45,7 @@ Apple Developer에서 앱 ID에 **Sign in with Apple**을 켜고, 앱과 연결�
 - Return URL: **`https://covebook.kodeploy.com/auth/apple/callback`**
 - 앱 복귀: `chaekjang://auth/apple`; 기기 계정에 묶인 일회용 claim 티켓을 사용한다.
 - `V18__apple_login.sql` 마이그레이션이 Apple 로그인 상태·티켓·암호화 갱신 토큰을 추가한다.
-- Flutter 3.47.6 / Dart 3.13.5, macOS runner, Fastlane으로 빌드한다.
+- Flutter 3.47.6 / Dart 3.13.5, macOS 26 runner와 Xcode 26.6, Fastlane으로 빌드한다. 참조 fixture의 날짜 기준에 맞춰 테스트 단계는 `TZ=Asia/Seoul`에서 실행한다.
 
 | GitHub 변수 | 용도 |
 |---|---|
@@ -67,4 +67,4 @@ TestFlight 업로드만 수행하고 외부 배포와 공개 앱 심사는 제�
 
 ## 구현 검증 (2026-11-14)
 
-Flutter 정적 분석과 테스트 642개 통과. 두 서버 모두 임시 PostgreSQL 16에서 전체 Go 테스트 통과. Apple state/최종 코드 재사용 거절, 잘못된 서명·audience·nonce·만료 거절, 계정 매핑·탈퇴 시 토큰 철회를 모의 Apple 응답으로 확인했다. GitHub workflow는 actionlint 검사를 통과했다. 실제 Apple 서명 빌드·업로드·실기기 로그인은 아직 실행하지 않았다.
+Flutter 정적 분석과 테스트 642개 통과. 두 서버 모두 임시 PostgreSQL 16에서 전체 Go 테스트 통과. Apple state/최종 코드 재사용 거절, 잘못된 서명·audience·nonce·만료 거절, 계정 매핑·탈퇴 시 토큰 철회를 모의 Apple 응답으로 확인했다. GitHub workflow는 actionlint 검사를 통과했다. 2026-11-15 GitHub macOS runner에서 정적 분석·전체 Flutter 테스트, 실제 Apple 서명 빌드·TestFlight 업로드·Apple 빌드 처리까지 통과했다. 실제 기기에서 로그인·로그인 취소·이메일 가리기·회원 탈퇴를 확인하는 단계는 남아 있다.
