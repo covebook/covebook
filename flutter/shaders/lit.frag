@@ -29,7 +29,6 @@ layout(location = 0) out vec4 fragColor;
   uniform vec4 bev1;
   uniform float endR;       // 판 앞면 양 끝 세로 모서리 둥글기(0이면 없다)
   uniform vec4 rim;       // 평평한 벽의 구멍(x0, x1, y0, y1): 구멍 앞 끝 둥근 테. x0 > x1이면 없다
-  uniform float rimCeil;    // 이 줄 위 면 높이: 테도 안쪽 면처럼 그 아래에서 어두워진다(light-model sideCeilF)
   uniform float kS;         // 재질의 표면 반사 몫 배수(materials specular)
   uniform vec4 softBox;   // 안쪽 모서리 번짐: 면 좌표의 둥근 사각형(a0, a1, b0, b1)
   uniform vec2 softR;     // 그 반지름, 번짐 폭(폭 0이면 번지지 않는다)
@@ -723,10 +722,6 @@ vec4 _tex2(vec2 q) {
   }
 
   // 안쪽 모서리 곡면(light-model coveNormal): 벽·틀·판이 맞닿는 곳에서 면 법선이 맞닿은 면 법선 쪽으로 돈다
-  float jointF2(float h) {
-    float d = max(0.0, h);
-    return 0.175000000 * (1.0 - d / sqrt(d * d + 393.030625));
-  }
   float coveB(float d, float end) {
     float t = max(0.0, d);
     return t < 9.15000000 ? tan(end * (1.0 - t / 9.15000000)) : 0.0;
@@ -778,8 +773,14 @@ void main() {
     float b1 = slope(arc(bev1.w - dot(P, bev1.xyz), PLANKR));
     // 판 앞면 양 끝: 윤곽(PLANK_END_R)과 같은 반지름으로 법선이 옆으로 돈다. 윤곽만 둥글고 빛이 평면이면 곡면으로 보이지 않는다(2026-11-05 사용자 '선반 끝 곡선')
     float be = endR > 0.0 ? slope(arc(366.000000 - P.x, endR)) - slope(arc(P.x - 0.00000000, endR)) : 0.0;
-    vec3 n = normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + coveOf(P) + vec3(be, 0.0, 0.0));
-    float rimLoss = 0.0;
+    vec3 cv = coveOf(P);
+    vec3 n = normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + cv + vec3(be, 0.0, 0.0));
+    // 휜 법선(안쪽 모서리 곡면·구멍 테)과 그 가림을 잴 자리. 테는 구멍 가장자리 바로 안쪽 점에서 잰다(앞 벽 평면 위 점은 안쪽 면을 앞에 둔 가리개로 본다)
+    vec3 nB = normalize(tN + cv);
+    vec3 PB = P;
+    bool bent = dot(cv, cv) > 1e-6;
+    bool rimOn = false;
+    float rimFade = 0.0;
     // 구멍 앞 끝 둥근 테(반지름 RIMR): 구멍(둥근 사각형, 모서리 RIMC)까지 거리 d로 벽 법선이 구멍 안쪽 면 법선 쪽으로 돈다
     if (rim.x < rim.y) {
       vec2 c = vec2(rim.x + rim.y, rim.z + rim.w) * 0.5;
@@ -791,12 +792,19 @@ void main() {
       if (d < RIMR) {
         vec2 g = length(qp) > 1e-4 ? qp / length(qp) : (q.x > q.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
         // 원호 단면(앞에서 본 자리 sin θ = t): 벽 쪽은 천천히, 안쪽 끝에서 빠르게 돌아 테가 또렷하게 꺾인다(2026-11-05 사용자 사진, 제곱근으로 돌리면 넓게 번져 흐릿했다).
-        // 끝은 안쪽 면 법선까지 다 돌지 않는다: 테는 맞닿은 면의 되비침을 받지 않아 다 돌리면 안쪽 면보다 어두운 줄이 생긴다(천장 앞 90°면 테 끝 180, 천장 189). 옆 76°, 위 70°면 테 끝과 안쪽 면·천장 밝기가 이어진다
+        // 끝은 안쪽 면 법선까지 다 돈다(Flutter 2026-11-15): 테가 구멍 안을 보는 만큼 가려지는 몫은 아래에서 그 법선으로 잰다.
+        // 예전에는 가림 없이 76°·70°에서 멈춰 맞췄는데, 틀이 벽과 같은 칠이 되자 테 끝이 안쪽 면보다 밝아 꺾였다(옆 237 → 195, 위 182 → 157)
         float rimT = min(1.0, 1.0 - d / RIMR);
-        float th = mix(0.844444444, 0.777777778, g.y * g.y) * asin(rimT);
+        float th = asin(rimT);
         n = normalize(tN * cos(th) - vec3(g * s, 0.0) * sin(th));
-        // 옆 테만 안쪽 면처럼 위 면 아래에서 어두워진다(위 테는 그 면 자체다). 안쪽 끝에 몰린다(벽 쪽은 방을 그대로 본다), 위 판 높이 위로는 없다(판이 테보다 뒤라 가리지 않는다)
-        rimLoss = P.y < rimCeil ? rimT * rimT * rimT * (1.0 - g.y * g.y) * jointF2(rimCeil - P.y) : 0.0;
+        nB = n;
+        PB = vec3(clamp(P.x, rim.x + 0.5, rim.y - 0.5), clamp(P.y, rim.z + 0.5, rim.w - 0.5), -FFRONT + 0.5);
+        bent = true;
+        rimOn = true;
+        // 위 테 안쪽 끝은 천장 앞 끝 그 자체다: 밑에 앞으로 늘려 그린 천장(구운 앞 끝 값)이 안쪽 끝에서 비치게 한다.
+        // 몫은 rimT³: 바깥쪽은 테 그대로 또렷하고(2026-11-05 사용자 '또렷한 테') 안쪽 끝 몇 화소에서 천장으로 넘어간다(돈 각도에 비례하면 테 전체가 회색으로 번졌다).
+        // 밑에 천장이 깔린 x 범위(구멍 폭) 안에서만: 둥근 구석은 밑면이 없어 바탕이 비쳤다. 옆 테는 아래 판 높이까지 밑면이 없어 하지 않는다
+        if (s.y > 0.0 && rim.w < 1e5) rimFade = rimT * rimT * rimT * g.y * g.y * smoothstep(rim.x, rim.x + RIMC, P.x) * smoothstep(rim.y, rim.y - RIMC, P.x);
       }
     }
     // 면 좌표: u = 판 길이 방향(x, 옆을 향한 틀 안쪽 면은 세로: 결이 틀 길이로 난다), v = 면 안의 다른 방향
@@ -811,12 +819,25 @@ void main() {
     bool beyond = env.x > 1.5 && abs(tN.z) < 0.5 && tN.y < 0.5 && (P.z > DEPTH + 0.01 || P.z < -FFRONT - 0.01 || (abs(tN.x) > 0.5 && P.y > env.z + 0.01));
     vec3 Pb = beyond ? vec3(P.x, abs(tN.x) > 0.5 ? min(P.y, env.z - 1.50000000) : P.y, clamp(P.z, -FFRONT + 6.50000000, DEPTH - 6.50000000)) : P;
     vec2 pb = beyond && liveEnv < 0.5 ? pxOf(Pb, Au, Av) : p;
-    vec3 loss = liveEnv > 0.5 ? envLoss(Pb, tN) : lossDec(vec3(_tex(pb).rgb), skyIrr(tN));
+    // 구멍 둘레 평평한 벽(rim)은 방을 그대로 보는 열린 벽이라 가림 0: 줄 둘레(env)는 테 몫을 잴 때만 읽는다
+    vec3 loss = liveEnv > 0.5 ? (rim.x < rim.y ? vec3(0.0) : envLoss(Pb, tN)) : lossDec(vec3(_tex(pb).rgb), skyIrr(tN));
     if (liveEnv < 0.5 && mixT < 1.0) loss = mix(lossDec(vec3(_tex2(pb).rgb), skyIrr(tN)), loss, mixT);
-    if (rimLoss > 0.0) loss += rimLoss * (skyIrr(tN) + KEYC * (DIFF * max(0.0, dot(tN, LU)))) / OCC;
-    vec4 g = shade(P, n, tN, normalize(vec3(cam4.x, cam4.y, cam4.z - cam4.w) - P), loss, albedo, eref, ms.w, ms.z, float(_keyTex(vec2(dot(P, kU), dot(P, kV)) + kO).a), sref, kS);
+    // 법선이 휜 곳(Flutter 2026-11-15 사용자 '선반 바로 뒤 위가 왜 밝은지', '위쪽 테가 갑자기 이어진다').
+    // 테: 구멍 안을 보게 된 만큼의 가림을 그 자리 둘레(벽·판·틀·되비침)로 잰다(열린 벽이라 기준 가림이 0, 실제 기하 그대로).
+    // 안쪽 모서리 곡면: 면 가림 비율로 휜 법선의 하늘 빛을 늘리면 판과 벽이 만나는 곡면이 위 하늘을 받는 것처럼 되어 판 위 뒷벽이 밝은 띠가 됐다(226 → 239)
+    vec3 nfF = tN;
+    if (rimOn && env.x > 0.5) {
+      loss += (envLoss(PB, nB) - envLoss(PB, tN)) / OCC;
+      nfF = nB;
+    } else if (bent) {
+      // 오목한 곡면은 평평한 면보다 빛을 더 받지 않는다: 휘어서 새로 보게 된 쪽은 맞닿은 면(판·천장·옆벽)이다. 휜 법선이 더 받는 빛(위 하늘 등)은 그 면이 가린 몫으로 뺀다
+      vec3 gain = max(vec3(0.0), openE(P, nB) - openE(P, tN));
+      loss += gain / OCC;
+      nfF = nB;
+    }
+    vec4 g = shade(P, n, nfF, normalize(vec3(cam4.x, cam4.y, cam4.z - cam4.w) - P), loss, albedo, eref, ms.w, ms.z, float(_keyTex(vec2(dot(P, kU), dot(P, kV)) + kO).a), sref, kS);
     if (DODGE > 1.5) {
-      float softA = softR.y > 0.0 ? softEdge(P) : 1.0;
+      float softA = (softR.y > 0.0 ? softEdge(P) : 1.0) * (1.0 - rimFade);
       { fragColor = vec4(vec3(min(base * vec3(g.rgb), vec3(1.0))) * softA, softA); return; }
     }
     { fragColor = g; return; }

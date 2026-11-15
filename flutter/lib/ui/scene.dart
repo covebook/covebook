@@ -92,7 +92,7 @@ const _ident = <double>[1, 0, 0, 0, 1, 0, 0, 0, 1];
 
 const litUniformNames = [
   'texSize', 'texMat', 'texDecal', 'keyTexSize', 'keyTexMat', 'keyTexDecal', 'tex2Size', 'tex2Mat', 'tex2Decal',
-  'mixT', 'base', 'O', 'Ux', 'Vy', 'Hw', 'tN', 'bev0', 'bev1', 'endR', 'rim', 'rimCeil', 'kS',
+  'mixT', 'base', 'O', 'Ux', 'Vy', 'Hw', 'tN', 'bev0', 'bev1', 'endR', 'rim', 'kS',
   'softBox', 'softR', 'cam4', 'keyOn', 'albedo', 'eref', 'sref', 'liveEnv',
   'kU', 'kV', 'kO', 'mR', 'mB', 'mG', 'mS', 'mSeed',
   'env', 'ECAM', 'RADF', 'RADU', 'RADW', 'RADE', 'RADSL', 'RADSR', 'PAPER', 'DODGE', 'SPLIT',
@@ -115,7 +115,6 @@ ui.FragmentShader planeShader({
   ({List<double> box, List<double> r})? soft,
   List<double>? env,
   List<double>? rim,
-  double rimCeil = 1e9,
 }) {
   final sh = u.shader();
   void vec(String name, List<double> v) {
@@ -162,7 +161,6 @@ ui.FragmentShader planeShader({
   vec('bev1', plane.edges.length > 1 ? plane.edges[1].u : _noEdge);
   one('endR', plane.endR);
   vec('rim', rim ?? _noRim);
-  one('rimCeil', rimCeil);
   one('kS', 1);
   vec('softBox', soft?.box ?? const [0, 0, 0, 0]);
   vec('softR', soft?.r ?? const [0, 0]);
@@ -311,7 +309,7 @@ void drawRow(
     final roofed = row.top;
     final topY = row.top ? space + shelfThick + headDu : space + shelfThick / 2;
     final bottomY = row.last ? -shelfThick - shelfCastExtent : -shelfThick;
-    _flatWall(canvas, lit, c, px, row, topY, bottomY, roofed ? space : null, row.last ? -shelfThick + holeBottomOver : null, space);
+    _flatWall(canvas, lit, c, px, row, topY, bottomY, roofed ? space : null, row.last ? -shelfThick + holeBottomOver : null);
   }
 
   // 판(윗면·앞면, 둥근 모서리는 셰이더가 법선을 돌린다). 두 면 껍질을 둥글린 윤곽 안에서만 칠한다(지금 앱 ShelfBoard)
@@ -384,7 +382,7 @@ const holeBottomOver = 0.6;
 /// 평평한 벽: 높이 bottomY ~ topY의 띠에서 둥근 사각형 구멍을 뺀다(지금 앱 ShelfFlatWall).
 /// openTop·openBottom: 구멍의 위·아래 끝 높이(이 줄 밖까지 이어지면 null)
 void _flatWall(ui.Canvas canvas, ShaderSlots lit, Cam c, Affine px, RowCase row, double topY, double bottomY,
-    double? openTop, double? openBottom, double ceilY) {
+    double? openTop, double? openBottom) {
   double y(double v) => toPx(c, px, Vec3(0, v, -frameFront)).dy;
   // 뒷벽·앞으로 늘린 틀 면의 위 끝도 함께 덮는다(카메라 기울기로 화면에서 더 위에 온다)
   final ya = math.min(y(topY),
@@ -411,9 +409,9 @@ void _flatWall(ui.Canvas canvas, ShaderSlots lit, Cam c, Affine px, RowCase row,
         atlas: null,
         spot: null,
         cellToPx: _ident,
-        env: const [0, 0, 0],
+        // 줄 둘레(env): 테가 구멍 안을 보는 만큼 가려지는 몫을 셰이더가 잰다. 테 밖 평평한 벽은 가림 0(셰이더가 둘레를 읽지 않는다)
+        env: row.env.u,
         rim: [frameX0, frameX1, openBottom ?? -far, openTop ?? far],
-        rimCeil: ceilY,
       ),
   );
 }
