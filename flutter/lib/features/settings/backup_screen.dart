@@ -135,7 +135,7 @@ class _BackupScreenState extends State<BackupScreen> {
   Future<void> _doLogin(String provider) async {
     setState(() => _loggingIn = true);
     try {
-      final r = await (provider == 'google' ? _sync.linkGoogle() : _sync.linkKakao());
+      final r = await (provider == 'apple' ? _sync.linkApple() : provider == 'google' ? _sync.linkGoogle() : _sync.linkKakao());
       if (!mounted) return;
       if (r.ok) {
         appAlert(context, '계정을 연결했어요', r.switched ? '연결된 계정으로 바꿨어요. 기기의 기록은 동기화가 끝나면 합쳐져요.' : '이 기기의 기록을 계정에 연결했어요.');
@@ -211,11 +211,21 @@ class _BackupScreenState extends State<BackupScreen> {
           ListItem(label: '카카오 계정 연결됨', sub: s.account.nickname.isNotEmpty ? '${s.account.nickname} · 다른 기기에서도 이어 봐요' : '다른 기기에서도 이어 봐요')
         else if (on && s.providers.kakao && !s.paused)
           ListItem(label: '카카오로 계속하기', sub: '연결하면 기기를 바꿔도 기록을 이어 봐요', chevron: true, onPress: _loggingIn ? null : () => _login('kakao')),
+        if (on && s.account.apple) const ListItem(label: 'Apple 계정 연결됨', sub: '다른 기기에서도 이어 봐요'),
         if (on && s.account.google) const ListItem(label: 'Google 계정 연결됨', sub: '다른 기기에서도 이어 봐요'),
         if (on && s.paused && !s.deletionPending) ListItem(label: '새 계정으로 동기화', chevron: true, onPress: _loggingIn ? null : _resume),
         if (on && (s.deletionPending || (s.providers.accountDeletion && !s.paused)))
           ListItem(label: s.deletionPending ? '계정 삭제 다시 요청' : '서버 계정 삭제', danger: true, onPress: _loggingIn ? null : _removeAccount),
       ]),
+      if (on && !s.paused && !s.account.apple && s.providers.apple)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.m),
+          child: SizedBox(height: 50, child: FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF000000), foregroundColor: const Color(0xFFFFFFFF)),
+            onPressed: _loggingIn ? null : () => _login('apple'),
+            icon: const Icon(Icons.apple), label: const Text('Apple로 계속하기'),
+          )),
+        ),
       // Google 로그인은 Google 공식 단추 모양을 지켜야 해서 그림 그대로 쓴다
       if (on && !s.paused && !s.account.google && s.providers.google)
         Padding(

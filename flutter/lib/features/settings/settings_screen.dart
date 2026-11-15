@@ -93,7 +93,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Widget para(String t, {bool last = false}) => Padding(padding: EdgeInsets.only(bottom: last ? 0 : Space.item), child: Text(t, style: p));
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             para(_syncAvailable
-                ? '책장 한켠은 로그인 없이 쓸 수 있으며, 책·독서 기록·갈피·사진은 이 기기에 저장되고 이 기기 전용 계정으로 책장 한켠 서버에도 동기화돼요. 카카오나 Google을 연결하면 해당 서비스의 회원 식별자와 선택한 닉네임이 서버에 저장되고, 다른 기기에서 같은 기록을 이어 볼 수 있어요.'
+                ? '책장 한켠은 로그인 없이 쓸 수 있으며, 책·독서 기록·갈피·사진은 이 기기에 저장되고 이 기기 전용 계정으로 책장 한켠 서버에도 동기화돼요. Apple·카카오·Google을 연결하면 해당 서비스의 회원 식별자와 선택한 닉네임이 서버에 저장되고, 다른 기기에서 같은 기록을 이어 볼 수 있어요.'
                 : '책장 한켠은 로그인 없이 쓰며, 책·독서 기록·갈피·사진은 이 기기 안에만 저장돼요.'),
             para('책을 검색하면 입력한 검색어가 책장 한켠 서버를 거쳐 도서 정보 서비스(YES24)로 전송되고, 서버에 닿지 않거나 결과가 없으면 Google Books·Open Library로 전송돼요. 검색 요청과 표지 이미지 요청에는 IP 주소 등 통신 정보가 함께 전달돼요.'),
             para('사진은 책을 찾고 장정을 만들 때 참고하거나 갈피 원문을 보관하는 데만 쓰고, 읽었다는 인증에는 쓰지 않아요. '
