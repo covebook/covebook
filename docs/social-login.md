@@ -35,3 +35,8 @@ The file deletion queue retries physical removal, including unregistered objects
 Run `go test ./...` in `server`, setting `TEST_DATABASE_URL` to a disposable PostgreSQL database for integration tests, and `npm run typecheck` plus `npm test -- --runInBand src/services/__tests__/sync-account-lifecycle.test.ts` in `app`. Integration tests use isolated PostgreSQL, fake providers and temporary storage. Tests cover JWT rejection, ticket/state replay, authenticated deletion, immediate session rejection, physical file removal, predecessor deletion, restore reapplication, forged webhook rejection and sync pause persistence. Provider registration and real installed-app sign-in are separate checks.
 
 Google button artwork is the unmodified approved light button. Sources: [Google OIDC](https://developers.google.com/identity/openid-connect/openid-connect), [Kakao REST](https://developers.kakao.com/docs/ko/kakaologin/rest-api), [Kakao callbacks](https://developers.kakao.com/docs/ko/kakaologin/callback).
+
+
+## Apple 로그인
+
+Apple 서버 검증·토큰 철회와 TestFlight 구성은 [ios-release.md](ios-release.md)를 참고한다.
