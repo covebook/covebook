@@ -1,6 +1,8 @@
 // 책 추가(지금 앱 app/book/add.tsx): 책 찾기(검색·직접 입력) → 책·판본 확인 → 추가하고 책장에 놓기(기본) 또는 보관만 하기.
 // 저장한 뒤 다시 묻지 않는다. 자리가 모자랄 때만 새 선반 열기 / 보관만 하기를 고른다(place_books). 보관만 한 책도 전체 책에 있다.
-// 검색 결과·표지·쪽수가 없어도 직접 입력과 기본 장정으로 끝낼 수 있다. 추정 크기를 확인된 정보처럼 저장하지 않는다
+// 검색 결과·표지·쪽수가 없어도 직접 입력과 기본 장정으로 끝낼 수 있다. 추정 크기를 확인된 정보처럼 저장하지 않는다.
+// 2026-11-15 페르소나 QA·사용자 '다 넣어': '책 확인'에서 뒤로·'한 권 더 추가' 뒤에도 검색어와 결과가 남는다(_FindMemory),
+// 검색 결과에서 여러 권 고르기 → 한 번에 추가, 결과 줄에 출판사·연도와 '내 서재에 있음', 바코드 연속 스캔·목록 파일 가져오기 입구
 library;
 
 import 'dart:math' as math;
@@ -9,9 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/library.dart';
-import '../../domain/rebinding.dart';
 import '../../services/book_search.dart';
-import '../../services/cover_colors.dart' show coverDominantColor, coverPalette, measureCover;
 import '../../services/photos.dart';
 import '../../store/files.dart' show keepImage;
 import '../../store/library_model.dart';
@@ -21,10 +21,16 @@ import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
+import 'add_icons.dart';
 import 'all_books_screen.dart' show openAllBooks;
+import 'barcode_scan_screen.dart' show PickMark, openBarcodeScan;
 import 'binding_editor.dart';
+import 'book_match.dart';
 import 'book_screen.dart' show BookScreen;
+import 'bulk_add.dart';
+import 'import_list_screen.dart' show openImportList;
 import 'place_books.dart';
+import '../home/home_screen.dart' show showBookOnShelf;
 
 const _statuses = [ReadStatus.want, ReadStatus.reading, ReadStatus.read, ReadStatus.paused];
 
@@ -38,6 +44,17 @@ class _Draft {
   String? coverUri, coverSource, category, seriesTitle, sourceName, link, productId;
   final String source; // manual · search · photo
   ReadStatus status = ReadStatus.want;
+}
+
+/// 찾기 단계에서 남겨 두는 것: 확인 단계로 갔다 돌아와도·'한 권 더 추가' 뒤에도 검색어와 결과가 그대로(2026-11-15 QA 정우 F2·민혁 F4).
+/// 여러 권 고르기에서 고른 책은 검색어를 바꿔도 남는다(여러 번 찾아 모아서 한 번에 추가)
+class _FindMemory {
+  String q = '';
+  List<BookCandidate>? items;
+  String? provider, err;
+  List<BookCandidate> popular = const [];
+  bool multi = false;
+  final picked = <String, BookCandidate>{};
 }
 
 int? _num(String v) {
@@ -62,6 +79,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
   late _Draft _draft = _Draft('manual')..title = widget.title ?? '';
   String? _notice;
   bool _saving = false, _more = false;
+  final _find = _FindMemory();
 
   /// 판형(가로·세로 mm): 둘 다 있을 때만
   ({int widthMm, int heightMm})? get _size {
@@ -114,34 +132,21 @@ class _AddBookScreenState extends State<AddBookScreen> {
     ]);
   }
 
-  /// 추천 장정 계산: 표지는 색 추출에만 쓰고(화면에 그리지 않는다) 결과 장정만 저장한다. 책등 사진 비율·갈피 색도 먼저 잰다(처음 놓을 때부터 실제 두께로)
-  Future<BookArtParams> _prepareArt() async {
+  /// 추천 장정 계산(여러 권 추가와 같은 식, bulk_add recommendedArt): 표지는 색 추출에만 쓰고 결과 장정만 저장한다. 책등 사진 비율도 먼저 잰다
+  Future<BookArtParams> _prepareArt() {
     final d = _draft;
-    final api = d.coverSource == 'api' && d.coverUri != null;
-    final palette = api ? await coverPalette(d.coverUri) : null;
-    if (api) await measureCover(d.coverUri!);
-    final coverColor = api ? await coverDominantColor(d.coverUri) : null;
-    final year = int.tryParse(d.publishedAt.length >= 4 ? d.publishedAt.substring(0, 4) : '') ?? 0;
-    final built = buildBookArt(
-      RebindInput(
-        title: d.title.trim(),
-        isbn: d.isbn.replaceAll(RegExp(r'[^\dXx]'), '').isEmpty ? null : d.isbn.replaceAll(RegExp(r'[^\dXx]'), ''),
-        authors: const [],
-        publisher: d.publisher,
-        publishedYear: year > 0 ? year : null,
-        pageCount: _num(d.pages),
-        heightMm: _size?.heightMm,
-        widthMm: _size?.widthMm,
-        category: d.category,
-        seriesTitle: d.seriesTitle,
-        palette: palette,
-        coverColor: coverColor,
-      ),
-      DateTime.now().toUtc().toIso8601String(),
+    return recommendedArt(
+      title: d.title,
+      isbn: d.isbn,
+      publisher: d.publisher,
+      publishedAt: d.publishedAt,
+      pageCount: _num(d.pages),
+      size: _size,
+      category: d.category,
+      seriesTitle: d.seriesTitle,
+      coverUri: d.coverUri,
+      apiCover: d.coverSource == 'api',
     );
-    // 표지 색을 못 읽었으면 판 번호를 낮춰 다음 시작 때 다시 맞춘다(표지 색 맞추기)
-    return BookArtParams(built.baseColor, built.inkColor, built.accentColor, built.motifId, built.layoutVariant, built.heightClass, built.thicknessClass, built.generatedAt,
-        api && coverColor == null ? 1 : built.version);
   }
 
   /// 등록 완료: shelf(기본)는 바로 책장에 놓고, keep은 책장에 없는 책으로 보관만 한다
@@ -185,7 +190,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
         placed = 'kept';
       } else {
         final r = await placeWithChoice(context, [id]);
-        placed = r.placed > 0 ? 'shelf' : 'kept';
+        placed = r.placed > 0 ? 'shelf' : (r.full ? 'full' : 'kept');
       }
       if (mounted) await _showDone(id, placed);
     } finally {
@@ -211,11 +216,11 @@ class _AddBookScreenState extends State<AddBookScreen> {
               if (_draft.authors.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(_draft.authors, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
               Padding(
                 padding: const EdgeInsets.only(top: Space.m),
-                child: Text(placed == 'shelf' ? '책장에 진열했어요' : '전체 책에만 보관했어요', style: AppType.button.copyWith(color: AppColors.accent)),
+                child: Text(placed == 'shelf' ? '책장에 진열했어요' : keptTitle(full: placed == 'full'), style: AppType.button.copyWith(color: AppColors.accent)),
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text(placed == 'shelf' ? '꾸미기에서 자리와 자세를 바꿀 수 있어요.' : '책장에는 아직 없어요. 전체 책에서 언제든 진열할 수 있어요.', style: AppType.caption),
+                child: Text(placed == 'shelf' ? '꾸미기에서 자리와 자세를 바꿀 수 있어요.' : keptNote(full: placed == 'full'), style: AppType.caption),
               ),
             ]),
           ),
@@ -250,14 +255,22 @@ class _AddBookScreenState extends State<AddBookScreen> {
     if (!mounted) return;
     switch (next) {
       case 'shelf':
-        nav.popUntil((r) => r.isFirst);
+        showBookOnShelf(nav.context, id);
       case 'books':
         nav.pop(id);
         if (nav.context.mounted) openAllBooks(nav.context, offShelf: true);
       case 'book':
         nav.pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book'), builder: (_) => BookScreen(id: id)));
       case 'again':
-        nav.pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book/add'), builder: (_) => const AddBookScreen()));
+        // 찾기 단계로(검색어·결과는 _find에 남아 있다. 2026-11-15 QA 정우 F2 '한 권 더 추가'면 검색어가 지워졌다)
+        setState(() {
+          _step = 'find';
+          _draft = _Draft('manual');
+          _notice = null;
+          _art = null;
+          _binding = null;
+          _more = false;
+        });
       default:
         // 닫으면 책 추가를 부른 화면으로(이미 추가했으니 확인 화면에 머물지 않는다)
         nav.pop(id);
@@ -314,10 +327,45 @@ class _AddBookScreenState extends State<AddBookScreen> {
       );
     }
     if (_step == 'find') {
-      return _FindStep(initial: widget.q, notice: _notice, onPick: _fromCandidate, onManual: (q) => _toConfirm(_Draft('manual')..title = q));
+      return _FindStep(
+        memory: _find,
+        initial: widget.q,
+        notice: _notice,
+        pick: widget.pick,
+        onPick: _fromCandidate,
+        onManual: (q) => _toConfirm(_Draft('manual')..title = q),
+        onAddMany: _addMany,
+      );
     }
     final d = _draft;
     final ready = d.title.trim().isNotEmpty && !_saving;
+    // 찾기에서 왔으면 뒤로 키·뒤로 화살표는 검색 결과로(2026-11-15 QA 민혁 F4: 책장까지 나가 검색어가 사라졌다). 직접 입력으로 바로 연 확인은 그대로 닫힌다
+    return PopScope(
+      canPop: widget.title != null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_saving) setState(() => _step = 'find');
+      },
+      child: _confirm(d, ready),
+    );
+  }
+
+  /// 여러 권 고르기에서 고른 책을 한 번에 추가(추천 장정, 진열 규칙은 한 권 추가와 같다). 결과 시트에서 '계속 추가'면 찾기 단계에 남는다
+  Future<void> _addMany(List<BookCandidate> picks) async {
+    if (_saving || picks.isEmpty) return;
+    setState(() => _saving = true);
+    final r = await addBooks(context, [for (final c in picks) (book: c, status: ReadStatus.want)]);
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _find
+        ..picked.clear()
+        ..multi = false;
+    });
+    final next = await showBulkDone(context, r);
+    if (mounted) goAfterBulk(context, next);
+  }
+
+  Widget _confirm(_Draft d, bool ready) {
     return Screen(
       title: '책 확인',
       footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -432,44 +480,56 @@ class _AddBookScreenState extends State<AddBookScreen> {
   }
 }
 
-/// 책 추가 첫 화면(2026-11-01 사용자): 검색창 → 결과 → 추가가 전부. 직접 입력은 결과 아래·결과 없음·검색 실패 때의 작은 '직접 등록'으로만
+/// 책 추가 첫 화면(2026-11-01 사용자): 검색창 → 결과 → 추가가 전부. 직접 입력은 결과 아래·결과 없음·검색 실패 때의 작은 '직접 등록'으로만.
+/// 상태는 부모의 _FindMemory에 둔다(확인 단계에 갔다 와도 그대로). '여러 권 고르기'(전체 책 '책장에 진열'과 같은 모양: 머리줄 '취소',
+/// 줄 오른쪽 동그라미 체크, 아래 'N권 추가', 기기 뒤로는 고르기만 끝낸다). 이미 서재에 있는 책은 고르지 않는다(한 권 추가에서 별도 소장본으로)
 class _FindStep extends StatefulWidget {
-  const _FindStep({required this.initial, required this.notice, required this.onPick, required this.onManual});
+  const _FindStep({
+    required this.memory,
+    required this.initial,
+    required this.notice,
+    required this.pick,
+    required this.onPick,
+    required this.onManual,
+    required this.onAddMany,
+  });
+  final _FindMemory memory;
   final String? initial, notice;
+  final bool pick;
   final ValueChanged<BookCandidate> onPick;
   final ValueChanged<String> onManual;
+  final ValueChanged<List<BookCandidate>> onAddMany;
 
   @override
   State<_FindStep> createState() => _FindStepState();
 }
 
 class _FindStepState extends State<_FindStep> {
-  late String _q = widget.initial ?? '';
-  List<BookCandidate>? _items;
-  String? _provider, _err;
+  _FindMemory get _m => widget.memory;
   bool _busy = false;
   int _run = 0;
-  List<BookCandidate> _popular = const [];
 
   @override
   void initState() {
     super.initState();
-    if (widget.initial != null) {
+    if (widget.initial != null && _m.items == null && _m.q.isEmpty) {
+      _m.q = widget.initial!;
       _search(widget.initial!);
-    } else {
+    }
+    if (_m.popular.isEmpty) {
       popularBooks().then((list) {
-        if (mounted) setState(() => _popular = list);
+        if (mounted) setState(() => _m.popular = list);
       });
     }
   }
 
   Future<void> _search([String? text]) async {
-    final t = (text ?? _q).trim();
+    final t = (text ?? _m.q).trim();
     if (t.isEmpty) return;
     final run = ++_run;
     setState(() {
       _busy = true;
-      _err = null;
+      _m.err = null;
     });
     final r = await searchBooks(t);
     // 늦게 온 결과로 새 검색 화면을 덮지 않는다
@@ -477,89 +537,173 @@ class _FindStepState extends State<_FindStep> {
     setState(() {
       _busy = false;
       if (r.ok) {
-        _items = r.items;
-        _provider = r.provider;
+        _m.items = r.items;
+        _m.provider = r.provider;
       } else {
-        _err = r.message;
-        _items = null;
+        _m.err = r.message;
+        _m.items = null;
       }
     });
   }
 
+  void _toggle(BookCandidate c) => setState(() {
+        if (_m.picked.remove(c.key) == null) _m.picked[c.key] = c;
+      });
+
+  void _endMulti() => setState(() {
+        _m.multi = false;
+        _m.picked.clear();
+      });
+
+  /// 결과 머리 오른쪽 '여러 권 고르기'(책 고르기에서 새 책 등록으로 왔을 때는 한 권만)
+  Widget? _multiLink() => widget.pick || _m.multi ? null : TextLink(label: '여러 권 고르기', soft: true, onPress: () => setState(() => _m.multi = true));
+
+  Widget _row(BookCandidate c, Library lib, {int? rank}) {
+    final owned = ownedBookId(lib, c) != null;
+    return _ResultRow(
+      c: c,
+      rank: rank,
+      owned: owned,
+      multi: _m.multi,
+      picked: _m.picked.containsKey(c.key),
+      onPick: _m.multi ? (owned ? null : _toggle) : widget.onPick,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final items = _items;
-    return Screen(
-      // 큰 제목 없이 뒤로 옆에 검색창(전체 책·내 책 찾기와 같은 머리줄)
-      headerField: SearchField(
-        value: _q,
-        onChange: (t) => setState(() {
-          _q = t;
-          if (t.isEmpty) {
-            _run++;
-            _busy = false;
-            _items = null;
-            _err = null;
-          }
-        }),
-        onSubmit: () => _search(),
-        busy: _busy,
-        placeholder: '새 책 찾기 · 제목이나 저자',
-        label: '제목이나 저자로 찾기',
+    final items = _m.items;
+    final q = _m.q;
+    final lib = LibraryModel.instance.lib;
+    final n = _m.picked.length;
+    return PopScope(
+      canPop: !_m.multi,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _endMulti();
+      },
+      child: Screen(
+        // 큰 제목 없이 뒤로 옆에 검색창(전체 책·내 책 찾기와 같은 머리줄)
+        headerField: SearchField(
+          value: q,
+          onChange: (t) => setState(() {
+            _m.q = t;
+            if (t.isEmpty) {
+              _run++;
+              _busy = false;
+              _m.items = null;
+              _m.err = null;
+            }
+          }),
+          onSubmit: () => _search(),
+          busy: _busy,
+          placeholder: '새 책 찾기 · 제목이나 저자',
+          label: '제목이나 저자로 찾기',
+        ),
+        left: _m.multi ? TextLink(label: '취소', onPress: _endMulti) : null,
+        // 바코드로 여러 권 찾기(책 고르기에서 왔을 때는 한 권만 고르므로 없음)
+        right: widget.pick || _m.multi ? null : IconBtn(label: '바코드로 찾기', onPress: () => openBarcodeScan(context), child: const AddIcon('ScanBarcode')),
+        footer: _m.multi ? Btn(label: n == 0 ? '추가할 책을 고르세요' : '$n권 추가', disabled: n == 0, onPress: () => widget.onAddMany(_m.picked.values.toList())) : null,
+        children: [
+          if (widget.notice != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(widget.notice!, style: AppType.sub)),
+          if (_busy && items == null) const Loading(label: '책을 찾는 중이에요'),
+          if (_m.err != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Space.xl),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _Notice(_m.err!, error: true),
+                const SizedBox(height: Space.s),
+                Btn(label: '다시 시도', kind: 'secondary', size: 's', onPress: () => _search()),
+                _ManualLink(onPress: () => widget.onManual(q)),
+              ]),
+            ),
+          if (items != null && items.isEmpty && !_busy)
+            Empty(title: '‘${q.trim()}’에 맞는 책이 없어요', body: '제목이나 저자 이름을 짧게 줄여 찾거나, 직접 등록할 수 있어요.', action: '직접 등록', actionKind: 'secondary', onAction: () => widget.onManual(q)),
+          // 검색 전: 여러 권 넣는 길(바코드·목록 파일)과 인기 많은 책(YES24 베스트셀러 순위 그대로, 못 받으면 순위는 보이지 않는다)
+          if (q.trim().isEmpty && items == null && !_busy && _m.err == null) ...[
+            if (!widget.pick && !_m.multi)
+              Padding(
+                padding: const EdgeInsets.only(top: Space.l),
+                child: Row(children: [
+                  Expanded(child: _EntryButton(icon: 'ScanBarcode', label: '바코드로 찾기', onPress: () => openBarcodeScan(context))),
+                  const SizedBox(width: Space.s),
+                  Expanded(child: _EntryButton(icon: 'FileSpreadsheet', label: '목록 파일 가져오기', onPress: () => openImportList(context))),
+                ]),
+              ),
+            if (_m.popular.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: Space.xl),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                    Expanded(child: Semantics(header: true, child: Text('인기 많은 책', style: AppType.section))),
+                    // 출처 표시는 늘 보인다(YES24 약관)
+                    Text('YES24 베스트셀러', style: AppType.caption),
+                    if (_multiLink() case final link?) ...[const SizedBox(width: Space.s), link],
+                  ]),
+                  const SizedBox(height: Space.s),
+                  for (final (i, c) in _m.popular.indexed) _row(c, lib, rank: i + 1),
+                ]),
+              ),
+          ],
+          if (items != null && items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: Space.xl),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                // 결과 머리: 구역 이름처럼 작게(출처 표시는 YES24 약관)
+                Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                  Expanded(
+                    child: Text.rich(TextSpan(text: '검색 결과 ${items.length}권', style: AppType.sub, children: [
+                      if (_m.provider != null) TextSpan(text: ' · ${_m.provider} 제공', style: AppType.caption),
+                    ])),
+                  ),
+                  ?_multiLink(),
+                ]),
+                const SizedBox(height: Space.s),
+                for (final c in items) _row(c, lib),
+                if (!_m.multi) _ManualLink(onPress: () => widget.onManual(q)),
+              ]),
+            ),
+        ],
       ),
-      children: [
-        if (widget.notice != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(widget.notice!, style: AppType.sub)),
-        if (_busy && items == null) const Loading(label: '책을 찾는 중이에요'),
-        if (_err != null)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xl),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _Notice(_err!, error: true),
-              const SizedBox(height: Space.s),
-              Btn(label: '다시 시도', kind: 'secondary', size: 's', onPress: () => _search()),
-              _ManualLink(onPress: () => widget.onManual(_q)),
-            ]),
-          ),
-        if (items != null && items.isEmpty && !_busy)
-          Empty(title: '‘${_q.trim()}’에 맞는 책이 없어요', body: '제목이나 저자 이름을 짧게 줄여 찾거나, 직접 등록할 수 있어요.', action: '직접 등록', actionKind: 'secondary', onAction: () => widget.onManual(_q)),
-        // 검색 전: 인기 많은 책(YES24 베스트셀러 순위 그대로, 못 받으면 아무것도 보이지 않는다)
-        if (_q.trim().isEmpty && items == null && !_busy && _err == null && _popular.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xl),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                Expanded(child: Semantics(header: true, child: Text('인기 많은 책', style: AppType.section))),
-                Text('YES24 베스트셀러', style: AppType.caption),
-              ]),
-              const SizedBox(height: Space.s),
-              for (final (i, c) in _popular.indexed) _ResultRow(c: c, rank: i + 1, onPick: widget.onPick),
-            ]),
-          ),
-        if (items != null && items.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xl),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              // 결과 머리: 구역 이름처럼 작게(출처 표시는 YES24 약관)
-              Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                Expanded(child: Text('검색 결과 ${items.length}권', style: AppType.sub)),
-                if (_provider != null) Text('$_provider 제공', style: AppType.caption),
-              ]),
-              const SizedBox(height: Space.s),
-              for (final c in items) _ResultRow(c: c, onPick: widget.onPick),
-              _ManualLink(onPress: () => widget.onManual(_q)),
-            ]),
-          ),
-      ],
     );
   }
 }
 
-/// 검색 결과·인기 책 한 줄: 표지·제목·저자, 오른쪽 '추가'. rank가 있으면 맨 앞에 순위. 줄 사이 선 없이 여백만, 누르는 동안 옅은 바탕(화면 끝까지)
+/// 여러 권 넣는 입구(바코드·목록 파일): 옅은 회색 바탕 알약에 아이콘과 글자
+class _EntryButton extends StatelessWidget {
+  const _EntryButton({required this.icon, required this.label, required this.onPress});
+  final String icon, label;
+  final VoidCallback onPress;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: Pressable(
+          onPress: onPress,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(Shape.button)),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              AddIcon(icon, size: 20),
+              const SizedBox(width: Space.s),
+              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.button.copyWith(color: AppColors.ink))),
+            ]),
+          ),
+        ),
+      );
+}
+
+/// 검색 결과·인기 책 한 줄: 표지·제목·저자·출판사 · 연도(판 구분, 2026-11-15 QA 지민 F12·정우 F7), 오른쪽 '추가'.
+/// 이미 서재에 있는 책은 '내 서재에 있음'. 여러 권 고르기에서는 '추가' 대신 동그라미 체크(서재에 있는 책은 고를 수 없음).
+/// rank가 있으면 맨 앞에 순위. 줄 사이 선 없이 여백만, 누르는 동안 옅은 바탕(화면 끝까지)
 class _ResultRow extends StatefulWidget {
-  const _ResultRow({required this.c, required this.onPick, this.rank});
+  const _ResultRow({required this.c, required this.onPick, this.rank, this.owned = false, this.multi = false, this.picked = false});
   final BookCandidate c;
   final int? rank;
-  final ValueChanged<BookCandidate> onPick;
+  final bool owned, multi, picked;
+  final ValueChanged<BookCandidate>? onPick;
 
   @override
   State<_ResultRow> createState() => _ResultRowState();
@@ -571,17 +715,21 @@ class _ResultRowState extends State<_ResultRow> {
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
+    final pub = publisherLine(c);
+    final tap = widget.onPick == null ? null : () => widget.onPick!(c);
+    final action = widget.multi ? (widget.owned ? '내 서재에 있음' : (widget.picked ? '고름' : '고르기')) : '추가';
     return Semantics(
-      button: true,
-      label: '${c.title}, ${c.authors.join(', ')}, 추가',
+      button: tap != null,
+      selected: widget.multi && widget.picked,
+      label: [c.title, if (c.authors.isNotEmpty) c.authors.join(', '), ?pub, if (widget.owned) '내 서재에 있음', action].join(', '),
       excludeSemantics: true,
-      onTap: () => widget.onPick(c),
+      onTap: tap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _down = true),
+        onTapDown: tap == null ? null : (_) => setState(() => _down = true),
         onTapCancel: () => setState(() => _down = false),
         onTapUp: (_) => setState(() => _down = false),
-        onTap: () => widget.onPick(c),
+        onTap: tap,
         // 누르는 동안 옅은 바탕을 화면 끝까지(좌우 여백만큼 바깥으로) 칠한다
         child: Stack(clipBehavior: Clip.none, children: [
           if (_down) const Positioned(left: -Space.page, right: -Space.page, top: 0, bottom: 0, child: ColoredBox(color: AppColors.surface)),
@@ -591,25 +739,37 @@ class _ResultRowState extends State<_ResultRow> {
               if (widget.rank != null)
                 SizedBox(width: 22, child: Text('${widget.rank}', textAlign: TextAlign.center, style: AppType.rowStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()]))),
               if (widget.rank != null) const SizedBox(width: Space.l),
-              DecoratedBox(
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), boxShadow: [cssShadow(const Color(0x1A000000), 0, 2, 4)]),
-                child: RealCover(uri: c.coverUrl, title: c.title, color: '#F2F4F6', width: 56, ratio: 0.72),
+              Opacity(
+                opacity: widget.multi && widget.owned ? 0.5 : 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), boxShadow: [cssShadow(const Color(0x1A000000), 0, 2, 4)]),
+                  child: RealCover(uri: c.coverUrl, title: c.title, color: '#F2F4F6', width: 56, ratio: 0.72),
+                ),
               ),
               const SizedBox(width: Space.l),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(c.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
                   if (c.authors.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(c.authors.join(', '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                  if (pub != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(pub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption)),
+                  if (widget.owned)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text('내 서재에 있음', style: AppType.caption.copyWith(fontFamily: AppFonts.uiBold, color: AppColors.accent)),
+                    ),
                 ]),
               ),
               const SizedBox(width: Space.l),
-              Container(
-                constraints: const BoxConstraints(minHeight: 36),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.line)),
-                child: Text('추가', style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, height: 20 / 15, color: AppColors.ink)),
-              ),
+              if (widget.multi)
+                widget.owned ? const SizedBox(width: 24) : PickMark(on: widget.picked)
+              else
+                Container(
+                  constraints: const BoxConstraints(minHeight: 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.line)),
+                  child: Text('추가', style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, height: 20 / 15, color: AppColors.ink)),
+                ),
             ]),
           ),
         ]),

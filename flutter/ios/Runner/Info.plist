@@ -43,7 +43,7 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>책 표지와 갈피로 남길 문장을 찍어요. 사진은 기기에만 저장돼요.</string>
+	<string>책 바코드를 읽어 책을 찾고, 책 표지와 갈피로 남길 문장을 찍어요. 사진은 기기에만 저장돼요.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>사진첩에서 책 표지와 갈피로 남길 사진을 골라요.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

@@ -14,6 +14,7 @@ import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../services/sync.dart';
 import '../../ui/theme.dart';
+import '../book/import_list_screen.dart' show openImportList;
 import 'backup_screen.dart' show openBackup;
 
 const _privacyUrl = 'https://midi-broccoli-56c.notion.site/Covebook-3eb50284670881b0a0e2c6029cea29c7';
@@ -129,6 +130,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SectionBand(),
         ListGroup(title: '내 기록', children: [
           ListItem(label: '백업 및 복원', sub: _syncAvailable ? '기록은 이 기기와 서버에 저장돼요' : '기록은 이 기기에 저장돼요', chevron: true, onPress: () => openBackup(context)),
+          // 다른 앱·엑셀에 정리해 둔 책을 한 번에(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어')
+          ListItem(label: '책 목록 가져오기', sub: '엑셀·CSV 파일로 여러 권을 한 번에', chevron: true, onPress: () => openImportList(context)),
           // 커뮤니티가 열렸고 서버를 쓰는 빌드일 때만
           if (communityOpen.value && _syncAvailable) ListItem(label: '커뮤니티 공개 프로필', chevron: true, onPress: () => openCommunityProfile(context)),
         ]),
