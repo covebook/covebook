@@ -4,7 +4,7 @@
 
 ## 현재 연결 상태
 
-2026-11-14 Apple Developer 활성화와 Team ID `8R7ZQBT9G2`를 확인했다. 앱 ID의 Sign in with Apple, Services ID `app.covebook.signin`, 아래 도메인·Return URL 등록을 완료했다. 2026-11-15 App Store Connect에 책장 한켠(Apple ID `6835054912`)을 생성하고 자동 배포를 켠 Internal 테스트 그룹을 등록했다. 로그인 키·배포 인증서·업로드 API 접근권한 신청 및 키 발급과 보안 저장, 서버 재배포 및 첫 TestFlight 업로드는 아직 남아 있다. 필요한 값이 채워지기 전에는 자동 배포를 켜지 않는다. 코드·설정 테스트와 실기기/Apple 실연동 검증은 별개다.
+2026-11-14 Apple Developer 활성화와 Team ID `8R7ZQBT9G2`를 확인했다. 앱 ID의 Sign in with Apple, Services ID `app.covebook.signin`, 아래 도메인·Return URL 등록을 완료했다. 2026-11-15 App Store Connect에 책장 한켠(Apple ID `6835054912`)을 생성하고 자동 배포를 켠 Internal 테스트 그룹을 등록했다. 2026-11-15 로그인 키를 발급하고 KoDeploy Covebook 앱에 Apple 환경변수 5개를 저장한 뒤 서버 재배포를 완료했다. 운영 `/auth/providers`에서 `apple: true`를 확인했다. KoDeploy 소스 주소도 `covebook/covebook`으로 갱신했다. App Store Connect API 접근권한 승인을 받았고 Developer 역할 업로드 키와 배포 인증서·프로파일을 발급해 GitHub Secrets 6개를 저장했다. 첫 수동 iOS 빌드는 실행 중이며 실제 TestFlight 업로드·실기기 로그인 확인은 아직 남아 있다. 필요한 값이 채워지기 전에는 자동 배포를 켜지 않는다. 코드·설정 테스트와 실기기/Apple 실연동 검증은 별개다.
 
 ## Apple 로그인
 
