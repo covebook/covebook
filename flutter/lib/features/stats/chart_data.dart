@@ -241,3 +241,16 @@ String timeRange(String startIso, String endIso) {
 
 /// 시작~끝 사이가 실제 독서 시간보다 1분 넘게 길면(일시정지가 있었으면)
 bool hasPause(Session s) => _local(s.endedAt).millisecondsSinceEpoch - _local(s.startedAt).millisecondsSinceEpoch - s.durationMs >= 60000;
+
+/// 기간에 서재에 넣은 책 수(넣은 날 = 기기 현지 날짜)와 지금 서재 권수. 서재 권수는 '전체 책' 목록과 같게 숨긴 책을 빼고 따로 센다
+/// (2026-11-15 QA: 기록 탭에 권수가 없어 전체 책과 숫자를 맞춰 볼 수 없었다)
+({int added, int shelf, int hidden}) bookCounts(Library lib, Period p) {
+  var added = 0, hidden = 0;
+  for (final b in lib.books.values) {
+    final at = DateTime.tryParse(b.createdAt);
+    final day = at == null ? null : today(at);
+    if (day != null && day.compareTo(p.from) >= 0 && day.compareTo(p.to) <= 0) added++;
+    if (b.hiddenAt != null) hidden++;
+  }
+  return (added: added, shelf: lib.books.length - hidden, hidden: hidden);
+}

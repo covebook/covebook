@@ -113,6 +113,80 @@ VerticalTitle spineTitleLayout(String title, double hDU, double faceDU, double a
   return layoutVerticalTitle(title, (0.85 - 0.08) * hDU - 4, faceDU, [minSize], 2, 1.0).at(0.08, 0.85);
 }
 
+// ---------- 로마자 제목 책등(돌린 글줄) ----------
+/// 한글·한자·가나 없이 로마자가 든 제목: 영어 책등처럼 글줄을 돌려 쓴다(한 자씩 세워 쌓으면 'Normal'이 오른쪽 줄부터 읽혔다, 2026-11-15 QA)
+bool isLatinTitle(String title) {
+  var latin = false;
+  for (final c in title.runes) {
+    if (c >= 0x1100 && c <= 0x11FF || c >= 0x3040 && c <= 0x30FF || c >= 0x3130 && c <= 0x318F || c >= 0x3400 && c <= 0x9FFF || c >= 0xAC00 && c <= 0xD7A3) return false;
+    if (c >= 0x41 && c <= 0x5A || c >= 0x61 && c <= 0x7A || c >= 0xC0 && c <= 0x24F) latin = true;
+  }
+  return latin;
+}
+
+/// 돌린 글줄 조판: 글자 크기, 줄(두께 방향으로 첫 줄이 앞표지 쪽), 첫 글자 머리 쪽 끝(책 높이 비율)
+class RotatedTitle {
+  const RotatedTitle(this.fontSize, this.lines, this.start);
+  final double fontSize;
+  final List<String> lines;
+  final double start;
+}
+
+/// 돌린 글줄의 줄 간격(글자 크기 배수)
+const rotatedLineH = 1.1;
+
+/// 세운 책등의 로마자 제목: 글줄을 시계 방향으로 돌려 머리 → 꼬리로 읽게(눕힌 책등과 같은 방향) 쓴다.
+/// 글자 크기는 세로 조판과 같은 규칙(책등 폭의 0.42, 8.5~11DU)에서 시작한다. 한 줄로 조금 줄여 넣고 → 두께가 되면 두 줄 → 7.5DU까지 한 줄 → 말줄임.
+/// start: 정한 시작 자리(장정 판짜기), 없으면 0.2부터 0.1까지 올려 본다. end: 글줄 끝 한계. widthOf: 글줄 길이(DU, 글자 크기 fs)
+RotatedTitle rotatedSpineTitleLayout(String title, double hDU, double faceDU, double? start, double end, double Function(String s, double fs) widthOf) {
+  final text = title.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final words = text.split(' ');
+  final base = math.max(8.5, math.min(11.0, _round(faceDU * 0.42 * 2) / 2));
+  final sizes = [for (var v = base; v >= 7.5 - 1e-9; v -= 0.5) _round(v * 10) / 10];
+  final starts = start != null ? [start] : const [0.2, 0.15, 0.1];
+  RotatedTitle? one(Iterable<double> fss) {
+    for (final fs in fss) {
+      for (final s0 in starts) {
+        if (widthOf(text, fs) <= (end - s0) * hDU) return RotatedTitle(fs, [text], s0);
+      }
+    }
+    return null;
+  }
+
+  RotatedTitle? two() {
+    if (words.length < 2) return null;
+    for (final fs in sizes) {
+      if (2 * fs * rotatedLineH > faceDU * 0.86) continue;
+      List<String>? best;
+      var bestW = double.infinity;
+      for (var i = 1; i < words.length; i++) {
+        final a = words.sublist(0, i).join(' '), b = words.sublist(i).join(' ');
+        final w = math.max(widthOf(a, fs), widthOf(b, fs));
+        if (w < bestW) {
+          bestW = w;
+          best = [a, b];
+        }
+      }
+      for (final s0 in starts) {
+        if (best != null && bestW <= (end - s0) * hDU) return RotatedTitle(fs, best, s0);
+      }
+    }
+    return null;
+  }
+
+  final r = one(sizes.take(3)) ?? two() ?? one(sizes.skip(3));
+  if (r != null) return r;
+  // 넘치면 최소 크기 한 줄에서 말줄임
+  final fs = sizes.last;
+  final s0 = starts.last;
+  var out = '';
+  for (final ch in _chars(text)) {
+    if (widthOf('$out$ch…', fs) > (end - s0) * hDU) break;
+    out += ch;
+  }
+  return RotatedTitle(fs, ['${out.trimRight()}…'], s0);
+}
+
 // ---------- 눕힌 책등(가로 한 줄) ----------
 const lyingStart = 0.14;
 const _lyingEnd = 0.08;

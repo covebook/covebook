@@ -50,7 +50,8 @@ class WordWrap extends StatelessWidget {
     final t = keepAll(text);
     final ls = style.letterSpacing ?? 0;
     final overflow = maxLines != null ? TextOverflow.ellipsis : null;
-    if (ls == 0 || !t.contains('\u2060')) return Text(t, style: style, maxLines: maxLines, overflow: overflow);
+    // 화면 읽기에는 단어 이음표(U+2060)를 뺀 원문을 준다(넣은 채면 글자마다 끊어 읽을 수 있다, 2026-11-15 QA)
+    if (ls == 0 || !t.contains('\u2060')) return Text(t, style: style, maxLines: maxLines, overflow: overflow, semanticsLabel: text);
     // 단어 붙임 문자(U+2060)에도 Flutter는 자간을 다 붙이고 지금 앱(Android)은 반쯤 붙는다(에뮬 실측: 9개에 −5px, 자간 −1.18px).
     // 붙임 문자만 자간을 반으로 해 줄 폭을 맞춘다
     final half = TextStyle(letterSpacing: ls / 2);
@@ -66,7 +67,7 @@ class WordWrap extends StatelessWidget {
       spans.add(TextSpan(text: ch, style: half));
     }
     if (run.isNotEmpty) spans.add(TextSpan(text: run.toString()));
-    return Text.rich(TextSpan(style: style, children: spans), maxLines: maxLines, overflow: overflow);
+    return Text.rich(TextSpan(style: style, children: spans), maxLines: maxLines, overflow: overflow, semanticsLabel: text);
   }
 }
 

@@ -14,6 +14,7 @@ import '../../services/share_image.dart';
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/alert.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../share/share_scene.dart';
@@ -45,6 +46,11 @@ class _BookShareScreenState extends State<BookShareScreen> {
   // 미리보기 그림(같은 입력·폭이면 다시 그리지 않는다)
   ui.Image? _preview;
   Object? _previewKey;
+  // 비어 있는 칩을 누르면 쓰는 자리로 데려간다(2026-11-15 QA: 빈 '한 줄 감상'·'별점' 칩은 눌러도 반응이 없었다)
+  final _rateKey = GlobalKey(), _noteKey = GlobalKey();
+  final _noteScope = FocusScopeNode(debugLabel: '한 줄 감상');
+  String? _hint; // 방금 누른 빈 칩: 그 안내 줄을 잠깐 진하게
+  Timer? _hintTimer;
 
   @override
   void initState() {
@@ -82,6 +88,8 @@ class _BookShareScreenState extends State<BookShareScreen> {
     _saveNote();
     _model.removeListener(_changed);
     _savedTimer?.cancel();
+    _hintTimer?.cancel();
+    _noteScope.dispose();
     _preview?.dispose();
     super.dispose();
   }
@@ -93,6 +101,19 @@ class _BookShareScreenState extends State<BookShareScreen> {
   void _saveNote() {
     final v = _note.trim().isEmpty ? null : _note.trim();
     if (v != _model.lib.books[widget.id]?.note) _model.updateBook(widget.id, note: v);
+  }
+
+  /// 비어 있는 칩: 한 줄 감상은 입력 칸으로(키보드까지), 별점은 별 줄로 내려 주고, 독서 시간·읽은 기간은 생기는 법 안내를 진하게
+  void _empty(String k) {
+    final target = switch (k) { 'note' => _noteKey, 'rating' => _rateKey, _ => null };
+    final ctx = target?.currentContext;
+    if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 280), alignment: 0.4);
+    if (k == 'note') _noteScope.nextFocus();
+    _hintTimer?.cancel();
+    setState(() => _hint = k == 'note' || k == 'rating' ? 'eval' : k);
+    _hintTimer = Timer(const Duration(milliseconds: 2400), () {
+      if (mounted) setState(() => _hint = null);
+    });
   }
 
   BookShareData? get _data {
@@ -180,7 +201,12 @@ class _BookShareScreenState extends State<BookShareScreen> {
     // 미리보기는 화면에 맞춰 줄인 같은 카드(옵션이 보이게 화면 폭의 3/4 정도)
     final previewW = [width - Space.page * 2, math.max(260.0, width * 0.74), 380.0].reduce(math.min);
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
-    final missing = [if (!has['time']!) '독서 시간은 타이머로 읽으면 생겨요', if (!has['period']!) '읽은 기간은 시작일·완독일을 적으면 생겨요'];
+    // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게)
+    final missing = {
+      if (!has['note']! || !has['rating']!) 'eval': '한 줄 감상·별점은 아래 ‘내 평가’에 적으면 생겨요',
+      if (!has['time']!) 'time': '독서 시간은 타이머로 읽으면 생겨요',
+      if (!has['period']!) 'period': '읽은 기간은 시작일·완독일을 적으면 생겨요',
+    };
     return Screen(
       title: '책 공유',
       compact: true,
@@ -208,11 +234,20 @@ class _BookShareScreenState extends State<BookShareScreen> {
         ),
         const H2('카드에 넣을 것'),
         Wrap(spacing: Space.s, runSpacing: Space.s, children: [
-          for (final k in _partLabel.keys) AppChip(label: _partLabel[k]!, on: on[k]! && has[k]!, onPress: has[k]! ? () => toggle(k) : null),
+          for (final k in _partLabel.keys) AppChip(label: _partLabel[k]!, on: on[k]! && has[k]!, onPress: has[k]! ? () => toggle(k) : () => _empty(k)),
         ]),
-        if (missing.isNotEmpty) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(missing.join(' · '), style: AppType.caption)),
+        if (missing.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: Space.s),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final e in missing.entries)
+                Text(keepAll(e.value),
+                    semanticsLabel: e.value, style: _hint == e.key ? AppType.caption.copyWith(color: AppColors.ink, fontFamily: AppFonts.uiBold) : AppType.caption),
+            ]),
+          ),
         const H2('내 평가'),
         Padding(
+          key: _rateKey,
           padding: const EdgeInsets.only(bottom: Space.m),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: Space.touch),
@@ -222,7 +257,11 @@ class _BookShareScreenState extends State<BookShareScreen> {
             ]),
           ),
         ),
-        Field(label: '한 줄 감상', value: _note, placeholder: '이 책은 나에게…', multiline: true, minHeight: 56, onChange: (t) => setState(() => _note = t.length > 140 ? t.substring(0, 140) : t)),
+        FocusScope(
+          key: _noteKey,
+          node: _noteScope,
+          child: Field(label: '한 줄 감상', value: _note, placeholder: '이 책은 나에게…', multiline: true, minHeight: 56, onChange: (t) => setState(() => _note = t.length > 140 ? t.substring(0, 140) : t)),
+        ),
       ],
     );
   }

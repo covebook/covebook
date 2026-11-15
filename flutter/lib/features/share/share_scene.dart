@@ -13,7 +13,16 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../../ui/keep_all.dart';
 
 const sceneW = 941.0; // 시안 폭(화소)
-const sceneH = 1671.0; // 시안 높이(9:16)
+const sceneH = 1671.0; // 시안 높이(바탕 그림)
+
+/// 카드 높이: 늘 9:16(폭 1080이면 1920, 인스타 스토리). 한 줄 감상이 길어도 늘이지 않고 글자를 줄여 넣는다(2026-11-15 QA: 1080×1998로 길어졌다)
+const cardH = sceneW * 16 / 9;
+
+/// '책장 한켠' 자리(시안 화소, 문단 위 끝)
+const _footY = 1551.0;
+
+/// 넘칠 때 글자와 '책장 한켠' 사이 최소 간격
+const _footGapMin = 60.0;
 
 // 시안에서 잰 자리(화소)
 const _coverH = 616.0; // 표지 높이(시안 책)
@@ -113,8 +122,8 @@ class ShareLayout {
 // 종이에 찍힌 글자처럼 아래로 아주 옅은 그늘(시안 글자 둘레)
 final _textShadow = [ui.Shadow(color: const Color.fromRGBO(0, 0, 0, 0.14), offset: const Offset(0, 1.5), blurRadius: blurRadiusOfSigma(2))];
 
-ui.Paragraph _para(String text, String family, double size, Color color, [double? lineHeight]) {
-  final b = ui.ParagraphBuilder(ui.ParagraphStyle(fontFamily: family, fontSize: size))
+ui.Paragraph _para(String text, String family, double size, Color color, [double? lineHeight, int? maxLines]) {
+  final b = ui.ParagraphBuilder(ui.ParagraphStyle(fontFamily: family, fontSize: size, maxLines: maxLines, ellipsis: maxLines == null ? null : '…'))
     ..pushStyle(ui.TextStyle(color: color, fontFamily: family, fontSize: size, height: lineHeight == null ? null : lineHeight / size, shadows: _textShadow))
     ..addText(keepAll(text));
   return b.build()..layout(const ui.ParagraphConstraints(width: _textW));
@@ -132,25 +141,39 @@ ShareLayout layoutShareScene(ShareSceneInput input) {
   final x = _bookCx - (w + pageW) / 2;
   final cover = Rect.fromLTWH(x, _coverBottom - h, w, h);
 
-  final title = _para(input.title, shareFonts.title, 67, _ink.title, 80);
-  final author = input.author != null ? _para(input.author!, shareFonts.ui, 36, _ink.author) : null;
-  final note = input.note != null ? _para(input.note!, shareFonts.note, 48, _ink.note, 70) : null;
+  // 제목은 두 줄, 저자는 한 줄까지(넘치면 말줄임)
+  final title = _para(input.title, shareFonts.title, 67, _ink.title, 80, 2);
+  final author = input.author != null ? _para(input.author!, shareFonts.ui, 36, _ink.author, null, 1) : null;
   final metaText = [if (input.rating != null && input.rating != 0) input.rating!.toStringAsFixed(1), ...input.extra].join('   ');
   final meta = metaText.isNotEmpty ? _para(metaText, shareFonts.ui, 36, _ink.meta) : null;
   final foot = _para('책장 한켠', shareFonts.ui, 33, _ink.foot);
-  // 세로 흐름(시안에서 잰 간격, 글자 문단 위 끝): 제목 1017 → 12 → 저자 → 47 → 감상 → 60 → 별점 줄 → 152 → '책장 한켠'(시안 자리보다 위로는 올라가지 않는다)
-  const yTitle = 1017.0;
-  var bottom = yTitle + title.height;
-  final yAuthor = bottom + 12;
-  if (author != null) bottom = yAuthor + author.height;
-  final yNote = bottom + 47;
-  if (note != null) bottom = yNote + note.height;
-  final yStars = bottom + 60;
   final hasMeta = (input.rating != null && input.rating != 0) || meta != null;
-  if (hasMeta) bottom = yStars + 43;
-  final yFoot = math.max(1551.0, (hasMeta ? yStars : bottom) + 152);
-  final height = math.max(sceneH, yFoot + 120);
-  return ShareLayout(height, cover, pageW, title, author, note, meta, foot, (title: yTitle, author: yAuthor, note: yNote, stars: yStars, foot: yFoot));
+  // 세로 흐름(시안에서 잰 간격, 글자 문단 위 끝): 제목 1017 → 12 → 저자 → 47 → 감상 → 60 → 별점 줄 → '책장 한켠'(1551 고정).
+  // 카드는 늘 9:16이라 '책장 한켠' 위로 넘치면 간격 → 감상 글자 크기 → 감상 줄 수 차례로 줄인다
+  const yTitle = 1017.0;
+  final yAuthor = yTitle + title.height + 12;
+  final authorEnd = author != null ? yAuthor + author.height : yTitle + title.height;
+  const steps = [(size: 48.0, lh: 70.0, gNote: 47.0, gStars: 60.0), (size: 44.0, lh: 62.0, gNote: 40.0, gStars: 48.0), (size: 40.0, lh: 56.0, gNote: 34.0, gStars: 40.0), (size: 36.0, lh: 50.0, gNote: 30.0, gStars: 36.0)];
+  ({ui.Paragraph? note, double yNote, double yStars, double end}) flow(({double size, double lh, double gNote, double gStars}) st, [int? maxLines]) {
+    final note = input.note != null ? _para(input.note!, shareFonts.note, st.size, _ink.note, st.lh, maxLines) : null;
+    final yNote = authorEnd + st.gNote;
+    final bottom = note != null ? yNote + note.height : authorEnd;
+    final yStars = bottom + st.gStars;
+    return (note: note, yNote: yNote, yStars: yStars, end: hasMeta ? yStars + 43 : bottom);
+  }
+
+  var f = flow(steps.first);
+  for (final st in steps) {
+    f = flow(st);
+    if (f.end + _footGapMin <= _footY) break;
+  }
+  if (f.end + _footGapMin > _footY && input.note != null) {
+    // 가장 작은 글자로도 넘치면 감상을 들어가는 줄 수까지만(말줄임)
+    final st = steps.last;
+    final room = _footY - _footGapMin - (authorEnd + st.gNote) - (hasMeta ? st.gStars + 43 : 0);
+    f = flow(st, math.max(1, (room / st.lh).floor()));
+  }
+  return ShareLayout(cardH, cover, pageW, title, author, f.note, meta, foot, (title: yTitle, author: yAuthor, note: f.yNote, stars: f.yStars, foot: _footY));
 }
 
 // 5각 별(시안 별: 끝이 조금 둥근 회색 별)
@@ -298,5 +321,5 @@ ui.Image renderShareCard(ShareSceneAssets a, ShareSceneInput input, int pxWidth)
   return img;
 }
 
-/// 그림 높이/폭(미리보기 칸 크기)
-double shareCardAspect(ShareSceneInput input) => layoutShareScene(input).height / sceneW;
+/// 그림 높이/폭(미리보기 칸 크기): 늘 9:16
+double shareCardAspect(ShareSceneInput input) => cardH / sceneW;

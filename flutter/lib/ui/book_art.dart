@@ -200,6 +200,7 @@ typedef InkAt = String Function(double f0, double f1);
 /// 세운 책등 제목(세로 조판): 글자를 바로 세워 열로 쌓는다. 글자마다 나아가기 폭의 가운데를 열 가운데에 둔다.
 /// 쉼표·마침표는 앞 글자 오른쪽 아래(지금 앱 verticalTitlePicture)
 void _verticalTitle(ui.Canvas canvas, BookLook look, Dims d, GlyphMetrics g, double opacity, {InkAt? inkAt}) {
+  if (isLatinTitle(look.title)) return _rotatedTitle(canvas, look, d, g, opacity, inkAt: inkAt);
   final w = d.t, h = d.h;
   final textEnd = look.titleTop != null ? 0.79 : 0.88;
   final t = spineTitleLayout(look.title, h, d.t * spineFace, textEnd, textEnd + 0.12);
@@ -239,6 +240,34 @@ void _verticalTitle(ui.Canvas canvas, BookLook look, Dims d, GlyphMetrics g, dou
   }
 }
 
+/// 세운 책등의 로마자 제목(영어 책등): 글줄을 시계 방향으로 돌려 머리 → 꼬리로 읽는다. 글자 위쪽은 앞표지 쪽(눕힌 책등과 같은 방향),
+/// 두 줄이면 첫 줄이 앞표지 쪽. 글자는 글꼴의 나아가기 폭으로 잇는다(로마자는 낱자 잉크 폭으로 붙이면 너무 빽빽하다)
+void _rotatedTitle(ui.Canvas canvas, BookLook look, Dims d, GlyphMetrics g, double opacity, {InkAt? inkAt}) {
+  final w = d.t, h = d.h;
+  double widthOf(String s, double fs) => s.runes.fold(0.0, (n, r) => n + g.advance(r, fs));
+  final fixed = look.titleTop != null ? math.max(0.12, look.titleTop! - _titleLift) : null;
+  final t = rotatedSpineTitleLayout(look.title, h, d.t * spineFace, fixed, look.titleTop != null ? 0.85 : 0.92, widthOf);
+  final fs = t.fontSize;
+  final gy = -(g.ascent(fs) + g.descent(fs)) / 2;
+  final lh = fs * rotatedLineH;
+  final ink = _alpha(_color(look.ink), opacity);
+  for (var i = 0; i < t.lines.length; i++) {
+    canvas.save();
+    canvas.translate(w / 2 + ((t.lines.length - 1) / 2 - i) * lh, t.start * h);
+    canvas.rotate(math.pi / 2);
+    var x = 0.0;
+    for (final r in t.lines[i].runes) {
+      final adv = g.advance(r, fs);
+      if (r != 0x20) {
+        final y0 = t.start * h + x;
+        _glyph(canvas, String.fromCharCode(r), x, gy, fs, inkAt == null ? ink : _alpha(_color(inkAt(y0 / h, (y0 + adv) / h)), opacity));
+      }
+      x += adv;
+    }
+    canvas.restore();
+  }
+}
+
 /// 장정 판짜기 제목을 책등에서 올리는 몫(지금 앱 TITLE_LIFT)
 const _titleLift = 0.06;
 
@@ -249,6 +278,8 @@ void _lyingTitle(ui.Canvas canvas, BookLook look, Dims d, GlyphMetrics g, double
   final fs = t.fontSize;
   final gy = -(g.ascent(fs) + g.descent(fs)) / 2;
   final ink = _alpha(_color(look.ink), opacity);
+  // 로마자는 글꼴의 나아가기 폭으로 잇는다(낱자 잉크 폭으로 붙이면 'Murakami'처럼 글자가 서로 붙는다)
+  final latin = isLatinTitle(look.title);
   canvas.save();
   canvas.translate(w / 2, t.start * h);
   canvas.rotate(math.pi / 2);
@@ -256,13 +287,13 @@ void _lyingTitle(ui.Canvas canvas, BookLook look, Dims d, GlyphMetrics g, double
   for (final r in t.text.runes) {
     final ch = String.fromCharCode(r);
     if (ch == ' ') {
-      x += fs * 0.32;
+      x += latin ? g.advance(r, fs) : fs * 0.32;
       continue;
     }
     final box = g.ink(r, fs);
-    final cw = box.x1 - box.x0;
+    final cw = latin ? g.advance(r, fs) : box.x1 - box.x0;
     _glyph(canvas, ch, x, gy, fs, inkAt == null ? ink : _alpha(_color(inkAt((t.start * h + x) / h, (t.start * h + x + cw) / h)), opacity));
-    x += cw + fs * lyingTrack;
+    x += cw + (latin ? 0 : fs * lyingTrack);
   }
   canvas.restore();
 }

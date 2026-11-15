@@ -65,9 +65,9 @@ Future<void> appAlert(BuildContext context, String title, [String? message, List
                       Flexible(
                         child: SingleChildScrollView(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Semantics(header: true, child: Text(keepAll(title), style: AppType.heading)),
+                            Semantics(header: true, child: Text(keepAll(title), style: AppType.heading, semanticsLabel: title)),
                             if (message != null && message.isNotEmpty)
-                              Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(keepAll(message), style: AppType.body.copyWith(color: AppColors.inkSoft))),
+                              Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(keepAll(message), style: AppType.body.copyWith(color: AppColors.inkSoft), semanticsLabel: message)),
                           ]),
                         ),
                       ),

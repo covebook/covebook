@@ -179,7 +179,7 @@ class _StatsScreenState extends State<StatsScreen> {
         ReadingCalendar(lib: lib, y: _y, m: _m, days: days, selected: selected, today: today, onSelect: (d) => setState(() => _picked = d))
       else
         ReadingChart(bars: bars, selected: selected, unit: monthly ? '일' : '월', onSelect: (k) => setState(() => _picked = k)),
-      if (_view == 'records') ..._records(lib, st0, sessions, activeDays, periodName, title, row, rowValue),
+      if (_view == 'records') ..._records(lib, st0, sessions, activeDays, periodName, title, row, rowValue, period, book),
       if (_view == 'calendar')
         if (selected != null) ...[
           const SectionBand(),
@@ -225,7 +225,7 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   List<Widget> _records(Library lib, PeriodStats st0, List<Session> sessions, int activeDays, String periodName, String? Function(String?) title,
-      Widget Function({required String? id, required String label, required Widget middle, required Widget right, VoidCallback? onPress}) row, TextStyle rowValue) {
+      Widget Function({required String? id, required String label, required Widget middle, required Widget right, VoidCallback? onPress}) row, TextStyle rowValue, Period period, String? book) {
     final summary = sessionSummary(sessions);
     final hours = hourBars(sessions), lengths = lengthBins(sessions), wd = weekdayBars(sessions);
     final top = topBooks(sessions, 3).where((r) => lib.books.containsKey(r.id)).toList();
@@ -291,12 +291,19 @@ class _StatsScreenState extends State<StatsScreen> {
       ],
       const SectionBand(),
       ListGroup(children: [
+        // 넣은 책·지금 서재(모든 책일 때만): '전체 책'의 권수와 맞춰 볼 수 있게
+        if (book == null) ListItem(label: '넣은 책', value: '${bookCounts(lib, period).added}권'),
         ListItem(
           label: '완독',
           sub: st0.completedRounds > st0.completedCount || st0.rereads > 0 ? '완독 ${st0.completedRounds}회 · 재독 ${st0.rereads}회' : null,
           value: '${st0.completedCount}권',
         ),
         ListItem(label: '남긴 갈피', value: '${st0.bookmarkCount}개'),
+        if (book == null)
+          () {
+            final c = bookCounts(lib, period);
+            return ListItem(label: '지금 서재', sub: c.hidden > 0 ? '숨긴 책 ${c.hidden}권은 빼고' : null, value: '${c.shelf}권');
+          }(),
       ]),
     ];
   }
