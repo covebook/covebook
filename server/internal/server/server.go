@@ -168,13 +168,13 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	var kakao, google bool
+	var kakao, google, apple bool
 	var nick string
-	err = s.DB.QueryRow(r.Context(), "SELECT EXISTS (SELECT 1 FROM auth_identities WHERE provider='kakao' AND user_id=$1), EXISTS (SELECT 1 FROM auth_identities WHERE provider='google' AND user_id=$1), COALESCE(nickname,'') FROM users WHERE id=$1", user).Scan(&kakao, &google, &nick)
+	err = s.DB.QueryRow(r.Context(), "SELECT EXISTS (SELECT 1 FROM auth_identities WHERE provider='kakao' AND user_id=$1), EXISTS (SELECT 1 FROM auth_identities WHERE provider='google' AND user_id=$1), EXISTS (SELECT 1 FROM auth_identities WHERE provider='apple' AND user_id=$1), COALESCE(nickname,'') FROM users WHERE id=$1", user).Scan(&kakao, &google, &apple, &nick)
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, map[string]any{"userId": user, "kakao": kakao, "google": google, "nickname": nick})
+	writeJSON(w, 200, map[string]any{"userId": user, "kakao": kakao, "google": google, "apple": apple, "nickname": nick})
 	return nil
 }
 func (s *Server) Handler() http.Handler {
@@ -185,6 +185,9 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /auth/google/start", wrap(s.googleStart))
 	m.HandleFunc("GET /auth/google/callback", wrap(s.googleCallback))
 	m.HandleFunc("POST /auth/google/claim", wrap(s.googleClaim))
+	m.HandleFunc("POST /auth/apple/start", wrap(s.appleStart))
+	m.HandleFunc("POST /auth/apple/callback", wrap(s.appleCallback))
+	m.HandleFunc("POST /auth/apple/claim", wrap(s.appleClaim))
 	m.HandleFunc("GET /me", wrap(s.me))
 	m.HandleFunc("DELETE /me", wrap(s.deleteAccount))
 	m.HandleFunc("GET /auth/kakao/unlink", wrap(s.kakaoUnlink))

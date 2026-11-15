@@ -308,6 +308,9 @@ func (s *Server) eraseEntry(ctx context.Context, e deletionEntry) error {
 				return err
 			}
 		}
+		if err = s.revokeApple(ctx, tx, e.UserID); err != nil {
+			return err
+		}
 		if _, err = tx.Exec(ctx, "DELETE FROM users WHERE id=$1", e.UserID); err != nil {
 			return err
 		}

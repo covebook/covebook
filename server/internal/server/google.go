@@ -29,7 +29,7 @@ func lifecycleError() error {
 }
 
 func (s *Server) providers(w http.ResponseWriter, r *http.Request) error {
-	writeJSON(w, 200, map[string]bool{"google": googleEnabled(), "kakao": kakaoEnabled(), "accountDeletion": true})
+	writeJSON(w, 200, map[string]bool{"google": googleEnabled(), "apple": s.appleEnabled(), "kakao": kakaoEnabled(), "accountDeletion": true})
 	return nil
 }
 
