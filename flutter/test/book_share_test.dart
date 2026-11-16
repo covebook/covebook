@@ -17,6 +17,8 @@ void main() {
     expect(t.replaceAll('⁠', ''), '여러 번  다시');
     expect('⁠'.allMatches(t).length, 2);
     expect(keepAll(''), '');
+    // 라틴 글자·숫자끼리는 원래 안 끊겨 이음표를 넣지 않는다(갈피 문장 줄 끝 글자가 잘렸다). 한글과 붙은 곳·하이픈 뒤는 넣는다
+    expect(keepAll('about 2026년 well-known'), 'about 2026\u2060년 well\u2060-\u2060known');
   });
   test('문장 줄 나누기: 가장 적은 줄 수에서 가장 긴 줄을 짧게, 꾸미는 짧은 낱말 뒤에서는 끊지 않는다', () {
     // 글자 수를 폭으로 본다
