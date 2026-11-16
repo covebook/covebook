@@ -185,10 +185,17 @@ class _MiniTimerState extends State<MiniTimer> {
                 child: SizedBox(
                   width: timeW - hair * 2,
                   height: miniTimerSize - hair * 2,
+                  // 큰 글씨에서는 동그라미 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA 확인)
                   child: Center(
-                    child: Text(label,
-                        maxLines: 1,
-                        style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(label,
+                            maxLines: 1,
+                            style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+                      ),
+                    ),
                   ),
                 ),
               ),

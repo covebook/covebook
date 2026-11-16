@@ -305,7 +305,7 @@ class Screen extends StatelessWidget {
             Expanded(child: body),
             if (footer != null)
               // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
-              _FooterReport(
+              FooterReport(
                 child: Container(
                   color: AppColors.bg,
                   padding: EdgeInsets.fromLTRB(Space.page, 12, Space.page, 12 + insets.bottom),
@@ -342,16 +342,18 @@ class KeyboardRefocusGuard extends NavigatorObserver {
   }
 }
 
-/// 화면 아래 고정 버튼 줄의 높이를 그 화면(경로) 몫으로 작은 타이머에 알린다
-class _FooterReport extends StatefulWidget {
-  const _FooterReport({required this.child});
+/// 화면 아래 고정 버튼 줄의 높이를 그 화면(경로) 몫으로 작은 타이머에 알린다.
+/// Screen의 footer가 아닌 화면(갈피 상세·갈피 보드처럼 아래 줄을 직접 그리는 곳)도 화면 아래 끝에 붙은 줄을 이것으로 감싼다
+/// (2026-11-16: 작은 타이머가 갈피 상세 '공유'·보드 '+ 갈피'를 가렸다)
+class FooterReport extends StatefulWidget {
+  const FooterReport({super.key, required this.child});
   final Widget child;
 
   @override
-  State<_FooterReport> createState() => _FooterReportState();
+  State<FooterReport> createState() => _FooterReportState();
 }
 
-class _FooterReportState extends State<_FooterReport> {
+class _FooterReportState extends State<FooterReport> {
   Route<dynamic>? _route;
 
   @override

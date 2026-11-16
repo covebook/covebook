@@ -763,14 +763,20 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
           }),
         ),
       ]),
+      // 작은 타이머가 이 줄 위에 뜨게 높이(아래 여백 포함)를 알린다('+ 갈피'를 가렸다, 2026-11-16)
       Positioned(
         left: 16,
         right: 16,
-        bottom: insets.bottom + 16,
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Btn(label: '전체 보기', kind: 'secondary', size: 's', disabled: _marks.isEmpty, onPress: _fit),
-          Btn(label: '갈피', kind: 'secondary', size: 's', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
-        ]),
+        bottom: 0,
+        child: FooterReport(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: insets.bottom + 16),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Btn(label: '전체 보기', kind: 'secondary', size: 's', disabled: _marks.isEmpty, onPress: _fit),
+              Btn(label: '갈피', kind: 'secondary', size: 's', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
+            ]),
+          ),
+        ),
       ),
     ]);
   }

@@ -355,7 +355,9 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
                         Text('${list.length}개의 갈피', style: AppType.caption),
                       ]),
                     ),
-                  Padding(
+                  // 작은 타이머가 이 줄 위에 뜨게 높이를 알린다(공유 단추를 가렸다)
+                  FooterReport(
+                   child: Padding(
                     padding: EdgeInsets.fromLTRB(Space.page, 12, Space.page, insets.bottom + size.height * 0.044),
                     child: _Bar(
                       brand: Semantics(
@@ -385,7 +387,7 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
                         ),
                       ]),
                     ),
-                  ),
+                  )),
                 ]),
               ),
             ),
