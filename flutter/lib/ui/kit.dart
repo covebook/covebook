@@ -1918,12 +1918,11 @@ class _MinutesBodyState extends State<_MinutesBody> {
               height: _wheelRow,
               child: DecoratedBox(decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(10))),
             ),
+            // 단위는 줄 글자 안에('1시간' · '45분'): 단위를 목록 밖에 따로 두면 숫자 폭에 따라 숫자–단위 사이가 열마다 달라지고 묶음이 가운데서 밀렸다(2026-11-16 사용자 '라인이랑 안 맞는')
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              _Wheel(count: _maxH + 1, index: _h, unit: '시간', text: (i) => '$i', onChange: (h) => setState(() => _h = h)),
-              const Text('시간', style: TextStyle(fontFamily: AppFonts.ui, fontSize: 17, color: AppColors.inkSoft)),
+              _Wheel(count: _maxH + 1, index: _h, unit: '', width: 104, text: (i) => '$i시간', onChange: (h) => setState(() => _h = h)),
               const SizedBox(width: Space.l),
-              _Wheel(count: 12, index: _m, unit: '분', text: (i) => '${i * 5}', onChange: (m) => setState(() => _m = m)),
-              const Text('분', style: TextStyle(fontFamily: AppFonts.ui, fontSize: 17, color: AppColors.inkSoft)),
+              _Wheel(count: 12, index: _m, unit: '', width: 104, text: (i) => '${i * 5}분', onChange: (m) => setState(() => _m = m)),
             ]),
           ]),
         ),
@@ -1945,9 +1944,10 @@ const _wheelVisible = 5;
 
 /// 돌리는 목록 하나: 가운데 줄이 고른 값. 손을 떼면 가까운 줄에 멈춘다. 화면 읽기에서는 위아래로 쓸어 한 칸씩 바꾼다
 class _Wheel extends StatefulWidget {
-  const _Wheel({required this.count, required this.index, required this.unit, required this.onChange, this.text});
+  const _Wheel({required this.count, required this.index, required this.unit, required this.onChange, this.text, this.width = 76});
   final int count, index;
   final String unit;
+  final double width;
   final ValueChanged<int> onChange;
 
   /// 줄 글자(없으면 두 자리 번호)
@@ -1979,7 +1979,7 @@ class _WheelState extends State<_Wheel> {
         onIncrease: () => _step(1),
         onDecrease: () => _step(-1),
         child: SizedBox(
-          width: 76,
+          width: widget.width,
           height: _wheelRow * _wheelVisible,
           child: ListWheelScrollView.useDelegate(
             controller: _c,

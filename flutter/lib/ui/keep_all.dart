@@ -21,11 +21,18 @@ String keepAll(String t) {
 /// 넣으면 갈피 문장처럼 이음표에 자간을 따로 주는 곳(WordWrap)에서 글자가 조각마다 나뉘어, 줄 끝 글자(about의 t)가 잘렸다(2026-11-16)
 final _inWord = RegExp(r"[A-Za-z0-9\u00C0-\u024F'\u2019]");
 
+/// 앞에서 줄이 바뀌지 않는 닫는 문장부호, 뒤에서 줄이 바뀌지 않는 여는 문장부호(유니코드 줄바꿈 규칙): 그 자리에도 이음표가 필요 없다.
+/// 넣으면 'little.'의 마침표가 조각으로 나뉘어 줄 끝에서 통째로 잘렸다(2026-11-16 QA 은서 F4)
+final _closing = RegExp(r'[.,!?;:)\]}’”」』…%]');
+final _opening = RegExp(r'[(\[{‘“「『]');
+
 String _join(String w) {
   final cs = w.runes.map(String.fromCharCode).toList();
   final out = StringBuffer();
   for (var i = 0; i < cs.length; i++) {
-    if (i > 0 && !(_inWord.hasMatch(cs[i - 1]) && _inWord.hasMatch(cs[i]))) out.write('\u2060');
+    if (i > 0 && !(_inWord.hasMatch(cs[i - 1]) && _inWord.hasMatch(cs[i])) && !_closing.hasMatch(cs[i]) && !_opening.hasMatch(cs[i - 1])) {
+      out.write('\u2060');
+    }
     out.write(cs[i]);
   }
   return out.toString();
