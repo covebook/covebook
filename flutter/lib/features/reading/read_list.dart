@@ -205,7 +205,9 @@ class _ReadListState extends State<ReadList> {
     final total = saved.total + activeToday;
     num msOf(String id) => (saved.byBook[id] ?? 0) + (active?.myBookId == id ? activeToday : 0);
     final noBookActive = active != null && active.myBookId == null;
-    final showNoBook = noBookActive || saved.noBook > 0 || added.contains(noBook);
+    // 오늘 책 없는 시간은 오늘 책 없이 읽어 저장했을 때만 줄로 띄운다(finish_reading noBookDay): 지운 책의 독서 시간도 책 연결이 비어
+    // 여기에 들어온다(2026-11-16 QA 현우 F4: 읽기 탭에 넣은 적 없는 '책 없이 읽기' 줄이 생겼다)
+    final showNoBook = noBookActive || (saved.noBook > 0 && _settings.noBookDay == day) || added.contains(noBook);
     // 목록에서 빼기: 추가해 둔 줄만(읽는 중인 책·오늘 읽은 책·재는 책은 그 까닭으로 목록에 있어 빼도 남는다)
     bool removable(String id) =>
         added.contains(id) &&
@@ -219,8 +221,10 @@ class _ReadListState extends State<ReadList> {
       final author = ed != null && ed.authors.isNotEmpty ? ed.authors.join(', ') : '';
       final ms = id != null ? msOf(id) : saved.noBook + (noBookActive ? activeToday : 0);
       final showMore = id != null || removable(noBook);
+      // 줄 이름은 한 번만: 안의 제목·지은이·시간 글은 줄 이름에 이미 있어 화면 읽기에서 뺀다(2026-11-16 QA 영숙 F9: 같은 말을 두세 번 읽었다)
       return Semantics(
         key: ValueKey(id ?? '~none'),
+        container: true,
         button: true,
         label: '$title${author.isNotEmpty ? ', $author' : ''}, 오늘 ${hms(ms)}${isActive ? (playing ? ', 읽는 중' : ', 일시정지') : ''}',
         child: Pressable(
@@ -228,9 +232,13 @@ class _ReadListState extends State<ReadList> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 84),
             child: Row(children: [
+              // 재생 단추: 표지 이름('… 표지')은 빼고 단추 이름만
               Semantics(
+                container: true,
                 button: true,
                 label: playing ? '$title 일시정지' : '$title 읽기 시작',
+                onTap: () => _begin(id),
+                excludeSemantics: true,
                 child: Pressable(
                   onPress: () => _begin(id),
                   pressedOpacity: 0.7,
@@ -270,19 +278,23 @@ class _ReadListState extends State<ReadList> {
               ),
               const SizedBox(width: Space.m),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: isActive ? AppType.row.copyWith(fontFamily: AppFonts.uiBold) : AppType.row),
-                  if (author.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14, color: AppColors.inkSoft)),
-                    ),
-                ]),
+                child: ExcludeSemantics(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: isActive ? AppType.row.copyWith(fontFamily: AppFonts.uiBold) : AppType.row),
+                    if (author.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14, color: AppColors.inkSoft)),
+                      ),
+                  ]),
+                ),
               ),
               const SizedBox(width: Space.m),
               // 책마다 시간은 세미볼드(2026-11-15 사용자 '숫자 좀 더 두껍게'): 위 큰 타이머(굵게)와 한 무리로 읽힌다
-              Text(hms(ms),
-                  style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 18, height: 26 / 18, color: ms == 0 && !isActive ? AppColors.inkSoft : AppColors.ink, fontFeatures: _tabular)),
+              ExcludeSemantics(
+                child: Text(hms(ms),
+                    style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 18, height: 26 / 18, color: ms == 0 && !isActive ? AppColors.inkSoft : AppColors.ink, fontFeatures: _tabular)),
+              ),
               const SizedBox(width: Space.m - Space.s),
               SizedBox(
                 width: 28 - Space.s,
@@ -292,8 +304,11 @@ class _ReadListState extends State<ReadList> {
                   alignment: Alignment.centerLeft,
                   child: showMore
                       ? Semantics(
+                          container: true,
                           button: true,
                           label: '$title 더 보기',
+                          onTap: () => _menu(id ?? noBook, id == null ? '책 없이 읽기' : title, removable(id ?? noBook)),
+                          excludeSemantics: true,
                           child: Pressable(
                             onPress: () => _menu(id ?? noBook, id == null ? '책 없이 읽기' : title, removable(id ?? noBook)),
                             child: const SizedBox(width: 28, height: Space.touch, child: Center(child: LucideIcon('MoreVertical', color: AppColors.inkSoft))),
@@ -385,9 +400,12 @@ class _ReadListState extends State<ReadList> {
           ),
         // 목록에 없는 책(읽을 책·다 읽은 책)이나 책 없이 읽기를 여러 개 골라 더한다
         if (hasRows)
+          // 이름은 한 번만('책 추가 / 책 추가'로 읽혔다)
           Semantics(
             button: true,
             label: '책 추가',
+            onTap: openPicker,
+            excludeSemantics: true,
             child: Pressable(
               onPress: openPicker,
               child: ConstrainedBox(

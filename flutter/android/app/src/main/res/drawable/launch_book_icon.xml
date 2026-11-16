@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 시스템 시작 화면 아이콘: 앱 시작 그림의 '느린 계절' 책(2026-11-16 QA 영숙 F17).
+     시스템 규칙상 아이콘은 288dp 칸 가운데 지름 192dp 원 안만 보여 책만 원 안에 들게 줄여 둔다 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="288dp" android:height="288dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+        </shape>
+    </item>
+    <item
+        android:width="118dp"
+        android:height="150dp"
+        android:gravity="center"
+        android:drawable="@drawable/launch_book" />
+</layer-list>

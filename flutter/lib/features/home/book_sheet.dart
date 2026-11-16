@@ -15,11 +15,12 @@ import '../book/add_book_screen.dart' show openAddBook;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/book_visual.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../book/book_screen.dart' show openBook;
 import '../bookmark/book_picker.dart' show statusLabel;
-import '../reading/reading_screen.dart' show openReadingScene;
+import '../reading/start_book.dart' show startReadingBook;
 import '../stats/stats_widgets.dart' show CoverImage;
 import '../bookmark/new_bookmark_screen.dart';
 
@@ -61,6 +62,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.transparent, // 바탕은 덮지 않는다(시안): 선반을 누르면 닫힌다
+    barrierLabel: '닫기', // 화면 읽기에서 영어 'Scrim'으로 읽혔다(2026-11-16 QA 영숙 F10)
     builder: (ctx) {
       final insets = MediaQuery.paddingOf(ctx);
       final ratio = (e.heightMm ?? 0) > 0 && (e.widthMm ?? 0) > 0 ? e.heightMm! / e.widthMm! : 188 / 128;
@@ -151,9 +153,10 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                   padding: const EdgeInsets.only(top: 10),
                   // 보조 행동 두 개(지금 앱 TextActions): 본문색 보통 글씨, 사이 얇은 세로선, 누르는 칸 48
                   child: Row(children: [
-                    _textAction('읽기 시작', () {
+                    // 누르면 그 책으로 바로 독서를 시작하고 읽기 화면을 연다(2026-11-16 QA 영숙 F2: 장면만 열리고 시계가 가지 않았다)
+                    _textAction(b.status == ReadStatus.reading || b.status == ReadStatus.paused ? '이어서 읽기' : '읽기 시작', () {
                       Navigator.pop(ctx);
-                      openReadingScene(context, bookId: bookId);
+                      startReadingBook(context, bookId);
                     }),
                     Container(width: 1, height: 18, color: AppColors.line),
                     _textAction('갈피 남기기', () {
@@ -168,9 +171,11 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                         final place = PlacementStore.instance;
                         await place.ensure();
                         if (!await place.toDrawer(bookId) || !context.mounted) return;
+                        // 되돌리기가 달린 알림은 Flutter 기본값(persist)이면 시간이 지나도 남아 하단 탭을 막았다: 정한 시간 뒤 사라지게(2026-11-16 QA 현우 F1)
                         ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
                           content: const Text('책장에서 뺐어요. 내 책에 그대로 있어요.'),
                           duration: const Duration(seconds: 4),
+                          persist: false,
                           action: SnackBarAction(label: '되돌리기', onPressed: () => place.undo()),
                         ));
                       }),
@@ -192,6 +197,7 @@ Future<void> _sampleSheet(BuildContext context, Book sample) => showModalBottomS
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.transparent,
+      barrierLabel: '닫기',
       builder: (ctx) {
         final insets = MediaQuery.paddingOf(ctx);
         final dims = sample.dims;
@@ -260,7 +266,7 @@ Widget _textAction(String label, VoidCallback onPress) => Expanded(
             constraints: const BoxConstraints(minHeight: 48),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Center(child: Text(label, textAlign: TextAlign.center, style: AppType.sub.copyWith(color: AppColors.ink))),
+              child: Center(child: Text(keepAll(label), textAlign: TextAlign.center, style: AppType.sub.copyWith(color: AppColors.ink))),
             ),
           ),
         ),

@@ -29,6 +29,34 @@ import 'read_list.dart' show bookTitle;
 import 'switch_book.dart';
 
 const _light = NightColors.ink;
+
+/// 시간 아래 한 줄(caption 15/21)의 지금 글자 배율 높이
+double _captionLine(BuildContext context) => MediaQuery.textScalerOf(context).scale(15) * 21 / 15;
+
+/// 시트가 열릴 때 이 칸이 접힌 아래(또는 위)에 있으면 보이게 넘긴다(고른 칸 보이기)
+class ShowWhenOpened extends StatefulWidget {
+  const ShowWhenOpened({super.key, required this.child, this.enabled = true});
+  final Widget child;
+  final bool enabled;
+
+  @override
+  State<ShowWhenOpened> createState() => _ShowWhenOpenedState();
+}
+
+class _ShowWhenOpenedState extends State<ShowWhenOpened> {
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.enabled) return;
+    // 시트가 올라오는 동안에도 자리는 정해져 있다: 첫 틀을 그린 뒤 넘긴다
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && Scrollable.maybeOf(context) != null) Scrollable.ensureVisible(context, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
 const _goals = [15, 30, 60];
 const _tabular = [FontFeature.tabularFigures()];
 const _shade = [Shadow(color: NightColors.shade, offset: Offset(0, 1), blurRadius: 6)];
@@ -38,10 +66,13 @@ const _videos = {'rain': 'assets/scenes/rain-window.mp4', 'fire': 'assets/scenes
 
 /// 장면 화면 열기(앱 맨 위에 꽉 차게)
 Future<void> openReadingScene(BuildContext context, {String? bookId, bool soundOnly = false}) =>
-    Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(
+    Navigator.of(context, rootNavigator: true).push(readingSceneRoute(bookId: bookId, soundOnly: soundOnly));
+
+/// 장면 화면 경로(화면을 닫은 뒤 뿌리 내비게이터로 열 때도 쓴다)
+Route<void> readingSceneRoute({String? bookId, bool soundOnly = false}) => MaterialPageRoute<void>(
       settings: const RouteSettings(name: '/reading/session'),
       builder: (_) => ReadingScreen(initialBookId: bookId, soundOnly: soundOnly),
-    ));
+    );
 
 class ReadingScreen extends StatefulWidget {
   const ReadingScreen({super.key, this.initialBookId, this.soundOnly = false});
@@ -139,6 +170,16 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
 
   void _leave() => Navigator.of(context).maybePop();
 
+  /// 오른쪽 위 단추: 소리만 듣기면 소리를 끄고 나가기, 읽는 중이면 독서 끝내기, 아니면 닫기
+  VoidCallback _endOrLeave(bool soundOnly, bool reading) => soundOnly
+      ? () {
+          _audio.stop();
+          _leave();
+        }
+      : reading
+          ? _finish
+          : _leave;
+
   void _start() {
     if (_reading.active != null || _reading.pending != null) {
       if (_reading.pending != null) Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
@@ -222,7 +263,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
 
           final big = MediaQuery.textScalerOf(ctx).scale(10) >= 16 || MediaQuery.sizeOf(ctx).width < 330;
           final goal = _settings.goalMin;
-          final tiles = [for (final m in _goals) Choice(label: '$m분', compact: !big, selected: goal == m, onPress: () => pick(m))];
+          final tiles = [for (final m in _goals) ShowWhenOpened(enabled: goal == m, child: Choice(label: '$m분', compact: !big, selected: goal == m, onPress: () => pick(m)))];
           // 직접 정하기(2026-11-16 사용자 '사용자가 시간 지정은 못 하나'): 15·30·60분 밖의 목표면 이 칸이 골라진 상태로 그 시간을 보인다
           final custom = goal != null && !_goals.contains(goal);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
@@ -233,14 +274,18 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
             else
               Row(children: [for (final (i, t) in tiles.indexed) ...[if (i > 0) const SizedBox(width: Space.s), Expanded(child: t)]]),
             const SizedBox(height: Space.s),
-            Choice(
-              label: custom ? '직접 정하기 · ${minutesLabel(goal)}' : '직접 정하기',
-              selected: custom,
-              onPress: () async {
-                Navigator.pop(ctx);
-                final m = await showMinutesSheet(context, title: '목표 시간', description: '목표를 바꿔도 읽은 시간은 유지돼요.', initial: (goal ?? 45).round());
-                if (m != null) _settings.set({'goalMin': m});
-              },
+            // 고른 칸이 접힌 아래에 있으면 시트를 열 때 그리로 넘긴다(2026-11-16 QA 영숙 F18: 2.0배에서 '직접 정하기 · 10분'이 안 보였다)
+            ShowWhenOpened(
+              enabled: custom,
+              child: Choice(
+                label: custom ? '직접 정하기 · ${minutesLabel(goal)}' : '직접 정하기',
+                selected: custom,
+                onPress: () async {
+                  Navigator.pop(ctx);
+                  final m = await showMinutesSheet(context, title: '목표 시간', description: '목표를 바꿔도 읽은 시간은 유지돼요.', initial: (goal ?? 45).round());
+                  if (m != null) _settings.set({'goalMin': m});
+                },
+              ),
             ),
           ]);
         },
@@ -420,18 +465,14 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               child: Pressable(onPress: _leave, child: const SizedBox(width: 52, height: Space.touch, child: Center(child: LucideIcon('ChevronLeft', size: 28, color: _light)))),
             ),
             Expanded(child: Text(soundOnly ? '소리 듣기' : '읽기', textAlign: TextAlign.center, style: AppType.title.copyWith(color: _light, shadows: _shade))),
+            // 이름은 한 번만('독서 끝내기 / 끝내기'로 두 번 읽혔다, 2026-11-16 QA 영숙 F9)
             Semantics(
               button: true,
               label: soundOnly ? '소리 끄고 나가기' : active != null ? '독서 끝내기' : '닫기',
+              onTap: _endOrLeave(soundOnly, active != null),
+              excludeSemantics: true,
               child: Pressable(
-                onPress: soundOnly
-                    ? () {
-                        _audio.stop();
-                        _leave();
-                      }
-                    : active != null
-                        ? _finish
-                        : _leave,
+                onPress: _endOrLeave(soundOnly, active != null),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(minWidth: 52, minHeight: Space.touch),
                   child: Center(child: Text(active != null || soundOnly ? '끝내기' : '닫기', style: AppType.button.copyWith(fontSize: 15, color: _light, shadows: _shade))),
@@ -514,6 +555,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 Semantics(
                   button: true,
                   label: '조작부 접기',
+                  onTap: () => setState(() => _open = false),
+                  excludeSemantics: true,
                   child: Pressable(
                     onPress: () => setState(() => _open = false),
                     child: ConstrainedBox(
@@ -527,15 +570,20 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                   ),
                 ),
               ]),
-              // 2) 시간(가장 크게, 숫자 폭 고정). 아래 한 줄은 자리를 늘 지켜 멈춰도 시간이 위아래로 흔들리지 않는다
+              // 2) 시간(가장 크게, 숫자 폭 고정). 아래 한 줄은 자리를 늘 지켜 멈춰도 시간이 위아래로 흔들리지 않는다.
+              // 아래 한 줄은 글자 배율만큼 내려 놓고 그만큼 아래를 비운다(2026-11-16 QA 영숙 F4: 2.0배에서 '목표 10분'이 숫자 아래를 덮었다). 1배는 그대로
               if (!soundOnly)
+                // 시간 숫자는 이 이름 뒤에 한 번 읽고, 아래 '목표 10분' 줄은 이름과 같은 말이라 뺀다(영숙 F9)
                 Semantics(
+                  container: true,
                   button: true,
                   label: '목표 시간 설정, ${goalMin != null ? minutesLabel(goalMin) : '자유롭게 시간 재기'}',
+                  onTap: _goalSheet,
                   child: GestureDetector(
+                    excludeFromSemantics: true,
                     onTap: _goalSheet,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: Space.l),
+                      padding: EdgeInsets.only(top: Space.l, bottom: Space.l + math.max(0.0, _captionLine(context) - 21)),
                       child: Column(children: [
                         _Elapsed(
                           running: ticking,
@@ -544,15 +592,17 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                             Positioned(
                               left: -100,
                               right: -100,
-                              bottom: -19, // 지금 앱: 시간 칸 아래 여백(16) 안에 겹쳐 칸 바닥보다 3 아래
-                              child: Text(
-                                active != null && !running
-                                    ? '일시정지'
-                                    : goalMs != null
-                                        ? (ms >= goalMs ? '목표 ${minutesLabel(goalMin!)}을 채웠어요' : '목표 ${minutesLabel(goalMin!)}')
-                                        : ' ',
-                                textAlign: TextAlign.center,
-                                style: AppType.caption,
+                              bottom: -(_captionLine(context) - 2), // 지금 앱: 시간 칸 아래 여백(16) 안에 겹쳐 칸 바닥보다 3 아래(1배에서 −19)
+                              child: ExcludeSemantics(
+                                child: Text(
+                                  active != null && !running
+                                      ? '일시정지'
+                                      : goalMs != null
+                                          ? (ms >= goalMs ? '목표 ${minutesLabel(goalMin!)}을 채웠어요' : '목표 ${minutesLabel(goalMin!)}')
+                                          : ' ',
+                                  textAlign: TextAlign.center,
+                                  style: AppType.caption,
+                                ),
                               ),
                             ),
                           ]),

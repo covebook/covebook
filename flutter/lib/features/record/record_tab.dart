@@ -14,6 +14,7 @@ import '../../store/library_model.dart';
 import '../../store/mini_timer_store.dart';
 import '../../store/reading_store.dart';
 import '../../ui/alert.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../book/labels.dart';
@@ -21,6 +22,7 @@ import '../bookmark/board_screen.dart' show openBookmarkBoard;
 import '../bookmark/bookmark_card.dart';
 import '../bookmark/bookmark_detail_screen.dart';
 import '../bookmark/bookmark_empty.dart';
+import '../bookmark/mark_text.dart' show isPhotoMark;
 import '../bookmark/new_bookmark_screen.dart';
 import '../stats/stats_widgets.dart' show LinkedCover;
 import 'essay_screens.dart';
@@ -35,8 +37,9 @@ bool markShown(Bookmark m, {String? book, MarkKind kind = MarkKind.all, bool sav
   final t = q.trim();
   return (book == null || m.myBookId == book) &&
       (!savedOnly || m.savedAt != null) &&
-      (kind != MarkKind.photo || (m.photoUri ?? '').isNotEmpty) &&
-      (kind != MarkKind.text || m.text.trim().isNotEmpty) &&
+      // 글이 있는 갈피는 사진을 함께 두어도 문장 갈피(카드와 같은 규칙 isPhotoMark, 2026-11-16 QA 은서 F11)
+      (kind != MarkKind.photo || isPhotoMark(m.text, m.photoUri)) &&
+      (kind != MarkKind.text || !isPhotoMark(m.text, m.photoUri)) &&
       (t.isEmpty || m.text.contains(t) || (m.memo ?? '').contains(t));
 }
 
@@ -477,11 +480,16 @@ class _RecordTabState extends State<RecordTab> {
       return [
         Expanded(
           child: ListView(padding: EdgeInsets.only(bottom: bottomPad), children: [
-            Empty(
-              title: '아직 쓴 감상이 없어요',
-              body: '책을 읽고 든 생각을 길게 남겨 보세요.\n별점·한 줄 감상과 따로 모여요.',
-              action: '감상 쓰기',
-              onAction: () => openNewEssay(context),
+            // 여기는 긴 감상만 모인다: 한 줄 감상·별점이 어디 있는지 알린다(2026-11-16 QA 영숙 F16: 한 줄 감상을 썼는데 비어 있어 사라진 줄 알았다).
+            // 안내 글은 한 칸, '감상 쓰기' 단추는 따로(묶음 전체가 단추로 '…감상 쓰기 / 감상 쓰기'까지 한꺼번에 읽혔다, 영숙 F9)
+            Semantics(
+              container: true,
+              child: Empty(
+                title: '아직 쓴 긴 감상이 없어요',
+                body: keepAll('책을 읽고 든 생각을 길게 남기는 곳이에요.\n별점과 한 줄 감상은 책 정보 › 평가에 있어요.'),
+                action: '감상 쓰기',
+                onAction: () => openNewEssay(context),
+              ),
             ),
           ]),
         ),

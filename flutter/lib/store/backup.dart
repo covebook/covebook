@@ -3,7 +3,8 @@
 // 그리고 앱 폴더에 보관한 사진(실제 표지 사진·갈피 페이지 사진·장정 그림). 진행 중 독서(타이머)는 넣지 않는다.
 // 파일 하나(JSON)에 사진을 base64로 담는다. 사진 주소는 'img:이름'으로 바꿔 저장해 다른 기기·재설치에서도 복원된다.
 // 복원 안전장치: ① 파일 전체를 먼저 검사하고 틀리면 아무것도 바꾸지 않는다. ② 바꾸기 전에 지금 상태를 메모리에 떠 두고, 도중에 실패하면 그 상태로 되돌린다.
-// 폴더 저장은 지금 앱의 '폴더 고르기' 대신 다운로드/책장한켠에 저장한다(권한 없이)
+// 폴더 저장은 지금 앱의 '폴더 고르기' 대신 다운로드/책장한켠에 저장한다(권한 없이).
+// 검색으로 넣은 책 표지(YES24 등 주소)는 파일에 넣지 않는다: 약관상 일시 저장만 되고, 복원하면 인터넷에서 다시 받는다
 library;
 
 import 'dart:convert';
@@ -28,6 +29,7 @@ import 'settings_store.dart';
 const _channel = MethodChannel('app.covebook/files');
 const _viewKey = 'view-settings:v3'; // 지금 앱 보기 설정(이 앱은 쓰지 않지만 백업에는 그대로 담는다)
 const _emptyLayout = '{"version":2,"shelves":[],"placements":[],"drawer":[]}';
+const _lastKey = 'last-backup:v1'; // 이 기기에서 마지막으로 백업 파일을 만든 때(백업에는 넣지 않는다)
 
 typedef Counts = ({int books, int bookmarks, int rounds, int sessions, int bindings, int essays, int images});
 
@@ -71,7 +73,39 @@ Future<Json> snapshot() async {
   };
 }
 
-String _fileName(Json d) => 'chaekjang-backup-${(d['exportedAt']! as String).substring(0, 19).replaceAll(RegExp('[:T]'), '-')}.json';
+String _p2(int n) => n.toString().padLeft(2, '0');
+
+/// 백업 파일 이름: 기기 시각(현지)으로. 파일 안 exportedAt은 그대로 UTC
+/// (2026-11-16 QA 현우 F6: 오후 2:11 백업이 '05-11-04'로 붙어 새벽 파일처럼 보였다)
+String backupFileName(String exportedAt) {
+  final t = DateTime.parse(exportedAt).toLocal();
+  return 'chaekjang-backup-${t.year}-${_p2(t.month)}-${_p2(t.day)}-${_p2(t.hour)}-${_p2(t.minute)}-${_p2(t.second)}.json';
+}
+
+/// 백업 시각 글(기기 시각): 올해면 '11월 16일 14:11', 아니면 앞에 해
+String backupTimeLabel(String iso, {DateTime? now}) {
+  final t = DateTime.tryParse(iso)?.toLocal();
+  if (t == null) return '';
+  final y = (now ?? DateTime.now()).year;
+  return '${t.year != y ? '${t.year}년 ' : ''}${t.month}월 ${t.day}일 ${_p2(t.hour)}:${_p2(t.minute)}';
+}
+
+String _fileName(Json d) => backupFileName(d['exportedAt']! as String);
+
+/// 마지막으로 백업 파일을 만든 때(at: UTC ISO)와 방법(download · share). 없으면 null (2026-11-16 QA 현우 F7)
+Future<({String at, String how})?> lastBackup() async {
+  try {
+    final raw = await KvStore.get(_lastKey);
+    if (raw == null) return null;
+    final m = (jsonDecode(raw) as Map).cast<String, Object?>();
+    final at = m['at'], how = m['how'];
+    return at is String && how is String ? (at: at, how: how) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> _rememberBackup(Json d, String how) => KvStore.set(_lastKey, jsonEncode({'at': d['exportedAt'], 'how': how})).catchError((_) {});
 
 Future<File> _write(Json d) async {
   final f = File('${(await getTemporaryDirectory()).path}/${_fileName(d)}');
@@ -79,11 +113,12 @@ Future<File> _write(Json d) async {
   return f;
 }
 
-/// 공유 창으로 내보내기
+/// 공유 창으로 내보내기(보낼 곳을 고른 때만 마지막 백업으로 남긴다)
 Future<Counts> exportShare() async {
   final d = await snapshot();
   final f = await _write(d);
-  await SharePlus.instance.share(ShareParams(files: [XFile(f.path, mimeType: 'application/json')], title: '책장 한켠 백업'));
+  final r = await SharePlus.instance.share(ShareParams(files: [XFile(f.path, mimeType: 'application/json')], title: '책장 한켠 백업'));
+  if (r.status == ShareResultStatus.success) await _rememberBackup(d, 'share');
   return countsOf(d);
 }
 
@@ -97,6 +132,7 @@ Future<({String name, Counts counts})> exportToDownloads() async {
   } finally {
     f.delete().ignore();
   }
+  await _rememberBackup(d, 'download');
   return (name: _fileName(d), counts: countsOf(d));
 }
 

@@ -300,7 +300,8 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     lib: lib,
                     book: r.book,
                     width: cellW,
-                    sub: [?r.book.author, ?copyOf[r.book.id], if (r.onShelf) '책장'].join(' · '),
+                    sub: r.book.author ?? '',
+                    tail: [?copyOf[r.book.id], if (r.onShelf) '책장'].join(' · '),
                     label: [r.book.title, ?r.book.author, subOf(r)].where((t) => t.isNotEmpty).join(', '),
                     state: !_selecting
                         ? _CellState.normal
@@ -563,13 +564,14 @@ enum _CellState { normal, free, picked, onShelf }
 /// 격자 한 칸: 표지 + 제목·저자 한 줄씩. 고르는 중: 고를 수 있는 책은 표지 오른쪽 위 모서리에 원, 고른 책은 테마색 테두리,
 /// 이미 책장에 있는 책은 흐린 표지 + '책장에 있음'
 class _GridCell extends StatelessWidget {
-  const _GridCell({required this.lib, required this.book, required this.width, required this.sub, required this.label, required this.state, this.onPress, this.onLongPress});
+  const _GridCell({required this.lib, required this.book, required this.width, required this.sub, this.tail = '', required this.label, required this.state, this.onPress, this.onLongPress});
   final Library lib;
   final Book book;
   final double width;
 
-  /// 제목 아래 한 줄(저자 · 소장본 · 책장)
+  /// 제목 아래 한 줄: 저자(길면 줄인다) · 뒤 표시(소장본 · 책장, 늘 보인다)
   final String sub;
+  final String tail;
   final String label;
   final _CellState state;
   final VoidCallback? onPress;
@@ -623,10 +625,20 @@ class _GridCell extends StatelessWidget {
                 padding: const EdgeInsets.only(top: Space.s),
                 child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.row.copyWith(fontSize: 15, height: 21 / 15)),
               ),
-              if (sub.isNotEmpty)
+              // 저자가 길어도 '· 책장' 같은 뒤 표시는 잘리지 않게 저자만 줄인다(2026-11-16 QA 현우 F14: 'Antoine de Saint…'에서 책장 표시가 사라졌다)
+              if (sub.isNotEmpty || tail.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 1),
-                  child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13)),
+                  child: LayoutBuilder(
+                    builder: (context, box) => Row(children: [
+                      if (sub.isNotEmpty) Flexible(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13))),
+                      if (tail.isNotEmpty)
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: box.maxWidth),
+                          child: Text('${sub.isNotEmpty ? ' · ' : ''}$tail', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13)),
+                        ),
+                    ]),
+                  ),
                 ),
             ]),
           ),
@@ -707,7 +719,8 @@ class _BookListRow extends StatelessWidget {
                           ),
                         ),
                     ]),
-                    if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                    // 두 줄까지: 저자가 길어도 뒤의 상태·'책장' 표시가 보이게(2026-11-16 QA 현우 F14)
+                    if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub)),
                     if ((note ?? '').isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 3 + Space.xs),

@@ -3,6 +3,8 @@
 // 서버 주소가 없는 빌드는 '이 기기에만 저장' 쪽 문구를 쓴다(지금 앱도 서버를 못 쓰면 같은 문구)
 library;
 
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -11,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../store/settings_store.dart';
 import '../../ui/alert.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../services/sync.dart';
 import '../../ui/theme.dart';
@@ -88,6 +91,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
       );
 
+  // 실제 동작과 맞춘 안내(2026-11-16 QA 현우 F3): 글자 인식·바코드는 기기 안, 검색은 책장 한켠 서버 → Google Books → Open Library,
+  // 백업은 다운로드/책장한켠에 바로 저장하거나 공유로 보낸다, 계정 삭제는 서버를 쓰는 빌드에서만, 공개되는 것이 있는지.
+  // 웹 전문(노션)에 맞출 문구 초안은 docs/privacy-draft-2026-11-16.md
   void _privacySheet() => showSheet<void>(
         context,
         title: '개인정보 처리 안내',
@@ -95,19 +101,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         maxHeight: 0.8,
         builder: (ctx) {
           final p = AppType.body.copyWith(color: AppColors.ink);
-          Widget para(String t, {bool last = false}) => Padding(padding: EdgeInsets.only(bottom: last ? 0 : Space.item), child: Text(t, style: p));
+          Widget para(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.item), child: Text(keepAll(t), style: p));
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             para(_syncAvailable
-                ? '책장 한켠은 로그인 없이 쓸 수 있으며, 책·독서 기록·갈피·사진은 이 기기에 저장되고 이 기기 전용 계정으로 책장 한켠 서버에도 동기화돼요. Apple·카카오·Google을 연결하면 해당 서비스의 회원 식별자와 선택한 닉네임이 서버에 저장되고, 다른 기기에서 같은 기록을 이어 볼 수 있어요.'
-                : '책장 한켠은 로그인 없이 쓰며, 책·독서 기록·갈피·사진은 이 기기 안에만 저장돼요.'),
-            para('책을 검색하면 입력한 검색어가 책장 한켠 서버를 거쳐 도서 정보 서비스(YES24)로 전송되고, 서버에 닿지 않거나 결과가 없으면 Google Books·Open Library로 전송돼요. 검색 요청과 표지 이미지 요청에는 IP 주소 등 통신 정보가 함께 전달돼요.'),
-            para('사진은 책을 찾고 장정을 만들 때 참고하거나 갈피 원문을 보관하는 데만 쓰고, 읽었다는 인증에는 쓰지 않아요. '
-                '${_syncAvailable ? '사진 인식·AI 장정은 아직 연결되지 않았고, 사진은 동기화를 위해 책장 한켠 서버에만 올라가요.' : '사진 인식·AI 장정은 아직 연결되지 않아 사진이 밖으로 전송되지 않아요.'}'),
-            para('내보낸 백업 파일은 직접 고른 곳에 저장되며, 그 파일에는 위 기록과 사진이 들어 있어요.', last: true),
-            // 지금 앱은 이 문단에도 아래 여백(space.item)이 남는다(공통 문단 스타일)
-            Padding(padding: const EdgeInsets.only(top: Space.item, bottom: Space.item), child: Text('서버 계정 삭제를 요청하면 연결된 로그인과 서버 기록·사진을 삭제 처리하고, 이 기기의 기록은 남겨요.', style: p)),
+                ? '책장 한켠은 로그인 없이 쓸 수 있어요. 책·독서 기록·갈피·감상·사진은 이 기기에 저장되고, 이 기기 전용 계정으로 책장 한켠 서버에도 동기화돼요. Apple·카카오·Google을 연결하면 그 서비스의 회원 식별자와 고른 닉네임이 서버에 저장되고, 다른 기기에서 같은 기록을 이어 볼 수 있어요.'
+                : '책장 한켠은 로그인 없이 써요. 책·독서 기록·갈피·감상·사진은 이 기기 안에만 저장돼요.'),
+            para('책을 찾으면 검색어가 책장 한켠 서버를 거쳐 YES24로 전송돼요. 서버에 닿지 않거나 결과가 없으면 Google Books로, 그래도 없으면 Open Library로 바로 전송돼요. 인기 많은 책 목록도 책장 한켠 서버에서 받아요. 검색과 표지 그림을 받을 때 IP 주소 같은 통신 정보가 함께 전달돼요.'),
+            para('사진은 표지를 넣거나 갈피 원문을 보관하는 데만 쓰고, 읽었다는 인증에는 쓰지 않아요. 갈피 사진의 글자 인식과 바코드 읽기는 기기 안에서 하고, 그 사진을 밖으로 보내지 않아요.'
+                '${_syncAvailable ? ' 동기화를 위해 사진은 책장 한켠 서버에 올라가요.' : ''}'),
+            para(Platform.isAndroid
+                ? '백업 파일은 직접 만들 때만 생겨요. 다운로드/책장한켠 폴더에 바로 저장하거나, 공유로 고른 앱(드라이브·메신저 등)으로 보내요. 그 파일에는 위 기록과 직접 찍거나 고른 사진이 들어 있어요(검색으로 넣은 책 표지는 빠져요).'
+                : '백업 파일은 직접 만들 때만 생기고, 공유로 고른 곳(파일·드라이브·메신저 등)으로 보내요. 그 파일에는 위 기록과 직접 찍거나 고른 사진이 들어 있어요(검색으로 넣은 책 표지는 빠져요).'),
+            para(_syncAvailable && communityOpen.value
+                ? '내 기록은 공개되지 않아요. 커뮤니티에 직접 올린 글과 고른 항목만 공개돼요.'
+                : '공개되는 기록은 없어요. 별점·한 줄 감상·감상·갈피는 나만 봐요.'),
+            // 계정 삭제는 서버를 쓰는 빌드에만 있다(로그인 없는 빌드에서 '서버 계정 삭제'를 말하지 않는다)
+            if (_syncAvailable) para('서버 계정 삭제를 요청하면 연결된 로그인과 서버 기록·사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
             Padding(
-              padding: const EdgeInsets.only(top: Space.xl),
+              padding: const EdgeInsets.only(top: Space.s),
               child: Btn(label: '처리방침 전문 보기(웹)', kind: 'secondary', onPress: () => launchUrl(Uri.parse(_privacyUrl), mode: LaunchMode.externalApplication)),
             ),
           ]);

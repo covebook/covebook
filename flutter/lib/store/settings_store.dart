@@ -45,6 +45,9 @@ class SettingsStore extends ChangeNotifier {
   List<String> get readList => ((_s['readList'] as List?) ?? const []).cast<String>();
   bool get soundOn => _s['soundOn'] == true;
 
+  /// 마지막으로 책 없이 읽어 저장한 날(YYYY-MM-DD, 읽기 탭 '책 없이 읽기' 줄, store/finish_reading)
+  String? get noBookDay => _s['noBookDay'] as String?;
+
   Future<void> load() => _loading ??= () async {
         try {
           final raw = await KvStore.get(_key);

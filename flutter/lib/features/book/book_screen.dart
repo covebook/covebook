@@ -6,14 +6,15 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../app/app_nav.dart';
 import '../../domain/color.dart';
 import '../../domain/library.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
@@ -33,9 +34,10 @@ import '../bookmark/board_screen.dart' show openBookmarkBoard;
 import 'binding_screen.dart' show openBindingEditor;
 import 'book_share_screen.dart' show openBookShare;
 import 'edit_book_screen.dart' show openEditBook;
-import 'place_books.dart' show placeWithChoice;
+import 'place_books.dart' show keptNote, keptTitle, placeWithChoice;
 import '../community/book_reviews.dart';
 import '../record/essay_screens.dart' show EssayRow, openNewEssay;
+import '../reading/start_book.dart' show startReadingBook;
 
 const _views = [('info', '책 정보'), ('rate', '평가'), ('mine', '내 기록')];
 const _statuses = [ReadStatus.want, ReadStatus.reading, ReadStatus.read, ReadStatus.paused];
@@ -49,7 +51,7 @@ class BookScreen extends StatefulWidget {
   const BookScreen({super.key, required this.id, this.onRead});
   final String id;
 
-  /// '읽기 시작·이어서 읽기': 읽기 탭으로 넘겨준다(앱 틀이 정한다)
+  /// '읽기 시작·이어서 읽기'를 대신할 동작(시험용). 없으면 그 책으로 독서를 시작하고 읽기 화면을 연다(start_book)
   final void Function(String id)? onRead;
 
   @override
@@ -66,6 +68,9 @@ class _BookScreenState extends State<BookScreen> {
   bool _noteLoaded = false;
   BookReviewsState? _reviews; // 같은 판본(ISBN-13)의 공개 후기. 판본 ISBN을 고치면 새로 받는다
   String? _reviewsIsbn;
+
+  /// 고른 탭 내용(책 정보·평가·내 기록) 자리
+  final _paneKey = GlobalKey();
 
   BookReviewsState _reviewsOf(String? isbn13) {
     final r = _reviews;
@@ -102,6 +107,28 @@ class _BookScreenState extends State<BookScreen> {
 
   String get id => widget.id;
 
+  /// 탭을 바꾸면 그 내용 첫머리가 보이게 넘긴다(2026-11-16 QA 영숙 F5: 큰 글씨·작은 화면에서는 큰 표지가 화면을 채워 '평가'를 눌러도
+  /// 바뀐 게 안 보였다). 첫머리가 이미 화면 위쪽에 보이면 그대로 둔다
+  void _chooseTab(String v) {
+    setState(() => _tab = v);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _paneKey.currentContext;
+      final box = ctx?.findRenderObject();
+      final pos = ctx == null ? null : Scrollable.maybeOf(ctx)?.position;
+      final viewport = box == null ? null : RenderAbstractViewport.maybeOf(box);
+      if (!mounted || box == null || pos == null || viewport == null) return;
+      final reveal = viewport.getOffsetToReveal(box, 0).offset;
+      final shownAt = reveal - pos.pixels; // 내용 첫머리가 화면(스크롤 칸) 위에서 얼마나 아래에 있는지
+      if (shownAt >= 0 && shownAt < pos.viewportDimension * 0.6) return;
+      final target = (reveal - Space.xl).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      if (MediaQuery.disableAnimationsOf(context)) {
+        pos.jumpTo(target);
+      } else {
+        pos.animateTo(target, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+      }
+    });
+  }
+
   void _saveNote() {
     final t = _note.text.trim();
     _model.updateBook(id, note: t.isEmpty ? null : t);
@@ -122,7 +149,7 @@ class _BookScreenState extends State<BookScreen> {
     _model.setStatus(id, s);
   }
 
-  /// 책 메뉴(지금 앱): 공유·정보 수정·장정 편집·책장 위치로·책장에서 빼기/진열·숨기기/삭제
+  /// 책 메뉴(지금 앱): 공유·정보 수정·장정 편집·책장에서 보기·책장에서 빼기/진열·숨기기/삭제
   Future<void> _menu() async {
     final place = PlacementStore.instance;
     await place.ensure();
@@ -144,8 +171,9 @@ class _BookScreenState extends State<BookScreen> {
           Navigator.pop(ctx);
           openBindingEditor(context, id);
         }),
+        // 책을 옮기지 않고 책장에서 그 책을 비춰 보인다(2026-11-16 QA 영숙 F8: '이동'이라 자리를 옮기는 줄 알았다)
         if (onShelf)
-          ListItem(label: '책장 위치로 이동', onPress: () {
+          ListItem(label: '책장에서 보기', onPress: () {
             Navigator.pop(ctx);
             showBookOnShelf(context, id);
           }),
@@ -156,9 +184,21 @@ class _BookScreenState extends State<BookScreen> {
             if (await place.toDrawer(id) && mounted) appAlert(context, '책장에서 뺐어요. 내 책에 그대로 있어요.');
           })
         else
-          ListItem(label: '책장에 진열', onPress: () {
+          ListItem(label: '책장에 진열', onPress: () async {
             Navigator.pop(ctx);
-            placeWithChoice(context, [id]);
+            // 뺐던 책은 뺄 때 자리로 돌아간다(placement_store). 진열했는지·어디인지 알린다(2026-11-16 QA 현우 F12: 화면이 그대로라 됐는지 몰랐다)
+            final back = place.hadSpot(id);
+            final r = await placeWithChoice(context, [id]);
+            if (!mounted) return;
+            if (r.placed > 0) {
+              final spot = back && place.lastRestored == id;
+              appAlert(context, '책장에 진열했어요', spot ? '뺄 때 있던 자리에 다시 꽂았어요.' : '빈 자리에 꽂았어요. 꾸미기에서 자리를 옮길 수 있어요.', [
+                const AlertButton('확인', style: AlertStyle.cancel),
+                AlertButton('책장에서 보기', onPress: () => showBookOnShelf(context, id)),
+              ]);
+            } else if (r.kept > 0) {
+              appAlert(context, keptTitle(full: r.full), keptNote(full: r.full));
+            }
           }),
         if (years.isNotEmpty)
           ListItem(label: '책 숨기기', sub: '${years.join('·')}년 책장에는 남아요', onPress: () {
@@ -166,7 +206,7 @@ class _BookScreenState extends State<BookScreen> {
             _confirmDelete(years);
           })
         else
-          ListItem(label: '책 삭제', sub: '갈피·읽은 기록까지 지워요', danger: true, onPress: () {
+          ListItem(label: '책 삭제', sub: '갈피·감상·독서 회차까지 지워요', danger: true, onPress: () {
             Navigator.pop(ctx);
             _confirmDelete(years);
           }),
@@ -174,24 +214,39 @@ class _BookScreenState extends State<BookScreen> {
     );
   }
 
-  /// 연도 책장에 있는 책은 지우지 않고 숨긴다(2026-11-06 사용자 '삭제 말고 숨기기로')
-  void _confirmDelete(List<int> years) {
+  /// 연도 책장에 있는 책은 지우지 않고 숨긴다(2026-11-06 사용자 '삭제 말고 숨기기로').
+  /// 여러 권 삭제(내 책 › 선택)와 같은 아래 시트: 표지와 제목, 무엇이 지워지고 남는지, 위 [삭제] 아래 '취소'
+  /// (2026-11-16 QA 현우 F5: 한 권 삭제만 가운데 창에 책 이름이 없고 버튼 자리가 달랐다)
+  Future<void> _confirmDelete(List<int> years) async {
     final hide = years.isNotEmpty;
     final lib = _model.lib;
-    appAlert(
+    final title = lib.editions[lib.books[id]?.editionId]?.title ?? '이 책';
+    final ok = await showSheet<bool>(
       context,
-      hide ? '책을 숨길까요?' : '책을 삭제할까요?',
-      hide ? '지금 책장과 책 목록에서 빠지고, ${years.join('·')}년 책장에는 그대로 남아요.\n내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id])),
-      [
-        const AlertButton('취소', style: AlertStyle.cancel),
-        AlertButton(hide ? '숨기기' : '삭제', style: hide ? AlertStyle.normal : AlertStyle.destructive, onPress: () async {
-          final nav = Navigator.of(context);
-          await _model.deleteBook(id, archived: hide);
-          await PlacementStore.instance.forget([id]);
-          nav.popUntil((r) => r.isFirst);
-        }),
-      ],
+      title: hide ? '이 책을 숨길까요?' : '이 책을 삭제할까요?',
+      description: hide ? '지금 책장과 책 목록에서 빠지고, ${years.join('·')}년 책장에는 그대로 남아요.' : null,
+      builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.only(top: Space.xs, bottom: Space.l),
+          child: Column(children: [
+            ExcludeSemantics(child: SizedBox(width: 56, child: BookVisual(lib: lib, id: id, width: 56))),
+            Padding(
+              padding: const EdgeInsets.only(top: Space.s),
+              child: Text(keepAll(title), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
+            ),
+          ]),
+        ),
+        Text(keepAll(hide ? '내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id]))), style: AppType.sub),
+        const SizedBox(height: Space.l),
+        Btn(label: hide ? '숨기기' : '삭제', kind: hide ? 'primary' : 'danger', size: 'l', onPress: () => Navigator.pop(ctx, true)),
+        Padding(padding: const EdgeInsets.only(top: Space.s), child: Center(child: TextLink(label: '취소', soft: true, onPress: () => Navigator.pop(ctx, false)))),
+      ]),
     );
+    if (ok != true || !mounted) return;
+    final nav = Navigator.of(context);
+    await _model.deleteBook(id, archived: hide);
+    await PlacementStore.instance.forget([id]);
+    nav.popUntil((r) => r.isFirst);
   }
 
   @override
@@ -251,18 +306,20 @@ class _BookScreenState extends State<BookScreen> {
           if (e.link != null) ListItem(label: '${e.sourceName ?? '판매처'}에서 보기', onPress: () => launchUrl(Uri.parse(e.link!), mode: LaunchMode.externalApplication)),
         ]);
 
+    // 별은 제목 아래 줄에: 별마다 누르는 칸이 48이라 별 줄이 240dp로 넓어져 '내 평가 / 나만 보는 평가예요'가 좁아졌다(2026-11-16 QA 영숙 F12).
+    // 별 그림은 칸 가운데라 첫 별이 글 첫머리와 맞게 칸 여백만큼 왼쪽으로 당긴다
     Widget ratePane() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: Space.touch),
-            child: Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Semantics(header: true, child: Text('내 평가', style: AppType.section)),
-                  Padding(padding: const EdgeInsets.only(top: 2), child: Text('나만 보는 평가예요', style: AppType.caption)),
-                ]),
+          Semantics(header: true, child: Text('내 평가', style: AppType.section)),
+          Padding(padding: const EdgeInsets.only(top: 2), child: Text('나만 보는 평가예요', style: AppType.caption)),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.xs),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Transform.translate(
+                offset: const Offset(-(Space.hit - 24) / 2, 0),
+                child: Stars(value: b.rating, onChange: (v) => _model.updateBook(id, rating: v)),
               ),
-              Stars(value: b.rating, onChange: (v) => _model.updateBook(id, rating: v)),
-            ]),
+            ),
           ),
           Padding(padding: const EdgeInsets.symmetric(vertical: Space.l), child: Container(height: 0.5, color: AppColors.line)),
           Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('한 줄 감상', style: AppType.label)),
@@ -272,9 +329,14 @@ class _BookScreenState extends State<BookScreen> {
             child: Semantics(
               label: '한 줄 감상',
               textField: true,
+              // 여러 줄로 다 보인다(2026-11-16 QA 영숙 F15: 한 줄 칸이라 큰 글씨에서 앞이나 뒤가 잘려 저장됐는지 걱정했다). 줄바꿈은 넣지 않고 완료로 닫는다
               child: TextField(
                 controller: _note,
                 maxLength: 140,
+                minLines: 1,
+                maxLines: null,
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.done,
                 style: AppType.input,
                 cursorColor: AppColors.accent,
                 decoration: InputDecoration(
@@ -439,16 +501,14 @@ class _BookScreenState extends State<BookScreen> {
                   onPress: () => openBookmark(context, m.id),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: Space.l),
+                    // 글은 늘 왼쪽 끝에서 시작하고 사진은 오른쪽에, 한글은 낱말 단위로 줄을 바꾼다
+                    // (2026-11-16 QA 은서 F12: 사진 갈피는 썸네일 오른쪽, 문장 갈피는 왼쪽 끝에서 시작해 들쭉날쭉했고 '앉/아'처럼 끊겼다)
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      if (m.photoUri != null && m.photoUri!.isNotEmpty) ...[
-                        ClipRRect(borderRadius: BorderRadius.circular(3), child: Container(width: 48, height: 64, color: AppColors.surface, child: BookmarkPhoto(uri: m.photoUri!))),
-                        const SizedBox(width: Space.m),
-                      ],
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           // 사진만 남긴 갈피는 글이 없다: '사진 갈피'로 보인다
                           if (m.text.trim().isNotEmpty)
-                            Text(m.text, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.serif, fontSize: 16, height: 27 / 16, color: AppColors.ink))
+                            Text(keepAll(m.text), maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.serif, fontSize: 16, height: 27 / 16, color: AppColors.ink))
                           else
                             Text('사진 갈피', style: AppType.row),
                           Padding(
@@ -457,6 +517,10 @@ class _BookScreenState extends State<BookScreen> {
                           ),
                         ]),
                       ),
+                      if (m.photoUri != null && m.photoUri!.isNotEmpty) ...[
+                        const SizedBox(width: Space.m),
+                        ClipRRect(borderRadius: BorderRadius.circular(3), child: Container(width: 48, height: 64, color: AppColors.surface, child: BookmarkPhoto(uri: m.photoUri!))),
+                      ],
                     ]),
                   ),
                 ),
@@ -472,25 +536,37 @@ class _BookScreenState extends State<BookScreen> {
         IconBtn(label: '책 공유', onPress: () => openBookShare(context, id), child: const LucideIcon('Share')),
         IconBtn(label: '더 보기', onPress: _menu, child: const LucideIcon('MoreHorizontal')),
       ]),
-      footer: Row(children: [
-        Expanded(child: Btn(label: '갈피 남기기', kind: 'secondary', size: 'l', onPress: () => openNewBookmark(context, book: widget.id))),
-        const SizedBox(width: Space.s),
-        Expanded(
-          child: Btn(
-            label: readLabel,
-            size: 'l',
-            onPress: () {
-              Navigator.of(context).popUntil((r) => r.isFirst);
-              widget.onRead != null ? widget.onRead!(id) : AppNav.instance.goRead(id);
-            },
+      // 두 단추 중 하나가 두 줄이 되면 높이를 맞춘다
+      footer: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Expanded(child: Btn(label: '갈피 남기기', kind: 'secondary', size: 'l', onPress: () => openNewBookmark(context, book: widget.id))),
+          const SizedBox(width: Space.s),
+          Expanded(
+            child: Btn(
+              label: readLabel,
+              size: 'l',
+              // 그 책으로 바로 독서를 시작하고 읽기 화면을 연다(2026-11-16 QA 영숙 F2: 읽기 탭 목록에 올리기만 하고 시계가 가지 않았다)
+              // 완독한 책의 '다시 읽기'는 새 회차를 먼저 묻는다(지난 회차에 이어 붙지 않게)
+              onPress: () {
+                if (widget.onRead != null) return widget.onRead!(id);
+                if (b.status != ReadStatus.read || last?.finishedAt == null) return unawaited(startReadingBook(context, id));
+                appAlert(context, '다시 읽기를 시작할까요?', '${last!.index + 1}회차가 생기고 진도는 0쪽부터예요. 지난 회차의 완독일·독서 기록·갈피는 그대로 남아요.', [
+                  const AlertButton('취소', style: AlertStyle.cancel),
+                  AlertButton('다시 읽기', onPress: () async {
+                    await _model.reread(id);
+                    if (context.mounted) unawaited(startReadingBook(context, id));
+                  }),
+                ]);
+              },
+            ),
           ),
-        ),
-      ]),
+        ]),
+      ),
       children: [
         Center(
           child: Padding(
             padding: const EdgeInsets.only(top: Space.xs),
-            child: SizedBox(width: 300, child: Segmented<String>(items: _views, value: _tab, onChange: (v) => setState(() => _tab = v))),
+            child: SizedBox(width: 300, child: Segmented<String>(items: _views, value: _tab, onChange: _chooseTab)),
           ),
         ),
         // 표지와 제목·지은이
@@ -509,6 +585,7 @@ class _BookScreenState extends State<BookScreen> {
           ]),
         ),
         Padding(
+          key: _paneKey,
           padding: const EdgeInsets.only(top: Space.xl),
           child: switch (_tab) { 'rate' => ratePane(), 'mine' => minePane(), _ => infoPane() },
         ),

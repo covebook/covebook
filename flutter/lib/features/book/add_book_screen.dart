@@ -18,6 +18,7 @@ import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
@@ -262,8 +263,14 @@ class _AddBookScreenState extends State<AddBookScreen> {
       case 'book':
         nav.pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book'), builder: (_) => BookScreen(id: id)));
       case 'again':
-        // 찾기 단계로(검색어·결과는 _find에 남아 있다. 2026-11-15 QA 정우 F2 '한 권 더 추가'면 검색어가 지워졌다)
+        // 책을 다 넣고 '한 권 더 추가'면 빈 검색 칸으로 새로 찾는다(2026-11-16 QA 은서 F16: 앞 검색어(ISBN) 뒤에 이어 쳐 엉뚱한 결과가 나왔다).
+        // 검색어를 남기는 것은 결과에서 책 확인으로 갔다 뒤로 돌아올 때다(2026-11-15 QA 정우 F2·민혁 F4)
         setState(() {
+          _find
+            ..q = ''
+            ..items = null
+            ..provider = null
+            ..err = null;
           _step = 'find';
           _draft = _Draft('manual');
           _notice = null;
@@ -556,7 +563,7 @@ class _FindStepState extends State<_FindStep> {
       });
 
   /// 결과 머리 오른쪽 '여러 권 고르기'(책 고르기에서 새 책 등록으로 왔을 때는 한 권만)
-  Widget? _multiLink() => widget.pick || _m.multi ? null : TextLink(label: '여러 권 고르기', soft: true, onPress: () => setState(() => _m.multi = true));
+  String? get _multiLink => widget.pick || _m.multi ? null : '여러 권 고르기';
 
   Widget _row(BookCandidate c, Library lib, {int? rank}) {
     final owned = ownedBookId(lib, c) != null;
@@ -596,7 +603,8 @@ class _FindStepState extends State<_FindStep> {
           }),
           onSubmit: () => _search(),
           busy: _busy,
-          placeholder: '새 책 찾기 · 제목이나 저자',
+          // 큰 글씨에서는 짧게(2026-11-16 QA 영숙 F3: '새 책 찾기 · 제…'로 잘렸다). 화면 읽기 이름은 그대로
+          placeholder: _big(context) ? '제목·저자' : '새 책 찾기 · 제목이나 저자',
           label: '제목이나 저자로 찾기',
         ),
         left: _m.multi ? TextLink(label: '취소', onPress: _endMulti) : null,
@@ -620,25 +628,34 @@ class _FindStepState extends State<_FindStep> {
             Empty(title: '‘${q.trim()}’에 맞는 책이 없어요', body: '제목이나 저자 이름을 짧게 줄여 찾거나, 직접 등록할 수 있어요.', action: '직접 등록', actionKind: 'secondary', onAction: () => widget.onManual(q)),
           // 검색 전: 여러 권 넣는 길(바코드·목록 파일)과 인기 많은 책(YES24 베스트셀러 순위 그대로, 못 받으면 순위는 보이지 않는다)
           if (q.trim().isEmpty && items == null && !_busy && _m.err == null) ...[
+            // 반씩 나눠 글이 다 안 들어가면(큰 글씨·좁은 화면) 위아래로 쌓는다(2026-11-16 QA 영숙 F3: '바코드…'·'목록 파…'로 잘렸다)
             if (!widget.pick && !_m.multi)
               Padding(
                 padding: const EdgeInsets.only(top: Space.l),
-                child: Row(children: [
-                  Expanded(child: _EntryButton(icon: 'ScanBarcode', label: '바코드로 찾기', onPress: () => openBarcodeScan(context))),
-                  const SizedBox(width: Space.s),
-                  Expanded(child: _EntryButton(icon: 'FileSpreadsheet', label: '목록 파일 가져오기', onPress: () => openImportList(context))),
-                ]),
+                child: LayoutBuilder(builder: (context, box) {
+                  final entries = [
+                    _EntryButton(icon: 'ScanBarcode', label: '바코드로 찾기', onPress: () => openBarcodeScan(context)),
+                    _EntryButton(icon: 'FileSpreadsheet', label: '목록 파일 가져오기', onPress: () => openImportList(context)),
+                  ];
+                  final half = (box.maxWidth - Space.s) / 2;
+                  if (entries.every((e) => _EntryButton.widthOf(context, e.label) <= half)) {
+                    return Row(children: [Expanded(child: entries[0]), const SizedBox(width: Space.s), Expanded(child: entries[1])]);
+                  }
+                  return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [entries[0], const SizedBox(height: Space.s), entries[1]]);
+                }),
               ),
             if (_m.popular.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: Space.xl),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                    Expanded(child: Semantics(header: true, child: Text('인기 많은 책', style: AppType.section))),
-                    // 출처 표시는 늘 보인다(YES24 약관)
-                    Text('YES24 베스트셀러', style: AppType.caption),
-                    if (_multiLink() case final link?) ...[const SizedBox(width: Space.s), link],
-                  ]),
+                  // 출처 표시는 늘 보인다(YES24 약관). 한 줄에 다 안 들어가면 제목 아래 줄로(2026-11-16 QA 영숙 F3: 제목이 한 글자씩 세로로 서서 겹쳤다)
+                  _HeadLine(
+                    title: Semantics(header: true, child: Text('인기 많은 책', style: AppType.section)),
+                    titleText: ('인기 많은 책', AppType.section),
+                    note: ('YES24 베스트셀러', AppType.caption),
+                    link: _multiLink,
+                    onLink: () => setState(() => _m.multi = true),
+                  ),
                   const SizedBox(height: Space.s),
                   for (final (i, c) in _m.popular.indexed) _row(c, lib, rank: i + 1),
                 ]),
@@ -649,14 +666,14 @@ class _FindStepState extends State<_FindStep> {
               padding: const EdgeInsets.only(top: Space.xl),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 // 결과 머리: 구역 이름처럼 작게(출처 표시는 YES24 약관)
-                Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                  Expanded(
-                    child: Text.rich(TextSpan(text: '검색 결과 ${items.length}권', style: AppType.sub, children: [
-                      if (_m.provider != null) TextSpan(text: ' · ${_m.provider} 제공', style: AppType.caption),
-                    ])),
-                  ),
-                  ?_multiLink(),
-                ]),
+                _HeadLine(
+                  title: Text.rich(TextSpan(text: '검색 결과 ${items.length}권', style: AppType.sub, children: [
+                    if (_m.provider != null) TextSpan(text: ' · ${_m.provider} 제공', style: AppType.caption),
+                  ])),
+                  titleText: ('검색 결과 ${items.length}권${_m.provider != null ? ' · ${_m.provider} 제공' : ''}', AppType.sub),
+                  link: _multiLink,
+                  onLink: () => setState(() => _m.multi = true),
+                ),
                 const SizedBox(height: Space.s),
                 for (final c in items) _row(c, lib),
                 if (!_m.multi) _ManualLink(onPress: () => widget.onManual(q)),
@@ -668,11 +685,63 @@ class _FindStepState extends State<_FindStep> {
   }
 }
 
+/// 글자를 키운 화면(1.3배부터)
+bool _big(BuildContext context) => MediaQuery.textScalerOf(context).scale(10) >= 13;
+
+/// 지금 글자 배율로 한 줄에 놓을 때의 글 폭
+double _textWidth(BuildContext context, String text, TextStyle style) {
+  final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: MediaQuery.textScalerOf(context), maxLines: 1)..layout();
+  final w = tp.width;
+  tp.dispose();
+  return w;
+}
+
+/// 구역 머리 한 줄: 제목 · 작은 글(출처) · 오른쪽 글자 단추. 한 줄에 다 안 들어가면 제목을 위에 두고 나머지를 아래 줄에(넘치면 또 줄바꿈)
+class _HeadLine extends StatelessWidget {
+  const _HeadLine({required this.title, required this.titleText, this.note, this.link, this.onLink});
+  final Widget title;
+  final (String, TextStyle) titleText;
+  final (String, TextStyle)? note;
+  final String? link;
+  final VoidCallback? onLink;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        // 글자 단추(TextLink)는 굵은 sub 글자 + 양옆 8
+        final linkW = link == null ? 0.0 : _textWidth(context, link!, AppType.sub.copyWith(fontFamily: AppFonts.uiBold)) + 16 + Space.s;
+        final noteW = note == null ? 0.0 : _textWidth(context, note!.$1, note!.$2) + Space.s;
+        final titleW = _textWidth(context, titleText.$1, titleText.$2);
+        final linkWidget = link == null ? null : TextLink(label: link!, soft: true, onPress: onLink!);
+        final noteWidget = note == null ? null : Text(note!.$1, style: note!.$2);
+        if (titleW + noteW + linkW <= box.maxWidth) {
+          return Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+            Expanded(child: title),
+            ?noteWidget,
+            if (linkWidget != null) ...[const SizedBox(width: Space.s), linkWidget],
+          ]);
+        }
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          title,
+          if (noteWidget != null || linkWidget != null)
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: Space.s,
+              // TextLink는 가운데 맞춤이라 줄 폭을 다 차지한다: 글자 폭만큼만
+              children: [?noteWidget, if (linkWidget != null) IntrinsicWidth(child: linkWidget)],
+            ),
+        ]);
+      });
+}
+
 /// 여러 권 넣는 입구(바코드·목록 파일): 옅은 회색 바탕 알약에 아이콘과 글자
 class _EntryButton extends StatelessWidget {
   const _EntryButton({required this.icon, required this.label, required this.onPress});
   final String icon, label;
   final VoidCallback onPress;
+
+  /// 한 줄에 다 들어가는 데 필요한 폭(둘레 여백 + 아이콘 + 글)
+  static double widthOf(BuildContext context, String label) => Space.m * 2 + 20 + Space.s + _textWidth(context, label, AppType.button) + 1;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -688,7 +757,7 @@ class _EntryButton extends StatelessWidget {
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               AddIcon(icon, size: 20),
               const SizedBox(width: Space.s),
-              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.button.copyWith(color: AppColors.ink))),
+              Flexible(child: Text(keepAll(label), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: AppType.button.copyWith(color: AppColors.ink))),
             ]),
           ),
         ),

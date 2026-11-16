@@ -6,6 +6,7 @@ import '../../domain/title_layout.dart' show compareKoTitle;
 import '../../domain/layout.dart';
 import '../../domain/layout_engine.dart' show BookMap;
 import '../../domain/library.dart';
+import '../../domain/reading.dart' show withJosa;
 import '../../domain/types.dart';
 
 enum AllBooksSort { recent, title }
@@ -71,14 +72,18 @@ Map<String, List<BookMemo>> memosByBook(Library lib) {
   return out;
 }
 
-/// 책을 지우면 함께 지워지는 것(갈피·긴 감상·읽은 기록)과 남는 것(독서 시간)
-({int rounds, int marks, int essays, int sessions}) deleteSummary(Library lib, Iterable<String> ids) {
+typedef DeleteSummary = ({int rounds, int marks, int essays, int sessions, num ms});
+
+/// 책을 지우면 함께 지워지는 것(갈피·긴 감상·독서 회차)과 남는 것(독서 시간 ms: 책 연결만 비워 통계에 남는다)
+DeleteSummary deleteSummary(Library lib, Iterable<String> ids) {
   final set = ids.toSet();
+  final sessions = [for (final s in lib.sessions.values) if (s.myBookId != null && set.contains(s.myBookId)) s];
   return (
     rounds: set.fold(0, (a, id) => a + roundsOf(lib, id).length),
     marks: set.fold(0, (a, id) => a + bookmarksOf(lib, id).length),
     essays: lib.essays.values.where((e) => set.contains(e.myBookId)).length,
-    sessions: lib.sessions.values.where((s) => s.myBookId != null && set.contains(s.myBookId)).length,
+    sessions: sessions.length,
+    ms: sessions.fold<num>(0, (a, s) => a + s.durationMs),
   );
 }
 
@@ -88,11 +93,18 @@ String _wa(String word) {
   return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 != 0 ? '과' : '와';
 }
 
-/// 삭제 확인 문구: 한 줄에 한 문장(함께 지워지는 것 → 남는 것 → 되돌릴 수 없음). 0개인 것은 뺀다
-String deleteNote(({int rounds, int marks, int essays, int sessions}) n) {
-  final parts = [if (n.marks > 0) '갈피 ${n.marks}개', if (n.essays > 0) '감상 ${n.essays}편', if (n.rounds > 0) '읽은 기록 ${n.rounds}회'];
+/// 삭제 확인 문구: 한 줄에 한 문장(함께 지워지는 것 → 남는 것 → 되돌릴 수 없음). 0개인 것은 뺀다.
+/// 남는 독서 시간은 얼마가 어떻게 남는지 쓴다(2026-11-16 QA 현우 F4: '읽은 기록 1회도 지워져요'와 '독서 시간은 통계에 남아요'가 함께 나와
+/// 무엇이 남는지 헷갈렸다). 지워지는 회차는 '독서 회차'로(백업 숫자와 같은 말)
+String deleteNote(DeleteSummary n) {
+  final parts = [if (n.marks > 0) '갈피 ${n.marks}개', if (n.essays > 0) '감상 ${n.essays}편', if (n.rounds > 0) '독서 회차 ${n.rounds}회'];
   final gone = parts.length <= 1 ? parts.join() : '${parts.sublist(0, parts.length - 1).join(', ')}${_wa(parts[parts.length - 2])} ${parts.last}';
-  return [if (gone.isNotEmpty) '$gone도 지워져요.', if (n.sessions > 0) '독서 시간은 통계에 남아요.', '되돌릴 수 없어요.'].join('\n');
+  final kept = n.ms >= 60000 ? formatDuration(n.ms) : formatDurationPrecise(n.ms);
+  return [
+    if (gone.isNotEmpty) '$gone도 지워져요.',
+    if (n.sessions > 0) '독서 시간 ${withJosa(kept, '은', '는')} 책 없이 읽은 시간으로 통계에 남아요.',
+    '되돌릴 수 없어요.',
+  ].join('\n');
 }
 
 /// 같은 판(판본)을 두 권 이상 넣은 책: 책 id → '소장본 N'(넣은 차례). 한 권뿐인 판은 없다(2026-11-15 QA: 별도 소장본 두 권이 목록에서 같아 보였다)

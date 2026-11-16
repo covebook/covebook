@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+ 시스템 시작 화면: 지금 앱과 같게 흰 바탕 + 빈 로고(Flutter 기본 로고·검은 바탕 대신) -->
+<!-- Android 12+ 시스템 시작 화면: 흰 바탕 + 앱 시작 그림의 책(2026-11-16 QA 영숙 F17: 빈 로고라 흰 화면만 2~3초 보였다) -->
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">@color/splashscreen_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splashscreen_logo</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_book_icon</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@color/splashscreen_background</item>

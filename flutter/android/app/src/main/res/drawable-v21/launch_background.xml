@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 시작 화면: 지금 앱처럼 흰 바탕만(로고 없음) -->
+<!-- 시작 화면(Android 11 이하): 흰 바탕 가운데 앱 시작 그림('느린 계절' 책·선반·'책장 한켠')을 Flutter 시작 그림과 비슷한 자리·크기로.
+     2026-11-16 QA 영숙 F17: 첫 실행에 흰 화면만 2~3초 보였다. 그림은 assets/loading/quiet-start.png에서 잘라 냈다(폭 411dp 화면에서 Flutter 그림과 같은 크기, 가운데보다 20dp 위) -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splashscreen_background" />
+    <item
+        android:width="252dp"
+        android:height="337dp"
+        android:bottom="40dp"
+        android:gravity="center"
+        android:drawable="@drawable/launch_start" />
 </layer-list>

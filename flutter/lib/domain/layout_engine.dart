@@ -1058,6 +1058,17 @@ EditResult setTilt(ShelfLayout layout, BookMap books, String bookId, int tilt) {
   return _finish(layout, settle(next, books, desired), books);
 }
 
+/// 책장에서 뺐던 책을 뺄 때 자리로 다시 끼운 배치(2026-11-16 QA 현우 F12: '책장에 진열'로 되돌리면 선반 맨 끝으로 갔다).
+/// was: 뺄 때의 배치(선반·자세·가로 위치·깊이·회전), index: 그 선반에서의 차례. 선반이 없어졌거나 더미 안 책이었거나 넘치면 null.
+/// 다른 책이 비켜 섰는지는 부르는 쪽이 본다
+ShelfLayout? reinsertAt(ShelfLayout layout, BookMap books, BookPlacement was, int index) {
+  if (was.stackId != null || index < 0 || books[was.bookId] == null || placementOf(layout, was.bookId) != null) return null;
+  if (!layout.shelves.any((s) => s.id == was.shelfId)) return null;
+  final base = ShelfLayout(layout.shelves, layout.placements, [for (final id in layout.drawer) if (id != was.bookId) id]);
+  final next = _insertItem(base, was.copyWith(stackId: unset), was.shelfId, index, books, was.pos);
+  return checkSpace(next, books, was.shelfId) == null ? next : null;
+}
+
 /// 메뉴의 이전/다음 자리
 EditResult moveBy(ShelfLayout layout, BookMap books, String bookId, int delta) {
   if (placementOf(layout, bookId) == null) return const EditResult.fail('unknown-book');

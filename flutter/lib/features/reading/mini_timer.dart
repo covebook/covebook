@@ -79,7 +79,8 @@ class _MiniTimerState extends State<MiniTimer> {
     final mq = MediaQuery.of(context);
     final keyboard = mq.viewInsets.bottom > 0;
     final path = _place.path;
-    final hidden = _reading.active == null || miniTimerHidden(path) || _place.hidden || _place.modal || keyboard;
+    // hidden(책장 꾸미기 조작부)은 탭 화면이 맨 위일 때만: 꾸미기에서 연 선반·벽지 화면에서는 보인다(2026-11-16 QA 현우 F9)
+    final hidden = _reading.active == null || miniTimerHidden(path) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
     // 화면이 바뀌거나 숨으면 접어 둔다(다시 나타날 때 늘 원)
     final key = '$path|$hidden';
     if (key != _lastKey) {

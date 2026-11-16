@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../services/sync.dart';
 import '../../store/backup.dart';
 import '../../ui/alert.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 
@@ -26,11 +27,18 @@ class _BackupScreenState extends State<BackupScreen> {
   final _sync = SyncService.instance;
   bool _loggingIn = false;
   String? _busy; // export · share · restore
+  ({String at, String how})? _last; // 마지막 백업(이 기기)
 
   @override
   void initState() {
     super.initState();
     _sync.addListener(_changed);
+    _loadLast();
+  }
+
+  Future<void> _loadLast() async {
+    final l = await lastBackup();
+    if (mounted) setState(() => _last = l);
   }
 
   @override
@@ -57,6 +65,7 @@ class _BackupScreenState extends State<BackupScreen> {
     setState(() => _busy = 'export');
     try {
       final r = await exportToDownloads();
+      _loadLast();
       if (mounted) appAlert(context, '백업 파일을 저장했어요', '다운로드/책장한켠/${r.name}\n${_countsText(r.counts)}');
     } catch (e) {
       if (mounted) appAlert(context, '저장하지 못했어요', e is StateError ? e.message : '$e');
@@ -69,6 +78,7 @@ class _BackupScreenState extends State<BackupScreen> {
     setState(() => _busy = 'share');
     try {
       await exportShare();
+      _loadLast();
     } catch (e) {
       if (mounted) appAlert(context, '내보내지 못했어요', '$e');
     } finally {
@@ -89,7 +99,8 @@ class _BackupScreenState extends State<BackupScreen> {
     appAlert(
       context,
       '백업으로 바꿀까요?',
-      '백업(${(r.data!['exportedAt']! as String).substring(0, 10)}): 책 ${c.books}권 · 갈피 ${c.bookmarks}개${c.essays > 0 ? ' · 감상 ${c.essays}편' : ''} · 독서 기록 ${c.sessions}개 · 사진 ${c.images}장\n지금 기기의 기록은 이 백업 내용으로 바뀌어요.',
+      // 만든 날짜와 시각(기기 시각): 같은 날 여러 번 백업해도 어느 것인지 안다(2026-11-16 QA 현우 F6)
+      '백업(${backupTimeLabel(r.data!['exportedAt']! as String)}): 책 ${c.books}권 · 갈피 ${c.bookmarks}개${c.essays > 0 ? ' · 감상 ${c.essays}편' : ''} · 독서 기록 ${c.sessions}개 · 사진 ${c.images}장\n지금 기기의 기록은 이 백업 내용으로 바뀌어요.',
       [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('복원', style: AlertStyle.destructive, onPress: () async {
@@ -111,7 +122,18 @@ class _BackupScreenState extends State<BackupScreen> {
 
   List<Widget> _backupSection() => [
         const H2('백업 파일', first: true),
-        Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('책·독서 기록·갈피·장정·책장 배치·설정·사진이 들어가요. 진행 중인 타이머는 빠져요.', style: AppType.sub)),
+        // 들어가는 것에 감상을, 책 표지는 파일에 넣지 않고 인터넷에서 다시 받는다는 것을 알린다(2026-11-16 QA 현우 F2·F7)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Space.xs),
+          child: Text(keepAll('책·독서 기록·갈피·감상·장정·책장 배치·설정과 직접 찍거나 고른 사진이 들어가요. 검색으로 넣은 책 표지는 파일에 넣지 않고 인터넷에서 다시 받아요. 진행 중인 타이머는 빠져요.'), style: AppType.sub),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: Space.s),
+          child: Text(
+            _last == null ? '이 기기에서는 아직 백업하지 않았어요.' : '마지막 백업 ${backupTimeLabel(_last!.at)} · ${_last!.how == 'share' ? '공유로 보냄' : '다운로드 폴더'}',
+            style: AppType.caption,
+          ),
+        ),
         ListGroup(children: [
           // iOS에는 다운로드 폴더가 없다: 공유창의 '파일에 저장'을 쓴다
           if (Platform.isAndroid)

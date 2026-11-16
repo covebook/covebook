@@ -10,9 +10,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding, Ticker;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show OrdinalSortKey;
 
 import '../../services/cover_colors.dart';
-import '../../ui/kit.dart' show Btn, PullUp, showSheet;
+import '../../ui/kit.dart' show Btn, PullUp, Space, showSheet;
 import 'locked_rows.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
@@ -35,6 +36,7 @@ import '../../domain/vec3.dart' show C3, Vec3;
 import '../../domain/book3.dart' show corners, toWorld;
 import '../../domain/front_pose.dart' show FrontState;
 import '../../domain/placed.dart' show jsRound;
+import '../../store/mini_timer_store.dart' show MiniTimerPlace;
 import '../../store/placement_store.dart';
 
 import '../../domain/camera.dart';
@@ -99,7 +101,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   final _scroll = ScrollController();
 
   // ---------- 지난 연도 책장(지금 앱 YearPager) ----------
@@ -120,7 +122,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _bare = false;
   String? _editId;
   String? _editMsg;
-  ({String title, Pose pose, int lean, ({bool left, bool right}) canLean, double spin, double spinMax, ({double lo, double hi})? spinRange, ({double lo, double hi, double z}) depth})? _panel;
+  ({
+    String title,
+    Pose pose,
+    int lean,
+    ({bool left, bool right}) canLean,
+    double spin,
+    double spinMax,
+    ({double lo, double hi})? spinRange,
+    ({double lo, double hi, double z}) depth,
+    ({bool left, bool right}) canMove,
+    String place,
+  })? _panel;
 
   /// 정보 시트를 연 책(시트가 열린 동안 윤곽 빛)
   String? _popId;
@@ -211,6 +224,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   /// 책장 책마다 화면 읽기 칸(책장은 그림이라 책이 화면 구조에 잡히지 않았다, 2026-11-15 QA): 윤곽 상자 자리에 제목·저자.
   /// 책장 그림·자리가 그대로면 지난번 것을 쓴다
+  /// 화면 읽기 차례는 위 선반부터, 한 선반 안에서는 왼쪽 책부터(2026-11-16 QA 영숙 F11: 오른쪽 책을 먼저 읽었다)
   ({Object key, List<({String id, Rect rect, String label})> list})? _semCache;
   List<({String id, Rect rect, String label})> _bookSemantics() {
     final g = _geom, c = _case;
@@ -219,10 +233,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final hit = _semCache;
     if (hit != null && hit.key == key) return hit.list;
     final byId = {for (final b in _libBooks) b.id: b};
+    final rowOf = {for (var i = 0; i < c.rows.length; i++) for (final b in c.rows[i].books) b.id: i};
     final list = [
       for (final o in _outlines())
         if (byId[o.id] case final b?) (id: o.id, rect: o.path.getBounds(), label: a11yLabel([b.title, ?b.author].join(', '))),
-    ];
+    ]..sort((a, b) {
+        final r = (rowOf[a.id] ?? 0).compareTo(rowOf[b.id] ?? 0);
+        return r != 0 ? r : a.rect.center.dx.compareTo(b.rect.center.dx);
+      });
     _semCache = (key: key, list: list);
     return list;
   }
@@ -236,6 +254,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _editMsg = null;
     });
     tabBarHidden.value = true;
+    MiniTimerPlace.instance.setHidden(true);
     _computePanel();
   }
 
@@ -249,6 +268,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _editMsg = null;
     });
     tabBarHidden.value = false;
+    MiniTimerPlace.instance.setHidden(false);
   }
 
   /// 고른 책의 조작부 값(자세·기대기 가능 방향·회전 범위·앞뒤 범위)
@@ -268,6 +288,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     final fs = p.pose == Pose.front ? frontStateOf(l, s.books, id) : null;
+    // 순서 단추(왼쪽·오른쪽 한 칸)와 지금 자리: 몇 번째 선반의 왼쪽에서 몇 번째(쌓인 책은 더미째 센다)
+    final items = shelfItems(l, p.shelfId);
+    final at = items.indexWhere((it) => it.bookIds.contains(id));
+    final shelfNo = sortedShelves(l).indexWhere((x) => x.id == p.shelfId) + 1;
     setState(() => _panel = (
           title: s.books[id]?.title ?? '',
           pose: p.pose == Pose.front && (p.pitch ?? 0) >= 89.95 ? Pose.horizontal : p.pose,
@@ -277,6 +301,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           spinMax: p.pose == Pose.front ? maxFrontSpin : maxSpin,
           spinRange: spinRangeOf(l, s.books, id),
           depth: depthRange(l, s.books, id),
+          canMove: (left: at > 0 || p.stackId != null, right: (at >= 0 && at < items.length - 1) || p.stackId != null),
+          place: '$shelfNo번째 선반 · 왼쪽에서 ${at + 1}번째 / ${items.length}',
         ));
   }
 
@@ -317,6 +343,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _editDepth(double z) => _edit((l, b, id) => setDepth(l, b, id, z));
 
+  /// 고른 책을 같은 선반에서 한 칸 옮기기(2026-11-16 QA 영숙 F8: 끌기 말고는 순서를 바꿀 길이 없어 화면 읽기 사용자는 못 바꿨다)
+  void _editMove(int d) => _edit((l, b, id) => moveBy(l, b, id, d));
+
   // ---------- 끌어 옮기기(지금 앱 HomeScreen beginDrag·endDrag, useShelfDragPreview) ----------
   /// 잡은 책: 잡은 곳(콘텐츠 좌표)·잡은 항목 가운데와 폭(설계 단위)·윤곽·끄는 책을 뺀 배치(끌기 한 번에 한 번만 계산)
   ({String id, String shelfId, Offset start, double centerDU, double widthDU, ui.Path path, ShelfLayout detached})? _drag;
@@ -355,6 +384,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
     });
     tabBarHidden.value = true;
+    // 꾸미는 동안 작은 타이머는 숨긴다: 조작부의 위치 mm·회전 값을 가렸다(2026-11-16 QA 현우 F9)
+    MiniTimerPlace.instance.setHidden(true);
     _computePanel();
     _dragTarget = null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -665,6 +696,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
       content: Text('해가 바뀌면 올해 책장이 지난 책장으로 남아요. 그때부터 옆으로 넘겨 볼 수 있어요.'),
       duration: Duration(seconds: 3),
+      persist: false, // 정한 시간 뒤 꼭 사라지게(2026-11-16 QA 현우 F1)
     ));
   }
 
@@ -889,6 +921,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!BookcaseStore.instance.loaded) BookcaseStore.instance.load();
     _loadSnap();
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// 앱이 앞으로 오면 받지 못한 표지를 다시 받아 본다. 뒤로 가면 다시 받기를 멈춘다
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _retryCovers(reset: true);
+    } else if (state == AppLifecycleState.paused) {
+      _coverRetry?.cancel();
+      _coverRetry = null;
+    }
+  }
+
+  /// 받지 못한 표지(인터넷 없이 복원·추가한 책은 코드로 그린 표지로 그렸다)를 앱이 앞으로 올 때와 잠시 뒤마다(30초부터 10분까지 늘려 가며) 다시 받는다.
+  /// 받는 대로 책장을 다시 그린다(2026-11-16 QA 현우 F2: 인터넷이 돌아와도 앱을 다시 켜야 표지가 돌아왔다)
+  Timer? _coverRetry;
+  int _coverTries = 0;
+
+  void _retryCovers({bool reset = false}) {
+    if (reset) _coverTries = 0;
+    _coverRetry?.cancel();
+    _coverRetry = null;
+    if (!mounted) return;
+    final missing = [for (final b in _libBooks) if (b.coverArtUri case final u? when !_photos.containsKey(u)) u];
+    if (missing.isEmpty) return;
+    _loadCovers(missing);
+    _coverRetry = Timer(Duration(seconds: math.min(600, 30 << math.min(_coverTries, 5))), _retryCovers);
+    _coverTries++;
   }
 
   /// 서재(갈피·장정·책 정보)가 바뀌면 책장 모습도 바뀔 수 있다: 책장에 보이는 값만 모은 열쇠가 바뀌었을 때만 다시 만든다
@@ -932,6 +993,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final lib = await loadLibrary();
     PlacementStore.instance.adopt(lib);
     _loadCovers([for (final b in lib.books) ?b.coverArtUri]);
+    // 못 받은 표지는 잠시 뒤 다시(앞서 걸어 둔 다시 받기가 있으면 그대로)
+    _coverRetry ??= Timer(const Duration(seconds: 30), _retryCovers);
     final shelves = placeShelves(lib);
     // 마지막 선반 아래 잠긴 칸(다섯 칸까지): 흐린 예시 책
     final locked = [for (var i = 0; i < lockedShelfCount(shelves.length); i++) await lockedRow(i)];
@@ -1066,7 +1129,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Navigator.pop(ctx);
             final ok = await PlacementStore.instance.addShelf();
             if (!mounted) return;
-            ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(ok ? '선반을 열었어요.' : '지금은 바꿀 수 없어요.'), duration: const Duration(seconds: 2)));
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(ok ? '선반을 열었어요.' : '지금은 바꿀 수 없어요.'), duration: const Duration(seconds: 2), persist: false));
           },
         ),
       ),
@@ -1108,11 +1171,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _widgetTimer?.cancel();
     _tweenTicker?.dispose();
     _autoScroll?.cancel();
+    _coverRetry?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     shelfRefresh.removeListener(_refresh);
     spineLook.removeListener(_spineLookChanged);
     focusBookOnShelf.removeListener(_focusBook);
     LibraryModel.instance.removeListener(_libraryChanged);
     BookcaseStore.instance.removeListener(_bookcasesChanged);
+    if (_decorating) MiniTimerPlace.instance.setHidden(false);
     for (final i in _atlases) {
       i.dispose();
     }
@@ -1161,8 +1227,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final last = geo.isEmpty ? null : geo.last;
                     // 끝 여백(지금 앱 contentEnd): 판 그늘 몫과 하단바 블록 + 덮개 0.6 중 큰 것
                     final tail = math.max((shelfCastExtent + 8) * m.scale, pad.bottom + TabBarStyle.gap + TabBarStyle.height + TabBarStyle.fade * 0.6);
-                    // 꾸미는 동안은 아래 조작부(약 280) 뒤에 숨는 줄도 위로 밀어 볼 수 있게 끝 여백을 늘린다
-                    final height = math.max(box.maxHeight, last == null ? 0.0 : contentTop + last.top + last.height + tail + (_decorating ? 280 : 0));
+                    // 꾸미는 동안은 아래 조작부 뒤에 숨는 줄도 위로 밀어 볼 수 있게 끝 여백을 늘린다(순서 단추가 생겨 약 360, 큰 글씨면 화면의 62%까지)
+                    final panelH = largeText(context) ? MediaQuery.sizeOf(context).height * 0.62 : 360.0;
+                    final height = math.max(box.maxHeight, last == null ? 0.0 : contentTop + last.top + last.height + tail + (_decorating ? panelH : 0));
                     final lockedFrom = n - _lockedCount;
                     _geom = (m: m, geo: geo, contentTop: contentTop, lockedFrom: lockedFrom);
                     return NotificationListener<ScrollStartNotification>(
@@ -1220,6 +1287,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 key: const ValueKey('touch'),
                                 child: RawGestureDetector(
                                   behavior: HitTestBehavior.translucent,
+                                  // 화면 읽기에는 이름 없는 화면 전체 칸으로 잡혔다(2026-11-16 QA 영숙 F10): 책 누르기는 아래 책 칸이, 옮기기는 꾸미기 조작부가 맡는다
+                                  excludeFromSemantics: true,
                                   gestures: {
                                     TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
                                       TapGestureRecognizer.new,
@@ -1251,11 +1320,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               ),
                               // 화면 읽기용 책 칸(누르기는 아래 누르기 층이 받는다: 이 칸은 손가락을 가로채지 않는다)
                               if (_drag == null && _head == null)
-                                for (final b in _bookSemantics())
+                                for (final (i, b) in _bookSemantics().indexed)
                                   Positioned.fromRect(
                                     key: ValueKey('sem:${b.id}'),
                                     rect: b.rect,
-                                    child: Semantics(button: true, label: b.label, onTap: () => _tapBook(b.id), child: const SizedBox.expand()),
+                                    child: Semantics(
+                                      container: true,
+                                      sortKey: OrdinalSortKey(1.0 + i),
+                                      button: true,
+                                      selected: _decorating && _editId == b.id,
+                                      label: b.label,
+                                      onTap: () => _tapBook(b.id),
+                                      child: const SizedBox.expand(),
+                                    ),
                                   ),
                               // 표지 책 머리 손잡이: 보이는 점은 작게, 잡는 칸은 넓게. 끄는 동안 손가락을 따라 실제로 된 각도만큼 옮겨 가고, 제자리와 가는 선으로 잇는다
                               if (_handlePoint() case final hp?) ...[
@@ -1268,6 +1345,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   width: _handleHit,
                                   height: _handleHit,
                                   child: Semantics(
+                                    container: true,
+                                    sortKey: const OrdinalSortKey(50000),
                                     label: '머리 손잡이: 위아래로 끌면 뒤로 젖히기, 좌우로 끌면 돌리기',
                                     // 닿는 순간 잡는다(지금 앱 manualActivation): 손가락 이벤트를 바로 받고, 잡는 동안은 스크롤을 끈다(스크롤 끌기가 손잡이를 가로채지 않게)
                                     child: Listener(
@@ -1295,7 +1374,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               ],
                               // 머리줄(책장과 함께 스크롤: 지금 앱 2026-11-04 '상단 라인은 고정이 아니야'): 왼쪽 '나의 책장'과 그 밑 해, 오른쪽 스토어·꾸미기·전체 책·더하기
                               // 자식 목록 자리는 그대로 둔다(있다 없다 하면 뒤의 누르기 층이 새로 만들어져 끌던 손가락이 끊긴다)
-                              Positioned(left: 0, right: 0, top: pad.top, child: _bare ? const SizedBox.shrink() : header(headerOpacity)),
+                              // 화면 읽기는 머리줄('나의 책장'·꾸미기·책 추가·내 정보)을 책보다 먼저 읽는다(2026-11-16 QA 영숙 F11: '내 정보'가 책 뒤로 밀렸다)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                top: pad.top,
+                                child: _bare
+                                    ? const SizedBox.shrink()
+                                    : Semantics(container: true, explicitChildNodes: true, sortKey: const OrdinalSortKey(0), child: header(headerOpacity)),
+                              ),
                               // 잠긴 칸: 가운데 자물쇠, 누르면 선반 한 칸 더 열기
                               for (var i = lockedFrom; i < n && i < geo.length; i++)
                                 Positioned(
@@ -1304,6 +1391,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   top: contentTop + geo[i].top,
                                   height: geo[i].height,
                                   child: Semantics(
+                                    container: true,
+                                    sortKey: OrdinalSortKey(100000.0 + i),
                                     button: true,
                                     label: '잠긴 선반, 눌러서 열기',
                                     onTap: _openLocked,
@@ -1357,6 +1446,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   // 지난 책장이 아직 없을 때 옆으로 밀면 짧게 알린다(2026-11-15 QA: 밀어도 아무 반응이 없었다). 꾸미는 중에는 책 끌기와 겹치지 않게 듣지 않는다
                   ? GestureDetector(
                       behavior: HitTestBehavior.translucent,
+                      excludeFromSemantics: true, // 알림만 띄우는 밀기: 화면 읽기에 이름 없는 전체 칸을 만들지 않는다(영숙 F10)
                       onHorizontalDragEnd: _decorating ? null : _noPastShelf,
                       child: shelfPage(1),
                     )
@@ -1435,6 +1525,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 onUndo: _undo,
                 onDone: _exitDecorate,
                 onSkin: () => openStore(context),
+                onMove: _editMove,
+                canMove: _panel?.canMove ?? (left: false, right: false),
+                place: _panel?.place,
               ),
             ),
         ],
@@ -1579,10 +1672,10 @@ class _RowDone {
   final Map<String, C3> tabLoss;
 }
 
-/// 책장에서 이 책을 보여 달라(책 정보 '책장 위치로 이동', 지금 앱 uiBus.focusBook): 홈이 그 줄로 넘기고 잠깐 윤곽을 빛낸다
+/// 책장에서 이 책을 보여 달라(책 정보 '책장에서 보기', 지금 앱 uiBus.focusBook): 홈이 그 줄로 넘기고 잠깐 윤곽을 빛낸다
 final focusBookOnShelf = ValueNotifier<String?>(null);
 
-/// 책장에서 이 책 보기: 홈(첫 화면)까지 닫고 그 책 줄로 넘긴다(책 정보 '책장 위치로 이동'·책 추가 결과 '책장에서 보기'가 같이 쓴다)
+/// 책장에서 이 책 보기: 홈(첫 화면)까지 닫고 그 책 줄로 넘긴다(책 정보 '책장에서 보기'·책 추가 결과 '책장에서 보기'가 같이 쓴다)
 void showBookOnShelf(BuildContext context, String id) {
   focusBookOnShelf.value = id;
   Navigator.of(context).popUntil((r) => r.isFirst);
@@ -1645,56 +1738,117 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget icon(String name, String label) => Semantics(
-      button: true,
-      label: label,
-      child: _Pressable(
-        onTap: switch (name) {
-          'decorate' => onDecorate,
-          'add' => () => openAddBook(context),
-          'profile' => () => openProfile(context),
-          _ => null,
-        },
-        child: SizedBox(
-          width: _headerCell,
-          height: 44,
-          child: Center(
-            child: Image.asset('assets/header/$name.png', width: _headerArt, height: _headerArt),
-          ),
-        ),
-      ),
-    );
     return Padding(
-      // 머리줄 아래 여백 4, 해는 제목 바로 밑(−2dp, 지금 앱 11-10 조정). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌')
-      padding: const EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, TabHeader.paddingH - (TabHeader.paddingH - (_headerLastCenter - _headerCell / 2)), _headerBottom),
+      // 머리줄 아래 여백 4, 해는 제목 바로 밑(−2dp, 지금 앱 11-10 조정). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌').
+      // 오른쪽은 아이콘 누르는 칸이 그림 칸보다 양옆으로 넓은 만큼(_HeaderIcons.slop) 덜 비운다: 그림 자리는 그대로
+      padding: EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, _headerLastCenter - _headerCell / 2 - (icons ? _HeaderIcons.slop : 0), _headerBottom),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: GestureDetector(
-              onLongPress: onLongPress,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('나의 책장', style: AppType.title, maxLines: 1),
-                  PullUp(
-                    dy: 2,
-                    child: Tooltip(
-                      message: status,
-                      child: Text('$year', style: AppType.sub, maxLines: 1),
+            // '나의 책장'과 해를 한 이름으로 읽는다(2026-11-16 QA 영숙 F9: 두 줄로 따로 읽혔다). 길게 누르기는 측정 메뉴라 화면 읽기에서 뺀다
+            child: Semantics(
+              container: true,
+              header: true,
+              label: '나의 책장, $year',
+              excludeSemantics: true,
+              child: GestureDetector(
+                excludeFromSemantics: true,
+                onLongPress: onLongPress,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('나의 책장', style: AppType.title, maxLines: 1),
+                    PullUp(
+                      dy: 2,
+                      child: Tooltip(
+                        message: status,
+                        child: Text('$year', style: AppType.sub, maxLines: 1),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2.5),
-            // 꾸미기 · 추가 · 프로필(2026-11-16 메뉴 구조 개편: 전체 책은 하단 '내 책' 탭과 겹쳐 빼고, 스토어(선반·벽지)는 꾸미기 안에서 연다)
-            child: icons ? Row(children: [icon('decorate', '꾸미기'), icon('add', '책 추가'), icon('profile', '내 정보')]) : const SizedBox(height: 44),
-          ),
+          // 꾸미기 · 추가 · 프로필(2026-11-16 메뉴 구조 개편: 전체 책은 하단 '내 책' 탭과 겹쳐 빼고, 스토어(선반·벽지)는 꾸미기 안에서 연다)
+          if (icons)
+            Padding(
+              padding: EdgeInsets.only(top: 2.5 - _HeaderIcons.slopY),
+              child: _HeaderIcons(items: [
+                ('decorate', '꾸미기', onDecorate),
+                ('add', '책 추가', () => openAddBook(context)),
+                ('profile', '내 정보', () => openProfile(context)),
+              ]),
+            )
+          else
+            const Padding(padding: EdgeInsets.only(top: 2.5), child: SizedBox(height: 44)),
         ],
       ),
+    );
+  }
+}
+
+/// 머리 아이콘 줄: 그림 칸은 34×44 그대로(시안), 누르는 칸은 아이콘마다 48×48(Space.hit)
+/// (2026-11-16 QA 영숙 F12: 34×44라 작았다). 이웃 칸이 겹치는 자리는 가까운 아이콘이 받는다. 화면 읽기 칸도 48×48
+class _HeaderIcons extends StatefulWidget {
+  const _HeaderIcons({required this.items});
+  final List<(String, String, VoidCallback?)> items;
+
+  /// 그림 칸 밖으로 넓힌 누르는 자리(양옆·위아래)
+  static const slop = (Space.hit - _headerCell) / 2;
+  static const slopY = (Space.hit - 44) / 2;
+
+  @override
+  State<_HeaderIcons> createState() => _HeaderIconsState();
+}
+
+class _HeaderIconsState extends State<_HeaderIcons> {
+  int? _down;
+
+  int _at(double x) => ((x - _HeaderIcons.slop - _headerCell / 2) / _headerCell).round().clamp(0, widget.items.length - 1);
+
+  @override
+  Widget build(BuildContext context) {
+    final n = widget.items.length;
+    return SizedBox(
+      width: _headerCell * n + _HeaderIcons.slop * 2,
+      height: Space.hit,
+      child: Stack(children: [
+        for (final (i, it) in widget.items.indexed) ...[
+          Positioned(
+            left: _HeaderIcons.slop + i * _headerCell,
+            top: _HeaderIcons.slopY,
+            width: _headerCell,
+            height: 44,
+            child: Opacity(
+              opacity: _down == i ? pressOpacity : 1,
+              // 그림 역할을 빼야 화면 읽기가 '이미지'가 아니라 단추로 읽는다(2026-11-16 QA 영숙 F11)
+              child: Center(child: Image.asset('assets/header/${it.$1}.png', width: _headerArt, height: _headerArt, excludeFromSemantics: true)),
+            ),
+          ),
+          Positioned(
+            left: i * _headerCell.toDouble(),
+            top: 0,
+            width: Space.hit,
+            height: Space.hit,
+            child: Semantics(container: true, button: true, label: it.$2, onTap: it.$3, child: const SizedBox.expand()),
+          ),
+        ],
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            excludeFromSemantics: true,
+            onTapDown: (e) => setState(() => _down = _at(e.localPosition.dx)),
+            onTapCancel: () => setState(() => _down = null),
+            onTapUp: (e) {
+              final i = _at(e.localPosition.dx);
+              setState(() => _down = null);
+              widget.items[i].$3?.call();
+            },
+          ),
+        ),
+      ]),
     );
   }
 }
