@@ -63,6 +63,7 @@
   --ck-space-xxl: 40px;
   --ck-space-row: 56px;
   --ck-space-touch: 44px;
+  --ck-space-hit: 48px;
   --ck-space-content-max: 640px;
   --ck-space-sheet-max: 560px;
   --ck-tab-header-padding-top: 16px;
@@ -94,7 +95,7 @@
   --ck-btn-l: 60px;
   --ck-btn-m: 54px;
   --ck-btn-s: 44px;
-  --ck-touch: 44px;
+  --ck-touch: 48px;
   --ck-icon: 22px;
   --ck-icon-stroke: 1.6px;
   --ck-toggle-width: 50px;

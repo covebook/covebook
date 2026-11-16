@@ -8,7 +8,7 @@
 ## 쓰는 방식 — CSS 변수
 - 색: `--ck-ink`(본문 #191F28) · `--ck-ink-soft`(보조) · `--ck-ink-faint` · `--ck-bg` · `--ck-surface`(옅은 회색 면) · `--ck-input` · `--ck-line` · `--ck-section-line` · `--ck-track` · `--ck-accent`(갈색, 주요 버튼·선택에만) · `--ck-accent-pressed` · `--ck-on-accent` · `--ck-danger` · `--ck-star` · `--ck-scrim`. 어두운 읽기 장면 위: `--ck-night-ink` · `--ck-night-ink-soft` · `--ck-night-line`.
 - 글자: `font: var(--ck-type-title)` 26/34 Bold · `--ck-type-heading` 21/29 · `--ck-type-section` 19/27 · `--ck-type-row` 18/26 · `--ck-type-row-strong` · `--ck-type-body` 17/27 · `--ck-type-sub` 16/23(색 `--ck-ink-soft`) · `--ck-type-caption` 15/21(색 `--ck-ink-soft`) · `--ck-type-button` 17/24 SemiBold · `--ck-type-label` 16/22 Medium. 갈피 문장·감상 본문은 `font-family: var(--ck-font-reading)`(명조).
-- 간격: `--ck-space-page`(화면 좌우 24) · `--ck-space-xs` 4 · `--ck-space-s` 8 · `--ck-space-m` 12 · `--ck-space-l` 16 · `--ck-space-xl` 28 · `--ck-space-xxl` 40 · `--ck-space-row` 56 · `--ck-touch` 44.
+- 간격: `--ck-space-page`(화면 좌우 24) · `--ck-space-xs` 4 · `--ck-space-s` 8 · `--ck-space-m` 12 · `--ck-space-l` 16 · `--ck-space-xl` 28 · `--ck-space-xxl` 40 · `--ck-space-row` 56 · `--ck-touch` 48(아이콘 단추·작은 버튼도 누르는 자리는 48 이상, 겉모양은 44여도 된다).
 - 모서리: `--ck-radius-button` 10 · `--ck-radius-input` 10 · `--ck-radius-choice` 14 · `--ck-radius-sheet` 20 · `--ck-radius-dialog` 18 · `--ck-radius-chip`(알약) · `--ck-radius-tag` 6. 그림자: `--ck-shadow-float` · `--ck-shadow-tab-bar` · `--ck-shadow-bookmark-card`.
 
 ## 부품 만드는 법(Flutter `lib/ui/kit.dart`와 같은 치수)

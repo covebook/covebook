@@ -1,9 +1,16 @@
 {
+  "projectId": "7efa6dab-30aa-404a-979a-f79e3c798a9b",
   "pkg": "chaekjang-design-tokens",
   "globalName": "ChaekjangDS",
   "shape": "package",
   "cssEntry": "styles.css",
-  "extraFonts": ["fonts.css"],
-  "guidelinesGlob": ["../components.md", "../drift.md", "../platform-widgets.md"],
+  "extraFonts": [
+    "fonts.css"
+  ],
+  "guidelinesGlob": [
+    "../components.md",
+    "../drift.md",
+    "../platform-widgets.md"
+  ],
   "readmeHeader": ".design-sync/conventions.md"
 }
