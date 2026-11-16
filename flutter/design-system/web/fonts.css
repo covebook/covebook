@@ -1,0 +1,9 @@
+/* 책장 한켠 글꼴(flutter/assets/fonts, 모두 OFL) - tool/gen_design_css.py가 만든다 */
+@font-face { font-family: 'Pretendard'; font-weight: 400; font-style: normal; font-display: swap; src: url('../../assets/fonts/Pretendard-Regular.otf') format('opentype'); }
+@font-face { font-family: 'Pretendard'; font-weight: 500; font-style: normal; font-display: swap; src: url('../../assets/fonts/Pretendard-Medium.otf') format('opentype'); }
+@font-face { font-family: 'Pretendard'; font-weight: 600; font-style: normal; font-display: swap; src: url('../../assets/fonts/Pretendard-SemiBold.otf') format('opentype'); }
+@font-face { font-family: 'Pretendard'; font-weight: 700; font-style: normal; font-display: swap; src: url('../../assets/fonts/Pretendard-Bold.otf') format('opentype'); }
+@font-face { font-family: 'Noto Serif KR'; font-weight: 400; font-style: normal; font-display: swap; src: url('../../assets/fonts/NotoSerifKR-Regular.otf') format('opentype'); }
+@font-face { font-family: 'Hahmlet'; font-weight: 600; font-style: normal; font-display: swap; src: url('../../assets/fonts/Hahmlet-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'MaruBuri'; font-weight: 400; font-style: normal; font-display: swap; src: url('../../assets/fonts/MaruBuri-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'MaruBuri'; font-weight: 600; font-style: normal; font-display: swap; src: url('../../assets/fonts/MaruBuri-SemiBold.ttf') format('truetype'); }

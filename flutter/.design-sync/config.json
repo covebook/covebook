@@ -1,0 +1,9 @@
+{
+  "pkg": "chaekjang-design-tokens",
+  "globalName": "ChaekjangDS",
+  "shape": "package",
+  "cssEntry": "styles.css",
+  "extraFonts": ["fonts.css"],
+  "guidelinesGlob": ["../components.md", "../drift.md", "../platform-widgets.md"],
+  "readmeHeader": ".design-sync/conventions.md"
+}

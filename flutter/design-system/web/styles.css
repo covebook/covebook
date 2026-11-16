@@ -1,0 +1,116 @@
+/* 책장 한켠 디자인 토큰 - flutter/design-system/tokens.json에서 생성(tool/gen_design_css.py). 손으로 고치지 않는다 */
+
+:root {
+  /* 색(라이트 하나, 다크 테마 없음) */
+  --ck-bg: #FFFFFF; /* 화면 바탕 */
+  --ck-white: #FFFFFF; /* 카드·칩 위 흰색 */
+  --ck-input: #F2F4F6; /* 입력칸 바탕 */
+  --ck-surface: #F2F4F6; /* 옅은 회색 면(칩·전환 칸·표지 자리) */
+  --ck-section-line: #EFF1F3; /* 묶음 사이 1dp 띠 */
+  --ck-line: #E5E8EB; /* 구분선·테두리 */
+  --ck-track: #D1D6DB; /* 막대·손잡이 자리, 시트 손잡이 */
+  --ck-ink: #191F28; /* 본문·제목 */
+  --ck-ink-soft: #646F7E; /* 보조 글자 */
+  --ck-ink-faint: #B0B8C1; /* 흐린 글자·꺾쇠 */
+  --ck-accent: #6C534A; /* 주요 버튼·선택(갈색) */
+  --ck-accent-pressed: #5A443C; /* 주요 버튼 눌림 */
+  --ck-chip-on: #6C534A; /* 고른 칩(=accent) */
+  --ck-on-accent: #FFFFFF; /* 갈색 위 글자 */
+  --ck-danger: #A5483A; /* 삭제·오류 */
+  --ck-star: #A8865F; /* 별점 */
+  --ck-scrim: #191F285C; /* 시트·확인창 뒤 막(ink 36%) */
+  --ck-icon-soft: #858585; /* 옅은 아이콘 */
+  --ck-tab-ink: #000000; /* 하단 탭 고른 아이콘 */
+  --ck-tab-ink-soft: #787676; /* 하단 탭 안 고른 아이콘 */
+  /* 어두운 읽기 장면 위 글자·조작부 */
+  --ck-night-ink: #F6EFE6;
+  --ck-night-ink-soft: #F6EFE6C7;
+  --ck-night-line: #F6EFE638;
+  --ck-night-shade: #100D0B47;
+  --ck-night-fade: #100D0B;
+
+  /* 글꼴 */
+  --ck-font-ui: 'Pretendard', sans-serif;
+  --ck-font-reading: 'Noto Serif KR', serif;
+  --ck-font-spine: 'Hahmlet', 'Noto Serif KR', serif;
+  --ck-font-share: 'MaruBuri', 'Noto Serif KR', serif;
+
+  /* 글자 위계: --ck-type-<이름> = font 단축(굵기 크기/줄높이 글꼴), 색은 따로(--ck-ink, sub·caption은 --ck-ink-soft) */
+  --ck-type-title: 700 26px/34px var(--ck-font-ui);
+  --ck-type-nav-title: 600 18px/25px var(--ck-font-ui);
+  --ck-type-heading: 600 21px/29px var(--ck-font-ui);
+  --ck-type-section: 600 19px/27px var(--ck-font-ui);
+  --ck-type-row: 400 18px/26px var(--ck-font-ui);
+  --ck-type-row-strong: 600 18px/26px var(--ck-font-ui);
+  --ck-type-body: 400 17px/27px var(--ck-font-ui);
+  --ck-type-sub: 400 16px/23px var(--ck-font-ui);
+  --ck-type-caption: 400 15px/21px var(--ck-font-ui);
+  --ck-type-button: 600 17px/24px var(--ck-font-ui);
+  --ck-type-label: 500 16px/22px var(--ck-font-ui);
+  --ck-type-input: 400 16px/normal var(--ck-font-ui);
+
+  /* 간격 */
+  --ck-space-page: 24px;
+  --ck-space-section: 40px;
+  --ck-space-group: 28px;
+  --ck-space-item: 12px;
+  --ck-space-tight: 8px;
+  --ck-space-xs: 4px;
+  --ck-space-s: 8px;
+  --ck-space-m: 12px;
+  --ck-space-l: 16px;
+  --ck-space-xl: 28px;
+  --ck-space-xxl: 40px;
+  --ck-space-row: 56px;
+  --ck-space-touch: 44px;
+  --ck-space-content-max: 640px;
+  --ck-space-sheet-max: 560px;
+  --ck-tab-header-padding-top: 16px;
+  --ck-tab-header-padding-bottom: 12px;
+  --ck-tab-header-padding-h: 24px;
+  --ck-tab-header-min-height: 64px;
+
+  /* 모서리 */
+  --ck-radius-button: 10px;
+  --ck-radius-input: 10px;
+  --ck-radius-sheet: 20px;
+  --ck-radius-dialog: 18px;
+  --ck-radius-tag: 6px;
+  --ck-radius-choice: 14px;
+  --ck-radius-segmented: 14px;
+  --ck-radius-chip: 999px;
+  --ck-radius-tab-bar: 999px;
+  --ck-radius-bookmark-card: 8px;
+  --ck-radius-bookmark-back-sheet: 7px;
+  --ck-radius-cover-image: 3px;
+
+  /* 그림자(CSS 흐림 반경 그대로) */
+  --ck-shadow-float: 0px 4px 10px #191F281F;
+  --ck-shadow-tab-bar: 0px 3px 14px #191F2821;
+  --ck-shadow-bookmark-card: 0px 1px 2px rgba(60,50,45,0.06), 0px 3px 10px rgba(60,50,45,0.05);
+  --ck-shadow-segmented-thumb: 0 1px 3px #191F2814;
+
+  /* 크기 */
+  --ck-btn-l: 60px;
+  --ck-btn-m: 54px;
+  --ck-btn-s: 44px;
+  --ck-touch: 44px;
+  --ck-icon: 22px;
+  --ck-icon-stroke: 1.6px;
+  --ck-toggle-width: 50px;
+  --ck-toggle-height: 30px;
+  --ck-toggle-knob: 24px;
+  --ck-radio: 22px;
+  --ck-tabbar-height: 58px;
+  --ck-tabbar-nav-height: 66px;
+  --ck-tabbar-side: 15px;
+  --ck-tabbar-gap: 4px;
+  --ck-tabbar-padding-x: 9px;
+  --ck-tabbar-content-pad: 106px;
+  --ck-tabbar-fade: 72px;
+  --ck-segmented-height: 44px;
+  --ck-press-opacity: 0.55;
+}
+
+/* 바탕: 앱 화면과 같은 글꼴·글자색·흰 바탕, 자간 0 */
+html, body { background: var(--ck-bg); color: var(--ck-ink); font: var(--ck-type-body); letter-spacing: 0; -webkit-font-smoothing: antialiased; }

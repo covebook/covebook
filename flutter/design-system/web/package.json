@@ -1,0 +1,9 @@
+{
+  "name": "chaekjang-design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "책장 한켠 디자인 토큰(Flutter 원본에서 생성)",
+  "main": "index.js",
+  "module": "index.js",
+  "style": "styles.css"
+}
