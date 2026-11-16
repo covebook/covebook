@@ -1,5 +1,6 @@
 // 갈피 공유 시트(지금 앱 features/bookmark/MarkShare.tsx, 2026-11-10 사용자 시안): 위에서 '책 페이지'·'종이 메모' 모양을 고르면 가운데 큰 미리보기가 바뀌고,
 // 아래 '저장'(사진첩)·'공유'(공유창)를 누르면 그 모양을 폭 1080px로 그려 보낸다(11-10 댓글 '가운데 박스, 밑쪽에 다운로드 공유')
+// 글이 길어 그림에 다 못 넣으면(끝에 '…') 미리보기 아래에 알린다(2026-11-16 QA 은서 F3)
 library;
 
 import 'dart:async';
@@ -101,10 +102,11 @@ class _MarkShareState extends State<_MarkShare> {
       }
     }
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
+    final cut = markQuoteBox(_style, widget.input.text).cut;
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Segmented<MarkStyle>(items: const [(MarkStyle.page, '책 페이지'), (MarkStyle.note, '종이 메모')], value: _style, onChange: (s) => setState(() => _style = s)),
       Padding(
-        padding: const EdgeInsets.symmetric(vertical: Space.l),
+        padding: EdgeInsets.only(top: Space.l, bottom: cut ? Space.s : Space.l),
         child: Center(
           child: Container(
             decoration: BoxDecoration(
@@ -124,6 +126,11 @@ class _MarkShareState extends State<_MarkShare> {
           ),
         ),
       ),
+      if (cut)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Space.m),
+          child: Text('글이 길어 그림에는 앞부분만 들어가요. 끝에 \'…\'로 표시돼요.', textAlign: TextAlign.center, style: AppType.caption),
+        ),
       Row(children: [
         if (_canSave) ...[
           Expanded(child: Btn(label: _saved ? '저장했어요' : '저장', kind: 'secondary', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),

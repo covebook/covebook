@@ -1,5 +1,6 @@
 // 사진 갈피의 사진(지금 앱 PhotoPlate.tsx): 흰 테두리를 두른 인화 사진을 한지 테이프로 붙인 모양.
-// 사진은 가로로 긴 틀에 맞춰 자르고(cover), 눌러서 원본 비율 그대로 크게 볼 수 있다
+// 사진은 가로로 긴 틀에 맞춰 자르고(cover), 눌러서 원본 비율 그대로 크게 볼 수 있다(손가락으로 벌려 확대).
+// 테이프는 흰 테두리까지만 덮는다(2026-11-16 QA 은서 F9: 사진 첫 줄 글자를 가렸다). whole이면 잘라 내지 않고 사진 전체를 보인다(읽은 글과 견줄 때)
 library;
 
 import 'dart:io';
@@ -58,52 +59,68 @@ class _BookmarkPhotoState extends State<BookmarkPhoto> {
   }
 }
 
+/// 갈피 사진 크게 보기: 원본 비율 그대로, 두 손가락으로 벌려 확대(읽은 글과 견주기 좋게). 바깥이나 닫기를 누르면 닫는다
+void showBookmarkPhoto(BuildContext context, String uri) {
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: '닫기',
+    barrierColor: const Color.fromRGBO(18, 14, 10, 0.92),
+    transitionDuration: const Duration(milliseconds: 200),
+    pageBuilder: (ctx, _, _) {
+      final insets = MediaQuery.paddingOf(ctx);
+      final size = MediaQuery.sizeOf(ctx);
+      return Stack(children: [
+        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => Navigator.pop(ctx))),
+        Center(
+          child: SizedBox(
+            width: size.width,
+            height: size.height * 0.82,
+            // 가볍게 누르면 전처럼 닫히고, 벌리거나 끌면 확대·이동
+            child: GestureDetector(onTap: () => Navigator.pop(ctx), child: InteractiveViewer(maxScale: 5, child: BookmarkPhoto(uri: uri, fit: BoxFit.contain))),
+          ),
+        ),
+        Positioned(
+          top: insets.top + 12,
+          right: 22,
+          child: IconBtn(label: '닫기', onPress: () => Navigator.pop(ctx), child: const LucideIcon('X', size: 22, color: Color(0xFFFFFFFF))),
+        ),
+      ]);
+    },
+    transitionBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+  );
+}
+
 class PhotoPlate extends StatelessWidget {
-  const PhotoPlate({super.key, required this.uri, required this.width, required this.seed, this.ratio, this.compact = false});
+  const PhotoPlate({super.key, required this.uri, required this.width, required this.seed, this.ratio, this.compact = false, this.whole = false});
   final String uri;
   final num? ratio;
   final double width;
   final String seed;
   final bool compact;
 
-  void _open(BuildContext context) {
-    showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: '닫기',
-      barrierColor: const Color.fromRGBO(18, 14, 10, 0.92),
-      transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (ctx, _, _) {
-        final insets = MediaQuery.paddingOf(ctx);
-        final size = MediaQuery.sizeOf(ctx);
-        return GestureDetector(
-          onTap: () => Navigator.pop(ctx),
-          child: Stack(children: [
-            Center(child: SizedBox(width: size.width, height: size.height * 0.82, child: BookmarkPhoto(uri: uri, fit: BoxFit.contain))),
-            Positioned(top: insets.top + 12, right: 22, child: const SizedBox(width: 44, height: 44, child: Center(child: LucideIcon('X', size: 22, color: Color(0xFFFFFFFF))))),
-          ]),
-        );
-      },
-      transitionBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-    );
-  }
+  /// 잘라 내지 않고 사진 전체(틀을 사진 비율로)
+  final bool whole;
 
   @override
   Widget build(BuildContext context) {
     final border = compact ? 4.0 : 6.0;
-    final frameRatio = photoFrameRatio(compact ? math.max(ratio ?? 1.35, 1.35) : ratio);
+    final r = ratio != null && ratio! > 0 ? ratio!.toDouble() : 1.35;
+    final frameRatio = whole ? r.clamp(0.5, 2.0) : photoFrameRatio(compact ? math.max(r, 1.35) : ratio);
     final innerW = width - border * 2;
-    final tapeW = compact ? 62.0 : 92.0, tapeH = compact ? 20.0 : 30.0;
+    final tapeW = compact ? 62.0 : 92.0, tapeH = compact ? 16.0 : 24.0;
+    // 테이프 아래 끝이 흰 테두리 안(사진에서 1px)에 오게 사진을 내린다
+    final top = tapeH - border - 1;
     return SizedBox(
       width: width,
       child: Stack(clipBehavior: Clip.none, children: [
         Padding(
-          padding: EdgeInsets.only(top: compact ? 8 : 12),
+          padding: EdgeInsets.only(top: top),
           child: Semantics(
             button: true,
             label: '갈피 사진 크게 보기',
             child: GestureDetector(
-              onTap: () => _open(context),
+              onTap: () => showBookmarkPhoto(context, uri),
               child: Transform.rotate(
                 angle: (compact ? -0.4 : -0.8) * _deg,
                 child: Container(

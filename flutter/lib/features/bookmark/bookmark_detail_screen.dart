@@ -2,6 +2,9 @@
 // 아래 막대: 책장 한켠 · 수정 · 공유. 오른쪽 위 더 보기: 수정 · 메모 포함해 공유 · 갈피 색 · 연결된 책 열기 · 삭제.
 // 공유는 화면 밖에 그린 같은 카드를 그림으로 떠서 공유창으로 보낸다(개인 메모는 기본 제외).
 // 문장 갈피의 공유는 두 모양 '책 페이지·종이 메모'(mark_share_sheet). 문장 없는 사진 갈피와 '메모 포함해 공유'는 같은 카드를 이미지로 뜬다
+// 2026-11-16 QA 은서 F1: 수정·삭제·공유는 늘 화면에 보이는 갈피(넘길 때마다 그 갈피 id를 기억한다). 수정에서 돌아오면 넘기기 목록을
+// 그 갈피 자리에서 다시 붙인다(전에는 처음 연 갈피 자리로 붙어 보이는 갈피와 수정·삭제 대상이 달랐다). 삭제 확인창에 어느 갈피인지 보인다.
+// 영숙 F18: 아래 줄은 한 줄에 다 들어가면 '— 책장 한켠'과 '수정·공유'를 양끝에, 안 들어가면(큰 글씨) '수정·공유'만 가운데(빈 구분선 없음)
 library;
 
 import 'dart:io';
@@ -15,7 +18,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../domain/color.dart';
 import '../../domain/library.dart';
-import '../../services/photos.dart';
+import '../../services/photos.dart' show PhotoFail, PhotoOk, deniedMessage;
 import '../../store/files.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
@@ -25,6 +28,8 @@ import '../book/book_screen.dart';
 import '../book/labels.dart';
 import 'bookmark_card.dart';
 import 'mark_share_sheet.dart' show showMarkShareSheet;
+import 'mark_text.dart';
+import 'page_photo.dart';
 import 'photo_plate.dart';
 import 'ribbon_color_sheet.dart';
 
@@ -90,6 +95,11 @@ class BookmarkDetailScreen extends StatefulWidget {
 class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
   final _model = LibraryModel.instance;
   String? _bookId;
+
+  /// 화면에 보이는 갈피. 수정·삭제·공유 대상은 늘 이것(QA F1)
+  String? _curId;
+
+  /// 보이던 자리(보던 갈피가 다른 곳에서 지워지면 이 자리 갈피로)
   int _index = 0;
   PageController? _pages;
   Bookmark? _editing;
@@ -101,15 +111,23 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
   void initState() {
     super.initState();
     _model.addListener(_changed);
-    _model.load().then((_) {
-      if (!mounted) return;
-      // 넘기는 목록은 처음 연 갈피의 책 기준(연 갈피를 지워도 같은 책의 다른 갈피가 남는다)
-      _bookId = _model.lib.bookmarks[widget.id]?.myBookId;
-      final list = _list();
-      _index = math.max(0, list.indexWhere((m) => m.id == widget.id));
-      _pages = PageController(initialPage: _index);
-      setState(() {});
-    });
+    // 서재를 이미 읽었으면 바로(목록에서 열 때), 아니면 읽은 뒤에
+    if (_model.loaded) {
+      _start();
+    } else {
+      _model.load().then((_) {
+        if (mounted) setState(_start);
+      });
+    }
+  }
+
+  void _start() {
+    // 넘기는 목록은 처음 연 갈피의 책 기준(연 갈피를 지워도 같은 책의 다른 갈피가 남는다)
+    _bookId = _model.lib.bookmarks[widget.id]?.myBookId;
+    final list = _list();
+    _index = math.max(0, list.indexWhere((m) => m.id == widget.id));
+    _curId = list.isEmpty ? null : list[_index].id;
+    _pages = PageController(initialPage: _index);
   }
 
   @override
@@ -124,6 +142,55 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
   }
 
   List<Bookmark> _list() => _bookId == null ? const [] : bookmarksOf(_model.lib, _bookId!).reversed.toList();
+
+  // 보이는 갈피의 자리. 없으면(지워짐) 보던 자리의 갈피로 옮긴다
+  int _at(List<Bookmark> list) {
+    final i = list.indexWhere((m) => m.id == _curId);
+    if (i >= 0) return _index = i;
+    _index = _index.clamp(0, list.length - 1);
+    _curId = list[_index].id;
+    return _index;
+  }
+
+  void _edit(Bookmark m) => setState(() {
+        _curId = m.id;
+        _editing = m;
+      });
+
+  // 수정 화면은 넘기기 목록을 트리에서 뺀다. 돌아올 때(저장·뒤로 모두) 목록을 고친 갈피 자리에서 새로 붙인다
+  void _endEdit() {
+    final id = _editing?.id ?? _curId;
+    final list = _list();
+    final i = math.max(0, list.indexWhere((m) => m.id == id));
+    _pages?.dispose();
+    _pages = PageController(initialPage: i);
+    setState(() {
+      _editing = null;
+      _index = i;
+      _curId = list.isEmpty ? null : list[i].id;
+    });
+  }
+
+  Future<void> _delete(Bookmark cur, List<Bookmark> list) async {
+    final i = list.indexWhere((m) => m.id == cur.id);
+    // 지운 자리의 다음 갈피(마지막이었으면 앞 갈피)로
+    final next = list.length <= 1 ? null : list[i + 1 < list.length ? i + 1 : i - 1];
+    final wrote = _model.deleteBookmark(cur.id);
+    if (next == null) {
+      Navigator.of(context).maybePop();
+    } else {
+      setState(() => _curId = next.id);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final at = _list().indexWhere((m) => m.id == next.id);
+        if (mounted && at >= 0 && (_pages?.hasClients ?? false)) _pages!.jumpToPage(at);
+      });
+    }
+    try {
+      await wrote;
+    } catch (e) {
+      if (mounted) appAlert(context, '삭제를 저장하지 못했어요', '$e');
+    }
+  }
 
   // 화면 밖에 그린 같은 카드를 그림으로 떠서 공유
   Future<void> _shoot(bool withMemo, Bookmark cur, BookmarkCardData data) async {
@@ -164,7 +231,7 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
         builder: (ctx) => ListGroup(children: [
           ListItem(label: '수정', onPress: () {
             Navigator.pop(ctx);
-            setState(() => _editing = cur);
+            _edit(cur);
           }),
           if (cur.memo != null && cur.memo!.isNotEmpty)
             ListItem(label: '메모 포함해 공유', onPress: () {
@@ -184,20 +251,10 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
             danger: true,
             onPress: () {
               Navigator.pop(ctx);
-              appAlert(context, '갈피를 삭제할까요?', '되돌릴 수 없어요.', [
+              // 어느 갈피를 지우는지 보인다(QA F1)
+              appAlert(context, '이 갈피를 삭제할까요?', '${markLabel(cur.text, cur.page)}\n되돌릴 수 없어요.', [
                 const AlertButton('취소', style: AlertStyle.cancel),
-                AlertButton('삭제', style: AlertStyle.destructive, onPress: () async {
-                  await _model.deleteBookmark(cur.id);
-                  if (!mounted) return;
-                  if (list.length <= 1) {
-                    Navigator.of(context).maybePop();
-                    return;
-                  }
-                  // 지운 자리의 다음 갈피(마지막이었으면 앞 갈피)로
-                  final next = math.min(_index, list.length - 2);
-                  setState(() => _index = next);
-                  _pages?.jumpToPage(next);
-                }),
+                AlertButton('삭제', style: AlertStyle.destructive, onPress: () => _delete(cur, list)),
               ]);
             },
           ),
@@ -210,8 +267,16 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
     final list = _list();
     if (!_model.loaded || _pages == null) return const Screen(children: [Loading()]);
     if (list.isEmpty) return const Screen(title: '갈피', children: [Empty(title: '갈피를 찾을 수 없어요')]);
-    final cur = list[math.min(_index, list.length - 1)];
-    if (_editing != null) return _EditBookmark(m: _editing!, onDone: () => setState(() => _editing = null));
+    if (_editing != null) return _EditBookmark(m: _editing!, onDone: _endEdit);
+    final at = _at(list);
+    final cur = list[at];
+    // 목록이 바뀌어(다른 곳에서 지움 등) 보이는 칸이 보던 갈피와 다르면 그 갈피로 옮긴다
+    final pages = _pages!;
+    if (pages.hasClients && !pages.position.isScrollingNotifier.value && pages.page?.round() != at) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && pages.hasClients && !pages.position.isScrollingNotifier.value) pages.jumpToPage(_at(_list()));
+      });
+    }
     final curData = cardData(lib, cur);
     final size = MediaQuery.sizeOf(context);
     final insets = MediaQuery.paddingOf(context);
@@ -268,7 +333,10 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
                     child: PageView.builder(
                       controller: _pages,
                       itemCount: list.length,
-                      onPageChanged: (i) => setState(() => _index = i),
+                      onPageChanged: (i) => setState(() {
+                        _index = i;
+                        _curId = list[i].id;
+                      }),
                       itemBuilder: (context, i) {
                         final d = cardData(lib, list[i]);
                         return _CardPage(
@@ -282,15 +350,15 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
                     Padding(
                       padding: EdgeInsets.only(top: 6, bottom: size.height * 0.047),
                       child: Column(children: [
-                        PageDots(count: list.length, index: _index, color: dot, max: 12, gap: 10),
+                        PageDots(count: list.length, index: at, color: dot, max: 12, gap: 10),
                         const SizedBox(height: 12),
                         Text('${list.length}개의 갈피', style: AppType.caption),
                       ]),
                     ),
                   Padding(
                     padding: EdgeInsets.fromLTRB(Space.page, 12, Space.page, insets.bottom + size.height * 0.044),
-                    child: Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 16, runSpacing: 16, children: [
-                      Semantics(
+                    child: _Bar(
+                      brand: Semantics(
                         label: '책장 한켠',
                         excludeSemantics: true,
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -299,10 +367,10 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
                           Text('책장 한켠', style: AppType.sub),
                         ]),
                       ),
-                      Row(mainAxisSize: MainAxisSize.min, children: [
-                        Container(width: hair, height: 28, color: AppColors.line),
-                        const SizedBox(width: 18),
-                        _BarBtn(icon: 'PenLine', label: '수정', onPress: () => setState(() => _editing = cur)),
+                      rule: Container(width: hair, height: 28, color: AppColors.line),
+                      labels: ['수정', _busy ? '준비 중' : '공유'],
+                      actions: Row(mainAxisSize: MainAxisSize.min, children: [
+                        _BarBtn(icon: 'PenLine', label: '수정', onPress: () => _edit(cur)),
                         const SizedBox(width: 18),
                         _BarBtn(
                           icon: 'Share',
@@ -316,7 +384,7 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
                                   : () => _shoot(false, cur, curData),
                         ),
                       ]),
-                    ]),
+                    ),
                   ),
                 ]),
               ),
@@ -326,6 +394,38 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
       ),
     );
   }
+}
+
+/// 아래 줄: 한 줄에 다 들어가면 왼쪽 '— 책장 한켠', 오른쪽 '| 수정 공유'. 안 들어가면(큰 글씨·좁은 화면) 꾸밈인 서명과 구분선을 빼고
+/// '수정 공유'만 가운데(전에는 줄이 바뀌며 서명은 왼쪽, 버튼은 오른쪽으로 치우치고 빈 구분선이 남았다, QA 영숙 F18)
+class _Bar extends StatelessWidget {
+  const _Bar({required this.brand, required this.rule, required this.actions, required this.labels});
+  final Widget brand, rule, actions;
+
+  /// 버튼 글자들(폭 재기)
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
+        final scaler = MediaQuery.textScalerOf(context);
+        double tw(String t, TextStyle st) {
+          final p = TextPainter(text: TextSpan(text: t, style: st), textDirection: TextDirection.ltr, textScaler: scaler)..layout();
+          final w = p.width;
+          p.dispose();
+          return w;
+        }
+
+        // 서명: 줄 20 + 12 + 글자. 버튼: 양옆 2 + 아이콘 22 + 6 + 글자, 버튼 사이 18. 서명과 구분선 사이 16, 구분선 뒤 18
+        final brandW = 32 + tw('책장 한켠', AppType.sub);
+        final actionsW = [for (final l in labels) 30 + tw(l, AppType.sub)].fold<double>(0, (a, b) => a + b) + 18 * (labels.length - 1);
+        if (brandW + 16 + 1 + 18 + actionsW <= c.maxWidth) {
+          return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            brand,
+            Row(mainAxisSize: MainAxisSize.min, children: [rule, const SizedBox(width: 18), actions]),
+          ]);
+        }
+        return Center(child: actions);
+      });
 }
 
 class _BarBtn extends StatelessWidget {
@@ -376,7 +476,7 @@ class _EditBookmarkState extends State<_EditBookmark> {
   bool _saving = false;
 
   Future<void> _swap(String from) async {
-    final r = await pickPhoto(from, crop: true);
+    final r = await pickPagePhoto(from);
     if (!mounted) return;
     switch (r) {
       case PhotoOk(:final uri, :final width, :final height):
@@ -384,8 +484,10 @@ class _EditBookmarkState extends State<_EditBookmark> {
           _photo = (uri: uri, ratio: width != null && height != null && height > 0 ? width / height : null, changed: true);
           _msg = null;
         });
-      case PhotoFail(:final reason):
+      case PhotoFail(:final reason, :final message):
         if (reason == 'denied') setState(() => _msg = deniedMessage(from));
+        if (reason == 'crop') setState(() => _msg = cropCanceledMessage);
+        if (reason == 'error') setState(() => _msg = '사진을 가져오지 못했어요. ${message ?? ''}');
     }
   }
 
@@ -398,7 +500,8 @@ class _EditBookmarkState extends State<_EditBookmark> {
       if (_photo.changed) photoUri = _photo.uri != null ? await keepImage(_photo.uri!, 'page') : null;
       await LibraryModel.instance.updateBookmark(
         widget.m.id,
-        text: _text.trim(),
+        // 앞 빈 줄·끝 공백만 정리(첫 줄 들여쓰기는 남긴다, QA F10)
+        text: tidyMarkText(_text),
         page: n != null && n > 0 ? n.round() : null,
         memo: _memo.trim().isEmpty ? null : _memo.trim(),
         photoUri: photoUri,
@@ -417,7 +520,8 @@ class _EditBookmarkState extends State<_EditBookmark> {
     final lib = LibraryModel.instance.lib;
     final ed = lib.editions[lib.books[widget.m.myBookId]?.editionId ?? ''];
     final bookLine = ed == null ? '' : [ed.title, if (ed.authors.isNotEmpty) ed.authors.join(', ')].join(' · ');
-    final isPhoto = _photo.uri != null;
+    // 글이 있던 갈피면 사진은 원본으로 곁들인 문장 갈피(QA F11). 치는 동안 제목·칸이 바뀌지 않게 처음 글로 정한다
+    final isPhoto = isPhotoMark(widget.m.text, _photo.uri);
     final width = MediaQuery.sizeOf(context).width;
     return PopScope(
       canPop: false,

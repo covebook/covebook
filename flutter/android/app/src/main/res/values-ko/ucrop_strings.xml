@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 한국어 기기: uCrop 자체 values-ko(사진 편집·확인)보다 앱 문구가 앞서게 values와 같은 값을 둔다(2026-11-16 QA 은서 F14) -->
+<resources>
+    <string name="ucrop_label_edit_photo">사진 자르기</string>
+    <string name="ucrop_label_original">원본</string>
+    <string name="ucrop_menu_crop">완료</string>
+    <string name="ucrop_crop">자르기</string>
+    <string name="ucrop_rotate">돌리기</string>
+    <string name="ucrop_scale">크기</string>
+</resources>

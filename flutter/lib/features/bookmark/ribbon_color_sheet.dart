@@ -16,7 +16,8 @@ import 'bookmark_card.dart' show hexColor;
 Future<void> showRibbonColorSheet(BuildContext context, String bookId) => showSheet<void>(
       context,
       title: '갈피 색',
-      description: '책장 갈피와 갈피 카드 색이 함께 바뀌어요',
+      // 색은 갈피마다가 아니라 책에 하나라는 걸 분명히(2026-11-16 QA 현우 F8: 한 갈피만 바꾸려 했는데 다른 갈피도 바뀌었다)
+      description: '이 책의 갈피 모두가 같은 색으로 바뀌어요(책장 위 갈피 끈과 갈피 카드)',
       scroll: true,
       maxHeight: 0.85,
       builder: (ctx) => ListenableBuilder(listenable: LibraryModel.instance, builder: (ctx, _) => _Body(bookId)),

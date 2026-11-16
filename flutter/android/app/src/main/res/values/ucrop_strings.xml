@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 사진 자르기 화면(uCrop, image_cropper) 문구를 앱 말투 한국어로(2026-11-16 QA 은서 F14: 'ORIGINAL'·'Crop'이 영어로 보였다) -->
+<resources>
+    <string name="ucrop_label_edit_photo">사진 자르기</string>
+    <string name="ucrop_label_original">원본</string>
+    <string name="ucrop_menu_crop">완료</string>
+    <string name="ucrop_crop">자르기</string>
+    <string name="ucrop_rotate">돌리기</string>
+    <string name="ucrop_scale">크기</string>
+</resources>

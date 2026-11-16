@@ -1,0 +1,853 @@
+{
+ "_source": "QA 2026-11-16 은서(.qa-runs/2026-11-16-1236/transcriber): 줄 글자는 기기 인식 원본 ocr/*-raw.txt(blurry는 줄바꿈 그대로 원본), 줄 상자는 합성 사진 fixtures/*.jpg에서 잰 값(기운 사진은 바로 선 쪽 상자를 20° 돌린 바깥 상자). 정답은 fixtures/*.txt",
+ "pages": [
+  {
+   "name": "prose",
+   "width": 1240,
+   "height": 1754,
+   "blocks": [
+    {
+     "lines": [
+      {
+       "text": "작별의 밤",
+       "box": [
+        568,
+        98,
+        672,
+        123
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "그날 밤 눈은 그치지 않았다. 나는 창가에 앉아 그녀가",
+       "box": [
+        181,
+        203,
+        1088,
+        242
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "남긴 쪽지를 몇 번이고 다시 읽었다. 돌아오면 불을 켜",
+       "box": [
+        144,
+        277,
+        1083,
+        316
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "둘게.] 짧은 한 줄이었는데도, 읽을 때마다 문장의 무게",
+       "box": [
+        142,
+        351,
+        1094,
+        392
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "가 조금씩달라졌다.",
+       "box": [
+        142,
+        425,
+        478,
+        464
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "켜 둔다'는 말은 기다린다는 뜻일까, 아니면 잊지 않겠",
+       "box": [
+        182,
+        499,
+        1097,
+        539
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "다는 뜻일까. 나는 대답을 알지 못한 채 주전자에 물을 올",
+       "box": [
+        143,
+        573,
+        1098,
+        612
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "렸다 - 물이 끓는 소리만이 방 안을 채웠다. 바람이 문틈",
+       "box": [
+        143,
+        647,
+        1098,
+        686
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "으로 스며들 때마다 촛불이 기울었고, 그림자는 벽을 타",
+       "box": [
+        142,
+        721,
+        1098,
+        762
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "고 천천히 번겼다.",
+       "box": [
+        142,
+        795,
+        466,
+        834
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "새벽 네 시, 마침내 멀리서 발소리가 들렸다. 나는 일어",
+       "box": [
+        182,
+        869,
+        1093,
+        910
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "나지 않았다. 다만 불이 꺼지지 않았는지 한 번 더 확인했",
+       "box": [
+        143,
+        943,
+        1096,
+        982
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "을 뿐이다.",
+       "box": [
+        141,
+        1017,
+        313,
+        1056
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "118",
+       "box": [
+        603,
+        1645,
+        637,
+        1664
+       ],
+       "confidence": 0.9
+      }
+     ]
+    }
+   ],
+   "answer": "그날 밤 눈은 그치지 않았다. 나는 창가에 앉아 그녀가 남긴 쪽지를 몇 번이고 다시 읽었다. 「돌아오면 불을 켜 둘게.」 짧은 한 줄이었는데도, 읽을 때마다 문장의 무게가 조금씩 달라졌다.\n\n‘켜 둔다’는 말은 기다린다는 뜻일까, 아니면 잊지 않겠다는 뜻일까. 나는 대답을 알지 못한 채 주전자에 물을 올렸다 — 물이 끓는 소리만이 방 안을 채웠다. 바람이 문틈으로 스며들 때마다 촛불이 기울었고, 그림자는 벽을 타고 천천히 번졌다…\n\n새벽 네 시, 마침내 멀리서 발소리가 들렸다. 나는 일어나지 않았다. 다만 불이 꺼지지 않았는지 한 번 더 확인했을 뿐이다.",
+   "mode": "join",
+   "page": 118
+  },
+  {
+   "name": "blurry",
+   "width": 1240,
+   "height": 1754,
+   "blocks": [
+    {
+     "lines": [
+      {
+       "text": "그날 밤 눈은 그치지 않았다. 나는 창가에 앉아 그녀가",
+       "box": [
+        186,
+        204,
+        1085,
+        241
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "남긴 쪽지를 몇 번이고 다시 읽었다 . 돌아오면 불을 켜",
+       "box": [
+        144,
+        278,
+        1083,
+        315
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "둘게. 짧은 한 줄이었는데도, 읽을 때마다 문장의 무게",
+       "box": [
+        148,
+        352,
+        1095,
+        389
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "가 조금씩 달라졌다.",
+       "box": [
+        148,
+        426,
+        477,
+        462
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "'켜 둔다는 말은 기다린다는 뜻일까, 아니면 잊지 않겠",
+       "box": [
+        182,
+        500,
+        1094,
+        537
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "다는 뜻일까. 나는 대답을 알지 못한채 주전자에 물을 올",
+       "box": [
+        144,
+        574,
+        1095,
+        610
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "렸다- 물이 끓는 소리만이 방 안을 채웠다. 바람이 문틈",
+       "box": [
+        144,
+        648,
+        1094,
+        685
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "으로 스며들 때마다 촛불이 기울었고, 그림자는 벽을타",
+       "box": [
+        149,
+        722,
+        1096,
+        758
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "고 천천히 번졌다.",
+       "box": [
+        146,
+        796,
+        427,
+        832
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "새벽 네시, 마침내 멀리서 발소리가 들렸다 . 나는 일어",
+       "box": [
+        187,
+        870,
+        1093,
+        906
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "나지 않았다. 다만 불이 꺼지지 않았는지 한 번 더 확인했",
+       "box": [
+        144,
+        944,
+        1095,
+        981
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "을뿐이다.",
+       "box": [
+        145,
+        1018,
+        312,
+        1054
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "118",
+       "box": [
+        603,
+        1645,
+        637,
+        1664
+       ],
+       "confidence": 0.9
+      }
+     ]
+    }
+   ],
+   "answer": "그날 밤 눈은 그치지 않았다. 나는 창가에 앉아 그녀가 남긴 쪽지를 몇 번이고 다시 읽었다. 「돌아오면 불을 켜 둘게.」 짧은 한 줄이었는데도, 읽을 때마다 문장의 무게가 조금씩 달라졌다.\n\n‘켜 둔다’는 말은 기다린다는 뜻일까, 아니면 잊지 않겠다는 뜻일까. 나는 대답을 알지 못한 채 주전자에 물을 올렸다 — 물이 끓는 소리만이 방 안을 채웠다. 바람이 문틈으로 스며들 때마다 촛불이 기울었고, 그림자는 벽을 타고 천천히 번졌다…\n\n새벽 네 시, 마침내 멀리서 발소리가 들렸다. 나는 일어나지 않았다. 다만 불이 꺼지지 않았는지 한 번 더 확인했을 뿐이다.",
+   "mode": "join",
+   "page": 118
+  },
+  {
+   "name": "tilted",
+   "width": 1500,
+   "height": 1900,
+   "blocks": [
+    {
+     "lines": [
+      {
+       "text": "작별의 밤",
+       "box": [
+        435,
+        200,
+        541,
+        259
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "그날 밤 눈은 그치지 않았다. 나는 창가에 앉아 그녀가",
+       "box": [
+        107,
+        157,
+        973,
+        503
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "남긴 쪽지를 몇 번이고 다시 읽었다. 돌이아오면 불을 켜",
+       "box": [
+        97,
+        228,
+        993,
+        586
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "둘게. 짧은 한 줄이었는데도, 읽을 때마다 문장의 무게",
+       "box": [
+        121,
+        294,
+        1030,
+        658
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "가 조금씩 달라졌다.",
+       "box": [
+        146,
+        574,
+        475,
+        725
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "켜 둔다는 말은 기다린다는 뜻일까, 아니면 잊지 않겠",
+       "box": [
+        209,
+        432,
+        1083,
+        782
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "다는 뜻일까. 나는 대답을 알지 못한 채 주전자에 물을 올",
+       "box": [
+        198,
+        501,
+        1109,
+        864
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "렸다 - 물이 끓는 소리만이 방 안을 채웠다. 바람이 문틈",
+       "box": [
+        223,
+        570,
+        1134,
+        934
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "으로 스며들 때마다 촛불이 기울었고, 그림자는 벽을 타",
+       "box": [
+        247,
+        640,
+        1160,
+        1005
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "고 천천히 번졌다.",
+       "box": [
+        273,
+        926,
+        591,
+        1073
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "새벽 네 시, 마침내 멀리서 발소리가 들렸다. 나는 일어",
+       "box": [
+        336,
+        781,
+        1206,
+        1131
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "나지 않았다. 다만 불이 꺼지지 않았는지 한번 더 확인했",
+       "box": [
+        324,
+        849,
+        1233,
+        1212
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "을 뿐이다.",
+       "box": [
+        348,
+        1187,
+        523,
+        1282
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "118",
+       "box": [
+        997,
+        1666,
+        1035,
+        1695
+       ],
+       "confidence": 0.9
+      }
+     ]
+    }
+   ],
+   "answer": "그날 밤 눈은 그치지 않았다. 나는 창가에 앉아 그녀가 남긴 쪽지를 몇 번이고 다시 읽었다. 「돌아오면 불을 켜 둘게.」 짧은 한 줄이었는데도, 읽을 때마다 문장의 무게가 조금씩 달라졌다.\n\n‘켜 둔다’는 말은 기다린다는 뜻일까, 아니면 잊지 않겠다는 뜻일까. 나는 대답을 알지 못한 채 주전자에 물을 올렸다 — 물이 끓는 소리만이 방 안을 채웠다. 바람이 문틈으로 스며들 때마다 촛불이 기울었고, 그림자는 벽을 타고 천천히 번졌다…\n\n새벽 네 시, 마침내 멀리서 발소리가 들렸다. 나는 일어나지 않았다. 다만 불이 꺼지지 않았는지 한 번 더 확인했을 뿐이다.",
+   "mode": "join",
+   "page": 118
+  },
+  {
+   "name": "english",
+   "width": 1240,
+   "height": 1754,
+   "blocks": [
+    {
+     "lines": [
+      {
+       "text": "KLARA",
+       "box": [
+        576,
+        101,
+        664,
+        120
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "When the Manager moved us to the front win-",
+       "box": [
+        181,
+        204,
+        1097,
+        248
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "dow, I was careful not to look too eager. Rosa",
+       "box": [
+        142,
+        278,
+        1098,
+        322
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "said the Sun would notice us sooner there, but I",
+       "box": [
+        142,
+        353,
+        1095,
+        392
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "wasn't sure it worked that way. \"Be patient,\" the",
+       "box": [
+        140,
+        427,
+        1097,
+        470
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "Manager told us. \"The right child will come.\"",
+       "box": [
+        143,
+        501,
+        1006,
+        544
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "I watched the taxis stop and start-yellow, then",
+       "box": [
+        184,
+        575,
+        1096,
+        618
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "grey, then yellow again-and tried to remember",
+       "box": [
+        142,
+        649,
+        1099,
+        692
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "every face that paused at the glass. Some looked",
+       "box": [
+        142,
+        722,
+        1098,
+        766
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "for a long time; others hardly looked at all. I",
+       "box": [
+        141,
+        796,
+        1097,
+        840
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "didn't yet understand why a person would walk",
+       "box": [
+        142,
+        871,
+        1098,
+        914
+       ],
+       "confidence": 0.9
+      },
+      {
+       "text": "past so quickly, as though the window were only",
+       "box": [
+        141,
+        945,
+        1099,
+        988
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "a reflection of the street.",
+       "box": [
+        142,
+        1018,
+        611,
+        1052
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "37",
+       "box": [
+        607,
+        1645,
+        632,
+        1664
+       ],
+       "confidence": 0.9
+      }
+     ]
+    }
+   ],
+   "answer": "When the Manager moved us to the front window, I was careful not to look too eager. Rosa said the Sun would notice us sooner there, but I wasn't sure it worked that way. “Be patient,” the Manager told us. “The right child will come.”\n\nI watched the taxis stop and start—yellow, then grey, then yellow again—and tried to remember every face that paused at the glass. Some looked for a long time; others hardly looked at all. I didn't yet understand why a person would walk past so quickly, as though the window were only a reflection of the street.",
+   "mode": "join",
+   "page": 37
+  },
+  {
+   "name": "poem",
+   "width": 1240,
+   "height": 1754,
+   "blocks": [
+    {
+     "lines": [
+      {
+       "text": "겨울 정류장",
+       "box": [
+        203,
+        225,
+        453,
+        274
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "눈이 오면",
+       "box": [
+        201,
+        383,
+        360,
+        421
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "나는 정류장에 선다.",
+       "box": [
+        203,
+        457,
+        528,
+        496
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "아무도 오지 않는 버스를 기다리며",
+       "box": [
+        202,
+        531,
+        775,
+        570
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "손바닥에 내려앉는",
+       "box": [
+        262,
+        679,
+        578,
+        718
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "하얀 것들의 이름을",
+       "box": [
+        261,
+        753,
+        588,
+        792
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "하나씩 불러 본다",
+       "box": [
+        261,
+        827,
+        549,
+        866
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "불빛이 지나가고",
+       "box": [
+        201,
+        975,
+        479,
+        1014
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "또지나가고",
+       "box": [
+        201,
+        1049,
+        402,
+        1088
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "나는 여전히",
+       "box": [
+        203,
+        1197,
+        397,
+        1236
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "여기, 서 있다",
+       "box": [
+        203,
+        1271,
+        425,
+        1312
+       ],
+       "confidence": 0.9
+      }
+     ]
+    },
+    {
+     "lines": [
+      {
+       "text": "52",
+       "box": [
+        606,
+        1645,
+        632,
+        1664
+       ],
+       "confidence": 0.9
+      }
+     ]
+    }
+   ],
+   "answer": "겨울 정류장\n\n눈이 오면\n나는 정류장에 선다\n아무도 오지 않는 버스를 기다리며\n\n  손바닥에 내려앉는\n  하얀 것들의 이름을\n  하나씩 불러 본다\n\n불빛이 지나가고\n또 지나가고\n\n나는 여전히\n여기, 서 있다",
+   "mode": "keep",
+   "page": 52
+  }
+ ]
+}
