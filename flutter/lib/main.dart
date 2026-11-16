@@ -11,6 +11,8 @@ import 'package:flutter/services.dart';
 
 import 'app/app_shell.dart';
 import 'app/startup.dart';
+import 'features/auth/login_screen.dart' show AuthGate;
+import 'services/sync.dart';
 import 'services/ambient.dart';
 import 'services/cover_colors.dart';
 import 'features/reading/mini_timer.dart';
@@ -50,6 +52,8 @@ Future<void> main() async {
   await loadSpineLook();
   // 새 서재 예시 책장(표시 전용 예시 책): 책장을 읽기 전에
   await loadReferenceHome();
+  // 로그인 화면을 띄울지: 이 기기에 남긴 계정 사본을 먼저 읽는다(서버 있는 빌드만)
+  await SyncService.instance.loadLocalState();
   startStep.value = 2;
   runApp(const ChaekjangApp());
 }
@@ -156,7 +160,8 @@ class ChaekjangApp extends StatelessWidget {
         navigatorKey: appNavigator,
         // _refocusGuard: 돌아온 화면 입력칸이 초점을 되찾아 키보드가 저절로 뜨지 않게(ui/kit.dart, 2026-11-16 QA 영숙 F14)
         navigatorObservers: [_miniTimerObserver, _refocusGuard],
-        home: const AppShell(),
+        // 서버가 있는 빌드는 로그인해야 책장이 열린다(2026-11-16)
+        home: const AuthGate(child: AppShell()),
         // 공통 작은 타이머: 모든 화면 위에 한 겹(읽기 화면·읽기 탭에서는 숨는다)
         builder: (context, child) {
           // 글자 크기를 지금 앱처럼 화소로 올린다(RnTextScaler, ui/theme.dart)

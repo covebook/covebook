@@ -16,7 +16,7 @@
 | AI 장정·사진으로 책 찾기 | 연결되지 않음(코드 없음) | — |
 | 백업 파일 | 사용자가 만들 때만. Android는 다운로드/책장한켠에 바로 저장(고르는 창 없음)하거나 공유 창으로 보냄. iOS는 공유 창만. 직접 찍거나 고른 사진은 들어가고, 검색으로 받은 표지는 빠짐 | `store/backup.dart` |
 | 공개 | 서버 없는 빌드: 공개되는 것 없음. 서버·커뮤니티가 열린 빌드: 사용자가 커뮤니티에 올린 글과 고른 항목만 공개. 같은 책(ISBN)의 공개 평가를 받을 때 ISBN이 서버로 감 | `services/community.dart`, `features/community/book_reviews.dart` |
-| 계정 | 서버를 쓰는 빌드에서만 기기 전용 계정·Apple·카카오·Google 연결과 서버 계정 삭제가 있음 | `features/settings/backup_screen.dart` |
+| 계정 | 서버를 쓰는 빌드는 카카오·Apple·Google 로그인이 필수(2026-11-16). 로그아웃하면 이 폰의 기록을 지우고, 서버 계정 삭제도 있음 | `features/settings/backup_screen.dart` |
 
 ## 웹 전문에서 고칠 곳
 

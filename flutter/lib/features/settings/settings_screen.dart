@@ -20,7 +20,7 @@ import '../../ui/theme.dart';
 import '../book/import_list_screen.dart' show openImportList;
 import 'backup_screen.dart' show openBackup;
 
-const _privacyUrl = 'https://midi-broccoli-56c.notion.site/Covebook-3eb50284670881b0a0e2c6029cea29c7';
+const privacyUrl = 'https://midi-broccoli-56c.notion.site/Covebook-3eb50284670881b0a0e2c6029cea29c7';
 const _mail = 'yuntyu01@gmail.com';
 const _motion = [
   (id: 'system', label: '기기 설정 따르기', short: '기기 설정'),
@@ -119,7 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (_syncAvailable) para('서버 계정 삭제를 요청하면 연결된 로그인과 서버 기록·사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
-              child: Btn(label: '처리방침 전문 보기(웹)', kind: 'secondary', onPress: () => launchUrl(Uri.parse(_privacyUrl), mode: LaunchMode.externalApplication)),
+              child: Btn(label: '처리방침 전문 보기(웹)', kind: 'secondary', onPress: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication)),
             ),
           ]);
         },

@@ -211,6 +211,19 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// 복구 창을 닫기(일시정지로 둠. 표시는 남겨 다음 실행에서 다시 묻는다)
+  /// 진행 중 독서와 저장 전 초안을 모두 버린다(로그아웃으로 기기 기록을 지울 때)
+  Future<void> discardAll() async {
+    _stopBeat();
+    active = null;
+    interrupted = null;
+    pending = null;
+    pendingRestored = false;
+    spanGap = null;
+    _spanStart = null;
+    notifyListeners();
+    await _persist(null, null);
+  }
+
   void dismissInterrupted() {
     interrupted = null;
     notifyListeners();

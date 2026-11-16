@@ -17,7 +17,9 @@ import '../domain/sync.dart';
 import '../store/bookcase_store.dart';
 import '../store/files.dart' show imageDir;
 import '../store/library_model.dart';
+import '../store/first_shelf.dart' show exampleLayoutAt;
 import '../store/library_store.dart' show layoutState, markBookcasesSynced, readBookcases, saveRemoteLayout, unsyncedBookcaseIds, writeBookcase;
+import '../store/local_reset.dart';
 import '../store/placement_store.dart';
 import 'auth_link.dart';
 
@@ -80,6 +82,15 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   static final instance = SyncService._();
 
   bool get available => _base.isNotEmpty;
+
+  /// 서버가 있는 빌드는 로그인해야 앱을 쓴다(2026-11-16 사용자: 시작할 때 무조건 로그인). 서버 없는 시험 빌드는 지금처럼 바로 쓴다
+  bool get loginRequired => available;
+
+  /// 카카오·Apple·Google 중 하나라도 연결됐는지(이 기기에 남긴 사본 기준이라 오프라인에서도 안다)
+  bool get loggedIn => account.kakao || account.apple || account.google;
+
+  /// 서버에서 로그인 수단 목록을 받았는지
+  bool get providersKnown => _providersChecked;
   SyncState state = _base.isEmpty ? SyncState.off : SyncState.idle;
   String? lastAt, lastError;
   int pending = 0;
@@ -140,6 +151,28 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
     } catch (_) {
       _providersChecked = false;
+    }
+  }
+
+  /// 로그인 화면이 부른다: 로그인 수단을 다시 받는다(받았으면 true)
+  Future<bool> refreshProviders() async {
+    if (_base.isEmpty) return false;
+    await _refreshProviders();
+    return _providersChecked;
+  }
+
+  /// 앱을 켤 때 화면보다 먼저: 이 기기에 남긴 계정 사본과 중지 상태를 읽는다(로그인 화면을 띄울지 정한다)
+  Future<void> loadLocalState() async {
+    if (_base.isEmpty) return;
+    try {
+      final raw = await KvStore.get(_accountKey);
+      if (raw != null) {
+        final a = jsonDecode(raw) as Map;
+        account = (kakao: a['kakao'] == true, google: a['google'] == true, apple: a['apple'] == true, nickname: (a['nickname'] as String?) ?? '');
+      }
+      await _loadPause();
+    } catch (_) {
+      // 읽지 못하면 로그인 화면이 뜬다(다시 로그인하면 계정 사본이 새로 생긴다)
     }
   }
 
@@ -281,7 +314,8 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     await _dropMissingFiles(body);
     if (built.count != dirty.length) throw StateError('올릴 서재 기록을 찾지 못했어요');
     final saved = await layoutState();
-    final layout = saved.dirty && saved.json != null ? {'layoutJson': saved.json, 'version': 2, 'updatedAt': saved.at ?? DateTime.now().toUtc().toIso8601String()} : null;
+    // 예시 책장 자리(exampleLayoutAt)는 올리지 않는다: 새 폰에서 로그인하면 받기 전에 올라가 진짜 책장을 덮을 수 있다
+    final layout = saved.dirty && saved.json != null && saved.at != exampleLayoutAt ? {'layoutJson': saved.json, 'version': 2, 'updatedAt': saved.at ?? DateTime.now().toUtc().toIso8601String()} : null;
     final layoutRevision = saved.dirty ? saved.revision : null;
     // 연도 책장은 그 책·장정과 같은 요청이나 그 뒤 요청에 보낸다(서버 외래키). 연도 책장을 모르는 서버(재배포 전)에는 보내지 않는다
     final unsynced = _bookcasesSupported ? await unsyncedBookcaseIds() : <String>{};
@@ -397,6 +431,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> syncNow() async {
     if (_base.isEmpty) return;
+    if (loginRequired && !loggedIn) return; // 로그인 전: 로그인 화면이 계정을 만든다
     try {
       await _loadPause();
     } catch (e) {
@@ -478,7 +513,52 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       _verifiedToken = null;
       _accountChecked = false;
       _setAccount((kakao: false, google: false, apple: false, nickname: ''));
-      _set(state: SyncState.off, error: null);
+      if (loginRequired) {
+        // 로그인 없이는 앱을 쓰지 않으므로 이 폰의 기록도 지우고 로그인 화면으로 돌아간다
+        await wipeLocalData();
+        paused = false;
+        _pauseLoaded = null;
+        lastAt = null;
+        pending = 0;
+        _set(state: SyncState.idle, error: null);
+      } else {
+        _set(state: SyncState.off, error: null);
+      }
+    } finally {
+      _linking = false;
+    }
+  }
+
+  /// 로그아웃 전에: 올리지 못한 변경을 지금 올려 보고, 그래도 남은 수를 돌려준다
+  Future<int> flushBeforeLogout() async {
+    await _loadPause();
+    if (!paused) {
+      await syncNow();
+      await _runningDone?.future;
+    }
+    await _refreshPending();
+    return pending;
+  }
+
+  /// 로그아웃: 이 폰의 기록·사진·토큰을 지우고 로그인 화면으로(서버 기록은 그대로라 다시 로그인하면 받아 온다)
+  Future<void> logout() async {
+    if (_linking) throw StateError('로그인 처리가 끝난 뒤 다시 시도해 주세요');
+    _linking = true;
+    try {
+      _timer?.cancel();
+      _timer = null;
+      _again = false;
+      await _runningDone?.future;
+      await wipeLocalData(); // 토큰·계정 사본·중지 표시도 함께 지운다
+      paused = false;
+      deletionPending = false;
+      _pauseLoaded = null;
+      _verifiedToken = null;
+      _accountChecked = false;
+      lastAt = null;
+      pending = 0;
+      account = (kakao: false, google: false, apple: false, nickname: '');
+      _set(state: SyncState.idle, error: null);
     } finally {
       _linking = false;
     }

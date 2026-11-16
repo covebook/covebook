@@ -29,5 +29,15 @@ abstract final class KvStore {
       (await _open()).rawInsert('INSERT INTO storage (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value]);
 
   static Future<void> remove(String key) async => (await _open()).rawDelete('DELETE FROM storage WHERE key = ?', [key]);
+
+  /// keep에 든 키(기기 설정)만 남기고 모두 지운다(로그아웃)
+  static Future<void> removeAllExcept(Set<String> keep) async {
+    final d = await _open();
+    if (keep.isEmpty) {
+      await d.rawDelete('DELETE FROM storage');
+      return;
+    }
+    await d.rawDelete('DELETE FROM storage WHERE key NOT IN (${List.filled(keep.length, '?').join(',')})', keep.toList());
+  }
 }
 

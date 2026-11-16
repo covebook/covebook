@@ -5,11 +5,12 @@ library;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/sync.dart';
 import '../../store/backup.dart';
+import '../../store/reading_store.dart';
 import '../../ui/alert.dart';
+import '../../ui/brand_button.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
@@ -173,13 +174,21 @@ class _BackupScreenState extends State<BackupScreen> {
   void _removeAccount() => appAlert(
         context,
         '서버 계정을 삭제할까요?',
-        '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
+        _sync.loginRequired
+            ? '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 남겨 두려면 먼저 백업 파일로 보내 두세요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
+            : '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
         [
           const AlertButton('취소', style: AlertStyle.cancel),
           AlertButton('서버 계정 삭제', style: AlertStyle.destructive, onPress: () async {
             setState(() => _loggingIn = true);
             try {
+              final nav = Navigator.of(context, rootNavigator: true);
               await _sync.deleteCloudAccount();
+              if (_sync.loginRequired) {
+                // 로그인 화면(앱 첫 화면)으로 돌아간다
+                nav.popUntil((r) => r.isFirst);
+                return;
+              }
               if (mounted) appAlert(context, '삭제 요청을 접수했어요', '서버 접근을 차단하고 기록과 사진 삭제를 처리해요. 이 기기의 기록은 남아요.');
             } catch (e) {
               if (mounted) appAlert(context, '삭제 완료를 확인하지 못했어요', '$e\n동기화 상태를 확인하고 삭제를 다시 요청해 주세요.');
@@ -189,6 +198,42 @@ class _BackupScreenState extends State<BackupScreen> {
           }),
         ],
       );
+
+  // 로그아웃: 이 폰의 기록을 지우고 로그인 화면으로(2026-11-16 사용자: 로그아웃하면 폰에서 지움). 올리지 못한 변경이 있으면 먼저 알린다
+  void _logout() => appAlert(
+        context,
+        '로그아웃할까요?',
+        '이 폰에 있는 책·독서 기록·갈피·감상·사진을 지우고 로그인 화면으로 돌아가요. 서버에 올라간 기록은 그대로라 다시 로그인하면 받아 와요.'
+            '${ReadingStore.instance.active != null ? ' 지금 읽는 중인 시간은 저장되지 않아요.' : ''}',
+        [
+          const AlertButton('취소', style: AlertStyle.cancel),
+          AlertButton('로그아웃', style: AlertStyle.destructive, onPress: () => _doLogout()),
+        ],
+      );
+
+  Future<void> _doLogout({bool force = false}) async {
+    final nav = Navigator.of(context, rootNavigator: true);
+    setState(() => _loggingIn = true);
+    try {
+      if (!force) {
+        final left = await _sync.flushBeforeLogout();
+        if (left > 0) {
+          if (!mounted) return;
+          appAlert(context, '아직 올리지 못한 변경이 있어요', '서버에 올리지 못한 변경 $left개가 있어요. 지금 로그아웃하면 이 변경은 사라져요. 인터넷 연결을 확인하고 다시 해 보세요.', [
+            const AlertButton('취소', style: AlertStyle.cancel),
+            AlertButton('그래도 로그아웃', style: AlertStyle.destructive, onPress: () => _doLogout(force: true)),
+          ]);
+          return;
+        }
+      }
+      await _sync.logout();
+      nav.popUntil((r) => r.isFirst);
+    } catch (e) {
+      if (mounted) appAlert(context, '로그아웃하지 못했어요', e is StateError ? e.message : '$e');
+    } finally {
+      if (mounted) setState(() => _loggingIn = false);
+    }
+  }
 
   void _resume() => appAlert(context, '새 계정으로 동기화할까요?', '새 서버 계정을 만들고 이 기기에 남은 기록과 사진을 다시 올려요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
@@ -223,9 +268,9 @@ class _BackupScreenState extends State<BackupScreen> {
     final canLink = on && !s.paused;
     // 연결할 수 있는 계정: 세 회사 단추를 같은 크기·같은 줄 간격으로(예전엔 카카오는 목록 줄, Apple은 검은 알약, Google은 영어 그림 단추로 셋이 달랐다, 2026-11-16)
     final brands = <Widget>[
-      if (canLink && !s.account.kakao && s.providers.kakao) _BrandButton.kakao(onPress: _loggingIn ? null : () => _login('kakao')),
-      if (canLink && !s.account.apple && s.providers.apple) _BrandButton.apple(onPress: _loggingIn ? null : () => _login('apple')),
-      if (canLink && !s.account.google && s.providers.google) _BrandButton.google(onPress: _loggingIn ? null : () => _login('google')),
+      if (canLink && !s.account.kakao && s.providers.kakao) BrandButton.kakao(onPress: _loggingIn ? null : () => _login('kakao')),
+      if (canLink && !s.account.apple && s.providers.apple) BrandButton.apple(onPress: _loggingIn ? null : () => _login('apple')),
+      if (canLink && !s.account.google && s.providers.google) BrandButton.google(onPress: _loggingIn ? null : () => _login('google')),
     ];
     final linked = s.account.kakao || s.account.apple || s.account.google;
     return [
@@ -240,7 +285,7 @@ class _BackupScreenState extends State<BackupScreen> {
         if (on && s.account.kakao) ListItem(label: '카카오 계정 연결됨', sub: s.account.nickname.isNotEmpty ? '${s.account.nickname} · 다른 기기에서도 이어 봐요' : '다른 기기에서도 이어 봐요'),
         if (on && s.account.apple) const ListItem(label: 'Apple 계정 연결됨', sub: '다른 기기에서도 이어 봐요'),
         if (on && s.account.google) const ListItem(label: 'Google 계정 연결됨', sub: '다른 기기에서도 이어 봐요'),
-        if (on && s.paused && !s.deletionPending) ListItem(label: '새 계정으로 동기화', chevron: true, onPress: _loggingIn ? null : _resume),
+        if (on && s.paused && !s.deletionPending && !s.loginRequired) ListItem(label: '새 계정으로 동기화', chevron: true, onPress: _loggingIn ? null : _resume),
       ]),
       if (brands.isNotEmpty) ...[
         H2(linked ? '다른 계정도 연결' : '계정 연결'),
@@ -251,10 +296,12 @@ class _BackupScreenState extends State<BackupScreen> {
         for (final (i, b) in brands.indexed) Padding(padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s), child: b),
       ],
       // 지우는 줄은 로그인 단추 사이가 아니라 맨 아래에 따로 둔다(누르려던 단추 바로 옆에 빨간 삭제가 있었다)
-      if (on && (s.deletionPending || (s.providers.accountDeletion && !s.paused))) ...[
+      if (on && ((s.loginRequired && s.loggedIn) || s.deletionPending || (s.providers.accountDeletion && !s.paused))) ...[
         const SizedBox(height: Space.xl),
         ListGroup(children: [
-          ListItem(label: s.deletionPending ? '계정 삭제 다시 요청' : '서버 계정 삭제', danger: true, onPress: _loggingIn ? null : _removeAccount),
+          if (s.loginRequired && s.loggedIn && !s.deletionPending) ListItem(label: '로그아웃', sub: '이 폰의 기록을 지우고 로그인 화면으로', onPress: _loggingIn ? null : _logout),
+          if (s.deletionPending || (s.providers.accountDeletion && !s.paused))
+            ListItem(label: s.deletionPending ? '계정 삭제 다시 요청' : '서버 계정 삭제', danger: true, onPress: _loggingIn ? null : _removeAccount),
         ]),
       ],
     ];
@@ -270,76 +317,4 @@ class _BackupScreenState extends State<BackupScreen> {
           ..._syncSection(),
         ],
       );
-}
-
-/// 로그인 단추: 세 회사 모두 같은 틀(높이 54, 모서리 Shape.button, 가운데 로고+글자)에 각 회사 규칙의 색만 다르다.
-/// 카카오: 노랑 #FEE500·검은 말풍선·글자 85% 검정. Apple: 검정 바탕·흰 로고(HIG 사용자 정의 단추). Google: 흰 바탕·#747775 선·네 색 G(브랜딩 지침의 '계속하기' 문구)
-class _BrandButton extends StatefulWidget {
-  const _BrandButton({required this.label, required this.bg, required this.fg, required this.logo, required this.onPress, required this.border});
-
-  _BrandButton.kakao({required VoidCallback? onPress})
-      : this(label: '카카오로 계속하기', bg: const Color(0xFFFEE500), fg: const Color(0xD9000000), logo: SvgPicture.string(_kakaoSvg, width: 20, height: 20), border: null, onPress: onPress);
-
-  const _BrandButton.apple({required VoidCallback? onPress})
-      : this(label: 'Apple로 계속하기', bg: const Color(0xFF000000), fg: const Color(0xFFFFFFFF), logo: const Icon(Icons.apple, size: 22, color: Color(0xFFFFFFFF)), border: null, onPress: onPress);
-
-  _BrandButton.google({required VoidCallback? onPress})
-      : this(label: 'Google로 계속하기', bg: const Color(0xFFFFFFFF), fg: const Color(0xFF1F1F1F), border: const Color(0xFF747775), logo: SvgPicture.string(_googleSvg, width: 20, height: 20), onPress: onPress);
-
-  final String label;
-  final Color bg, fg;
-  final Color? border;
-  final Widget logo;
-  final VoidCallback? onPress;
-
-  static const _kakaoSvg =
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#000" d="M12 3.2C6.7 3.2 2.4 6.6 2.4 10.8c0 2.7 1.8 5.1 4.5 6.4l-.9 3.4c-.1.3.3.5.5.4l4-2.7c.5.1 1 .1 1.5.1 5.3 0 9.6-3.4 9.6-7.6S17.3 3.2 12 3.2z"/></svg>';
-  static const _googleSvg =
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
-
-  @override
-  State<_BrandButton> createState() => _BrandButtonState();
-}
-
-class _BrandButtonState extends State<_BrandButton> {
-  bool _down = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final off = widget.onPress == null;
-    // 눌림: 바탕 위에 옅은 검정을 얹는다(회사 색은 그대로 두고 어둡게만)
-    final bg = _down && !off ? Color.alphaBlend(const Color(0x14000000), widget.bg) : widget.bg;
-    return Semantics(
-      container: true,
-      button: true,
-      label: widget.label,
-      enabled: !off,
-      onTap: widget.onPress,
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: off ? null : (_) => setState(() => _down = true),
-        onTapCancel: off ? null : () => setState(() => _down = false),
-        onTapUp: off ? null : (_) => setState(() => _down = false),
-        onTap: widget.onPress,
-        child: Opacity(
-          opacity: off ? 0.45 : 1,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 54),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(Shape.button),
-              border: widget.border == null ? null : Border.all(color: widget.border!),
-            ),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              SizedBox(width: 22, height: 22, child: Center(child: widget.logo)),
-              const SizedBox(width: 10),
-              Flexible(child: WordText(widget.label, textAlign: TextAlign.center, style: AppType.button.copyWith(fontSize: 16, height: 22 / 16, color: widget.fg))),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
 }
