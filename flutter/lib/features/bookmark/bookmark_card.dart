@@ -165,13 +165,19 @@ class BookmarkCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [cssShadow(const Color.fromRGBO(60, 50, 45, 0.06), 0, 1, 2), cssShadow(const Color.fromRGBO(60, 50, 45, 0.05), 0, 3, 10)],
       ),
-      foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.line, width: hair)),
       child: Stack(clipBehavior: Clip.none, children: [
         Positioned.fill(child: BookmarkPaper(color: cardPaper, radius: 8, seed: '$seed-front')),
         Semantics(
           button: onOpen != null,
           label: onOpen != null ? '${data.text.isNotEmpty ? data.text : '사진 갈피'}, ${data.title}' : null,
           child: Pressable(onPress: onOpen, child: body),
+        ),
+        // 카드 테두리는 테이프 밑에(지금 앱은 테두리가 바탕 층이라 테이프가 덮는다). foregroundDecoration이면 테이프 위로 그어져
+        // 테이프를 붙인 게 아니라 선이 테이프를 뚫고 지나가 보였다(2026-11-16 사용자)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.line, width: hair))),
+          ),
         ),
         if (!photo)
           Positioned(
