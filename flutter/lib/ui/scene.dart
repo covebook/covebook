@@ -211,7 +211,9 @@ List<double> _wallCellToPx(Cam c, Affine px, BakeArea a) {
 /// 움푹 파인 책장 뒷벽 꼭지점 둥글기·번짐(지금 앱 BACK_CORNER_R·SOFT_W), 천장 번짐(ROOF_SOFT)
 final _backCornerR = mm(look.cornerMm);
 final _softW = mm(look.softMm);
-final _roofSoft = (box: <double>[frameX0, frameX1, -far, far], r: <double>[0, _softW]);
+/// 천장 양옆 번짐은 안쪽 모서리 곡면 반지름(coveMm)만큼: 천장(147)에서 옆벽 위 끝(158)으로 꺾임 없이 한 방향으로 넘어간다.
+/// 3mm면 화면에서 1~2px이라 모서리 이음새가 선으로 보였다. 두 면을 다 모서리 쪽으로 돌리면(26599f8) 만나는 곳이 가장 어두운 골이 되어 선이 남았다(2026-11-16 사용자)
+final _roofSoft = (box: <double>[frameX0, frameX1, -far, far], r: <double>[0, mm(look.coveMm)]);
 
 /// 판 윗면 번짐: 뒷벽·안쪽 면으로(나무와 벽이라 벽끼리 번짐의 절반 폭). 뒤 꼭지점은 둥글리지 않는다(지금 앱 PLANK_SOFT)
 final _plankSoft = (box: <double>[frameX0, frameX1, -far, shelfDepth * look.eyeY / look.dist], r: <double>[1, _softW / 2]);

@@ -738,7 +738,10 @@ vec4 _tex2(vec2 q) {
     vec2 c2 = vec2(softBox.x + softBox.y, softBox.z + softBox.w) * 0.5;
     vec2 q = abs(u - c2) - (vec2(softBox.y - softBox.x, softBox.w - softBox.z) * 0.5 - vec2(softR.x));
     float d = softR.x - length(max(q, vec2(0.0))) - min(max(q.x, q.y), 0.0);
-    return max(front, smoothstep(0.0, softR.y, d));
+    // 천장 양옆 번짐 폭은 앞에서 넓고(softR.y) 뒤로 갈수록 좁다(Flutter 2026-11-16 사용자 '이음새에 선이 남으면 안 된다'):
+    // 천장과 옆벽 위 끝의 밝기 차는 앞쪽에서 크고(147 · 158) 뒷벽 쪽에서 거의 없다. 뒤까지 넓게 비우면 세 면 꼭지점이 밝게 비쳤다
+    float sw = tN.y < -0.5 ? mix(0.5, softR.y, clamp((DEPTH - P.z) / (DEPTH + FFRONT), 0.0, 1.0)) : softR.y;
+    return max(front, smoothstep(0.0, sw, d));
   }
   // 평면 위 점 Q가 그려지는 캔버스 자리: 사상 P = (O + p.x Ux + p.y Vy) / w의 역(면 안 두 축 Au, Av로 푼다)
   vec2 pxOf(vec3 Q, vec3 Au, vec3 Av) {
@@ -756,10 +759,11 @@ vec4 _tex2(vec2 q) {
   vec3 coveOf(vec3 P) {
     vec3 c = vec3(0.0);
     if (env.x < 1.5 || false || P.z < -56.9250000 || (abs(tN.z) > 0.5 && P.z < -52.8750000)) return c;
-    // 안쪽 면 ↔ 위 면(천장·위 판 아랫면)은 두 면이 다 45°씩 돌아 모서리에서 법선이 같다(Flutter 2026-11-16 사용자 '위 모서리 이음새가 부자연스럽다':
-    // 안쪽 면만 25° 돌고 천장은 돌지 않아 앞쪽 모서리에서 천장 147 · 안쪽 면 158로 끊겼다). 오목면은 더 받지 않으므로(아래 gain) 돌아도 밝아지지 않는다
-    if (abs(tN.y) < 0.5) c.y += coveB(P.y - env.y, 0.436332313) - coveB(env.z - P.y, abs(tN.x) > 0.5 ? 0.785398163 : 0.436332313);
-    if (abs(tN.x) < 0.5) c.x += coveB(P.x - 0.00000000, 0.785398163) - coveB(366.000000 - P.x, 0.785398163);
+    // 안쪽 면의 위 면(천장) 쪽 끝 각은 앞 45° → 뒤 25°(light-model coveNormal과 같다, Flutter 2026-11-16 사용자 '이음새에 선이 남으면 안 된다'):
+    // 안쪽 면은 앞쪽일수록 밝아(방이 더 보인다) 25°로는 위 끝이 천장(147)보다 밝은 158에서 끝나 대각선 경계가 남았다. 천장은 돌리지 않는다(돌리면 두 면이 다 어두워져 만나는 곳이 골이 된다)
+    float coveTop = abs(tN.x) > 0.5 ? mix(0.785398163, 0.436332313, clamp((P.z + FFRONT) / (DEPTH + FFRONT), 0.0, 1.0)) : 0.436332313;
+    if (abs(tN.y) < 0.5) c.y += coveB(P.y - env.y, 0.436332313) - coveB(env.z - P.y, coveTop);
+    if (abs(tN.x) < 0.5 && tN.y > -0.5) c.x += coveB(P.x - 0.00000000, 0.785398163) - coveB(366.000000 - P.x, 0.785398163);
     return c;
   }
   
