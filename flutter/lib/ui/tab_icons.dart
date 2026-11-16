@@ -15,10 +15,12 @@ String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(
 ({double width, double height, String viewBox}) _boxOf(double size, double w, double cy, [double k = 1]) =>
     (width: size * w * k / _box, height: size, viewBox: '0 ${cy - _box / k / 2} $w ${_box / k}');
 
+// 꾸밈 그림: 화면 읽기에서 빠진다(탭이 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F11). 이름은 탭 버튼이 준다
 Widget _svg(String body, ({double width, double height, String viewBox}) b) => SvgPicture.string(
       '<svg xmlns="http://www.w3.org/2000/svg" width="${b.width}" height="${b.height}" viewBox="${b.viewBox}">$body</svg>',
       width: b.width,
       height: b.height,
+      excludeFromSemantics: true,
     );
 
 /// 책장: 같은 크기의 책 세 권, 세 번째는 앞 책에 기대 있다(−18°)

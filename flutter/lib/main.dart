@@ -1,6 +1,7 @@
 // 책장한켠(Flutter). 지금 앱(React Native, ../app)을 옮기는 중이다.
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
 
 import 'domain/reference_home.dart';
@@ -16,6 +17,7 @@ import 'features/reading/mini_timer.dart';
 import 'features/home/home_screen.dart' show bootAt, homeSnapshotFile;
 import 'ui/bake.dart';
 import 'store/mini_timer_store.dart';
+import 'ui/kit.dart' show KeyboardRefocusGuard, Shape, Space;
 import 'ui/theme.dart';
 
 /// 시험 빌드 전용 프록시(예: --dart-define=QA_PROXY=127.0.0.1:8899 + adb reverse): 인터넷이 끊긴 에뮬레이터에서 표지·책 검색을 호스트로 보낸다. 출시 빌드는 비어 있다
@@ -54,10 +56,69 @@ Future<void> main() async {
 
 final appNavigator = GlobalKey<NavigatorState>();
 final _miniTimerObserver = MiniTimerObserver();
+final _refocusGuard = KeyboardRefocusGuard();
+
+/// 머티리얼 기본 문구 한국어(앱은 한국어만): 화면 읽기가 시트 뒤 덮개를 영어 'Scrim', 시트를 'Dialog'로 읽었다(2026-11-16 QA 영숙 F10).
+/// 글자 고르기 메뉴(복사·붙여넣기)도 한국어로
+class KoMaterialLocalizations extends DefaultMaterialLocalizations {
+  const KoMaterialLocalizations();
+  static const LocalizationsDelegate<MaterialLocalizations> delegate = _KoMaterialDelegate();
+
+  @override
+  String get scrimLabel => '닫기';
+  @override
+  String scrimOnTapHint(String modalRouteContentName) => '$modalRouteContentName 닫기';
+  @override
+  String get bottomSheetLabel => '아래 시트';
+  @override
+  String get dialogLabel => '대화상자';
+  @override
+  String get alertDialogLabel => '알림';
+  @override
+  String get modalBarrierDismissLabel => '닫기';
+  @override
+  String get backButtonTooltip => '뒤로';
+  @override
+  String get closeButtonTooltip => '닫기';
+  @override
+  String get closeButtonLabel => '닫기';
+  @override
+  String get moreButtonTooltip => '더 보기';
+  @override
+  String get clearButtonTooltip => '지우기';
+  @override
+  String get okButtonLabel => '확인';
+  @override
+  String get cancelButtonLabel => '취소';
+  @override
+  String get copyButtonLabel => '복사';
+  @override
+  String get cutButtonLabel => '잘라내기';
+  @override
+  String get pasteButtonLabel => '붙여넣기';
+  @override
+  String get selectAllButtonLabel => '모두 선택';
+  @override
+  String get lookUpButtonLabel => '찾아보기';
+  @override
+  String get searchWebButtonLabel => '웹 검색';
+  @override
+  String get shareButtonLabel => '공유';
+}
+
+class _KoMaterialDelegate extends LocalizationsDelegate<MaterialLocalizations> {
+  const _KoMaterialDelegate();
+  @override
+  bool isSupported(Locale locale) => true;
+  @override
+  Future<MaterialLocalizations> load(Locale locale) => SynchronousFuture(const KoMaterialLocalizations());
+  @override
+  bool shouldReload(_KoMaterialDelegate old) => false;
+}
 
 // 글자 자간: Material 3 기본 글자(bodyMedium 0.25 등)를 Text가 물려받아 모든 글자가 지금 앱보다 약 1.4% 넓었다(줄바꿈이 달라짐).
 // 지금 앱(RN)은 자간을 따로 주지 않으면 0이다 → 테마 글자 전부 0
-final _theme = (() {
+final appTheme = (() {
   final base = ThemeData(
     scaffoldBackgroundColor: AppColors.bg,
     fontFamily: AppFonts.ui,
@@ -73,6 +134,13 @@ final _theme = (() {
       bodyLarge: flat(t.bodyLarge), bodyMedium: flat(t.bodyMedium), bodySmall: flat(t.bodySmall),
       labelLarge: flat(t.labelLarge), labelMedium: flat(t.labelMedium), labelSmall: flat(t.labelSmall),
     ),
+    // 알림 줄(스낵바)은 떠 있는 탭 바 위에 띄운다: 화면 바닥에 붙으면 탭 바를 덮어 그동안 탭을 누를 수 없었다(2026-11-16 QA 현우 F1).
+    // 되돌리기가 달린 알림이 정한 시간 뒤 사라지게 하는 것은 테마로 못 한다(Flutter 3.47: action이 있으면 persist 기본 true) → 부르는 곳에서 persist: false
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      insetPadding: const EdgeInsets.fromLTRB(TabBarStyle.side, Space.xs, TabBarStyle.side, TabBarStyle.navHeight + Space.s),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Shape.button)),
+    ),
   );
 })();
 
@@ -83,9 +151,11 @@ class ChaekjangApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         title: '책장한켠',
         debugShowCheckedModeBanner: false,
-        theme: _theme,
+        theme: appTheme,
+        localizationsDelegates: const [KoMaterialLocalizations.delegate],
         navigatorKey: appNavigator,
-        navigatorObservers: [_miniTimerObserver],
+        // _refocusGuard: 돌아온 화면 입력칸이 초점을 되찾아 키보드가 저절로 뜨지 않게(ui/kit.dart, 2026-11-16 QA 영숙 F14)
+        navigatorObservers: [_miniTimerObserver, _refocusGuard],
         home: const AppShell(),
         // 공통 작은 타이머: 모든 화면 위에 한 겹(읽기 화면·읽기 탭에서는 숨는다)
         builder: (context, child) {

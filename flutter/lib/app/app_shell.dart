@@ -253,6 +253,12 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
+    // 키보드가 열려 있으면 탭 바를 숨긴다: 탭 화면은 Scaffold가 키보드 위로 줄이므로 탭 바가 키보드 바로 위에 떠서 입력하는 내용을 가렸다(2026-11-16 QA 키보드 F1 묶음)
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
+    void tap(int i) {
+      if (!AppNav.instance.tabsBlocked) _select(i);
+    }
+
     final shell = Scaffold(
       backgroundColor: AppColors.bg,
       body: Stack(
@@ -263,7 +269,7 @@ class _AppShellState extends State<AppShell> {
           ),
           ValueListenableBuilder<bool>(
             valueListenable: tabBarHidden,
-            builder: (context, hidden, _) => hidden ? const SizedBox.shrink() : Positioned(
+            builder: (context, hidden, _) => hidden || keyboard ? const SizedBox.shrink() : Positioned(
             left: TabBarStyle.side,
             right: TabBarStyle.side,
             bottom: bottom + TabBarStyle.gap,
@@ -278,17 +284,19 @@ class _AppShellState extends State<AppShell> {
                 padding: const EdgeInsets.symmetric(horizontal: TabBarStyle.paddingX),
                 child: Row(
                   children: [
+                    // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 탭 아래 글자는 두지 않는다(메뉴 개편: 아이콘 중심)
                     for (var i = 0; i < _tabs.length; i++)
                       Expanded(
                         child: Semantics(
+                          container: true,
                           button: true,
                           selected: i == _index,
                           label: _tabs[i].label,
+                          onTap: () => tap(i),
+                          excludeSemantics: true,
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onTap: () {
-                              if (!AppNav.instance.tabsBlocked) _select(i);
-                            },
+                            onTap: () => tap(i),
                             child: Center(child: _tabs[i].icon(i == _index ? AppColors.tabInk : AppColors.tabInkSoft, i == _index)),
                           ),
                         ),

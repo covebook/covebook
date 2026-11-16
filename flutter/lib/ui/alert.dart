@@ -32,14 +32,17 @@ Future<void> appAlert(BuildContext context, String title, [String? message, List
     pageBuilder: (ctx, _, _) {
       final actions = list.where((b) => b != cancel).toList();
       Widget btn(AlertButton b, String kind) => Btn(label: b.text, kind: kind, onPress: () => Navigator.pop(ctx, b));
+      // 나란한 두 버튼은 높이를 같게: 큰 글씨에서 한쪽 이름만 두 줄이 되어도 버튼 높이가 어긋나지 않게(2026-11-16 QA 영숙 F6)
       final body = list.length <= 2 && !stacked
-          ? Row(children: [
-              if (cancel != null) Expanded(child: btn(cancel, 'secondary')),
-              for (final (i, b) in actions.indexed) ...[
-                if (cancel != null || i > 0) const SizedBox(width: Space.s),
-                Expanded(child: btn(b, b.style == AlertStyle.destructive ? 'danger' : i == 0 && cancel == null && actions.length > 1 ? 'secondary' : 'primary')),
-              ],
-            ])
+          ? IntrinsicHeight(
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                if (cancel != null) Expanded(child: btn(cancel, 'secondary')),
+                for (final (i, b) in actions.indexed) ...[
+                  if (cancel != null || i > 0) const SizedBox(width: Space.s),
+                  Expanded(child: btn(b, b.style == AlertStyle.destructive ? 'danger' : i == 0 && cancel == null && actions.length > 1 ? 'secondary' : 'primary')),
+                ],
+              ]),
+            )
           : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               for (final (i, b) in actions.indexed) ...[
                 if (i > 0) const SizedBox(height: Space.s),

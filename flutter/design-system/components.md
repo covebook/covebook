@@ -7,7 +7,7 @@
 | 위젯 | 위치 | 하는 일 | 변형 | 상태 |
 |---|---|---|---|---|
 | `Btn` | lib/ui/kit.dart:332 | 버튼 | `kind`: primary(갈색 채움·흰 글자, 화면에 하나) · secondary(흰 바탕+회색 선) · danger(흰 바탕+선, 빨간 글자) · ghost(바탕·선 없이 글자만). `size`: l 60 · m 54 · s 44. `icon` 앞 아이콘 | `disabled`(회색), `busy`(돌림 표시, 누르기 막음) |
-| `IconBtn` | kit.dart:411 | 아이콘 단추(누르는 자리 44) | `circle`(둥근 바탕) | `disabled` |
+| `IconBtn` | kit.dart | 아이콘 단추(누르는 자리 48) | `circle`(둥근 바탕) | `disabled` |
 | `TextLink` | kit.dart:1551 | 글자 버튼(밑줄 없음) | 기본 굵은 갈색 = 이어서 할 일, `soft` 회색 = 조심스러운 일, `start` 왼쪽 정렬 | `disabled` |
 | `Pressable` | kit.dart:57 | 바탕 없는 누를 것(글자·아이콘·목록 줄) | `pressedOpacity`(기본 0.55) | `disabled` |
 | `AppChip` | kit.dart:448 | 칩(옅은 회색 알약) | `color`면 앞에 색 점 | `on`(갈색 채움·흰 글자) |
@@ -94,4 +94,4 @@
 - 흰 화면 안에 회색 상자를 두지 않는다(입력칸은 예외). 글자 버튼에 밑줄을 긋지 않는다.
 - 주요 버튼(갈색 채움)은 화면에 하나.
 - 아이콘·글자 버튼의 눌림은 투명도 0.55로 통일한다.
-- 누르는 자리는 44dp 이상.
+- 누르는 자리는 48dp 이상(`Space.hit`, 2026-11-16 QA).
