@@ -750,6 +750,9 @@ vec4 _grid(vec2 q) {
   // 안쪽 모서리 그늘(light-model jointShade): 벽·틀·판이 맞닿는 모서리 쪽 어두운 띠가 가리는 몫
   float jointF(float h, float H, float K) {
     float d = max(0.0, h);
+    // 곡면 안에서는 모서리에서 기울기 0(light-model jointF): 날카로운 모서리 식이면 두 면 그늘이 V자로 꺾여 모서리마다 어두운 줄이 남는다
+    float sR = d / 9.15000000;
+    if (true && sR < 1.0) d = 9.15000000 * sR * sR * (2.0 - sR);
     return 0.5 * K * (1.0 - d / sqrt(d * d + H * H));
   }
   float jointXs(vec3 P, float w) {

@@ -42,3 +42,12 @@ PATH=$NODE_BIN:$PATH npx jest --silent=false \
 echo "== GLSL 로 바꾸기"
 cd "$ROOT"
 PATH=$FLUTTER_BIN:$PATH dart run tool/sksl_to_glsl.dart build/sksl shaders
+
+echo "== 굽기 셰이더 지문(굽기 캐시 열쇠)"
+# 굽기 캐시는 같은 열쇠의 그림을 다시 쓴다: 굽기 셰이더가 바뀌면 열쇠도 바뀌어야 업데이트한 폰이 옛 그림을 쓰지 않는다(2026-11-17)
+H=$(sha1sum shaders/bake.frag | cut -c1-16)
+cat > lib/gen/bake_shader_hash.g.dart <<DART
+// 만든 파일(tool/gen_shaders.sh): shaders/bake.frag의 sha1 앞 16자. 손으로 고치지 않는다
+const bakeShaderHash = '$H';
+DART
+echo "[bake] $H"

@@ -13,6 +13,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/shelf_row.dart';
+import '../gen/bake_shader_hash.g.dart';
 import '../gen/light_uniforms.g.dart' as cal;
 import '../services/cover_cache.dart' show decodeImageInLine;
 
@@ -31,8 +32,9 @@ Future<void>? _ready;
 /// 굽기 결과를 정하는 값 전부 → 짧은 이름
 String bakeKey(RowCase r) {
   final b = StringBuffer();
-  // 셰이더가 바뀌면 옛 그림을 쓰면 안 된다(빌드마다 바뀌는 값을 넣는다)
-  b.write('v1|');
+  // 셰이더가 바뀌면 옛 그림을 쓰면 안 된다: 굽기 셰이더 지문을 넣는다(tool/gen_shaders.sh가 만든다).
+  // 예전에는 'v1' 고정이라 굽기 셰이더를 고쳐도 업데이트한 폰이 옛 그림을 계속 썼다(2026-11-17 모서리 그늘을 고쳐도 화면이 그대로였다)
+  b.write('v1|$bakeShaderHash|');
   b.write('${r.env.u.join(',')}|');
   b.write('${r.bx.list.length}:');
   for (final v in r.bx.v) {
