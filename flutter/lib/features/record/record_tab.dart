@@ -189,8 +189,7 @@ class _RecordTabState extends State<RecordTab> {
           ),
           Container(height: 1 / MediaQuery.devicePixelRatioOf(ctx), color: AppColors.line),
           const SizedBox(height: Space.l + 4),
-          Semantics(header: true, child: Text('유형', style: AppType.rowStrong)),
-          const SizedBox(height: Space.m),
+          const SheetLabel('유형'),
           Row(children: [
             for (final (i, k) in MarkKind.values.indexed) ...[
               if (i > 0) const SizedBox(width: Space.s),
@@ -199,7 +198,7 @@ class _RecordTabState extends State<RecordTab> {
           ]),
           const SizedBox(height: Space.l),
           // 아껴둔 갈피만(예전 머리줄 아이콘)
-          ListItem(label: '아껴둔 갈피만', right: Toggle(label: '아껴둔 갈피만', value: saved, onChange: (v) => set(() => saved = v))),
+          FilterToggleRow(label: '아껴둔 갈피만', value: saved, onChange: (v) => set(() => saved = v)),
           const SizedBox(height: Space.l),
           Btn(label: '적용', onPress: () {
             Navigator.pop(ctx);

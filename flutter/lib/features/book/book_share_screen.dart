@@ -282,7 +282,7 @@ class _CheckLine extends StatelessWidget {
                   child: on ? const Center(child: LucideIcon('Check', size: 16, color: AppColors.bg, stroke: 2.6)) : null,
                 ),
                 const SizedBox(width: Space.m),
-                Flexible(child: WordText(label, style: AppType.body.copyWith(fontSize: 16, height: 22 / 16))),
+                Flexible(child: WordText(label, style: AppType.bodySmall)),
               ]),
             ),
           ),

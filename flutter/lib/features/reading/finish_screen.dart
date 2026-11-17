@@ -32,7 +32,6 @@ String hm(String iso) {
   return '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
 }
 
-const _tabular = [FontFeature.tabularFigures()];
 
 class FinishScreen extends StatefulWidget {
   const FinishScreen({super.key});
@@ -206,7 +205,7 @@ class _FinishScreenState extends State<FinishScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: Space.s),
                 child: Text(pending.durationMs < 60000 ? formatDurationPrecise(pending.durationMs) : formatDuration(pending.durationMs),
-                    style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 36, height: 44 / 36, color: AppColors.ink, fontFeatures: _tabular)),
+                    style: AppType.clock),
               ),
               Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text('${hm(pending.startedAt)} ~ ${hm(pending.endedAt)} · 일시정지 시간 제외', style: AppType.caption)),
             ]),
@@ -314,7 +313,7 @@ Future<void> showSavedSheet(BuildContext context, {required String? bookId, requ
                           const SizedBox(width: Space.l),
                           Flexible(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                              Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.heading.copyWith(fontSize: 19, height: 26 / 19)),
+                              Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
                               if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
                             ]),
                           ),
@@ -322,7 +321,7 @@ Future<void> showSavedSheet(BuildContext context, {required String? bookId, requ
                       else
                         Text('책 없이 읽은 시간', textAlign: TextAlign.center, style: AppType.sub),
                       const SizedBox(height: Space.l + 4),
-                      WordText(done, textAlign: TextAlign.center, style: AppType.heading.copyWith(fontSize: 22, height: 30 / 22)),
+                      WordText(done, textAlign: TextAlign.center, style: AppType.heading),
                       const SizedBox(height: Space.l + 4),
                       Btn(label: '확인', onPress: () => Navigator.pop(ctx)),
                     ]),

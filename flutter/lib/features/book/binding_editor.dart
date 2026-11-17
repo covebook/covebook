@@ -135,7 +135,7 @@ class _BindingEditorState extends State<BindingEditor> {
                             : null,
                         child: Text(
                           label,
-                          style: AppType.row.copyWith(fontSize: 15, color: _tab == id ? AppColors.ink : AppColors.inkSoft, fontFamily: _tab == id ? AppFonts.uiBold : AppFonts.ui),
+                          style: AppType.caption.copyWith(color: _tab == id ? AppColors.ink : AppColors.inkSoft, fontFamily: _tab == id ? AppFonts.uiBold : AppFonts.ui),
                         ),
                       ),
                     ),

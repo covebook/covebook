@@ -193,7 +193,7 @@ class _MiniTimerState extends State<MiniTimer> {
                         fit: BoxFit.scaleDown,
                         child: Text(label,
                             maxLines: 1,
-                            style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+                            style: AppType.labelStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                       ),
                     ),
                   ),

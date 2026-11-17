@@ -254,7 +254,7 @@ class ComposeScreen extends StatelessWidget {
                       child: Row(children: [
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(ed?.title ?? '제목 없음', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 17, height: 24 / 17, color: AppColors.ink)),
+                            Text(ed?.title ?? '제목 없음', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
                             Padding(padding: const EdgeInsets.only(top: 2), child: Text(meta, style: AppType.caption)),
                           ]),
                         ),
@@ -642,7 +642,7 @@ class _PostScreenState extends State<PostScreen> {
                             Flexible(
                               child: GestureDetector(
                                 onTap: () => openCommunityUser(context, c.userId),
-                                child: Text(c.nickname, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, color: AppColors.ink)),
+                                child: Text(c.nickname, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.labelStrong),
                               ),
                             ),
                             const SizedBox(width: 6),

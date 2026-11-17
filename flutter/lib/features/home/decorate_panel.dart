@@ -87,7 +87,7 @@ class DecoratePanel extends StatelessWidget {
       keepAll(title ?? '꾸밀 책을 눌러 고르세요'),
       maxLines: big ? 2 : 1,
       overflow: TextOverflow.ellipsis,
-      style: title != null ? AppType.title.copyWith(fontSize: 23, height: 30 / 23) : AppType.row.copyWith(color: AppColors.inkSoft),
+      style: title != null ? AppType.pageTitle : AppType.row.copyWith(color: AppColors.inkSoft),
     );
     final actions = <Widget>[
       // 선반·벽지(스토어): 2026-11-16 메뉴 구조 개편으로 책장 머리에서 빼고 꾸미기 안에서 연다
@@ -99,7 +99,7 @@ class DecoratePanel extends StatelessWidget {
           excludeSemantics: true,
           child: Pressable(
             onPress: onSkin,
-            child: const SizedBox(height: 40, child: Center(child: Text('선반·벽지', softWrap: false, style: TextStyle(fontFamily: AppFonts.ui, fontSize: 15.5, color: AppColors.inkSoft)))),
+            child: SizedBox(height: 40, child: Center(child: Text('선반·벽지', softWrap: false, style: AppType.caption))),
           ),
         ),
         const SizedBox(width: 14),
@@ -123,7 +123,7 @@ class DecoratePanel extends StatelessWidget {
         excludeSemantics: true,
         child: Pressable(
           onPress: onDone,
-          child: const SizedBox(height: 40, child: Center(child: Text('완료', softWrap: false, style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 16.5, color: AppColors.ink)))),
+          child: SizedBox(height: 40, child: Center(child: Text('완료', softWrap: false, style: AppType.buttonSmall))),
         ),
       ),
     ];
@@ -276,7 +276,7 @@ class _PoseTab extends StatelessWidget {
               const SizedBox(height: 2),
               CustomPaint(size: const Size(30, 30), painter: _PoseIcon(pose, color)),
               const SizedBox(height: 6),
-              Text(_poseNames[pose]!, style: AppType.row.copyWith(fontSize: 16, height: 22 / 16, color: on ? AppColors.ink : AppColors.inkSoft, fontFamily: on ? AppFonts.uiBold : AppFonts.ui)),
+              Text(_poseNames[pose]!, style: (on ? AppType.labelStrong : AppType.bodySmall).copyWith(color: on ? AppColors.ink : AppColors.inkSoft)),
               const SizedBox(height: 9),
               Container(width: 52, height: 2.5, decoration: BoxDecoration(color: on ? AppColors.accent : Colors.transparent, borderRadius: BorderRadius.circular(2))),
             ]),
@@ -341,7 +341,7 @@ class _LeanChoice extends StatelessWidget {
                 children: [
                   CustomPaint(size: const Size(26, 26), painter: _LeanIcon(dir)),
                   const SizedBox(width: 6),
-                  Text(_leanNames[dir]!, softWrap: false, style: AppType.caption.copyWith(fontSize: 13.5, color: AppColors.ink)),
+                  Text(_leanNames[dir]!, softWrap: false, style: AppType.micro.copyWith(color: AppColors.ink)),
                 ],
               ),
             ),
@@ -376,7 +376,7 @@ class _MoveChoice extends StatelessWidget {
             decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: Border.all(color: AppColors.line)),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               if (dir < 0) const LucideIcon('ChevronLeft', size: 20),
-              Flexible(child: Text(keepAll(name), textAlign: TextAlign.center, style: AppType.caption.copyWith(fontSize: 13.5, color: AppColors.ink))),
+              Flexible(child: Text(keepAll(name), textAlign: TextAlign.center, style: AppType.micro.copyWith(color: AppColors.ink))),
               if (dir > 0) const LucideIcon('ChevronRight', size: 20),
             ]),
           ),

@@ -83,7 +83,7 @@ class PostCard extends StatelessWidget {
     final p = post;
     final facts = postFacts(p.durationMs, p.pagesRead);
     final bookMeta = [if (p.bookAuthor != null && p.bookAuthor!.isNotEmpty) p.bookAuthor!, if (facts.isNotEmpty) facts].join(' · ');
-    const meta = TextStyle(fontFamily: AppFonts.ui, fontSize: 13, height: 18 / 13, color: AppColors.inkSoft);
+    final meta = AppType.micro;
     return Semantics(
       button: onOpen != null,
       label: '${p.nickname}님의 ${p.bookTitle} 독서 기록',
@@ -106,11 +106,11 @@ class PostCard extends StatelessWidget {
                         Flexible(
                           child: GestureDetector(
                             onTap: onAuthor,
-                            child: Text(p.nickname, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, height: 21 / 15, color: AppColors.ink)),
+                            child: Text(p.nickname, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.labelStrong),
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(ago(p.createdAt), style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14, color: AppColors.inkSoft)),
+                        Text(ago(p.createdAt), style: AppType.micro),
                       ]),
                     ),
                     if (onMore != null) MoreDots(label: '더보기', onPress: onMore!),
@@ -119,7 +119,7 @@ class PostCard extends StatelessWidget {
                 if (p.body != null && p.body!.isNotEmpty)
                   Padding(
                     padding: EdgeInsets.only(top: full ? 6 : 4),
-                    child: Text(p.body!, maxLines: full ? null : 6, overflow: full ? null : TextOverflow.ellipsis, style: TextStyle(fontFamily: AppFonts.ui, fontSize: full ? 17 : 16, height: full ? 26 / 17 : 24 / 16, color: AppColors.ink)),
+                    child: Text(p.body!, maxLines: full ? null : 6, overflow: full ? null : TextOverflow.ellipsis, style: full ? AppType.body : AppType.bodySmall),
                   ),
                 // 갈피 문장: 왼쪽 세로줄 인용(명조). 게시물 안에 상자를 겹치지 않는다
                 if (p.quote != null && p.quote!.isNotEmpty)
@@ -128,7 +128,7 @@ class PostCard extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 12, top: 2, bottom: 2),
                     decoration: const BoxDecoration(border: Border(left: BorderSide(color: AppColors.track, width: 3))),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(p.quote!, maxLines: full ? null : 4, overflow: full ? null : TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.serif, fontSize: 15, height: 24 / 15, color: AppColors.ink)),
+                      Text(p.quote!, maxLines: full ? null : 4, overflow: full ? null : TextOverflow.ellipsis, style: AppType.quote),
                       if (p.quotePage != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text('${p.quotePage}쪽', style: meta)),
                     ]),
                   ),
@@ -145,7 +145,7 @@ class PostCard extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(p.bookTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, height: 21 / 15, color: AppColors.ink)),
+                          Text(p.bookTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.labelStrong),
                           if (bookMeta.isNotEmpty) Text(bookMeta, maxLines: 1, overflow: TextOverflow.ellipsis, style: meta),
                         ]),
                       ),
@@ -168,7 +168,7 @@ class PostCard extends StatelessWidget {
                           constraints: const BoxConstraints(minHeight: 32, minWidth: 32),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             LucideIcon('Heart', size: 20, color: p.liked ? AppColors.danger : AppColors.inkSoft, fill: p.liked ? AppColors.danger : null),
-                            if (p.likes > 0) Padding(padding: const EdgeInsets.only(left: 4), child: Text('${p.likes}', style: TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14, color: p.liked ? AppColors.danger : AppColors.inkSoft))),
+                            if (p.likes > 0) Padding(padding: const EdgeInsets.only(left: 4), child: Text('${p.likes}', style: AppType.micro.copyWith(color: p.liked ? AppColors.danger : AppColors.inkSoft))),
                           ]),
                         ),
                       ),
@@ -179,7 +179,7 @@ class PostCard extends StatelessWidget {
                       excludeSemantics: true,
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         const LucideIcon('MessageCircle', size: 20, color: AppColors.inkSoft),
-                        if (p.comments > 0) Padding(padding: const EdgeInsets.only(left: 4), child: Text('${p.comments}', style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14, color: AppColors.inkSoft))),
+                        if (p.comments > 0) Padding(padding: const EdgeInsets.only(left: 4), child: Text('${p.comments}', style: AppType.micro)),
                       ]),
                     ),
                   ]),

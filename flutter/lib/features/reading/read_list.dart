@@ -356,7 +356,7 @@ class _ReadListState extends State<ReadList> {
                 WordText(titleOf(featured), maxLines: 2, style: AppType.heading),
                 if (authorOf(featured).isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(authorOf(featured), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
                 const SizedBox(height: Space.l),
-                Text(fActive && fMs < 60000 ? hms(fMs) : formatDuration(fMs), textAlign: TextAlign.right, style: AppType.rowStrong.copyWith(fontSize: 20, fontFeatures: _tabular)),
+                Text(fActive && fMs < 60000 ? hms(fMs) : formatDuration(fMs), textAlign: TextAlign.right, style: AppType.section.copyWith(fontFeatures: _tabular)),
                 const SizedBox(height: Space.s),
                 Btn(label: fLabel, size: 's', icon: const PlayIcon(size: 17, color: AppColors.onAccent), onPress: () => fActive ? (running ? _openScene() : _begin(featured)) : _begin(featured)),
               ]),

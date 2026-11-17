@@ -22,6 +22,12 @@ abstract final class Space {
   static const xs = 4.0, s = 8.0, m = 12.0, l = 16.0, xl = 28.0, xxl = 40.0;
   static const row = 56.0, touch = 44.0;
 
+  /// 한 화면 안 구역 사이(책 정보의 독서 기록 · 읽은 기간 · 남긴 갈피, 통계 그래프 사이). 같은 종류 구역은 이 간격만 쓴다(2026-11-18)
+  static const block = 48.0;
+
+  /// 촘촘한 정보 줄 높이(내 기록의 시간대 · 읽은 시간 줄)
+  static const dense = 32.0;
+
   /// 누르는 자리 최소(안드로이드 접근성 기준 48). 겉모양은 그대로 두고 누르는 자리만 넓힐 때(2026-11-16 QA 영숙 F12)
   static const hit = 48.0;
 }
@@ -57,6 +63,9 @@ class WordText extends Text {
 /// 모양: 조작 요소 10, 칩 알약, 시트 20, 확인창 18
 abstract final class Shape {
   static const button = 10.0, input = 10.0, sheet = 20.0, dialog = 18.0, tag = 6.0;
+
+  /// 테두리 상자(읽은 기간 카드 · 통계 평균 카드)
+  static const card = 12.0;
   static const floatShadow = BoxShadow(color: Color(0x1F191F28), offset: Offset(0, 4), blurRadius: 10);
 }
 
@@ -458,7 +467,7 @@ class _BtnState extends State<Btn> {
                         Flexible(
                           child: WordText(widget.label,
                               textAlign: TextAlign.center,
-                              style: (small ? AppType.button.copyWith(fontSize: 16, height: 22 / 16) : AppType.button).copyWith(color: ink)),
+                              style: (small ? AppType.buttonSmall : AppType.button).copyWith(color: ink)),
                         ),
                       ],
                     ),
@@ -555,7 +564,7 @@ class _ChipState extends State<AppChip> {
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 230),
                 child: Text(widget.label,
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(fontSize: 15, color: widget.on ? AppColors.onAccent : AppColors.ink)),
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(color: widget.on ? AppColors.onAccent : AppColors.ink)),
               ),
             ],
           ),
@@ -713,7 +722,7 @@ Color _hexColor(String hex) => Color(0xFF000000 | int.parse(hex.replaceAll('#', 
 class ListItem extends StatelessWidget {
   const ListItem({super.key, required this.label, this.sub, this.value, this.onPress, this.danger = false, this.chevron = false, this.right, this.icon, this.selected, this.tight = false});
 
-  /// 줄 높이 50(내 정보 시안, 2026-11-17): 위아래 12
+  /// 예전 이름(지금은 모든 줄이 50). 쓰지 않아도 된다
   final bool tight;
   final String label;
   final String? sub;
@@ -743,13 +752,14 @@ class ListItem extends StatelessWidget {
       child: Pressable(
         onPress: tap,
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: tight ? Space.hit : Space.row),
+          // 목록 줄은 모두 높이 50(위아래 12, 2026-11-17 내 정보 시안을 앱 전체 목록 줄 기준으로)
+          constraints: const BoxConstraints(minHeight: Space.hit),
           child: Row(
             children: [
               if (icon != null) SizedBox(width: 32, child: Align(alignment: Alignment.centerLeft, child: ExcludeSemantics(child: icon))),
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(top: sub != null ? 18 : (tight ? 12 : 16), bottom: sub != null ? 18 : (tight ? 12 : 16), right: right != null || value != null || chevron ? 12 : 0),
+                  padding: EdgeInsets.only(top: sub != null ? 14 : 12, bottom: sub != null ? 14 : 12, right: right != null || value != null || chevron ? 12 : 0),
                   child: ExcludeSemantics(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,7 +776,7 @@ class ListItem extends StatelessWidget {
                   constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.55),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: ExcludeSemantics(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub.copyWith(fontSize: tight ? 16 : 15))),
+                    child: ExcludeSemantics(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub)),
                   ),
                 ),
               ?right,
@@ -826,10 +836,8 @@ class Segmented<T> extends StatelessWidget {
                               : null,
                           child: Text(label,
                               maxLines: 1,
-                              style: TextStyle(
+                              style: AppType.caption.copyWith(
                                 fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
-                                fontSize: 15,
-                                height: 20 / 15,
                                 color: id == value ? AppColors.ink : AppColors.inkSoft,
                               )),
                         ),
@@ -854,12 +862,7 @@ class FilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = TextStyle(
-      fontFamily: active ? AppFonts.uiBold : AppFonts.ui,
-      fontSize: 16,
-      height: 22 / 16,
-      color: active && !plain ? AppColors.onAccent : AppColors.ink,
-    );
+    final text = (active ? AppType.labelStrong : AppType.bodySmall).copyWith(color: active && !plain ? AppColors.onAccent : AppColors.ink);
     // 화면 읽기: '모든 책, 바꾸기' 한 번만(안쪽 글자까지 겹쳐 읽혔다, 2026-11-16 QA 영숙 F9)
     if (plain) {
       return Semantics(
@@ -1077,8 +1080,8 @@ class Tabs<T> extends StatelessWidget {
     Widget tab(({T id, String label}) it, {double left = 0, double right = 0}) {
       final on = it.id == value;
       final text = fill
-          ? TextStyle(fontFamily: AppFonts.uiBold, fontSize: 16, height: 22 / 16, color: on ? AppColors.ink : AppColors.inkSoft)
-          : AppType.row.copyWith(fontSize: 17, height: 24 / 17, color: on ? AppColors.ink : AppColors.inkSoft, fontFamily: on ? AppType.button.fontFamily : AppFonts.ui);
+          ? AppType.labelStrong.copyWith(color: on ? AppColors.ink : AppColors.inkSoft)
+          : AppType.body.copyWith(color: on ? AppColors.ink : AppColors.inkSoft, fontFamily: on ? AppFonts.uiBold : AppFonts.ui);
       return Semantics(
         container: true,
         selected: on,
@@ -1760,6 +1763,104 @@ class TextLink extends StatelessWidget {
       );
 }
 
+/// 구역 머리줄(책 정보 · 통계 등 한 화면 안 구역): 왼쪽 제목(구역 제목 19), 제목 옆 작은 회색 개수('감상 1개'),
+/// 오른쪽 글자 단추(보조 16, 화살표 선택). 머리줄 높이는 글 높이(30)만 차지해 제목과 내용 사이가 좁다(2026-11-17 시안)
+class SectionHead extends StatelessWidget {
+  const SectionHead({super.key, required this.title, this.count, this.link, this.onLink, this.chevron = false, this.linkLabel});
+  final String title;
+  final String? count, link;
+  final VoidCallback? onLink;
+  final bool chevron;
+
+  /// 화면 읽기 이름(없으면 '제목 링크')
+  final String? linkLabel;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Text.rich(TextSpan(text: title, style: AppType.section, children: [
+              if (count != null) TextSpan(text: '  $count', style: AppType.sub.copyWith(fontFamily: AppFonts.uiMedium)),
+            ])),
+          ),
+        ),
+        if (link != null && onLink != null)
+          Semantics(
+            button: true,
+            label: linkLabel ?? '$title $link',
+            excludeSemantics: true,
+            onTap: onLink,
+            child: Pressable(
+              onPress: onLink,
+              child: SizedBox(
+                height: 30,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(link!, style: AppType.sub),
+                  if (chevron) ...[const SizedBox(width: 2), const LucideIcon('ChevronRight', size: 18, color: AppColors.inkSoft)],
+                ]),
+              ),
+            ),
+          ),
+      ]);
+}
+
+/// 테두리 상자(읽은 기간 카드 · 통계 평균 카드): 흰 바탕 · 옅은 선 · 둥근 모서리 12 · 안쪽 18/14
+class OutlineBox extends StatelessWidget {
+  const OutlineBox({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(Shape.card), border: Border.all(color: AppColors.line)),
+        child: child,
+      );
+}
+
+/// 시트 안 묶음 이름('정렬' · '유형'): 굵은 18, 아래 12
+class SheetLabel extends StatelessWidget {
+  const SheetLabel(this.text, {super.key});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: Space.m),
+        child: Semantics(header: true, child: Text(text, style: AppType.rowStrong)),
+      );
+}
+
+/// 필터 켜고 끄는 줄('책장에 없는 책만 1권' · '아껴둔 갈피만'): 굵은 이름 + 회색 개수 + 스위치. 줄 어디를 눌러도 바뀌고 화면 읽기는 한 번
+class FilterToggleRow extends StatelessWidget {
+  const FilterToggleRow({super.key, required this.label, this.count, required this.value, required this.onChange});
+  final String label;
+  final String? count;
+  final bool value;
+  final ValueChanged<bool> onChange;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        toggled: value,
+        label: [label, ?count].join(', '),
+        onTap: () => onChange(!value),
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChange(!value),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 60),
+            child: Row(children: [
+              Text(label, style: AppType.rowStrong),
+              const SizedBox(width: Space.m),
+              Expanded(child: count != null ? Text(count!, style: AppType.sub) : const SizedBox.shrink()),
+              Toggle(label: label, value: value, onChange: onChange),
+            ]),
+          ),
+        ),
+      );
+}
+
 /// 필터 시트의 고르는 칸(갈피 유형·내 책 정렬, 2026-11-17 사용자 시안): 테두리 상자, 고르면 진한 테두리와 오른쪽 위 모서리에 체크.
 /// 체크는 둥근 모서리 위에 걸치게(가운데가 모서리 곡선 위, 2026-11-17 사용자 '조금만 오른쪽으로, 모서리에')
 class ChoiceBox extends StatelessWidget {
@@ -2000,7 +2101,7 @@ class _DateBodyState extends State<_DateBody> {
     final canPrev = widget.min == null || month.compareTo(widget.min!.substring(0, 7)) > 0;
     final canNext = widget.max == null || month.compareTo(widget.max!.substring(0, 7)) < 0;
     final today = todayKey();
-    final dayStyle = TextStyle(fontFamily: AppFonts.ui, fontSize: 16, color: AppColors.ink, fontFeatures: const [FontFeature.tabularFigures()]);
+    final dayStyle = AppType.bodySmall.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Padding(
         padding: const EdgeInsets.only(bottom: Space.s),
@@ -2116,7 +2217,7 @@ class _TimeBodyState extends State<_TimeBody> {
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             _Wheel(count: 24, index: _h, unit: '시', onChange: (h) => setState(() => _h = h)),
             const SizedBox(width: Space.s),
-            const Text(':', style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 20, color: AppColors.ink)),
+            Text(':', style: AppType.section),
             const SizedBox(width: Space.s),
             _Wheel(count: 60, index: _m, unit: '분', onChange: (m) => setState(() => _m = m)),
           ]),
@@ -2240,7 +2341,7 @@ class _WheelState extends State<_Wheel> {
                   child: Text(
                     widget.text?.call(i) ?? i.toString().padLeft(2, '0'),
                     // 고르지 않은 값도 읽히게 보조 글자색(옅은 회색은 흰 바탕에서 대비가 2:1이 안 됐다, 2026-11-16 QA 영숙 F18). 고른 값은 진한 굵은 글자 + 회색 띠
-                    style: TextStyle(fontFamily: i == _cur ? AppFonts.uiBold : AppFonts.ui, fontSize: 20, color: i == _cur ? AppColors.ink : AppColors.inkSoft, fontFeatures: const [FontFeature.tabularFigures()]),
+                    style: AppType.section.copyWith(fontFamily: i == _cur ? AppFonts.uiBold : AppFonts.ui, color: i == _cur ? AppColors.ink : AppColors.inkSoft, fontFeatures: const [FontFeature.tabularFigures()]),
                   ),
                 ),
               ),

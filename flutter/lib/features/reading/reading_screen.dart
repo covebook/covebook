@@ -475,7 +475,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 onPress: _endOrLeave(soundOnly, active != null),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(minWidth: 52, minHeight: Space.touch),
-                  child: Center(child: Text(active != null || soundOnly ? '끝내기' : '닫기', style: AppType.button.copyWith(fontSize: 15, color: _light, shadows: _shade))),
+                  child: Center(child: Text(active != null || soundOnly ? '끝내기' : '닫기', style: AppType.buttonSmall.copyWith(color: _light, shadows: _shade))),
                 ),
               ),
             ),
@@ -533,7 +533,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                           const SizedBox(width: Space.m),
                           Expanded(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(soundOnly ? '소리와 함께 쉬어 가요' : bookTitle(lib, bookId) ?? '책 연결하기', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong.copyWith(fontSize: 19, height: 26 / 19)),
+                              Text(soundOnly ? '소리와 함께 쉬어 가요' : bookTitle(lib, bookId) ?? '책 연결하기', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
                               const SizedBox(height: 2),
                               Text(soundOnly ? '독서 시간은 기록하지 않아요' : bookId != null ? _authorOf(lib, bookId) : '책 없이 시작해도 좋아요', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
                             ]),
@@ -574,7 +574,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                         _Elapsed(
                           running: ticking,
                           builder: (ms) => Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-                            Text(clock(ms), style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 64, height: 72 / 64, color: AppColors.ink, fontFeatures: _tabular)),
+                            Text(clock(ms), style: AppType.timer),
                             Positioned(
                               left: -100,
                               right: -100,
@@ -802,7 +802,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   }
 }
 
-const _dockTime = TextStyle(fontFamily: AppFonts.ui, fontSize: 34, height: 42 / 34, color: NightColors.ink, fontFeatures: _tabular, shadows: _shade);
+final _dockTime = AppType.clock.copyWith(color: NightColors.ink, shadows: _shade);
 
 /// 1초마다 바뀌는 시간 글자만 다시 그린다(장면·조작부까지 매초 다시 그리지 않게)
 class _Elapsed extends StatefulWidget {

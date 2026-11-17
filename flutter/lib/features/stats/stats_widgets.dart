@@ -13,7 +13,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'chart_data.dart';
 
-const _small = TextStyle(fontFamily: AppFonts.ui, fontSize: 13, height: 18 / 13, color: AppColors.inkSoft, fontFeatures: [FontFeature.tabularFigures()]);
+final _small = AppType.micro;
 
 Color _hex(String hex) => Color(0xFF000000 | int.parse(hex.replaceAll('#', ''), radix: 16));
 
@@ -245,8 +245,8 @@ class ReadingChart extends StatelessWidget {
               ? 0.0
               : (TextPainter(
                     text: TextSpan(children: [
-                      TextSpan(text: '${bars[sel].label}$unit · ', style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14)),
-                      TextSpan(text: formatDuration(bars[sel].ms), style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 14, height: 20 / 14)),
+                      TextSpan(text: '${bars[sel].label}$unit · ', style: AppType.micro),
+                      TextSpan(text: formatDuration(bars[sel].ms), style: AppType.micro.copyWith(fontFamily: AppFonts.uiBold)),
                     ]),
                     textDirection: TextDirection.ltr,
                     textScaler: MediaQuery.textScalerOf(context), // 그릴 때와 같은 글자 크기(RnTextScaler)로 잰다
@@ -293,8 +293,8 @@ class ReadingChart extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
                   child: Text.rich(TextSpan(children: [
-                    TextSpan(text: '${bars[sel].label}$unit · ', style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14, color: AppColors.onAccent)),
-                    TextSpan(text: formatDuration(bars[sel].ms), style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 14, height: 20 / 14, color: AppColors.onAccent)),
+                    TextSpan(text: '${bars[sel].label}$unit · ', style: AppType.micro.copyWith(color: AppColors.onAccent)),
+                    TextSpan(text: formatDuration(bars[sel].ms), style: AppType.micro.copyWith(fontFamily: AppFonts.uiBold, color: AppColors.onAccent)),
                   ])),
                 ),
               ),
@@ -501,7 +501,7 @@ class StatNumber extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(value,
                   maxLines: 1,
-                  style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 20, height: 28 / 20, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+                  style: AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
             ),
           ]),
         ),

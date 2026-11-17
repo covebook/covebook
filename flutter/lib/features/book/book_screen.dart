@@ -312,20 +312,8 @@ class _BookScreenState extends State<BookScreen> {
 
     // 평가 탭(2026-11-17 사용자 시안): 별은 표지·제목·저자 아래 가운데, 그 아래 '한줄평'(오른쪽 수정)과 '감상 N'(오른쪽 쓰기).
     // 한줄평은 회색 상자 없이 글만 두고 '수정'을 누르면 그 자리에서 고친다. 별점·한줄평은 나만 본다
-    // 개수는 제목 옆에 작은 회색 글('감상 1개', 2026-11-17 사용자 시안)
-    Widget sectionHead(String title, String? link, VoidCallback? onLink, {String? count}) => Row(children: [
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Text.rich(TextSpan(text: title, style: AppType.section, children: [
-                if (count != null) TextSpan(text: '  $count', style: AppType.sub.copyWith(fontFamily: AppFonts.uiMedium)),
-              ])),
-            ),
-          ),
-          // 머리줄은 글 높이만 차지한다(누르는 칸은 위아래로 조금 넘친다): 제목과 내용 사이를 시안처럼 좁게(2026-11-17)
-          // 높이만 30으로 줄인다(넓이는 글자만큼). OverflowBox로 감쌌더니 줄 안에서 넓이가 끝없이 커져 제목이 한 글자씩 세로로 깨졌다(2026-11-18)
-          if (link != null && onLink != null) SizedBox(height: 30, child: TextLink(label: link, soft: true, onPress: onLink)),
-        ]);
+    // 구역 머리줄은 공용 SectionHead(제목 · 회색 개수 · 오른쪽 글자 단추)
+    Widget sectionHead(String title, String? link, VoidCallback? onLink, {String? count}) => SectionHead(title: title, count: count, link: link, onLink: onLink);
     void endNote() {
       _noteTimer?.cancel();
       _saveNote();
@@ -382,7 +370,7 @@ class _BookScreenState extends State<BookScreen> {
             )
           else
             WordText(note.isEmpty ? '이 책을 한 줄로 남겨 보세요' : note, style: note.isEmpty ? AppType.sub.copyWith(color: AppColors.inkFaint) : AppType.body),
-          const SizedBox(height: Space.xl + 4),
+          const SizedBox(height: Space.block),
           // 감상(기록 › 감상과 같은 데이터, 이 책 것만)
           sectionHead('감상', '쓰기', () => openNewEssay(context, book: id), count: essays.isEmpty ? null : '${essays.length}개'),
           if (essays.isEmpty)
@@ -461,8 +449,8 @@ class _BookScreenState extends State<BookScreen> {
                       alignment: Alignment.centerRight,
                       child: Text.rich(TextSpan(
                         text: '$cur',
-                        style: const TextStyle(fontFamily: AppFonts.uiMedium, fontSize: 26, height: 34 / 26, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]),
-                        children: [TextSpan(text: pc != null ? ' / $pc쪽' : '쪽', style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 17, color: AppColors.inkSoft))],
+                        style: AppType.figure,
+                        children: [TextSpan(text: pc != null ? ' / $pc쪽' : '쪽', style: AppType.body.copyWith(color: AppColors.inkSoft))],
                       )),
                     ),
                   ),
@@ -525,35 +513,15 @@ class _BookScreenState extends State<BookScreen> {
               ),
             ),
           // 최근 독서 기록: 날짜 · 시간대 · 걸린 시간(누르면 고치기), 전체는 통계에서
-          const SizedBox(height: Space.xl + 4),
-          Row(children: [
-            Expanded(child: Semantics(header: true, child: WordText('독서 기록', style: AppType.section))),
-            if (recent.isNotEmpty)
-              Semantics(
-                button: true,
-                label: '독서 기록 전체 보기',
-                onTap: openAllSessions,
-                excludeSemantics: true,
-                child: Pressable(
-                  onPress: openAllSessions,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: Space.hit),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text('전체 보기', style: AppType.sub),
-                      const SizedBox(width: 2),
-                      const LucideIcon('ChevronRight', size: 18, color: AppColors.inkSoft),
-                    ]),
-                  ),
-                ),
-              ),
-          ]),
+          const SizedBox(height: Space.block),
+          SectionHead(title: '독서 기록', link: recent.isNotEmpty ? '전체 보기' : null, chevron: true, linkLabel: '독서 기록 전체 보기', onLink: openAllSessions),
           if (recent.isEmpty)
             Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('타이머로 읽으면 여기에 쌓여요', style: AppType.sub))
           else
             // 같은 날짜는 묶고(날짜 한 줄 아래 시간대는 연하게, 읽은 시간은 오른쪽에 진하게), 구분선 없이 날짜 사이 여백으로(2026-11-17 시안). 최근 5개
             for (final (gi, g) in _byDay(recent.take(5).toList(), dayOf).indexed)
               Padding(
-                padding: EdgeInsets.only(top: gi == 0 ? Space.s : 14),
+                padding: EdgeInsets.only(top: gi == 0 ? Space.s : Space.m),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Semantics(header: true, child: Text(g.day, style: AppType.row)),
                   for (final x in g.items)
@@ -565,9 +533,9 @@ class _BookScreenState extends State<BookScreen> {
                       child: Pressable(
                         onPress: () => openSessionEdit(context, x.id),
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 31),
+                          constraints: const BoxConstraints(minHeight: Space.dense),
                           child: Row(children: [
-                            Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.sub.copyWith(fontSize: 15))),
+                            Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.caption)),
                             Text(formatDuration(x.durationMs), style: AppType.rowStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                           ]),
                         ),
@@ -576,7 +544,7 @@ class _BookScreenState extends State<BookScreen> {
                 ]),
               ),
           // 읽은 기간(회차, 2026-11-17 사용자 시안): 테두리 카드에 'N회차'·상태, 시작일·완독일. 오른쪽 '수정'을 누르면 그 자리에서 날짜를 고른다
-          const SizedBox(height: 44),
+          const SizedBox(height: Space.block),
           sectionHead('읽은 기간', rounds.isEmpty ? null : (_roundEdit ? '완료' : '수정'), () => setState(() => _roundEdit = !_roundEdit)),
           const SizedBox(height: Space.s),
           if (rounds.isNotEmpty)
@@ -589,7 +557,7 @@ class _BookScreenState extends State<BookScreen> {
           else
             Text('읽기 시작하면 회차가 생겨요. 날짜는 나중에 고칠 수 있어요.', style: AppType.sub),
           // 남긴 갈피: 제목 옆 작은 회색 개수(감상과 같은 모양), 없으면 가운데 한 줄
-          const SizedBox(height: 44),
+          const SizedBox(height: Space.block),
           sectionHead('남긴 갈피', null, null, count: '${marks.length}개'),
           if (marks.isNotEmpty) ...[
             ListGroup(children: [
@@ -605,7 +573,7 @@ class _BookScreenState extends State<BookScreen> {
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           // 사진만 남긴 갈피는 글이 없다: '사진 갈피'로 보인다
                           if (m.text.trim().isNotEmpty)
-                            Text(keepAll(m.text), maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.serif, fontSize: 16, height: 27 / 16, color: AppColors.ink))
+                            Text(keepAll(m.text), maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.quote)
                           else
                             Text('사진 갈피', style: AppType.row),
                           Padding(
@@ -674,10 +642,10 @@ class _BookScreenState extends State<BookScreen> {
             BookVisual(lib: lib, id: id, width: 140),
             Padding(
               padding: const EdgeInsets.only(top: Space.l),
-              child: Text(e.title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 22, height: 30 / 22, color: AppColors.ink)),
+              child: Text(e.title, textAlign: TextAlign.center, style: AppType.pageTitle),
             ),
             if (e.authors.isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(e.authors.join(', '), textAlign: TextAlign.center, style: AppType.sub.copyWith(fontSize: 16, height: 22 / 16))),
+              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(e.authors.join(', '), textAlign: TextAlign.center, style: AppType.sub)),
             ReaderRating(data: reviews.data),
           ]),
         ),
@@ -703,19 +671,17 @@ class _RoundView extends StatelessWidget {
     Widget col(String label, String v) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: AppType.caption),
           const SizedBox(height: 4),
-          Text(v, style: AppType.label.copyWith(fontSize: 16, fontFeatures: const [FontFeature.tabularFigures()])),
+          Text(v, style: AppType.label.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
         ]);
     return Semantics(
       container: true,
       label: '${r.index}회차, ${r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중'}, 시작일 ${day(r.startedAt)}, 완독일 ${r.finishedAt != null ? day(r.finishedAt) : '없음'}',
       excludeSemantics: true,
-      child: Container(
-        margin: const EdgeInsets.only(top: Space.s),
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      child: Padding(
+        padding: const EdgeInsets.only(top: Space.s),
+        child: OutlineBox(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Expanded(child: Text('${r.index}회차${r.index > 1 ? ' · 재독' : ''}', style: AppType.rowStrong.copyWith(fontSize: 16))),
+            Expanded(child: Text('${r.index}회차${r.index > 1 ? ' · 재독' : ''}', style: AppType.labelStrong)),
             Text(r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중', style: AppType.caption),
           ]),
           const SizedBox(height: Space.m),
@@ -724,7 +690,7 @@ class _RoundView extends StatelessWidget {
             const SizedBox(width: Space.m),
             Expanded(child: col('완독일', day(r.finishedAt))),
           ]),
-        ]),
+        ])),
       ),
     );
   }

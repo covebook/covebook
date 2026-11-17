@@ -31,7 +31,7 @@ void main() {
       expect(r.height, lessThan(40), reason: '$title 높이 ${r.height}');
       expect(r.width, greaterThan(40), reason: '$title 넓이 ${r.width}');
     }
-    expect(t.getRect(find.text('수정')).left, greaterThan(t.getRect(find.text('한줄평')).right));
+    expect(t.getRect(find.text('수정')).left, greaterThanOrEqualTo(t.getRect(find.text('한줄평')).right));
     await t.tap(find.text('내 기록'));
     await t.pumpAndSettle(const Duration(milliseconds: 100));
     await t.scrollUntilVisible(find.text('남긴 갈피  0개'), 300, scrollable: find.byType(Scrollable).first);

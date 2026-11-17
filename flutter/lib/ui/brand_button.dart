@@ -82,7 +82,7 @@ class _BrandButtonState extends State<BrandButton> {
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               SizedBox(width: 22, height: 22, child: Center(child: widget.logo)),
               const SizedBox(width: 10),
-              Flexible(child: WordText(widget.label, textAlign: TextAlign.center, style: AppType.button.copyWith(fontSize: 16, height: 22 / 16, color: widget.fg))),
+              Flexible(child: WordText(widget.label, textAlign: TextAlign.center, style: AppType.buttonSmall.copyWith(color: widget.fg))),
             ]),
           ),
         ),

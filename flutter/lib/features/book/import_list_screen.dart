@@ -247,7 +247,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
         title: '책 목록 가져오기',
         children: [
           const SizedBox(height: Space.s),
-          Semantics(header: true, child: Text('다른 곳의 책 목록을\n한 번에 가져오세요', style: AppType.title.copyWith(fontSize: 26, height: 36 / 26))),
+          Semantics(header: true, child: Text('다른 곳의 책 목록을\n한 번에 가져오세요', style: AppType.title)),
           const SizedBox(height: Space.m),
           Text('엑셀이나 CSV 파일을 선택해 주세요.', style: AppType.body.copyWith(color: AppColors.inkSoft)),
           const SizedBox(height: Space.xl),

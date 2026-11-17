@@ -65,7 +65,7 @@ class ReaderRating extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = data;
     if (d == null || d.count == 0 || d.average == null) return const SizedBox.shrink();
-    final label = AppType.sub.copyWith(fontSize: 15);
+    final label = AppType.caption;
     return Semantics(
       label: '독자 평점 ${_avg(d.average!)}점, ${d.count}명',
       excludeSemantics: true,
@@ -76,7 +76,7 @@ class ReaderRating extends StatelessWidget {
           const SizedBox(width: 4),
           const LucideIcon('Star', size: 15, color: AppColors.star, fill: AppColors.star, stroke: 1.4),
           const SizedBox(width: 4),
-          Text(_avg(d.average!), style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 15, height: 20 / 15, color: AppColors.ink)),
+          Text(_avg(d.average!), style: AppType.labelStrong),
           const SizedBox(width: 4),
           Text('· ${d.count}명', style: label),
         ]),
@@ -159,7 +159,7 @@ class _ReviewsPaneState extends State<ReviewsPane> {
                 label: '평균 ${_avg(d.average!)}점, ${d.count}명 평가',
                 excludeSemantics: true,
                 child: Row(children: [
-                  Text(_avg(d.average!), style: const TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 36, height: 44 / 36, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+                  Text(_avg(d.average!), style: AppType.score),
                   const SizedBox(width: Space.s),
                   const LucideIcon('Star', size: 26, color: AppColors.star, fill: AppColors.star, stroke: 1.4),
                   const SizedBox(width: Space.s + Space.xs),

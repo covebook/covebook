@@ -39,8 +39,8 @@ String _dayPart(int h) => switch (h) {
       _ => '밤 ${h - 12}시',
     };
 
-/// 통계 칸 사이 간격(2026-11-17 사용자: 항목 사이를 더 넓게)
-const _gap = 56.0;
+/// 통계 칸 사이 간격: 앱 공통 구역 간격(Space.block)
+const _gap = Space.block;
 
 class _StatsScreenState extends State<StatsScreen> {
   final _model = LibraryModel.instance;
@@ -117,7 +117,7 @@ class _StatsScreenState extends State<StatsScreen> {
     Widget cover(String? id) => id != null && lib.books.containsKey(id)
         ? LinkedCover(lib: lib, id: id, width: _coverW)
         : const RealCover(title: '책 없음', color: '#F2F4F6', width: _coverW, ratio: 0.7);
-    const rowValue = TextStyle(fontFamily: AppFonts.uiBold, fontSize: 19, height: 26 / 19, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]);
+    final rowValue = AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
     Widget row({required String? id, required String label, required Widget middle, required Widget right, VoidCallback? onPress}) => Semantics(
           button: onPress != null,
           label: label,
@@ -160,7 +160,7 @@ class _StatsScreenState extends State<StatsScreen> {
           ),
           Semantics(
             header: true,
-            child: Text(monthly ? '$_y년 $_m월' : '$_y년', style: AppType.heading.copyWith(fontSize: 22, fontFeatures: const [FontFeature.tabularFigures()])),
+            child: Text(monthly ? '$_y년 $_m월' : '$_y년', style: AppType.heading.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
           ),
           const SizedBox(width: 2),
           IconBtn(
@@ -248,7 +248,7 @@ class _StatsScreenState extends State<StatsScreen> {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, maxLines: 1, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 19, height: 26 / 19, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+            child: Text(value, maxLines: 1, style: AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
           ),
         ]);
     // 한 번에 읽은 시간 위 카드: 평균 | 가장 오래(테두리 상자, 가운데 세로 선)
@@ -256,9 +256,7 @@ class _StatsScreenState extends State<StatsScreen> {
       container: true,
       label: '한 번에 평균 ${summary.count > 0 ? _shortMs(summary.averageMs) : '없음'}, 가장 오래 읽은 시간 ${summary.count > 0 ? _shortMs(summary.longestMs) : '없음'}',
       excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
+      child: OutlineBox(
         child: IntrinsicHeight(
           child: Row(children: [
             Expanded(child: pair('한 번에 평균', summary.count > 0 ? _shortMs(summary.averageMs) : '-')),
@@ -334,13 +332,13 @@ class _StatsScreenState extends State<StatsScreen> {
       if (m > 0 || (h == 0 && ms >= 60000)) ('$m', '분'),
       if (ms < 60000) ('$s', '초'),
     ];
-    const big = TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 48, height: 58 / 48, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]);
-    final unit = AppType.heading.copyWith(fontFamily: AppFonts.uiMedium, fontSize: 22);
+    final big = AppType.display;
+    final unit = AppType.displayUnit;
     Widget stat(String label, String value) => Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: AppType.caption),
             const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 24, height: 32 / 24, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+            Text(value, style: AppType.figure),
           ]),
         );
     return [

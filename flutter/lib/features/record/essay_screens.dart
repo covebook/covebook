@@ -82,9 +82,9 @@ class EssayRow extends StatelessWidget {
   }
 
   Widget _headline(String head, {int lines = 2, double size = 18}) => Text(head.isEmpty ? '(빈 감상)' : head,
-      maxLines: lines, overflow: TextOverflow.ellipsis, style: AppType.section.copyWith(fontSize: size, height: (size + 7) / size));
+      maxLines: lines, overflow: TextOverflow.ellipsis, style: AppType.rowStrong);
 
-  Widget _date() => Text(essayDateLine(essay), maxLines: 1, style: AppType.caption.copyWith(fontSize: 14, height: 20 / 14));
+  Widget _date() => Text(essayDateLine(essay), maxLines: 1, style: AppType.micro);
 
   /// 책 정보 화면 안(표지 없이): 감상 제목 · 미리보기 · 쓴 날
   Widget _text(String head, String preview) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -115,7 +115,7 @@ class EssayRow extends StatelessWidget {
                     ]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.caption.copyWith(fontSize: 14, height: 20 / 14),
+                    style: AppType.micro,
                   ),
                   const SizedBox(height: 6),
                   _headline(head, lines: 1, size: 17),
@@ -226,14 +226,14 @@ class _EssayScreenState extends State<EssayScreen> {
         Padding(
           padding: const EdgeInsets.only(top: Space.xl),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (title.isNotEmpty) Semantics(header: true, child: Text(title, style: AppType.heading.copyWith(fontSize: 24, height: 33 / 24))),
+            if (title.isNotEmpty) Semantics(header: true, child: Text(title, style: AppType.title)),
             Padding(padding: EdgeInsets.only(top: title.isNotEmpty ? Space.s : 0), child: Text(essayDateLine(essay), style: AppType.caption)),
           ]),
         ),
         // 본문: 읽는 글꼴로 넉넉한 줄 간격. 고를 수 있게만(입력 칸이 아니다)
         Padding(
           padding: const EdgeInsets.only(top: Space.xl, bottom: Space.xxl),
-          child: SelectableText(essay.body, style: const TextStyle(fontFamily: AppFonts.reading, fontSize: 17, height: 30 / 17, color: AppColors.ink)),
+          child: SelectableText(essay.body, style: AppType.reading),
         ),
       ],
     );

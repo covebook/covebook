@@ -35,7 +35,7 @@ class BookmarkEmpty extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
               decoration: BoxDecoration(borderRadius: BorderRadius.circular(999), border: Border.all(color: const Color(0xFFE5E8EB), width: 2 / MediaQuery.devicePixelRatioOf(context))),
-              child: Text('예시', style: AppType.caption.copyWith(fontSize: 12, height: null)),
+              child: Text('예시', style: AppType.micro),
             ),
             Semantics(
               label: '예시 갈피. ${_sample.replaceAll('\n', ' ')}',
@@ -55,7 +55,7 @@ class BookmarkEmpty extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text('문장이나 사진으로\n간직하고 싶은 순간을 모아요.', textAlign: TextAlign.center, style: AppType.sub.copyWith(fontSize: 15, height: 22 / 15)),
+              child: Text('문장이나 사진으로\n간직하고 싶은 순간을 모아요.', textAlign: TextAlign.center, style: AppType.caption),
             ),
             Padding(
               padding: const EdgeInsets.only(top: 28),

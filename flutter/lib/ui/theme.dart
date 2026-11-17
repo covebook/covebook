@@ -67,8 +67,25 @@ class RnTextScaler extends TextScaler {
 TextStyle _text(String family, double size, double line, Color color) =>
     TextStyle(fontFamily: family, fontSize: size, height: rnPx(line) / rnPx(size), color: color, leadingDistribution: TextLeadingDistribution.even);
 
-/// 글자 위계(토스 TDS): 큰 제목 26 Bold, 시트·묶음 제목 21, 구역 제목 19, 본문 17~18, 보조 16, 작은 메타 15
+const _tab = [FontFeature.tabularFigures()];
+
+/// 글자 위계(토스 TDS): 큰 제목 26 Bold, 시트·묶음 제목 21, 구역 제목 19, 본문 17~18, 보조 16, 작은 메타 15, 아주 작은 표시 13.
+/// 화면에서 글자 크기를 직접 쓰지 않는다: 같은 종류 항목은 같은 역할을 쓴다(2026-11-18 사용자 '버튼·글씨 크기·여백·글씨체는 항목에 따라 통일해서 관리').
+/// 숫자 역할(figure·display·clock·timer·score)은 숫자 폭이 고정이다
 abstract final class AppType {
+  /// 아주 큰 숫자(통계 '이번 달 읽은 시간' 48)와 그 단위(22)
+  static TextStyle get display => _text(AppFonts.uiTitle, 48, 58, AppColors.ink).copyWith(fontFeatures: _tab);
+  static TextStyle get displayUnit => _text(AppFonts.uiMedium, 22, 30, AppColors.ink);
+  /// 읽기 장면 시간 64
+  static TextStyle get timer => _text(AppFonts.ui, 64, 72, AppColors.ink).copyWith(fontFeatures: _tab);
+  /// 큰 시간(독서 끝 · 접은 읽기 장면) 36
+  static TextStyle get clock => _text(AppFonts.ui, 36, 44, AppColors.ink).copyWith(fontFeatures: _tab);
+  /// 큰 점수(독자 평점 평균) 36
+  static TextStyle get score => _text(AppFonts.uiTitle, 36, 44, AppColors.ink).copyWith(fontFeatures: _tab);
+  /// 숫자 값(통계 읽은 날 · 독서 횟수, 쪽수) 24
+  static TextStyle get figure => _text(AppFonts.uiTitle, 24, 32, AppColors.ink).copyWith(fontFeatures: _tab);
+  /// 머리줄 왼쪽 큰 제목(책 추가 · 꾸미기 · 책 정보 제목) 23
+  static TextStyle get pageTitle => _text(AppFonts.uiTitle, 23, 30, AppColors.ink);
   static TextStyle get title => _text(AppFonts.uiTitle, 26, 34, AppColors.ink);
   static TextStyle get navTitle => _text(AppFonts.uiBold, 18, 25, AppColors.ink);
   static TextStyle get heading => _text(AppFonts.uiBold, 21, 29, AppColors.ink);
@@ -80,6 +97,17 @@ abstract final class AppType {
   static TextStyle get caption => _text(AppFonts.ui, 15, 21, AppColors.inkSoft);
   static TextStyle get button => _text(AppFonts.uiBold, 17, 24, AppColors.ink);
   static TextStyle get label => _text(AppFonts.uiMedium, 16, 22, AppColors.ink);
+  /// 굵은 작은 이름(카드 제목 · 닉네임 · 필터 칸) 16
+  static TextStyle get labelStrong => _text(AppFonts.uiBold, 16, 22, AppColors.ink);
+  /// 작은 본문(진한 16: 체크 이름 · 날짜 칸 · 짧은 글)
+  static TextStyle get bodySmall => _text(AppFonts.ui, 16, 22, AppColors.ink);
+  /// 작은 단추 글자 16
+  static TextStyle get buttonSmall => _text(AppFonts.uiBold, 16, 22, AppColors.ink);
+  /// 아주 작은 표시(그래프 눈금 · 배지 · 쓴 날) 13
+  static TextStyle get micro => _text(AppFonts.ui, 13, 18, AppColors.inkSoft).copyWith(fontFeatures: _tab);
+  /// 갈피 문장(명조) 16 · 긴 글 본문(명조) 17
+  static TextStyle get quote => _text(AppFonts.serif, 16, 27, AppColors.ink);
+  static TextStyle get reading => _text(AppFonts.reading, 17, 30, AppColors.ink);
   /// 입력창(줄 높이는 플랫폼에 맡긴다)
   static const input = TextStyle(fontFamily: AppFonts.ui, fontSize: 16, color: AppColors.ink);
 }

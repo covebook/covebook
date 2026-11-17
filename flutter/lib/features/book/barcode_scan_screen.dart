@@ -127,12 +127,12 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
                     ),
                   ),
                 ),
-                const Positioned(
+                Positioned(
                   left: 0,
                   right: 0,
                   bottom: 12,
                   child: IgnorePointer(
-                    child: Text('바코드를 틀 안에 비추면 바로 찾아요', textAlign: TextAlign.center, style: TextStyle(fontFamily: AppFonts.uiMedium, fontSize: 14, height: 20 / 14, color: Color(0xFFFFFFFF), shadows: [Shadow(color: Color(0x80000000), blurRadius: 6)])),
+                    child: Text('바코드를 틀 안에 비추면 바로 찾아요', textAlign: TextAlign.center, style: AppType.label.copyWith(color: const Color(0xFFFFFFFF), shadows: const [Shadow(color: Color(0x80000000), blurRadius: 6)])),
                   ),
                 ),
               ]),

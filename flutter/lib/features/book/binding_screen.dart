@@ -69,7 +69,7 @@ class _BindingScreenState extends State<BindingScreen> {
             constraints: const BoxConstraints(minHeight: 44),
             alignment: Alignment.center,
             padding: const EdgeInsets.only(right: 10, left: 10),
-            child: Text('초기화', style: AppType.sub.copyWith(fontSize: 16)),
+            child: Text('초기화', style: AppType.sub),
           ),
         ),
       ),

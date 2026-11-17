@@ -441,7 +441,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       title: '필터',
       scroll: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
-        Widget head(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.m), child: Semantics(header: true, child: Text(t, style: AppType.rowStrong)));
+        Widget head(String t) => SheetLabel(t);
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
           head('정렬'),
           Row(children: [
@@ -451,27 +451,8 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             ],
           ]),
           const SizedBox(height: Space.l),
-          // 줄 어디를 눌러도 켜고 끈다. 화면 읽기는 '책장에 없는 책만, N권' 한 번(이름이 두 번 읽혔다)
-          Semantics(
-            container: true,
-            toggled: off,
-            label: '책장에 없는 책만, $offCount권',
-            onTap: () => set(() => off = !off),
-            excludeSemantics: true,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => set(() => off = !off),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 60),
-                child: Row(children: [
-                  Text('책장에 없는 책만', style: AppType.rowStrong),
-                  const SizedBox(width: Space.m),
-                  Expanded(child: Text('$offCount권', style: AppType.sub)),
-                  Toggle(label: '책장에 없는 책만', value: off, onChange: (v) => set(() => off = v)),
-                ]),
-              ),
-            ),
-          ),
+          // 공용 FilterToggleRow(줄 어디를 눌러도 켜고 끔, 화면 읽기 한 번)
+          FilterToggleRow(label: '책장에 없는 책만', count: '$offCount권', value: off, onChange: (v) => set(() => off = v)),
           if (years.isNotEmpty) ...[
             const SizedBox(height: Space.m),
             head('완독한 해'),
@@ -666,14 +647,14 @@ class _GridCell extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: Space.m, vertical: Space.xs),
                         decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(999)),
-                        child: Text('책장에 있음', maxLines: 1, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13, color: AppColors.ink)),
+                        child: Text('책장에 있음', maxLines: 1, style: AppType.micro.copyWith(color: AppColors.ink)),
                       ),
                     ),
                   ),
               ]),
               Padding(
                 padding: const EdgeInsets.only(top: Space.s),
-                child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.row.copyWith(fontSize: 15, height: 21 / 15)),
+                child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(color: AppColors.ink)),
               ),
               // 저자가 길어도 '· 책장' 같은 뒤 표시는 잘리지 않게 저자만 줄인다(2026-11-16 QA 현우 F14: 'Antoine de Saint…'에서 책장 표시가 사라졌다)
               if (sub.isNotEmpty || tail.isNotEmpty)
@@ -681,11 +662,11 @@ class _GridCell extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 1),
                   child: LayoutBuilder(
                     builder: (context, box) => Row(children: [
-                      if (sub.isNotEmpty) Flexible(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13))),
+                      if (sub.isNotEmpty) Flexible(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro)),
                       if (tail.isNotEmpty)
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: box.maxWidth),
-                          child: Text('${sub.isNotEmpty ? ' · ' : ''}$tail', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontSize: 13, height: 18 / 13)),
+                          child: Text('${sub.isNotEmpty ? ' · ' : ''}$tail', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: AppType.micro),
                         ),
                     ]),
                   ),

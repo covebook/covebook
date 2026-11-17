@@ -112,11 +112,11 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Semantics(
                           header: true,
-                          child: Text(e.title, style: const TextStyle(fontFamily: AppFonts.uiMedium, fontSize: 20, height: 27 / 20, letterSpacing: -0.2, color: AppColors.ink)),
+                          child: Text(e.title, style: AppType.section),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
-                          child: Text(status ?? statusLabel[b.status]!, style: AppType.caption.copyWith(fontSize: 14, height: 20 / 14)),
+                          child: Text(status ?? statusLabel[b.status]!, style: AppType.caption),
                         ),
                         if ((b.note ?? '').isNotEmpty)
                           Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(b.note!, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink))),
@@ -229,11 +229,11 @@ Future<void> _sampleSheet(BuildContext context, Book sample) => showModalBottomS
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Semantics(
                       header: true,
-                      child: Text(sample.title, style: const TextStyle(fontFamily: AppFonts.uiMedium, fontSize: 20, height: 27 / 20, letterSpacing: -0.2, color: AppColors.ink)),
+                      child: Text(sample.title, style: AppType.section),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text('예시 책이에요\n내 서재에는 없어요', style: AppType.caption.copyWith(fontSize: 14, height: 20 / 14)),
+                      child: Text('예시 책이에요\n내 서재에는 없어요', style: AppType.caption),
                     ),
                   ]),
                 ),

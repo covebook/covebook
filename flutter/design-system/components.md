@@ -34,7 +34,9 @@
 |---|---|---|---|---|
 | `Screen` | kit.dart:104 | 화면 틀(머리줄·뒤로·내용·아래 고정 단추) | 큰 왼쪽 제목 / `back: false` / `footer` | — |
 | `H2` | kit.dart:319 | 구역 제목 | `first`(위 여백 없음) | — |
-| `ListItem` | kit.dart:621 | 목록 한 줄(이름·설명·값·꺾쇠) | `icon`, `right`, `chevron`, `danger` | `selected` |
+| `ListItem` | kit.dart | 목록 한 줄(이름·설명·값·꺾쇠). **모든 목록 줄 높이 50**(위아래 12, 설명 있으면 14) | `icon`, `right`, `chevron`, `danger` | `selected` |
+| `SectionHead` | kit.dart | 한 화면 안 구역 머리줄: 제목(section 19) · 옆 회색 개수('감상 1개') · 오른쪽 글자 단추(sub 16, 화살표 선택). 높이 30 | 책 정보 평가·내 기록 | — |
+| `OutlineBox` | kit.dart | 테두리 상자(흰 바탕 · line · 둥근 12 · 안쪽 18/14) | 읽은 기간 카드, 통계 평균 카드 | — |
 | `ListGroup` | kit.dart:778 | 목록 묶음(줄 사이 선 없음) | `title`(작은 회색) | — |
 | `SectionBand` | kit.dart:794 | 묶음 사이 화면 끝까지 1dp 선 | — | — |
 | `AppDivider` | kit.dart:862 | 구분선 | — | — |
@@ -54,6 +56,9 @@
 | `FilterButton` | kit.dart:723 | 거르기 단추(회색 알약 / `plain` 글자+꺾쇠) | 통계 '모든 책 ˅' | `active`(갈색) |
 | `FilterGroup` | kit.dart:1015 | 필터 시트 묶음(진한 이름, 위 선) | 필터 시트 | `first` |
 | `FilterOption` | kit.dart:1058 | 필터 줄(오른쪽 `RadioMark`) | 필터 시트 | `selected`, `chevron`(다른 시트로), `right`(스위치 등) |
+| `SheetLabel` | kit.dart | 시트 안 묶음 이름('정렬' · '유형', rowStrong 18, 아래 12) | 내 책·갈피 필터 | — |
+| `ChoiceBox` | kit.dart | 고르는 칸(테두리 상자 48, 고르면 진한 테두리 + 모서리 체크) | 갈피 유형, 내 책 정렬, 완독한 해 | `on` |
+| `FilterToggleRow` | kit.dart | 켜고 끄는 줄(굵은 이름 + 회색 개수 + 스위치, 줄 어디를 눌러도) | 책장에 없는 책만, 아껴둔 갈피만 | `value` |
 
 > 같은 '안쪽 메뉴'에 `Tabs`와 `Segmented` 두 모양이 섞여 있습니다(drift.md 7).
 
@@ -95,6 +100,7 @@
 - 주요 버튼(갈색 채움)은 화면에 하나.
 - 아이콘·글자 버튼의 눌림은 투명도 0.55로 통일한다.
 - 누르는 자리는 48dp 이상(`Space.hit`, 2026-11-16 QA).
+- **글자 크기·여백·글씨체·단추 크기는 화면에서 직접 쓰지 않는다**(2026-11-18 사용자: 항목에 따라 다른 곳과 통일해서 관리). 글자는 `AppType` 역할(title 26 · pageTitle 23 · heading 21 · section 19 · row 18 · body 17 · sub/label/labelStrong/bodySmall/buttonSmall 16 · caption 15 · micro 13, 숫자는 display 48 · timer 64 · clock 36 · figure 24, 명조는 quote · reading), 간격은 `Space`(구역 사이 `block` 48 · 촘촘한 줄 `dense` 32), 둥글기는 `Shape`(카드 12), 단추는 `Btn` 크기 l 60 · m 54 · s 44. 시안에 맞추려면 그 역할 값을 바꾸거나 공통 부품을 고친다. 예외는 그린 표지·공유 그림·새긴 해·자동 맞춤 제목뿐.
 
 ## 로그인 단추 (`_BrandButton`, features/settings/backup_screen.dart)
 

@@ -16,7 +16,7 @@ import 'bookmark_paper.dart';
 import 'bookmark_tape.dart';
 import 'photo_plate.dart' show BookmarkPhoto;
 
-const _soft = TextStyle(fontFamily: AppFonts.ui, fontSize: 13, height: 18 / 13, color: AppColors.inkSoft);
+final _soft = AppType.micro;
 const _quote = TextStyle(fontFamily: AppFonts.reading, fontSize: 18, height: 29 / 18, color: AppColors.ink, letterSpacing: -0.3);
 
 List<BoxShadow> _shadow(double a1, double a2, double y2, double b2) => [
