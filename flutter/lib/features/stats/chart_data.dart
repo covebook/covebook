@@ -214,7 +214,8 @@ List<int> yTicks(num maxMs) {
   return step == 0 ? const [] : [step, step * 2];
 }
 
-String tickLabel(int min) => min >= 120 && min % 60 == 0 ? '${min ~/ 60}시간' : '$min분';
+/// 세로 눈금 글자: 60분부터 시간 단위('1시간', 2026-11-17 통계 시안)
+String tickLabel(int min) => min >= 60 && min % 60 == 0 ? '${min ~/ 60}시간' : '$min분';
 
 /// 가로 글자: 월 보기 1·5·10·15·20·25·마지막 날, 연도 보기 1·3·5·7·9·11·12월
 List<int> xLabels(int count) => count == 12 ? const [1, 3, 5, 7, 9, 11, 12] : [1, 5, 10, 15, 20, 25, count];

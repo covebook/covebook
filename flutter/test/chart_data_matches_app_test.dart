@@ -51,7 +51,9 @@ void main() {
 
   test('눈금·글자', () {
     expect([0, 59000, 120000, 4200000, 36000000, 400000000].map(yTicks).toList(), (c['yTicks'] as List).map((x) => (x as List).cast<int>()).toList());
-    expect([5, 60, 120, 150, 180].map(tickLabel).toList(), (c['tickLabels'] as List).cast<String>());
+    // 60분만 '1시간'으로 바꿨다(2026-11-17 통계 시안). 나머지는 지금 앱과 같다
+    final app = (c['tickLabels'] as List).cast<String>().map((x) => x == '60분' ? '1시간' : x).toList();
+    expect([5, 60, 120, 150, 180].map(tickLabel).toList(), app);
     expect([xLabels(12), xLabels(30), xLabels(31)], (c['xLabels'] as List).map((x) => (x as List).cast<int>()).toList());
     expect(['2026-10-31', '2026-11-13', '2027-01-01'].map(dayTitle).toList(), (c['dayTitles'] as List).cast<String>());
     expect(ys.take(8).map((x) => timeRange(x.startedAt, x.endedAt)).toList(), (c['timeRanges'] as List).cast<String>());
