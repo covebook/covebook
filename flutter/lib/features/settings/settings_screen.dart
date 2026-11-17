@@ -12,7 +12,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../store/settings_store.dart';
 import '../../ui/alert.dart';
-import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../services/sync.dart';
 import '../../ui/theme.dart';
@@ -101,7 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         maxHeight: 0.8,
         builder: (ctx) {
           final p = AppType.body.copyWith(color: AppColors.ink);
-          Widget para(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.item), child: Text(keepAll(t), style: p));
+          Widget para(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.item), child: WordText(t, style: p));
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             para(_syncAvailable
                 ? '책장 한켠은 카카오·Google·Apple 로그인으로 써요. 책·독서 기록·갈피·감상·사진은 이 기기와 책장 한켠 서버의 내 계정에 저장돼, 폰을 바꿔도 이어 볼 수 있어요. 로그인한 서비스의 회원 식별자와 고른 닉네임이 서버에 저장돼요.'

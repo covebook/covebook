@@ -137,7 +137,7 @@ void main() {
     testWidgets('처음 안내에 끌어 옮기기, 2배 글자에서도 넘치지 않는다', (tester) async {
       await tester.pumpWidget(panel(scale: 2));
       expect(tester.takeException(), isNull);
-      expect(find.textContaining(keepAll('끌어')), findsOneWidget);
+      expect(find.textContaining('끌어'), findsOneWidget); // WordText: 찾기·화면 읽기는 원문
       expect(find.textContaining(keepAll('꾸밀')), findsOneWidget);
     });
 

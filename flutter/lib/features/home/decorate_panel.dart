@@ -154,7 +154,7 @@ class DecoratePanel extends StatelessWidget {
         if (title == null)
           Padding(
             padding: const EdgeInsets.only(top: Space.xs),
-            child: Text(keepAll('책을 눌러 고르면 자세를 바꿀 수 있어요. 책을 끌어 자리를 옮겨요.'), style: AppType.caption),
+            child: WordText('책을 눌러 고르면 자세를 바꿀 수 있어요. 책을 끌어 자리를 옮겨요.', style: AppType.caption),
           ),
         if (msg != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(msg!, style: AppType.caption.copyWith(color: AppColors.danger))),
         // 큰 글씨에서 조작부가 화면보다 길어지면 안에서 밀어 본다
@@ -376,7 +376,7 @@ class _MoveChoice extends StatelessWidget {
             decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: Border.all(color: AppColors.line)),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               if (dir < 0) const LucideIcon('ChevronLeft', size: 20),
-              Flexible(child: Text(keepAll(name), textAlign: TextAlign.center, style: AppType.micro.copyWith(color: AppColors.ink))),
+              Flexible(child: WordText(name, textAlign: TextAlign.center, style: AppType.micro.copyWith(color: AppColors.ink))),
               if (dir > 0) const LucideIcon('ChevronRight', size: 20),
             ]),
           ),

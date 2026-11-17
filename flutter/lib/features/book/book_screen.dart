@@ -14,7 +14,6 @@ import '../../domain/library.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
-import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
@@ -236,11 +235,11 @@ class _BookScreenState extends State<BookScreen> {
             ExcludeSemantics(child: SizedBox(width: 56, child: BookVisual(lib: lib, id: id, width: 56))),
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
-              child: Text(keepAll(title), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
+              child: WordText(title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
             ),
           ]),
         ),
-        Text(keepAll(hide ? '내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id]))), style: AppType.sub),
+        WordText(hide ? '내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id])), style: AppType.sub),
         const SizedBox(height: Space.l),
         Btn(label: hide ? '숨기기' : '삭제', kind: hide ? 'primary' : 'danger', size: 'l', onPress: () => Navigator.pop(ctx, true)),
         Padding(padding: const EdgeInsets.only(top: Space.s), child: Center(child: TextLink(label: '취소', soft: true, onPress: () => Navigator.pop(ctx, false)))),
@@ -573,7 +572,7 @@ class _BookScreenState extends State<BookScreen> {
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           // 사진만 남긴 갈피는 글이 없다: '사진 갈피'로 보인다
                           if (m.text.trim().isNotEmpty)
-                            Text(keepAll(m.text), maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.quote)
+                            WordText(m.text, maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.quote)
                           else
                             Text('사진 갈피', style: AppType.row),
                           Padding(

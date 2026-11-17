@@ -6,7 +6,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 
@@ -62,7 +61,7 @@ Future<void> showTermsSheet(BuildContext context) => showSheet<void>(
             padding: EdgeInsets.only(top: i == 0 ? 0 : Space.l, bottom: Space.xs),
             child: Semantics(header: true, child: Text(title, style: AppType.labelStrong)),
           ),
-          for (final p in paras) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: Text(keepAll(p), style: AppType.bodySmall)),
+          for (final p in paras) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: WordText(p, style: AppType.bodySmall)),
         ],
         Padding(padding: const EdgeInsets.only(top: Space.l, bottom: Space.s), child: Text('시행일은 정식 출시 때 정합니다.', style: AppType.caption)),
       ]),

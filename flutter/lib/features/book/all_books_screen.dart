@@ -716,6 +716,7 @@ class _BookListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
         button: true,
+        // 화면 읽기는 줄 이름 한 번(안쪽 글은 빼고, 메모 단추만 따로). 안쪽 글이 한 번 더 읽혔다(2026-11-18 확인)
         label: [book.title, sub, ?note].where((t) => t.isNotEmpty).join(', '),
         onTap: onPress,
         child: GestureDetector(
@@ -731,7 +732,7 @@ class _BookListRow extends StatelessWidget {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const SizedBox(height: 4),
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong)),
+                      Expanded(child: ExcludeSemantics(child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong))),
                       if (memos.isNotEmpty) const SizedBox(width: Space.xs),
                       if (memos.isNotEmpty)
                         // 지금 앱: 44 누르는 칸에 marginRight −12·marginVertical −10(눌리는 칸은 크게, 줄 높이는 그대로)
@@ -753,12 +754,12 @@ class _BookListRow extends StatelessWidget {
                         ),
                     ]),
                     // 두 줄까지: 저자가 길어도 뒤의 상태·'책장' 표시가 보이게(2026-11-16 QA 현우 F14)
-                    if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                    if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: ExcludeSemantics(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub))),
                     if ((note ?? '').isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 3 + Space.xs),
                         // 낱말 단위로 줄을 바꾼다('한/다고'처럼 끊기지 않게)
-                        child: Text(keepAll(note!), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink)),
+                        child: ExcludeSemantics(child: Text(keepAll(note!), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink))),
                       ),
                   ]),
                 ),

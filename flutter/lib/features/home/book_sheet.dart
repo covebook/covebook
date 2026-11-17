@@ -15,7 +15,6 @@ import '../book/add_book_screen.dart' show openAddBook;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/book_visual.dart';
-import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../book/book_screen.dart' show openBook;
@@ -266,7 +265,7 @@ Widget _textAction(String label, VoidCallback onPress) => Expanded(
             constraints: const BoxConstraints(minHeight: 48),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Center(child: Text(keepAll(label), textAlign: TextAlign.center, style: AppType.sub.copyWith(color: AppColors.ink))),
+              child: Center(child: WordText(label, textAlign: TextAlign.center, style: AppType.sub.copyWith(color: AppColors.ink))),
             ),
           ),
         ),
