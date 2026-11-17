@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
 import '../../domain/library.dart';
 import '../../domain/reading.dart';
@@ -29,8 +30,6 @@ import 'reading_screen.dart';
 import 'switch_book.dart';
 
 const _week = ['일', '월', '화', '수', '목', '금', '토'];
-const _coverW = 42.0; // 표지 폭(높이는 표지 비율대로 약 62)
-const _badge = 26.0; // 표지 위 재생 단추 지름
 const _tabular = [FontFeature.tabularFigures()];
 
 String? bookTitle(Library lib, String? id) {
@@ -213,111 +212,67 @@ class _ReadListState extends State<ReadList> {
         added.contains(id) &&
         (id == noBook ? !noBookActive && saved.noBook == 0 : lib.books[id]?.status != ReadStatus.reading && !saved.byBook.containsKey(id) && active?.myBookId != id);
 
+    // 2026-11-17 사용자 시안: 위에 '최근 읽던 책' 카드(큰 표지 · 오늘 시간 · 이어서 읽기), 아래 '내 읽기 목록'(제목·저자, 오늘 읽었으면 시간, 아니면 ▶ 읽기).
+    // 누르면 타이머 장면으로 넘어간다. 줄을 길게 누르면 예전 ⋮ 메뉴(책 정보 · 이 책 독서 기록 · 목록에서 빼기)
+    String titleOf(String? id) => id != null ? bookTitle(lib, id) ?? '' : '책 없이 읽기';
+    String authorOf(String? id) {
+      final ed = id == null ? null : lib.editions[lib.books[id]?.editionId ?? ''];
+      return ed != null && ed.authors.isNotEmpty ? ed.authors.join(', ') : '';
+    }
+    num timeOf(String? id) => id != null ? msOf(id) : saved.noBook + (noBookActive ? activeToday : 0);
+    Widget coverOf(String? id, double w) => id != null
+        ? LinkedCover(lib: lib, id: id, width: w)
+        : Container(
+            width: w,
+            height: (w / 0.68).roundToDouble(),
+            decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(4)),
+            child: const Center(child: LucideIcon('BookOpen', color: AppColors.inkSoft)),
+          );
+    void moreOf(String? id) {
+      if (id == null && !removable(noBook)) return;
+      _menu(id ?? noBook, id == null ? '책 없이 읽기' : titleOf(id), removable(id ?? noBook));
+    }
+
     Widget row(String? id) {
       final isActive = active != null && active.myBookId == id;
       final playing = isActive && running;
-      final title = id != null ? bookTitle(lib, id) ?? '' : '책 없이 읽기';
-      final ed = id == null ? null : lib.editions[lib.books[id]?.editionId ?? ''];
-      final author = ed != null && ed.authors.isNotEmpty ? ed.authors.join(', ') : '';
-      final ms = id != null ? msOf(id) : saved.noBook + (noBookActive ? activeToday : 0);
-      final showMore = id != null || removable(noBook);
-      // 줄 이름은 한 번만: 안의 제목·지은이·시간 글은 줄 이름에 이미 있어 화면 읽기에서 뺀다(2026-11-16 QA 영숙 F9: 같은 말을 두세 번 읽었다)
+      final title = titleOf(id), author = authorOf(id);
+      final ms = timeOf(id);
       return Semantics(
         key: ValueKey(id ?? '~none'),
         container: true,
         button: true,
-        label: '$title${author.isNotEmpty ? ', $author' : ''}, 오늘 ${hms(ms)}${isActive ? (playing ? ', 읽는 중' : ', 일시정지') : ''}',
-        child: Pressable(
-          onPress: () => _tapRow(id),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 84),
-            child: Row(children: [
-              // 재생 단추: 표지 이름('… 표지')은 빼고 단추 이름만
-              Semantics(
-                container: true,
-                button: true,
-                label: playing ? '$title 일시정지' : '$title 읽기 시작',
-                onTap: () => _begin(id),
-                excludeSemantics: true,
-                child: Pressable(
-                  onPress: () => _begin(id),
-                  pressedOpacity: 0.7,
-                  child: SizedBox(
-                    width: _coverW + 6,
-                    child: Stack(clipBehavior: Clip.none, children: [
-                      IgnorePointer(
-                        child: id != null
-                            ? LinkedCover(lib: lib, id: id, width: _coverW)
-                            : Container(
-                                width: _coverW,
-                                height: (_coverW / 0.68).roundToDouble(),
-                                decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(4)),
-                                child: const Center(child: LucideIcon('BookOpen', color: AppColors.inkSoft)),
-                              ),
-                      ),
-                      // 재생 단추: 표지 오른쪽 아래에 걸친 작은 원(대표색 + 흰 테두리, 2026-11-14 사용자 '대표색으로'). 재생·일시정지는 안의 모양으로 가른다
-                      Positioned(
-                        right: 0,
-                        bottom: -4,
-                        child: Container(
-                          width: _badge,
-                          height: _badge,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.accent,
-                            border: Border.all(color: AppColors.white, width: 2),
-                          ),
-                          child: Center(
-                            child: playing ? const PauseIcon(width: 3.5, height: 11, gap: 3.5, color: AppColors.onAccent) : const PlayIcon(size: 15, color: AppColors.onAccent),
-                          ),
-                        ),
-                      ),
-                    ]),
-                  ),
-                ),
-              ),
-              const SizedBox(width: Space.m),
-              Expanded(
-                child: ExcludeSemantics(
+        label: '$title${author.isNotEmpty ? ', $author' : ''}${ms > 0 ? ', 오늘 ${formatDuration(ms)}' : ''}${isActive ? (playing ? ', 읽는 중' : ', 일시정지') : ', 읽기'}',
+        customSemanticsActions: {CustomSemanticsAction(label: '$title 더 보기'): () => moreOf(id)},
+        excludeSemantics: true,
+        onTap: () => _tapRow(id),
+        child: GestureDetector(
+          onLongPress: () => moreOf(id),
+          child: Pressable(
+            onPress: () => _tapRow(id),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.s),
+              child: Row(children: [
+                coverOf(id, 48),
+                const SizedBox(width: Space.l),
+                Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: isActive ? AppType.row.copyWith(fontFamily: AppFonts.uiBold) : AppType.row),
-                    if (author.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 14, height: 20 / 14, color: AppColors.inkSoft)),
-                      ),
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
+                    if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
                   ]),
                 ),
-              ),
-              const SizedBox(width: Space.m),
-              // 책마다 시간은 세미볼드(2026-11-15 사용자 '숫자 좀 더 두껍게'): 위 큰 타이머(굵게)와 한 무리로 읽힌다
-              ExcludeSemantics(
-                child: Text(hms(ms),
-                    style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 18, height: 26 / 18, color: ms == 0 && !isActive ? AppColors.inkSoft : AppColors.ink, fontFeatures: _tabular)),
-              ),
-              const SizedBox(width: Space.m - Space.s),
-              SizedBox(
-                width: 28 - Space.s,
-                height: Space.touch,
-                child: OverflowBox(
-                  maxWidth: 28,
-                  alignment: Alignment.centerLeft,
-                  child: showMore
-                      ? Semantics(
-                          container: true,
-                          button: true,
-                          label: '$title 더 보기',
-                          onTap: () => _menu(id ?? noBook, id == null ? '책 없이 읽기' : title, removable(id ?? noBook)),
-                          excludeSemantics: true,
-                          child: Pressable(
-                            onPress: () => _menu(id ?? noBook, id == null ? '책 없이 읽기' : title, removable(id ?? noBook)),
-                            child: const SizedBox(width: 28, height: Space.touch, child: Center(child: LucideIcon('MoreVertical', color: AppColors.inkSoft))),
-                          ),
-                        )
-                      : const SizedBox(width: 28),
-                ),
-              ),
-            ]),
+                const SizedBox(width: Space.m),
+                // 오늘 읽었으면 그 시간, 아니면 ▶ 읽기(재는 중이면 시간이 늘어난다)
+                if (ms > 0 || isActive)
+                  Text(isActive && ms < 60000 ? hms(ms) : formatDuration(ms), style: AppType.rowStrong.copyWith(fontFeatures: _tabular))
+                else
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    const PlayIcon(size: 14, color: AppColors.accent),
+                    const SizedBox(width: 6),
+                    Text('읽기', style: AppType.rowStrong.copyWith(color: AppColors.accent)),
+                  ]),
+              ]),
+            ),
           ),
         ),
       );
@@ -329,48 +284,57 @@ class _ReadListState extends State<ReadList> {
       if (picked.isNotEmpty) _addToList(picked);
     }
 
+    // 최근 읽던 책: 재는 책 → 오늘·최근에 읽은 책 → 목록 첫 책
+    String? featured;
+    var hasFeatured = false;
+    if (active != null) {
+      featured = active.myBookId;
+      hasFeatured = true;
+    } else {
+      final recent = lib.sessions.values.where((x) => x.myBookId != null && ids.contains(x.myBookId)).toList()..sort((a, c) => c.startedAt.compareTo(a.startedAt));
+      if (recent.isNotEmpty) {
+        featured = recent.first.myBookId;
+        hasFeatured = true;
+      } else if (ids.isNotEmpty) {
+        featured = ids.first;
+        hasFeatured = true;
+      }
+    }
+    final rest = [for (final id in ids) if (!(hasFeatured && id == featured)) id];
+    final restNoBook = showNoBook && !(hasFeatured && featured == null);
+    final fActive = hasFeatured && active != null && active.myBookId == featured;
+    final fMs = hasFeatured ? timeOf(featured) : 0;
+    final fRead = featured != null && lib.sessions.values.any((x) => x.myBookId == featured);
+    final fLabel = fActive ? (running ? '읽기 화면으로' : '이어서 읽기') : (fRead ? '이어서 읽기' : '읽기 시작');
+
     return Screen(
       back: false,
       bottomPad: TabBarStyle.contentPad - Space.section,
       children: [
-        // 머리: 가운데 오늘 날짜, 오른쪽 소리만 듣기(시간을 재지 않는 분위기 장면)
+        // 머리: '읽기' 제목(오른쪽 소리만 듣기), 아래 오늘 날짜와 오늘 총 시간
         Padding(
-          padding: const EdgeInsets.only(top: Space.xs),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 56),
-            child: Row(children: [
-              const SizedBox(width: 56),
-              Expanded(
-                child: Semantics(header: true, child: Text('${now.month}. ${now.day} (${_week[now.weekday % 7]})', textAlign: TextAlign.center, style: AppType.navTitle)),
-              ),
-              SizedBox(
-                width: 56,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: IconBtn(label: '소리만 듣기', onPress: () => openReadingScene(context, soundOnly: true), child: const LucideIcon('AudioLines')),
-                ),
-              ),
+          padding: const EdgeInsets.only(top: TabHeader.paddingTop),
+          child: Row(children: [
+            Expanded(child: Semantics(header: true, child: Text('읽기', style: AppType.title))),
+            IconBtn(label: '소리만 듣기', onPress: () => openReadingScene(context, soundOnly: true), child: const LucideIcon('AudioLines')),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: Semantics(
+            label: '${now.month}월 ${now.day}일 ${_week[now.weekday % 7]}요일, 오늘 총 ${formatDuration(total)}${active != null ? (running ? ', 읽는 중' : ', 일시정지') : ''}',
+            excludeSemantics: true,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Expanded(child: Text('${now.month}월 ${now.day}일 ${_week[now.weekday % 7]}요일', style: AppType.sub.copyWith(color: AppColors.ink))),
+              Text('오늘 총 ', style: AppType.sub),
+              Text(formatDuration(total), style: AppType.rowStrong.copyWith(fontFeatures: _tabular)),
             ]),
           ),
-        ),
-        // 오늘 읽은 시간(모든 책 + 책 없이)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xl, bottom: Space.xxl),
-          child: Column(children: [
-            Semantics(
-              label: '오늘 읽은 시간 ${hms(total)}',
-              child: Text(hms(total), style: const TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 56, height: 64 / 56, color: AppColors.ink, fontFeatures: _tabular)),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: Space.s),
-              child: Text(active != null ? (running ? '읽는 중' : '일시정지') : '오늘 읽은 시간', style: AppType.caption),
-            ),
-          ]),
         ),
         // 끝냈지만 저장하지 않은 기록(독서 끝 화면에서 뒤로 나왔을 때 등): 여기서 다시 연다(2026-11-15 QA 민혁 F3)
         if (_reading.pending != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: Space.m),
+            padding: const EdgeInsets.only(top: Space.m),
             child: ListItem(
               label: '저장하지 않은 독서 기록이 있어요',
               sub: [bookTitle(lib, _reading.pending!.myBookId) ?? '책 없이 읽기', formatDurationPrecise(_reading.pending!.durationMs)].join(' · '),
@@ -378,48 +342,53 @@ class _ReadListState extends State<ReadList> {
               onPress: _openPending,
             ),
           ),
-        SizedBox(
-          height: 1 / MediaQuery.devicePixelRatioOf(context),
-          child: OverflowBox(maxWidth: double.infinity, child: Container(width: MediaQuery.sizeOf(context).width, color: AppColors.line)),
-        ),
-        if (hasRows)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.s),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final id in ids) row(id), if (showNoBook) row(null)]),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xxl, bottom: Space.m),
-            child: Column(children: [
-              Text('타이머에 책을 추가해 보세요', style: AppType.heading),
-              Padding(
-                padding: const EdgeInsets.only(top: Space.s),
-                child: Text('읽을 책을 여러 권 골라 두고\n재생 단추로 시간을 재요.', textAlign: TextAlign.center, style: AppType.sub),
-              ),
-            ]),
-          ),
-        // 목록에 없는 책(읽을 책·다 읽은 책)이나 책 없이 읽기를 여러 개 골라 더한다
-        if (hasRows)
-          // 이름은 한 번만('책 추가 / 책 추가'로 읽혔다)
-          Semantics(
-            button: true,
-            label: '책 추가',
-            onTap: openPicker,
-            excludeSemantics: true,
-            child: Pressable(
-              onPress: openPicker,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 84),
-                child: Row(children: [
-                  const SizedBox(width: _coverW + 6, child: Padding(padding: EdgeInsets.only(left: 9), child: Align(alignment: Alignment.centerLeft, child: LucideIcon('Plus', color: AppColors.inkSoft)))),
-                  const SizedBox(width: Space.m),
-                  Expanded(child: Text('책 추가', style: AppType.row.copyWith(color: AppColors.inkSoft))),
-                ]),
-              ),
+        if (hasFeatured) ...[
+          Padding(padding: const EdgeInsets.only(top: Space.xl, bottom: Space.m), child: Text(fActive ? (running ? '읽는 중' : '잠깐 멈춘 책') : '최근 읽던 책', style: AppType.sub)),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Semantics(
+              button: true,
+              label: '${titleOf(featured)} 책 정보',
+              excludeSemantics: true,
+              onTap: featured == null ? null : () => openBook(context, featured!),
+              child: Pressable(onPress: featured == null ? null : () => openBook(context, featured!), child: coverOf(featured, 120)),
             ),
+            const SizedBox(width: Space.l),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                WordText(titleOf(featured), maxLines: 2, style: AppType.heading),
+                if (authorOf(featured).isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(authorOf(featured), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                const SizedBox(height: Space.l),
+                Text(fActive && fMs < 60000 ? hms(fMs) : formatDuration(fMs), textAlign: TextAlign.right, style: AppType.rowStrong.copyWith(fontSize: 20, fontFeatures: _tabular)),
+                const SizedBox(height: Space.s),
+                Btn(label: fLabel, icon: const PlayIcon(size: 15, color: AppColors.onAccent), onPress: () => fActive ? (running ? _openScene() : _begin(featured)) : _begin(featured)),
+              ]),
+            ),
+          ]),
+        ],
+        // 내 읽기 목록(오른쪽 +: 읽을 책·다 읽은 책이나 책 없이 읽기를 여러 개 골라 더한다)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.section),
+          child: Row(children: [
+            Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.heading))),
+            IconBtn(label: '읽기 목록에 책 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26)),
+          ]),
+        ),
+        if (rest.isNotEmpty || restNoBook)
+          Padding(
+            padding: const EdgeInsets.only(top: Space.xs),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final id in rest) row(id), if (restNoBook) row(null)]),
+          )
+        else if (!hasRows)
+          Padding(
+            padding: const EdgeInsets.only(top: Space.l),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              WordText('읽을 책을 골라 두고 눌러서 시간을 재요', style: AppType.sub),
+              const SizedBox(height: Space.m),
+              Btn(label: '책 추가', onPress: openPicker),
+            ]),
           )
         else
-          Padding(padding: const EdgeInsets.only(top: Space.l), child: Btn(label: '책 추가', onPress: openPicker)),
+          Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('+로 읽을 책을 더 골라 둘 수 있어요', style: AppType.sub)),
       ],
     );
   }

@@ -3,7 +3,6 @@
 // 서버 주소가 없는 빌드는 '이 기기에만 저장' 쪽 문구를 쓴다(지금 앱도 서버를 못 쓰면 같은 문구)
 library;
 
-import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -104,14 +103,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Widget para(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.item), child: Text(keepAll(t), style: p));
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             para(_syncAvailable
-                ? '책장 한켠은 로그인 없이 쓸 수 있어요. 책·독서 기록·갈피·감상·사진은 이 기기에 저장되고, 이 기기 전용 계정으로 책장 한켠 서버에도 동기화돼요. Apple·카카오·Google을 연결하면 그 서비스의 회원 식별자와 고른 닉네임이 서버에 저장되고, 다른 기기에서 같은 기록을 이어 볼 수 있어요.'
+                ? '책장 한켠은 카카오·Google·Apple 로그인으로 써요. 책·독서 기록·갈피·감상·사진은 이 기기와 책장 한켠 서버의 내 계정에 저장돼, 폰을 바꿔도 이어 볼 수 있어요. 로그인한 서비스의 회원 식별자와 고른 닉네임이 서버에 저장돼요.'
                 : '책장 한켠은 로그인 없이 써요. 책·독서 기록·갈피·감상·사진은 이 기기 안에만 저장돼요.'),
             para('책을 찾으면 검색어가 책장 한켠 서버를 거쳐 YES24로 전송돼요. 서버에 닿지 않거나 결과가 없으면 Google Books로, 그래도 없으면 Open Library로 바로 전송돼요. 인기 많은 책 목록도 책장 한켠 서버에서 받아요. 검색과 표지 그림을 받을 때 IP 주소 같은 통신 정보가 함께 전달돼요.'),
             para('사진은 표지를 넣거나 갈피 원문을 보관하는 데만 쓰고, 읽었다는 인증에는 쓰지 않아요. 갈피 사진의 글자 인식과 바코드 읽기는 기기 안에서 하고, 그 사진을 밖으로 보내지 않아요.'
                 '${_syncAvailable ? ' 동기화를 위해 사진은 책장 한켠 서버에 올라가요.' : ''}'),
-            para(Platform.isAndroid
-                ? '백업 파일은 직접 만들 때만 생겨요. 다운로드/책장한켠 폴더에 바로 저장하거나, 공유로 고른 앱(드라이브·메신저 등)으로 보내요. 그 파일에는 위 기록과 직접 찍거나 고른 사진이 들어 있어요(검색으로 넣은 책 표지는 빠져요).'
-                : '백업 파일은 직접 만들 때만 생기고, 공유로 고른 곳(파일·드라이브·메신저 등)으로 보내요. 그 파일에는 위 기록과 직접 찍거나 고른 사진이 들어 있어요(검색으로 넣은 책 표지는 빠져요).'),
             para(_syncAvailable && communityOpen.value
                 ? '내 기록은 공개되지 않아요. 커뮤니티에 직접 올린 글과 고른 항목만 공개돼요.'
                 : '공개되는 기록은 없어요. 별점·한줄평·감상·갈피는 나만 봐요.'),
@@ -144,7 +140,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         const SectionBand(),
         ListGroup(title: '내 기록', children: [
-          ListItem(label: '백업 및 복원', sub: _syncAvailable ? '기록은 이 기기와 서버에 저장돼요' : '기록은 이 기기에 저장돼요', chevron: true, onPress: () => openBackup(context)),
+          // 백업·복원은 뺐다(2026-11-17 사용자: 기록은 계정에 보관, 다른 앱에서 갈아타는 가져오기만)
+          ListItem(label: '계정 및 동기화', sub: _syncAvailable ? '기록은 계정에 보관돼요' : '기록은 이 기기에 저장돼요', chevron: true, onPress: () => openBackup(context)),
           // 다른 앱·엑셀에 정리해 둔 책을 한 번에(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어')
           ListItem(label: '책 목록 가져오기', sub: '엑셀·CSV 파일로 여러 권을 한 번에', chevron: true, onPress: () => openImportList(context)),
           // 커뮤니티가 열렸고 서버를 쓰는 빌드일 때만

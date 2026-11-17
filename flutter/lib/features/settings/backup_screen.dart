@@ -1,17 +1,14 @@
-// 백업 및 복원(지금 앱 app/backup.tsx, 설정 → 내 기록): 백업 파일 저장·공유·복원, 서버 동기화 상태·계정 연결.
+// 계정 및 동기화(설정 → 내 기록): 서버 동기화 상태·계정 연결·로그아웃·서버 계정 삭제. 백업 파일 저장·공유·복원은 2026-11-17에 뺐다(사용자: 기록은 계정에, 가져오기만)
 // 2026-11-01 토스식: 세로로 쌓인 버튼 대신 누르는 줄 목록, 설명은 한 줄
 library;
 
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../../services/sync.dart';
-import '../../store/backup.dart';
 import '../../store/reading_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/brand_button.dart';
-import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 
@@ -28,19 +25,11 @@ class BackupScreen extends StatefulWidget {
 class _BackupScreenState extends State<BackupScreen> {
   final _sync = SyncService.instance;
   bool _loggingIn = false;
-  String? _busy; // export · share · restore
-  ({String at, String how})? _last; // 마지막 백업(이 기기)
 
   @override
   void initState() {
     super.initState();
     _sync.addListener(_changed);
-    _loadLast();
-  }
-
-  Future<void> _loadLast() async {
-    final l = await lastBackup();
-    if (mounted) setState(() => _last = l);
   }
 
   @override
@@ -60,90 +49,6 @@ class _BackupScreenState extends State<BackupScreen> {
     String p(int n) => n.toString().padLeft(2, '0');
     return '${t.month}월 ${t.day}일 ${p(t.hour)}:${p(t.minute)}';
   }
-
-  String _countsText(Counts c) => '책 ${c.books}권 · 갈피 ${c.bookmarks}개${c.essays > 0 ? ' · 감상 ${c.essays}편' : ''} · 독서 회차 ${c.rounds}개 · 독서 기록 ${c.sessions}개 · 장정 ${c.bindings}개 · 사진 ${c.images}장';
-
-  Future<void> _saveToDownloads() async {
-    setState(() => _busy = 'export');
-    try {
-      final r = await exportToDownloads();
-      _loadLast();
-      if (mounted) appAlert(context, '백업 파일을 저장했어요', '다운로드/책장한켠/${r.name}\n${_countsText(r.counts)}');
-    } catch (e) {
-      if (mounted) appAlert(context, '저장하지 못했어요', e is StateError ? e.message : '$e');
-    } finally {
-      if (mounted) setState(() => _busy = null);
-    }
-  }
-
-  Future<void> _share() async {
-    setState(() => _busy = 'share');
-    try {
-      await exportShare();
-      _loadLast();
-    } catch (e) {
-      if (mounted) appAlert(context, '내보내지 못했어요', '$e');
-    } finally {
-      if (mounted) setState(() => _busy = null);
-    }
-  }
-
-  Future<void> _restore() async {
-    setState(() => _busy = 'restore');
-    final r = await readBackupFile();
-    if (!mounted) return;
-    setState(() => _busy = null);
-    if (r.data == null) {
-      if (r.error != null) appAlert(context, '복원할 수 없어요', r.error);
-      return;
-    }
-    final c = r.counts!;
-    appAlert(
-      context,
-      '백업으로 바꿀까요?',
-      // 만든 날짜와 시각(기기 시각): 같은 날 여러 번 백업해도 어느 것인지 안다(2026-11-16 QA 현우 F6)
-      '백업(${backupTimeLabel(r.data!['exportedAt']! as String)}): 책 ${c.books}권 · 갈피 ${c.bookmarks}개${c.essays > 0 ? ' · 감상 ${c.essays}편' : ''} · 독서 기록 ${c.sessions}개 · 사진 ${c.images}장\n지금 기기의 기록은 이 백업 내용으로 바뀌어요.',
-      [
-        const AlertButton('취소', style: AlertStyle.cancel),
-        AlertButton('복원', style: AlertStyle.destructive, onPress: () async {
-          setState(() => _busy = 'restore');
-          try {
-            await restoreBackup(r.data!);
-            if (mounted) appAlert(context, '복원했어요');
-          } catch (e) {
-            if (mounted) appAlert(context, '복원하지 못했어요', e is StateError ? e.message : '$e');
-          } finally {
-            if (mounted) setState(() => _busy = null);
-          }
-        }),
-      ],
-    );
-  }
-
-  Widget? _spin(String kind) => _busy == kind ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent)) : null;
-
-  List<Widget> _backupSection() => [
-        const H2('백업 파일', first: true),
-        // 들어가는 것에 감상을, 책 표지는 파일에 넣지 않고 인터넷에서 다시 받는다는 것을 알린다(2026-11-16 QA 현우 F2·F7)
-        Padding(
-          padding: const EdgeInsets.only(bottom: Space.xs),
-          child: Text(keepAll('책·독서 기록·갈피·감상·장정·책장 배치·설정과 직접 찍거나 고른 사진이 들어가요. 검색으로 넣은 책 표지는 파일에 넣지 않고 인터넷에서 다시 받아요. 진행 중인 타이머는 빠져요.'), style: AppType.sub),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: Space.s),
-          child: Text(
-            _last == null ? '이 기기에서는 아직 백업하지 않았어요.' : '마지막 백업 ${backupTimeLabel(_last!.at)} · ${_last!.how == 'share' ? '공유로 보냄' : '다운로드 폴더'}',
-            style: AppType.caption,
-          ),
-        ),
-        ListGroup(children: [
-          // iOS에는 다운로드 폴더가 없다: 공유창의 '파일에 저장'을 쓴다
-          if (Platform.isAndroid)
-            ListItem(label: '다운로드 폴더에 백업 파일 저장', sub: '다운로드/책장한켠에 저장돼요', chevron: _busy != 'export', right: _spin('export'), onPress: _busy != null ? null : _saveToDownloads),
-          ListItem(label: '공유로 보내기', sub: '메신저·드라이브로 보내요', chevron: _busy != 'share', right: _spin('share'), onPress: _busy != null ? null : _share),
-          ListItem(label: '백업에서 복원', sub: '지금 기기의 기록이 백업 내용으로 바뀌어요', chevron: _busy != 'restore', right: _spin('restore'), onPress: _busy != null ? null : _restore),
-        ]),
-      ];
 
   // 연결 전에 알린다: 이 기기의 기록이 계정 기록과 합쳐지고(같은 항목은 더 최근에 고친 쪽), 아무것도 자동 공개되지 않는다
   void _login(String provider) => appAlert(
@@ -175,7 +80,7 @@ class _BackupScreenState extends State<BackupScreen> {
         context,
         '서버 계정을 삭제할까요?',
         _sync.loginRequired
-            ? '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 남겨 두려면 먼저 백업 파일로 보내 두세요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
+            ? '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
             : '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
         [
           const AlertButton('취소', style: AlertStyle.cancel),
@@ -264,7 +169,7 @@ class _BackupScreenState extends State<BackupScreen> {
                         : '아직 동기화 전이에요';
     final sub = on
         ? '${s.pending > 0 ? '올리지 못한 변경 ${s.pending}개' : s.lastAt != null && !s.paused && s.state != SyncState.error ? '대기 중인 변경이 없어요' : '기기에 기록을 보관하고 있어요'}${s.lastError != null ? ' · ${s.lastError}' : ''}'
-        : '기록은 이 기기에만 있어요. 백업 파일로 옮길 수 있어요.';
+        : '기록은 이 기기에만 있어요.';
     final canLink = on && !s.paused;
     // 연결할 수 있는 계정: 세 회사 단추를 같은 크기·같은 줄 간격으로(예전엔 카카오는 목록 줄, Apple은 검은 알약, Google은 영어 그림 단추로 셋이 달랐다, 2026-11-16)
     final brands = <Widget>[
@@ -310,12 +215,9 @@ class _BackupScreenState extends State<BackupScreen> {
 
   @override
   Widget build(BuildContext context) => Screen(
-        title: '백업 및 복원',
-        subtitle: _sync.available ? '기록은 이 기기와 서버에 함께 저장돼요' : '모든 기록은 이 기기에만 저장돼요',
-        children: [
-          ..._backupSection(),
-          const SectionBand(),
-          ..._syncSection(),
-        ],
+        // 2026-11-17 사용자: 백업·복원·파일 내보내기를 없애고 '계정 및 동기화'로(기록은 계정에 보관된다. 다른 앱에서 갈아타는 가져오기만 둔다)
+        title: '계정 및 동기화',
+        subtitle: _sync.available ? '기록은 계정에 보관돼 폰을 바꿔도 이어져요' : '모든 기록은 이 기기에만 저장돼요',
+        children: _syncSection(),
       );
 }
