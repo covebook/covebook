@@ -311,8 +311,16 @@ class _BookScreenState extends State<BookScreen> {
 
     // 평가 탭(2026-11-17 사용자 시안): 별은 표지·제목·저자 아래 가운데, 그 아래 '한줄평'(오른쪽 수정)과 '감상 N'(오른쪽 쓰기).
     // 한줄평은 회색 상자 없이 글만 두고 '수정'을 누르면 그 자리에서 고친다. 별점·한줄평은 나만 본다
-    Widget sectionHead(String title, String link, VoidCallback onLink) => Row(children: [
-          Expanded(child: Semantics(header: true, child: WordText(title, style: AppType.section))),
+    // 개수는 제목 옆에 작은 회색 글('감상 1개', 2026-11-17 사용자 시안)
+    Widget sectionHead(String title, String link, VoidCallback onLink, {String? count}) => Row(children: [
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text.rich(TextSpan(text: title, style: AppType.section, children: [
+                if (count != null) TextSpan(text: '  $count', style: AppType.sub.copyWith(fontFamily: AppFonts.uiMedium)),
+              ])),
+            ),
+          ),
           TextLink(label: link, soft: true, onPress: onLink),
         ]);
     void endNote() {
@@ -373,7 +381,7 @@ class _BookScreenState extends State<BookScreen> {
             WordText(note.isEmpty ? '이 책을 한 줄로 남겨 보세요' : note, style: note.isEmpty ? AppType.sub.copyWith(color: AppColors.inkFaint) : AppType.body),
           const SizedBox(height: Space.xl + 4),
           // 감상(기록 › 감상과 같은 데이터, 이 책 것만)
-          sectionHead(essays.isEmpty ? '감상' : '감상 ${essays.length}', '쓰기', () => openNewEssay(context, book: id)),
+          sectionHead('감상', '쓰기', () => openNewEssay(context, book: id), count: essays.isEmpty ? null : '${essays.length}개'),
           if (essays.isEmpty)
             Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('이 책을 읽고 든 생각을 길게 남겨요', style: AppType.sub))
           else
