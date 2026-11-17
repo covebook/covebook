@@ -22,6 +22,8 @@ import '../bookmark/bookmark_detail_screen.dart' show openBookmark;
 import '../bookmark/bookmark_card.dart' show hexColor;
 import '../bookmark/photo_plate.dart' show BookmarkPhoto;
 import '../bookmark/ribbon_color_sheet.dart';
+import '../stats/chart_data.dart' show timeRange;
+import '../stats/session_edit_screen.dart' show openSessionEdit;
 import '../stats/stats_screen.dart';
 import 'labels.dart';
 import '../bookmark/new_bookmark_screen.dart';
@@ -386,41 +388,81 @@ class _BookScreenState extends State<BookScreen> {
           _pageEdit = !_pageEdit;
           _page.text = b.currentPage != null && b.currentPage != 0 ? '${b.currentPage}' : '';
         });
-    Widget minePane() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-            Expanded(child: Semantics(header: true, child: Text('내 독서', style: AppType.section))),
-            Text([statusLabel[b.status]!, if (done > 0) '완독 $done회'].join(' · '), style: AppType.caption),
+    // 내 기록 탭(2026-11-17 사용자 시안): 위에 읽기 상태(누르면 고르는 시트)와 쪽수, 진행 막대, 'N% 읽음 · 총 시간 · 횟수',
+    // 그 아래 최근 독서 기록(날짜·시간대·걸린 시간, 전체 보기는 통계). 읽은 기간(회차)과 남긴 갈피는 그 아래 그대로
+    final pc = e.pageCount;
+    final cur = b.currentPage ?? 0;
+    final pct = pc != null && pc > 0 ? ((cur / pc).clamp(0.0, 1.0) * 100).round() : null;
+    final recent = lib.sessions.values.where((x) => x.myBookId == id).toList()..sort((a, c) => c.startedAt.compareTo(a.startedAt));
+    void pickStatus() => showSheet<void>(
+          context,
+          title: '읽기 상태',
+          builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final st in _statuses)
+              FilterOption(
+                label: statusLabel[st]!,
+                selected: b.status == st,
+                onPress: () {
+                  Navigator.of(ctx).pop();
+                  _chooseStatus(b, last, st);
+                },
+              ),
           ]),
-          Semantics(
-            button: true,
-            label: '현재 쪽 ${b.currentPage ?? 0}${e.pageCount != null ? ' / ${e.pageCount}쪽' : '쪽'}, 눌러서 고치기',
-            onTap: togglePage,
-            excludeSemantics: true,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: togglePage,
-              child: Padding(
-                padding: const EdgeInsets.only(top: Space.s),
+        );
+    void openAllSessions() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsScreen(tab: false, initialBook: id)));
+    String dayOf(String iso) {
+      final t = DateTime.parse(iso).toLocal();
+      return '${t.month}월 ${t.day}일';
+    }
+
+    Widget minePane() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Semantics(
+              button: true,
+              label: '읽기 상태 ${statusLabel[b.status]}, 바꾸기',
+              onTap: pickStatus,
+              excludeSemantics: true,
+              child: Pressable(
+                onPress: pickStatus,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: Space.touch),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                    Expanded(
-                      child: Text.rich(TextSpan(
-                        text: '${b.currentPage ?? 0}',
-                        style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 32, height: 40 / 32, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]),
-                        children: [TextSpan(text: e.pageCount != null ? '  /  ${e.pageCount}쪽' : '쪽', style: const TextStyle(fontSize: 18, color: AppColors.inkSoft))],
-                      )),
-                    ),
-                    if (e.pageCount == null) Text('전체 쪽수 미입력', style: AppType.caption),
+                  constraints: const BoxConstraints(minHeight: Space.hit),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(statusLabel[b.status]!, style: AppType.rowStrong.copyWith(color: AppColors.accent)),
+                    const SizedBox(width: 4),
+                    const LucideIcon('ChevronDown', size: 20, color: AppColors.accent, stroke: 2),
                   ]),
                 ),
               ),
             ),
-          ),
+            const SizedBox(width: Space.m),
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: '현재 쪽 $cur${pc != null ? ' / $pc쪽' : '쪽'}, 눌러서 고치기',
+                onTap: togglePage,
+                excludeSemantics: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: togglePage,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: Space.hit),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text.rich(TextSpan(
+                        text: '$cur',
+                        style: const TextStyle(fontFamily: AppFonts.uiMedium, fontSize: 32, height: 40 / 32, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]),
+                        children: [TextSpan(text: pc != null ? ' / $pc쪽' : '쪽', style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 18, color: AppColors.inkSoft))],
+                      )),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ]),
           // 쪽수 진행 막대: 8 두께, 끝은 둥글게(전체 쪽수를 알 때만)
-          if (e.pageCount != null && e.pageCount! > 0)
+          if (pc != null && pc > 0)
             Padding(
-              padding: const EdgeInsets.only(top: Space.m),
+              padding: const EdgeInsets.only(top: Space.s),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: SizedBox(
@@ -428,13 +470,23 @@ class _BookScreenState extends State<BookScreen> {
                   child: Stack(children: [
                     Container(color: AppColors.line),
                     FractionallySizedBox(
-                      widthFactor: (((b.currentPage ?? 0) / e.pageCount!).clamp(0.0, 1.0)).toDouble(),
+                      widthFactor: ((cur / pc).clamp(0.0, 1.0)).toDouble(),
                       child: Container(decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(4))),
                     ),
                   ]),
                 ),
               ),
             ),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.s),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(pct != null ? '$pct% 읽음' : '전체 쪽수 미입력', style: AppType.caption),
+              const SizedBox(width: Space.m),
+              Expanded(
+                child: WordText(['총 ${formatDuration(readMs)}', if (sessions > 0) '$sessions회', if (done > 0) '완독 $done회'].join(' · '), textAlign: TextAlign.right, style: AppType.caption),
+              ),
+            ]),
+          ),
           if (_pageEdit)
             Container(
               margin: const EdgeInsets.only(top: Space.s),
@@ -460,38 +512,62 @@ class _BookScreenState extends State<BookScreen> {
                 },
               ),
             ),
-          const H2('읽기 상태'),
-          Wrap(spacing: Space.s, runSpacing: Space.s, children: [
-            for (final s in _statuses) AppChip(label: statusLabel[s]!, on: b.status == s, onPress: () => _chooseStatus(b, last, s)),
+          // 최근 독서 기록: 날짜 · 시간대 · 걸린 시간(누르면 고치기), 전체는 통계에서
+          const SizedBox(height: Space.section),
+          Row(children: [
+            Expanded(child: Semantics(header: true, child: WordText('독서 기록', style: AppType.heading))),
+            if (recent.isNotEmpty)
+              Semantics(
+                button: true,
+                label: '독서 기록 전체 보기',
+                onTap: openAllSessions,
+                excludeSemantics: true,
+                child: Pressable(
+                  onPress: openAllSessions,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: Space.hit),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text('전체 보기', style: AppType.sub),
+                      const SizedBox(width: 2),
+                      const LucideIcon('ChevronRight', size: 18, color: AppColors.inkSoft),
+                    ]),
+                  ),
+                ),
+              ),
           ]),
-          if (b.status == ReadStatus.read)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.s),
-              child: Row(children: [
-                Btn(label: '완독 카드 공유', kind: 'ghost', size: 's', onPress: () => openBookShare(context, id)),
-                const SizedBox(width: Space.l),
-                Btn(label: '다시 읽기 시작(새 회차)', kind: 'ghost', size: 's', onPress: () => _chooseStatus(b, last, ReadStatus.reading)),
-              ]),
-            ),
-          const H2('내 기록'),
-          ListGroup(children: [
-            ListItem(label: '누적 독서 시간', value: formatDuration(readMs)),
-            ListItem(label: '완독', value: done > 0 ? '$done회${done > 1 ? ' (재독 ${done - 1}회)' : ''}' : '아직'),
-            ListItem(
-              label: '독서 기록',
-              value: '$sessions회',
-              onPress: sessions > 0 ? () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsScreen(tab: false, initialBook: id))) : null,
-            ),
-          ]),
-          if (rounds.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.s),
-              child: Column(children: [
-                for (final r in rounds) _RoundCard(key: ValueKey('${r.id}|${r.startedAt}|${r.finishedAt}'), round: r, onSave: (s, f) => _model.updateRound(r.id, startedAt: s, finishedAt: f)),
-              ]),
-            )
+          if (recent.isEmpty)
+            Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('타이머로 읽으면 여기에 쌓여요', style: AppType.sub))
           else
-            Padding(padding: const EdgeInsets.only(top: Space.item), child: Text('읽기 시작하면 회차가 생겨요. 날짜는 나중에 고칠 수 있어요.', style: AppType.sub)),
+            for (final x in recent.take(3))
+              Semantics(
+                button: true,
+                label: '${dayOf(x.startedAt)}, ${timeRange(x.startedAt, x.endedAt)}, ${formatDuration(x.durationMs)}, 고치기',
+                excludeSemantics: true,
+                onTap: () => openSessionEdit(context, x.id),
+                child: Pressable(
+                  onPress: () => openSessionEdit(context, x.id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: Space.m),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(dayOf(x.startedAt), style: AppType.row),
+                          Padding(padding: const EdgeInsets.only(top: 2), child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.caption)),
+                        ]),
+                      ),
+                      Text(formatDuration(x.durationMs), style: AppType.row),
+                    ]),
+                  ),
+                ),
+              ),
+          // 읽은 기간(회차): 날짜를 고친다
+          const H2('읽은 기간'),
+          if (rounds.isNotEmpty)
+            Column(children: [
+              for (final r in rounds) _RoundCard(key: ValueKey('${r.id}|${r.startedAt}|${r.finishedAt}'), round: r, onSave: (s, f) => _model.updateRound(r.id, startedAt: s, finishedAt: f)),
+            ])
+          else
+            Text('읽기 시작하면 회차가 생겨요. 날짜는 나중에 고칠 수 있어요.', style: AppType.sub),
           H2('남긴 갈피${marks.isNotEmpty ? ' · ${marks.length}' : ''}'),
           if (marks.isNotEmpty) ...[
             ListGroup(children: [
