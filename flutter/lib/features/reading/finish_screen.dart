@@ -19,8 +19,7 @@ import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart';
-import '../book/book_screen.dart';
-import '../bookmark/new_bookmark_screen.dart';
+import '../stats/stats_widgets.dart' show LinkedCover;
 
 int? _page(String? v) {
   final digits = (v ?? '').replaceAll(RegExp(r'[^\d]'), '');
@@ -275,50 +274,68 @@ class _FinishScreenState extends State<FinishScreen> {
 
 
 /// 독서 기록 저장 뒤 시트: 이번 기록(책 · 시간 · 쪽) → 이어서 할 수 있는 일(갈피 남기기 · 책 정보 · 통계) → 확인
+/// 저장했어요(2026-11-17 사용자 시안): 가운데 작은 창에 표지 · 제목 · 저자, 'N분 N초 기록했어요', 확인. 뒤는 어둡게, 어디를 눌러도 닫힌다
 Future<void> showSavedSheet(BuildContext context, {required String? bookId, required String sessionId}) {
-  final nav = Navigator.of(context);
   final lib = LibraryModel.instance.lib;
   final ss = lib.sessions[sessionId];
   final sb = bookId == null ? null : lib.books[bookId];
   final se = sb == null ? null : lib.editions[sb.editionId];
-  final pagesText = ss != null && ss.startPage != null && ss.pagesRead != null && ss.pagesRead! >= ss.startPage!
-      ? '${ss.startPage}→${ss.pagesRead}쪽(${ss.pagesRead! - ss.startPage!}쪽)'
-      : ss?.pagesRead != null && ss!.pagesRead != 0
-          ? '${ss.pagesRead}쪽까지'
-          : null;
-  final summary = [if (ss != null) ss.durationMs < 60000 ? formatDurationPrecise(ss.durationMs) : formatDuration(ss.durationMs), ?pagesText].join(' · ');
-  return showSheet<void>(
-    context,
-    title: '저장했어요',
-    builder: (ctx) {
-      // 시트를 닫고 그 화면으로(시트가 내려간 뒤 연다)
-      void go(VoidCallback open) {
-        Navigator.pop(ctx);
-        open();
-      }
-
-      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          padding: const EdgeInsets.only(bottom: Space.l),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 1 / MediaQuery.devicePixelRatioOf(ctx)))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(se?.title ?? '책 없이 읽은 시간', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-            if (summary.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(summary, style: AppType.sub)),
-          ]),
-        ),
-        const SizedBox(height: Space.s),
-        if (bookId != null)
-          ListItem(
-            label: '이 책에 갈피 남기기',
-            sub: '이번 기록과 연결돼요',
-            chevron: true,
-            onPress: () => go(() => nav.push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/bookmark/new'), builder: (_) => NewBookmarkScreen(book: bookId, session: sessionId)))),
+  final author = se != null && se.authors.isNotEmpty ? se.authors.join(', ') : '';
+  final done = '${ss == null ? '' : formatDurationPrecise(ss.durationMs)} 기록했어요'.trim();
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: '닫기',
+    barrierColor: const Color(0x8C000000),
+    transitionDuration: const Duration(milliseconds: 180),
+    pageBuilder: (ctx, _, _) => Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: [se?.title ?? '책 없이 읽은 시간', done].join(', '),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.pop(ctx),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.page),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: Material(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(Shape.dialog + 2),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(Space.l + 4, Space.xl, Space.l + 4, Space.l + 4),
+                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      if (sb != null && se != null)
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 56)),
+                          const SizedBox(width: Space.l),
+                          Flexible(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                              Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.heading.copyWith(fontSize: 19, height: 26 / 19)),
+                              if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                            ]),
+                          ),
+                        ])
+                      else
+                        Text('책 없이 읽은 시간', textAlign: TextAlign.center, style: AppType.sub),
+                      const SizedBox(height: Space.l + 4),
+                      WordText(done, textAlign: TextAlign.center, style: AppType.heading.copyWith(fontSize: 22, height: 30 / 22)),
+                      const SizedBox(height: Space.l + 4),
+                      Btn(label: '확인', onPress: () => Navigator.pop(ctx)),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
           ),
-        if (bookId != null) ListItem(label: '책 정보 보기', chevron: true, onPress: () => go(() => nav.push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book'), builder: (_) => BookScreen(id: bookId))))),
-        ListItem(label: '통계에서 보기', chevron: true, onPress: () => go(() => AppNav.instance.goTab(AppTab.stats))),
-        const SizedBox(height: Space.l),
-        Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx)),
-      ]);
+        ),
+      ),
+    ),
+    transitionBuilder: (ctx, anim, _, child) {
+      final t = Curves.easeOutCubic.transform(anim.value);
+      return Opacity(opacity: t, child: Transform.scale(scale: 0.96 + 0.04 * t, child: child));
     },
   );
 }

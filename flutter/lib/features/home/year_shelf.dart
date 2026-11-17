@@ -24,7 +24,6 @@ import '../../ui/bake.dart';
 import '../../ui/book_key.dart';
 import '../../ui/cover_photo.dart';
 import '../../ui/engraved_year.dart';
-import '../../ui/kit.dart' show LucideIcon;
 import '../../ui/metrics.dart';
 import '../../ui/plane_key.dart';
 import '../../ui/row_bake.dart';
@@ -251,7 +250,8 @@ class _YearShelfState extends State<YearShelf> {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: _shooting ? null : _share,
-                    child: const SizedBox(width: 48, height: 48, child: Center(child: LucideIcon('Share', size: 24, color: AppColors.iconSoft))),
+                    // 사용자가 준 입체 공유 아이콘(2026-11-17, tool/gen_header_art_icons.py)
+                    child: const SizedBox(width: 48, height: 48, child: Center(child: Image(image: AssetImage('assets/header/share.png'), width: 31, height: 31))),
                   ),
                 ),
               ),
