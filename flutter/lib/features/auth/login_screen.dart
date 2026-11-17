@@ -12,6 +12,7 @@ import '../../ui/brand_button.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../settings/settings_screen.dart' show privacyUrl;
+import '../settings/terms.dart' show showTermsSheet;
 
 /// 로그인했을 때만 child(앱)를 보여 준다. required를 주지 않으면 서버가 있는 빌드에서만 막는다
 class AuthGate extends StatelessWidget {
@@ -111,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: Space.l),
                         Semantics(
                           header: true,
-                          child: Text('책장 한켠', textAlign: TextAlign.center, style: AppType.title.copyWith(color: AppColors.accent, fontSize: 28, height: 36 / 28)),
+                          child: Text('책장 한켠', textAlign: TextAlign.center, style: AppType.title.copyWith(color: AppColors.accent)),
                         ),
                         const SizedBox(height: Space.s),
                         WordText('읽은 책을 책장에 꽂고,\n읽은 시간과 문장을 남겨요', textAlign: TextAlign.center, style: AppType.sub),
@@ -127,13 +128,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 bottom,
                 // 단추 아래 긴 설명은 뺐다(2026-11-17 사용자 '구구절절 설명 지워'): 처리방침 글자 단추만
                 const SizedBox(height: Space.xl),
-                Center(
-                  child: TextButton(
+                // 이용약관 · 개인정보 처리방침 두 글자 단추(2026-11-18 약관 추가)
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft, minimumSize: const Size(Space.hit, Space.hit)),
+                    onPressed: () => showTermsSheet(context),
+                    child: Text('이용약관', style: AppType.caption.copyWith(fontFamily: AppFonts.uiMedium)),
+                  ),
+                  ExcludeSemantics(child: Text('·', style: AppType.caption)),
+                  TextButton(
                     style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft, minimumSize: const Size(Space.hit, Space.hit)),
                     onPressed: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication),
                     child: Text('개인정보 처리방침', style: AppType.caption.copyWith(fontFamily: AppFonts.uiMedium)),
                   ),
-                ),
+                ]),
                 const SizedBox(height: Space.s),
               ]),
             ),
