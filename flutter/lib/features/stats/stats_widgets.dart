@@ -12,6 +12,7 @@ import '../../services/cover_cache.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'chart_data.dart';
+import '../book/labels.dart' show dateShort;
 
 final _small = AppType.micro;
 
@@ -101,10 +102,11 @@ class ReadingCalendar extends StatelessWidget {
               decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.track, width: 0.5))),
               child: Row(children: [for (final d in weekdays) SizedBox(width: cell, child: Text(d, textAlign: TextAlign.center, style: _small))]),
             ),
-            for (final week in calendarWeeks(y, m))
+            // 주 사이에만 선(맨 아래 선은 없다: 아래 구역 선과 겹쳐 두 줄로 보였다, 2026-11-17 사용자 댓글)
+            for (final (wi, week) in calendarWeeks(y, m).indexed)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 0.5))),
+                decoration: wi == calendarWeeks(y, m).length - 1 ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 0.5))),
                 child: Row(children: [
                   for (final day in week)
                     day == null
@@ -517,7 +519,7 @@ class BookRecordView extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = bookRecord(lib, id);
     final title = lib.editions[lib.books[id]?.editionId]?.title ?? '';
-    String dot(String d) => d.replaceAll('-', '.');
+    String dot(String d) => dateShort(d);
     final span = r.firstDay != null ? (r.firstDay == r.lastDay ? dot(r.firstDay!) : '${dot(r.firstDay!)} ~ ${dot(r.lastDay!)}') : '아직 기록이 없어요';
     return Padding(
       padding: const EdgeInsets.only(top: Space.s),

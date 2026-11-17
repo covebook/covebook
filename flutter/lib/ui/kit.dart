@@ -2028,8 +2028,11 @@ String todayKey([DateTime? now]) {
   return dayKey(t.year, t.month, t.day);
 }
 
-/// 칸에 보이는 날짜: 숫자만(2026.11.09)
-String dayLabel(String v) => v.replaceAll('-', '.');
+/// 칸에 보이는 날짜: 상세 날짜 쓰는 법('2026년 11월 9일', features/book/labels.dart dateLong과 같다)
+String dayLabel(String v) {
+  final p = v.split('-');
+  return p.length == 3 ? '${p[0]}년 ${int.parse(p[1])}월 ${int.parse(p[2])}일' : v;
+}
 
 /// 날짜 칸: 누르면 한 달 달력 시트에서 하루를 고른다(고를 수 없는 날은 흐리게). 값은 'YYYY-MM-DD' 또는 ''(정하지 않음)
 class DateField extends StatelessWidget {

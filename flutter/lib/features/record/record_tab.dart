@@ -466,7 +466,7 @@ class _RecordTabState extends State<RecordTab> {
                         title: e.title,
                         author: e.authors.join(', '),
                         page: m.page,
-                        date: ymd(m.createdAt),
+                        date: dateShort(m.createdAt),
                         color: ribbonOf(_lib, b.id),
                         coverUri: e.coverUri,
                         bookId: b.id,

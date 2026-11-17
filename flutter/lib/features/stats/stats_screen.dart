@@ -190,7 +190,8 @@ class _StatsScreenState extends State<StatsScreen> {
       if (_view == 'records') ..._records(lib, st0, sessions, activeDays, periodName, title, row, rowValue, period, book),
       if (_view == 'calendar')
         if (selected != null) ...[
-          const SectionBand(),
+          // 선 없이 구역 간격만(달력 아래 선과 두 줄로 보였다, 2026-11-17 사용자 댓글)
+          const SizedBox(height: Space.xl),
           Padding(
             padding: const EdgeInsets.only(bottom: Space.s),
             child: Column(children: [

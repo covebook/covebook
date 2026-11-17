@@ -42,7 +42,7 @@ BookmarkCardData? cardData(Library lib, Bookmark m) {
     title: e.title,
     author: e.authors.isEmpty ? null : e.authors.join(', '),
     page: m.page,
-    date: ymd(m.createdAt),
+    date: dateLong(m.createdAt),
     memo: m.memo,
     color: ribbonOf(lib, b!.id),
     coverUri: e.coverUri,

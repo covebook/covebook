@@ -26,9 +26,10 @@ Future<void> openNewEssay(BuildContext context, {String? book}) => Navigator.of(
 Future<void> openEditEssay(BuildContext context, String id) => Navigator.of(context, rootNavigator: true)
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/essay/edit'), builder: (_) => EssayEditScreen(id: id)));
 
-/// 감상 날짜 줄: 쓴 날(고쳤으면 고친 날도)
-String essayDateLine(Essay e) {
-  final made = ymd(e.createdAt), changed = ymd(e.updatedAt);
+/// 감상 날짜 줄: 쓴 날(고쳤으면 고친 날도). 목록은 짧게, 읽기 화면은 길게
+String essayDateLine(Essay e, {bool long = false}) {
+  final f = long ? dateLong : dateShort;
+  final made = f(e.createdAt), changed = f(e.updatedAt);
   return changed.isNotEmpty && changed != made ? '$made · $changed 고침' : made;
 }
 
@@ -54,7 +55,7 @@ class EssayRow extends StatelessWidget {
     final author = e == null || e.authors.isEmpty ? '' : e.authors.join(', ');
     return Semantics(
       button: true,
-      label: [if (showBook && e != null) e.title, head, ymd(essay.createdAt)].join(', '),
+      label: [if (showBook && e != null) e.title, head, dateShort(essay.createdAt)].join(', '),
       excludeSemantics: true,
       child: Pressable(
         onPress: onOpen ?? () => openEssay(context, essay.id),
@@ -227,7 +228,7 @@ class _EssayScreenState extends State<EssayScreen> {
           padding: const EdgeInsets.only(top: Space.xl),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (title.isNotEmpty) Semantics(header: true, child: Text(title, style: AppType.title)),
-            Padding(padding: EdgeInsets.only(top: title.isNotEmpty ? Space.s : 0), child: Text(essayDateLine(essay), style: AppType.caption)),
+            Padding(padding: EdgeInsets.only(top: title.isNotEmpty ? Space.s : 0), child: Text(essayDateLine(essay, long: true), style: AppType.caption)),
           ]),
         ),
         // 본문: 읽는 글꼴로 넉넉한 줄 간격. 고를 수 있게만(입력 칸이 아니다)

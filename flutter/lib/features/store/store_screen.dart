@@ -103,7 +103,8 @@ class _StoreScreenState extends State<StoreScreen> {
   Widget build(BuildContext context) {
     final changed = _choice != _saved || _spine != _savedSpine;
     return Screen(
-      title: '스토어',
+      // 꾸미기 안 '선반·벽지' 입구와 같은 이름(2026-11-17 같은 일을 다른 말로)
+      title: '선반·벽지',
       footer: Btn(label: '적용하기', size: 'l', disabled: !changed, onPress: _apply),
       children: [
         LayoutBuilder(

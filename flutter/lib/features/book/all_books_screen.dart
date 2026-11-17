@@ -31,7 +31,7 @@ import '../bookmark/book_picker.dart' show statusLabel;
 import '../bookmark/bookmark_detail_screen.dart' show openBookmark;
 import 'all_books.dart';
 import 'book_screen.dart' show openBook;
-import 'labels.dart' show ymd;
+import 'labels.dart' show dateShort;
 import 'place_books.dart';
 import 'add_book_screen.dart' show openAddBook;
 
@@ -698,8 +698,9 @@ class _PickMark extends StatelessWidget {
 
 /// 작은 앞모습(목록 줄 왼쪽, 칸 폭 64): 지금 앱 StandaloneBook 앞면 배율 0.42(설계 단위 → dp). 판형과 상관없이 모든 책을 같은 크기로(격자와 같은 규칙)
 Widget _thumb(Library lib, String id) {
-  final w = (mm(128) + 8) * 0.61; // 추정 판형 폭 + 둘레 여백 4DU×2(2026-11-17 시안: 목록 표지 폭 약 61)
-  return SizedBox(width: 66, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w, uniform: true))));
+  // 표지 높이 = 글 묶음 최대 높이(제목 한 줄 · 저자 한 줄 · 한줄평 두 줄): 한줄평이 0·1·2줄이어도 줄 간격이 같다(2026-11-17 사용자 댓글)
+  final w = (mm(128) + 8) * 0.74;
+  return SizedBox(width: 80, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w, uniform: true))));
 }
 
 /// 목록 한 줄(시안): 표지 + 제목 + 저자·상태 + 한 줄 감상 두 줄. 메모가 있으면 오른쪽 위 메모 아이콘을 눌러 작은 상자로 본다
@@ -725,12 +726,12 @@ class _BookListRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _thumb(lib, book.id),
-                const SizedBox(width: 18),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const SizedBox(height: 4),
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong)),
+                      Expanded(child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong)),
                       if (memos.isNotEmpty) const SizedBox(width: Space.xs),
                       if (memos.isNotEmpty)
                         // 지금 앱: 44 누르는 칸에 marginRight −12·marginVertical −10(눌리는 칸은 크게, 줄 높이는 그대로)
@@ -752,7 +753,7 @@ class _BookListRow extends StatelessWidget {
                         ),
                     ]),
                     // 두 줄까지: 저자가 길어도 뒤의 상태·'책장' 표시가 보이게(2026-11-16 QA 현우 F14)
-                    if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                    if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
                     if ((note ?? '').isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 3 + Space.xs),
@@ -859,7 +860,7 @@ Future<void> _showMemos(BuildContext iconContext, String bookId, List<BookMemo> 
                         for (final m in memos.take(5))
                           Semantics(
                             button: true,
-                            label: '${m.text}, ${ymd(m.at)} ${m.bookmark ? '갈피' : '독서 기록'}. 눌러서 열기',
+                            label: '${m.text}, ${dateShort(m.at)} ${m.bookmark ? '갈피' : '독서 기록'}. 눌러서 열기',
                             excludeSemantics: true,
                             child: Pressable(
                               onPress: () => open(() => m.bookmark ? openBookmark(iconContext, m.id) : openBook(iconContext, bookId)),
@@ -867,7 +868,7 @@ Future<void> _showMemos(BuildContext iconContext, String bookId, List<BookMemo> 
                                 padding: const EdgeInsets.symmetric(vertical: Space.s),
                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                   Text(m.text, maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink)),
-                                  Padding(padding: const EdgeInsets.only(top: 3), child: Text('${ymd(m.at)} · ${m.bookmark ? '갈피' : '독서 기록'}', style: AppType.caption)),
+                                  Padding(padding: const EdgeInsets.only(top: 3), child: Text('${dateShort(m.at)} · ${m.bookmark ? '갈피' : '독서 기록'}', style: AppType.caption)),
                                 ]),
                               ),
                             ),

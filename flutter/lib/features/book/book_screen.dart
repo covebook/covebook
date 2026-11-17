@@ -196,7 +196,7 @@ class _BookScreenState extends State<BookScreen> {
             if (!mounted) return;
             if (r.placed > 0) {
               final spot = back && place.lastRestored == id;
-              appAlert(context, '책장에 진열했어요', spot ? '뺄 때 있던 자리에 다시 꽂았어요.' : '빈 자리에 꽂았어요. 꾸미기에서 자리를 옮길 수 있어요.', [
+              appAlert(context, '책장에 진열했어요', spot ? '뺄 때 있던 자리에 다시 진열했어요.' : '빈 자리에 진열했어요. 꾸미기에서 자리를 옮길 수 있어요.', [
                 const AlertButton('확인', style: AlertStyle.cancel),
                 AlertButton('책장에서 보기', onPress: () => showBookOnShelf(context, id)),
               ]);
@@ -578,7 +578,7 @@ class _BookScreenState extends State<BookScreen> {
                             Text('사진 갈피', style: AppType.row),
                           Padding(
                             padding: const EdgeInsets.only(top: Space.s),
-                            child: Text([if (m.page != null && m.page != 0) '${m.page}쪽', ymd(m.createdAt)].where((x) => x.isNotEmpty).join(' · '), style: AppType.caption),
+                            child: Text([if (m.page != null && m.page != 0) '${m.page}쪽', dateShort(m.createdAt)].where((x) => x.isNotEmpty).join(' · '), style: AppType.caption),
                           ),
                         ]),
                       ),
@@ -667,7 +667,7 @@ class _RoundView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = round;
-    String day(String? x) => x != null && isDay(x) ? x.replaceAll('-', '.') : '—';
+    String day(String? x) => x != null && isDay(x) ? dateLong(x) : '—';
     Widget col(String label, String v) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: AppType.caption),
           const SizedBox(height: 4),

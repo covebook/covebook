@@ -115,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text('책장 한켠', textAlign: TextAlign.center, style: AppType.title.copyWith(color: AppColors.accent)),
                         ),
                         const SizedBox(height: Space.s),
-                        WordText('읽은 책을 책장에 꽂고,\n읽은 시간과 문장을 남겨요', textAlign: TextAlign.center, style: AppType.sub),
+                        WordText('읽은 책을 책장에 진열하고,\n읽은 시간과 문장을 남겨요', textAlign: TextAlign.center, style: AppType.sub),
                       ]),
                     ),
                   ),

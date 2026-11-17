@@ -1,12 +1,17 @@
 // 공통 작은 타이머(지금 앱 features/reading/MiniTimer.tsx): 진행 중이거나 일시정지된 독서가 있을 때 화면 오른쪽 아래에 작은 원(누적 시간만).
 // 원을 누르면 오른쪽 끝(시간 자리)은 그대로 두고 왼쪽으로 늘어나 '읽기 화면 바로가기'와 '재생/일시정지'가 나온다.
 // 시간을 다시 누르거나 바깥을 누르면 접힌다(타이머·환경음 상태는 그대로). 시간은 같은 누적 값을 1초마다 다시 그릴 뿐 따로 재지 않는다.
-// 읽기 화면·읽기 탭(책마다 흐르는 시간이 보인다)에서는 띄우지 않는다. 하단 탭·키보드·안전 영역과 겹치지 않게 둔다
+// 읽기 화면·읽기 탭(책마다 흐르는 시간이 보인다)에서는 띄우지 않는다. 하단 탭·키보드·안전 영역과 겹치지 않게 둔다.
+// 꾹 누른 채 끌면 자리를 옮긴다(2026-11-17 사용자 '타이머를 꾹 누르고 옮길 수 있게'). 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
+
+import '../../db/kv_store.dart';
 
 import '../../domain/reading.dart';
 import '../../store/mini_timer_store.dart';
@@ -44,11 +49,20 @@ class _MiniTimerState extends State<MiniTimer> {
   Timer? _tick;
   String _lastKey = '';
 
+  /// 사용자가 옮긴 자리(화면 오른쪽·아래 끝에서 거리). 없으면 기본 자리
+  ({double right, double bottom})? _moved;
+  ({double right, double bottom})? _dragFrom;
+  static const _posKey = 'mini-timer-pos';
+
   @override
   void initState() {
     super.initState();
     _reading.addListener(_changed);
     _place.addListener(_changed);
+    KvStore.get(_posKey).then((v) {
+      final p = v?.split(',').map(double.tryParse).toList();
+      if (mounted && p != null && p.length == 2 && !p.contains(null)) setState(() => _moved = (right: p[0]!, bottom: p[1]!));
+    }).ignore();
   }
 
   @override
@@ -97,17 +111,47 @@ class _MiniTimerState extends State<MiniTimer> {
     final s = SettingsStore.instance;
     final reduce = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && mq.disableAnimations);
     final onTabs = _place.route == '/' && _tabs.contains(path);
-    final bottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? _place.footer ?? mq.padding.bottom) + _gap;
+    final minBottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? _place.footer ?? mq.padding.bottom) + _gap;
+    // 옮긴 자리: 화면 안, 하단 탭·고정 단추 위, 상태 표시줄 아래로만
+    final maxRight = mq.size.width - timeW - (_open ? _actionsW : 0) - 8;
+    final maxBottom = mq.size.height - mq.padding.top - miniTimerSize - 8;
+    final double right = (_moved?.right ?? 16.0).clamp(8.0, math.max(8.0, maxRight)).toDouble();
+    final double bottom = (_moved?.bottom ?? minBottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
+    final dragging = _dragFrom != null;
     final hair = 2 / mq.devicePixelRatio;
     Widget divider() => Container(width: hair, height: 22, color: AppColors.line);
     return Stack(children: [
       // 펼친 동안 바깥을 누르면 접는다(아래 화면은 눌리지 않는다)
       if (_open) Positioned.fill(child: Semantics(label: '미니 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
       Positioned(
-        right: 16,
+        right: right,
         bottom: bottom,
         height: miniTimerSize,
-        child: Container(
+        child: GestureDetector(
+          // 꾹 눌러 끌기: 손가락을 따라 옮기고, 놓으면 그 자리를 기억한다
+          onLongPressStart: (_) {
+            if (s.haptics) HapticFeedback.selectionClick();
+            setState(() {
+              _open = false;
+              _dragFrom = (right: right, bottom: bottom);
+            });
+          },
+          onLongPressMoveUpdate: (d) {
+            final f = _dragFrom;
+            if (f == null) return;
+            setState(() => _moved = (right: f.right - d.offsetFromOrigin.dx, bottom: f.bottom - d.offsetFromOrigin.dy));
+          },
+          onLongPressEnd: (_) {
+            setState(() {
+              _dragFrom = null;
+              _moved = (right: right, bottom: bottom);
+            });
+            KvStore.set(_posKey, '${right.round()},${bottom.round()}').ignore();
+          },
+          child: AnimatedScale(
+            scale: dragging ? 1.08 : 1,
+            duration: reduce ? Duration.zero : const Duration(milliseconds: 120),
+            child: Container(
           decoration: BoxDecoration(
             color: AppColors.bg,
             borderRadius: BorderRadius.circular(miniTimerSize / 2),
@@ -201,6 +245,8 @@ class _MiniTimerState extends State<MiniTimer> {
               ),
             ),
           ]),
+        ),
+          ),
         ),
       ),
     ]);
