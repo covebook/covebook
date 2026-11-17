@@ -172,13 +172,16 @@ class _BoardScreenState extends State<BookmarkBoardScreen> with SingleTickerProv
       color: AppColors.bg,
       child: Stack(children: [
         Column(children: [
+          // 다른 상세 화면과 같은 머리줄: 왼쪽 뒤로, 가운데 작은 제목(2026-11-17)
           Padding(
             padding: EdgeInsets.fromLTRB(Space.page - 10, insets.top + 4, Space.page, 0),
-            child: Row(children: [
-              back,
-              const SizedBox(width: 4),
-              Semantics(header: true, child: const Text('갈피 보드', style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: 19, height: 26 / 19, color: AppColors.ink))),
-            ]),
+            child: SizedBox(
+              height: 56,
+              child: Stack(children: [
+                Positioned.fill(left: 64, right: 64, child: Center(child: Semantics(header: true, child: Text('갈피 보드', style: AppType.navTitle)))),
+                Align(alignment: Alignment.centerLeft, child: back),
+              ]),
+            ),
           ),
           Expanded(
             child: ClipRect(

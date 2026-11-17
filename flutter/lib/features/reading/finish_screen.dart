@@ -191,6 +191,7 @@ class _FinishScreenState extends State<FinishScreen> {
     final screen = Screen(
       title: '독서 끝',
       back: false,
+      topBar: true,
       footer: Btn(label: '개인 기록 저장', busy: _saving, disabled: !_lib.loaded || _saving || pending.durationMs < 1000 || badRange || startOver || endOver, onPress: () => _save(pending, sp, ep)),
       children: [
         if (_reading.error != null) Text('독서 기록을 기기에 저장하지 못했어요. 저장을 다시 시도해 주세요.', style: AppType.sub),

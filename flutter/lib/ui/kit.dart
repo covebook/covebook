@@ -149,6 +149,7 @@ class Screen extends StatelessWidget {
     this.compact = false,
     this.left,
     this.headerField,
+    this.topBar,
   });
   final List<Widget> children;
   final String? title;
@@ -159,6 +160,7 @@ class Screen extends StatelessWidget {
   final bool scroll;
   final double bottomPad;
   final Widget? footer;
+  /// 예전 '작은 가운데 제목' 표시(이제 밀어 넣은 화면은 모두 가운데 제목이라 쓰지 않는다, 2026-11-17)
   final bool compact;
 
   /// 뒤로 대신 왼쪽에 둘 것(예: 고르는 중 '취소')
@@ -167,12 +169,18 @@ class Screen extends StatelessWidget {
   /// 검색이 주인공인 화면: 제목 대신 뒤로 옆에 검색창
   final Widget? headerField;
 
+  /// 뒤로 없이도 가운데 제목 줄을 둘지(독서 끝처럼 밀어 넣었지만 뒤로를 막은 화면). 기본은 뒤로가 있을 때만
+  final bool? topBar;
+
   @override
   Widget build(BuildContext context) {
     // 키보드가 열리면 아래 안전 여백 대신 키보드 높이만큼 비운다(키보드가 열리면 paddingOf 아래는 0이 된다)
     final insets = MediaQuery.paddingOf(context);
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
-    final large = back && !compact && headerField == null && title != null;
+    // 밀어 넣은 화면은 모두 가운데 작은 제목(2026-11-17 사용자: 가운데 제목이면 깔끔). 큰 왼쪽 제목은 탭 첫 화면에만 남긴다.
+    // 부제목은 내용 맨 위 한 줄로 옮긴다
+    final bar = topBar ?? back;
+    final subLine = bar && subtitle != null ? Padding(padding: const EdgeInsets.only(top: 4, bottom: Space.l), child: WordText(subtitle!, style: AppType.sub)) : null;
     Widget tabHead() => Padding(
           padding: const EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, TabHeader.paddingH, TabHeader.paddingBottom),
           child: ConstrainedBox(
@@ -195,23 +203,6 @@ class Screen extends StatelessWidget {
             ),
           ),
         );
-    final largeTitle = large
-        ? Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Semantics(
-                  header: true,
-                  child: WordText.rich(TextSpan(text: title, style: AppType.title, children: [
-                    if (titleNote != null) TextSpan(text: '  $titleNote', style: AppType.title.copyWith(fontFamily: AppFonts.ui, color: AppColors.inkSoft)),
-                  ])),
-                ),
-                if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(subtitle!, style: AppType.sub)),
-              ],
-            ),
-          )
-        : null;
     final content = Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: contentMax + Space.page * 2),
@@ -224,7 +215,7 @@ class Screen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
-              children: _padded([?largeTitle, ...children]),
+              children: _padded([?subLine, ...children]),
             ),
           ],
         ),
@@ -235,7 +226,7 @@ class Screen extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: contentMax + Space.page * 2),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _padded([?largeTitle, ...children])),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _padded([?subLine, ...children])),
       ),
     );
     // 독서 중이면 작은 타이머에 마지막 내용이 가리지 않게 아래를 더 비운다
@@ -259,12 +250,12 @@ class Screen extends StatelessWidget {
         padding: EdgeInsets.only(top: insets.top, bottom: keyboard),
         child: Column(
           children: [
-            if (back)
+            if (bar)
               SizedBox(
                 height: 60,
                 child: Stack(
                   children: [
-                    if (!large && title != null && headerField == null)
+                    if (title != null && headerField == null)
                       Positioned(
                         left: 64,
                         right: 64,
@@ -277,7 +268,7 @@ class Screen extends StatelessWidget {
                       child: Row(children: [
                         if (left != null)
                           Padding(padding: const EdgeInsets.only(left: Space.page), child: left)
-                        else
+                        else if (back)
                           // 누르는 자리 48(꺾쇠 자리는 그대로: 왼쪽 여백을 2 줄인다, 2026-11-16 QA 영숙 F12)
                           Padding(
                             padding: EdgeInsets.only(left: 8 - (Space.hit - Space.touch) / 2),
