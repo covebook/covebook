@@ -211,7 +211,7 @@ class Screen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // 탭 첫 화면 제목도 내용과 함께 올라간다(머리줄 고정 아님)
-            if (!back && title != null && scroll) tabHead(),
+            if (!bar && title != null && scroll) tabHead(),
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
