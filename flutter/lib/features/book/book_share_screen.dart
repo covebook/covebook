@@ -37,7 +37,8 @@ class BookShareScreen extends StatefulWidget {
 
 class _BookShareScreenState extends State<BookShareScreen> {
   final _model = LibraryModel.instance;
-  late String _note = _model.lib.books[widget.id]?.note ?? '';
+  // 한줄평은 책 정보 › 평가에서 쓴다(이 화면의 '내 평가' 칸은 2026-11-17 시안에 맞춰 뺐다)
+  String get _note => _model.lib.books[widget.id]?.note ?? '';
   ShareParts _parts = defaultParts;
   String? _busy; // save · share
   bool _saved = false, _canSave = false, _coverWaiting = true;
@@ -47,8 +48,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
   ui.Image? _preview;
   Object? _previewKey;
   // 비어 있는 칩을 누르면 쓰는 자리로 데려간다(2026-11-15 QA: 빈 '한 줄 감상'·'별점' 칩은 눌러도 반응이 없었다)
-  final _rateKey = GlobalKey(), _noteKey = GlobalKey();
-  final _noteScope = FocusScopeNode(debugLabel: '한 줄 감상');
   String? _hint; // 방금 누른 빈 칩: 그 안내 줄을 잠깐 진하게
   Timer? _hintTimer;
 
@@ -85,11 +84,9 @@ class _BookShareScreenState extends State<BookShareScreen> {
 
   @override
   void dispose() {
-    _saveNote();
     _model.removeListener(_changed);
     _savedTimer?.cancel();
     _hintTimer?.cancel();
-    _noteScope.dispose();
     _preview?.dispose();
     super.dispose();
   }
@@ -98,17 +95,9 @@ class _BookShareScreenState extends State<BookShareScreen> {
     if (mounted) setState(() {});
   }
 
-  void _saveNote() {
-    final v = _note.trim().isEmpty ? null : _note.trim();
-    if (v != _model.lib.books[widget.id]?.note) _model.updateBook(widget.id, note: v);
-  }
 
   /// 비어 있는 칩: 한 줄 감상은 입력 칸으로(키보드까지), 별점은 별 줄로 내려 주고, 독서 시간·읽은 기간은 생기는 법 안내를 진하게
   void _empty(String k) {
-    final target = switch (k) { 'note' => _noteKey, 'rating' => _rateKey, _ => null };
-    final ctx = target?.currentContext;
-    if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 280), alignment: 0.4);
-    if (k == 'note') _noteScope.nextFocus();
     _hintTimer?.cancel();
     setState(() => _hint = k == 'note' || k == 'rating' ? 'eval' : k);
     _hintTimer = Timer(const Duration(milliseconds: 2400), () {
@@ -125,7 +114,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
   Future<void> _run(String kind) async {
     final d = _data;
     if (_busy != null || d == null) return;
-    _saveNote();
     setState(() => _busy = kind);
     try {
       // 표지를 받는 중이면 잠깐(최대 6초) 기다린다. 끝내 없으면 표지 색으로 그린다
@@ -199,11 +187,11 @@ class _BookShareScreenState extends State<BookShareScreen> {
         ));
     final width = MediaQuery.sizeOf(context).width;
     // 미리보기는 화면에 맞춰 줄인 같은 카드(옵션이 보이게 화면 폭의 3/4 정도)
-    final previewW = [width - Space.page * 2, math.max(260.0, width * 0.74), 380.0].reduce(math.min);
+    final previewW = [width - Space.page * 2, math.max(240.0, width * 0.66), 340.0].reduce(math.min);
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
     // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게)
     final missing = {
-      if (!has['note']! || !has['rating']!) 'eval': '한줄평·별점은 아래 ‘내 평가’에 적으면 생겨요',
+      if (!has['note']! || !has['rating']!) 'eval': '한줄평·별점은 책 정보 › 평가에서 적으면 생겨요',
       if (!has['time']!) 'time': '독서 시간은 타이머로 읽으면 생겨요',
       if (!has['period']!) 'period': '읽은 기간은 시작일·완독일을 적으면 생겨요',
     };
@@ -255,23 +243,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
                     semanticsLabel: e.value, style: _hint == e.key ? AppType.caption.copyWith(color: AppColors.ink, fontFamily: AppFonts.uiBold) : AppType.caption),
             ]),
           ),
-        const H2('내 평가'),
-        Padding(
-          key: _rateKey,
-          padding: const EdgeInsets.only(bottom: Space.m),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: Space.touch),
-            child: Row(children: [
-              Expanded(child: Text('별점', style: AppType.row)),
-              Stars(value: b.rating, size: 26, onChange: (v) => _model.updateBook(widget.id, rating: v)),
-            ]),
-          ),
-        ),
-        FocusScope(
-          key: _noteKey,
-          node: _noteScope,
-          child: Field(label: '한줄평', value: _note, placeholder: '이 책은 나에게…', multiline: true, minHeight: 56, onChange: (t) => setState(() => _note = t.length > 140 ? t.substring(0, 140) : t)),
-        ),
       ],
     );
   }
@@ -296,13 +267,13 @@ class _CheckLine extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: onPress,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: Space.hit),
+            constraints: const BoxConstraints(minHeight: 44),
             child: Opacity(
               opacity: enabled ? 1 : 0.4,
               child: Row(children: [
                 Container(
-                  width: 24,
-                  height: 24,
+                  width: 22,
+                  height: 22,
                   decoration: BoxDecoration(
                     color: on ? AppColors.accent : AppColors.bg,
                     borderRadius: BorderRadius.circular(6),
@@ -311,7 +282,7 @@ class _CheckLine extends StatelessWidget {
                   child: on ? const Center(child: LucideIcon('Check', size: 16, color: AppColors.bg, stroke: 2.6)) : null,
                 ),
                 const SizedBox(width: Space.m),
-                Flexible(child: WordText(label, style: AppType.body)),
+                Flexible(child: WordText(label, style: AppType.body.copyWith(fontSize: 16, height: 22 / 16))),
               ]),
             ),
           ),

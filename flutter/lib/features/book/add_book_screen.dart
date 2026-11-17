@@ -588,7 +588,7 @@ class _FindStepState extends State<_FindStep> {
       },
       // 2026-11-17 사용자 시안: 뒤로 옆 '책 추가' 제목 + 오른쪽 '목록 가져오기', 그 아래 검색칸(오른쪽 끝 바코드), '많이 찾는 책' 줄은 제목·저자와 +
       child: Screen(
-        headerField: Semantics(header: true, child: Text(_m.multi ? (n == 0 ? '여러 권 고르기' : '$n권 고름') : '책 추가', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.heading)),
+        headerField: Semantics(header: true, child: Text(_m.multi ? (n == 0 ? '여러 권 고르기' : '$n권 고름') : '책 추가', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.heading.copyWith(fontSize: 23, height: 30 / 23))),
         left: _m.multi ? TextLink(label: '취소', onPress: _endMulti) : null,
         // 엑셀·CSV 목록으로 여러 권(책 고르기에서 왔을 때는 한 권만 고르므로 없음)
         right: widget.pick || _m.multi ? null : TextLink(label: '목록 가져오기', soft: true, onPress: () => openImportList(context)),
@@ -788,10 +788,14 @@ class _ResultRowState extends State<_ResultRow> {
                 widget.owned ? const SizedBox(width: 24) : PickMark(on: widget.picked)
               else
                 // 오른쪽 + (이미 서재에 있는 책은 체크: 눌러도 별도 소장본으로 넣을지 묻는다)
-                SizedBox(
-                  width: Space.hit,
-                  height: Space.hit,
-                  child: Center(child: widget.owned ? const LucideIcon('Check', size: 24, color: AppColors.accent, stroke: 2) : const LucideIcon('Plus', size: 26, color: AppColors.ink, stroke: 1.6)),
+                // 그림 오른쪽 끝을 내용 오른쪽 끝(검색칸 끝)에 맞춘다: 누르는 칸 48 가운데 26 그림이라 남는 11만큼 밀어 둔다
+                Transform.translate(
+                  offset: const Offset(11, 0),
+                  child: SizedBox(
+                    width: Space.hit,
+                    height: Space.hit,
+                    child: Center(child: widget.owned ? const LucideIcon('Check', size: 24, color: AppColors.accent, stroke: 2) : const LucideIcon('Plus', size: 26, color: AppColors.ink, stroke: 1.6)),
+                  ),
                 ),
             ]),
           ),

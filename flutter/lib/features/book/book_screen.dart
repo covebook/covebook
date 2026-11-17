@@ -312,7 +312,7 @@ class _BookScreenState extends State<BookScreen> {
     // 평가 탭(2026-11-17 사용자 시안): 별은 표지·제목·저자 아래 가운데, 그 아래 '한줄평'(오른쪽 수정)과 '감상 N'(오른쪽 쓰기).
     // 한줄평은 회색 상자 없이 글만 두고 '수정'을 누르면 그 자리에서 고친다. 별점·한줄평은 나만 본다
     Widget sectionHead(String title, String link, VoidCallback onLink) => Row(children: [
-          Expanded(child: Semantics(header: true, child: WordText(title, style: AppType.heading))),
+          Expanded(child: Semantics(header: true, child: WordText(title, style: AppType.section))),
           TextLink(label: link, soft: true, onPress: onLink),
         ]);
     void endNote() {
@@ -371,7 +371,7 @@ class _BookScreenState extends State<BookScreen> {
             )
           else
             WordText(note.isEmpty ? '이 책을 한 줄로 남겨 보세요' : note, style: note.isEmpty ? AppType.sub.copyWith(color: AppColors.inkFaint) : AppType.body),
-          const SizedBox(height: Space.section),
+          const SizedBox(height: Space.xl + 4),
           // 감상(기록 › 감상과 같은 데이터, 이 책 것만)
           sectionHead(essays.isEmpty ? '감상' : '감상 ${essays.length}', '쓰기', () => openNewEssay(context, book: id)),
           if (essays.isEmpty)
@@ -450,8 +450,8 @@ class _BookScreenState extends State<BookScreen> {
                       alignment: Alignment.centerRight,
                       child: Text.rich(TextSpan(
                         text: '$cur',
-                        style: const TextStyle(fontFamily: AppFonts.uiMedium, fontSize: 32, height: 40 / 32, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]),
-                        children: [TextSpan(text: pc != null ? ' / $pc쪽' : '쪽', style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 18, color: AppColors.inkSoft))],
+                        style: const TextStyle(fontFamily: AppFonts.uiMedium, fontSize: 26, height: 34 / 26, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]),
+                        children: [TextSpan(text: pc != null ? ' / $pc쪽' : '쪽', style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 17, color: AppColors.inkSoft))],
                       )),
                     ),
                   ),
@@ -471,7 +471,8 @@ class _BookScreenState extends State<BookScreen> {
                     Container(color: AppColors.line),
                     FractionallySizedBox(
                       widthFactor: ((cur / pc).clamp(0.0, 1.0)).toDouble(),
-                      child: Container(decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(4))),
+                      // 시안처럼 옅은 갈색(대표색을 흰 바탕에 65%)
+                      child: Container(decoration: BoxDecoration(color: AppColors.accent.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(4))),
                     ),
                   ]),
                 ),
@@ -513,9 +514,9 @@ class _BookScreenState extends State<BookScreen> {
               ),
             ),
           // 최근 독서 기록: 날짜 · 시간대 · 걸린 시간(누르면 고치기), 전체는 통계에서
-          const SizedBox(height: Space.section),
+          const SizedBox(height: Space.xl + 4),
           Row(children: [
-            Expanded(child: Semantics(header: true, child: WordText('독서 기록', style: AppType.heading))),
+            Expanded(child: Semantics(header: true, child: WordText('독서 기록', style: AppType.section))),
             if (recent.isNotEmpty)
               Semantics(
                 button: true,
@@ -547,7 +548,7 @@ class _BookScreenState extends State<BookScreen> {
                 child: Pressable(
                   onPress: () => openSessionEdit(context, x.id),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Space.m),
+                    padding: const EdgeInsets.symmetric(vertical: Space.s),
                     child: Row(children: [
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -645,14 +646,14 @@ class _BookScreenState extends State<BookScreen> {
           ),
         ),
         // 표지와 제목·지은이
+        // 2026-11-17 시안에 맞춰 표지·간격을 줄였다(표지 170 → 140, 제목 24 → 22)
         Padding(
-          padding: const EdgeInsets.only(top: Space.xl),
+          padding: const EdgeInsets.only(top: Space.l + 8),
           child: Column(children: [
-            // 책장과 같은 판형 비율의 앞면(지금 앱 BookVisual 170)
-            BookVisual(lib: lib, id: id, width: 170),
+            BookVisual(lib: lib, id: id, width: 140),
             Padding(
               padding: const EdgeInsets.only(top: Space.l),
-              child: Text(e.title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 24, height: 32 / 24, color: AppColors.ink)),
+              child: Text(e.title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 22, height: 30 / 22, color: AppColors.ink)),
             ),
             if (e.authors.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(e.authors.join(', '), textAlign: TextAlign.center, style: AppType.sub.copyWith(fontSize: 16, height: 22 / 16))),
@@ -661,7 +662,7 @@ class _BookScreenState extends State<BookScreen> {
         ),
         Padding(
           key: _paneKey,
-          padding: const EdgeInsets.only(top: Space.xl),
+          padding: const EdgeInsets.only(top: Space.l),
           child: switch (_tab) { 'rate' => ratePane(), 'mine' => minePane(), _ => infoPane() },
         ),
       ],

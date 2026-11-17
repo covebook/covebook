@@ -251,9 +251,9 @@ class _ReadListState extends State<ReadList> {
           child: Pressable(
             onPress: () => _tapRow(id),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Space.s),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(children: [
-                coverOf(id, 48),
+                coverOf(id, 44),
                 const SizedBox(width: Space.l),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
@@ -314,10 +314,8 @@ class _ReadListState extends State<ReadList> {
         // 머리: '읽기' 제목(오른쪽 소리만 듣기), 아래 오늘 날짜와 오늘 총 시간
         Padding(
           padding: const EdgeInsets.only(top: TabHeader.paddingTop),
-          child: Row(children: [
-            Expanded(child: Semantics(header: true, child: Text('읽기', style: AppType.title))),
-            IconBtn(label: '소리만 듣기', onPress: () => openReadingScene(context, soundOnly: true), child: const LucideIcon('AudioLines')),
-          ]),
+          // 소리만 듣기 아이콘은 뺐다(2026-11-17 사용자 '위에 음악 아이콘 없애')
+          child: Semantics(header: true, child: Text('읽기', style: AppType.title)),
         ),
         Padding(
           padding: const EdgeInsets.only(top: Space.s),
@@ -360,7 +358,7 @@ class _ReadListState extends State<ReadList> {
                 const SizedBox(height: Space.l),
                 Text(fActive && fMs < 60000 ? hms(fMs) : formatDuration(fMs), textAlign: TextAlign.right, style: AppType.rowStrong.copyWith(fontSize: 20, fontFeatures: _tabular)),
                 const SizedBox(height: Space.s),
-                Btn(label: fLabel, icon: const PlayIcon(size: 15, color: AppColors.onAccent), onPress: () => fActive ? (running ? _openScene() : _begin(featured)) : _begin(featured)),
+                Btn(label: fLabel, size: 's', icon: const PlayIcon(size: 17, color: AppColors.onAccent), onPress: () => fActive ? (running ? _openScene() : _begin(featured)) : _begin(featured)),
               ]),
             ),
           ]),
@@ -370,7 +368,11 @@ class _ReadListState extends State<ReadList> {
           padding: const EdgeInsets.only(top: Space.section),
           child: Row(children: [
             Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.heading))),
-            IconBtn(label: '읽기 목록에 책 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26)),
+            // +는 오른쪽 끝(아래 '▶ 읽기'와 같은 선)에 맞춘다: 누르는 칸 48 가운데 26 그림이라 남는 11만큼 밀어 둔다(2026-11-17 사용자 '+ 위치랑 두께')
+            Transform.translate(
+              offset: const Offset(11, 0),
+              child: IconBtn(label: '읽기 목록에 책 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.ink, stroke: 2)),
+            ),
           ]),
         ),
         if (rest.isNotEmpty || restNoBook)
