@@ -84,7 +84,7 @@ class MainActivity : AudioServiceActivity() {
           val name = call.argument<String>("name") ?: File(path).name
           val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
-            put(MediaStore.Downloads.MIME_TYPE, "application/json")
+            put(MediaStore.Downloads.MIME_TYPE, call.argument<String>("mime") ?: "application/json")
             put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/책장한켠")
             put(MediaStore.Downloads.IS_PENDING, 1)
           }

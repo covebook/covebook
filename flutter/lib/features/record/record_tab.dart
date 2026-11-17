@@ -194,7 +194,7 @@ class _RecordTabState extends State<RecordTab> {
           Row(children: [
             for (final (i, k) in MarkKind.values.indexed) ...[
               if (i > 0) const SizedBox(width: Space.s),
-              Expanded(child: _KindBox(label: markKindLabel[k]!, on: kind == k, onPress: () => set(() => kind = k))),
+              Expanded(child: ChoiceBox(label: markKindLabel[k]!, on: kind == k, onPress: () => set(() => kind = k))),
             ],
           ]),
           const SizedBox(height: Space.l),
@@ -568,51 +568,6 @@ class _BookChoice extends StatelessWidget {
               ]),
             ),
           ),
-        ),
-      );
-}
-
-/// 필터 유형 한 칸: 테두리 상자, 고르면 진한 테두리와 오른쪽 위 체크(2026-11-17 시안)
-class _KindBox extends StatelessWidget {
-  const _KindBox({required this.label, required this.on, required this.onPress});
-  final String label;
-  final bool on;
-  final VoidCallback onPress;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        selected: on,
-        label: label,
-        excludeSemantics: true,
-        onTap: onPress,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onPress,
-          child: Stack(clipBehavior: Clip.none, children: [
-            Container(
-              constraints: const BoxConstraints(minHeight: 52),
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.bg,
-                borderRadius: BorderRadius.circular(Shape.button),
-                border: Border.all(color: on ? AppColors.inkSoft : AppColors.line, width: on ? 1.5 : 1),
-              ),
-              child: Text(label, maxLines: 1, textAlign: TextAlign.center, style: AppType.label.copyWith(color: on ? AppColors.ink : AppColors.ink)),
-            ),
-            if (on)
-              Positioned(
-                top: -7,
-                right: -5,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle, border: Border.all(color: AppColors.bg, width: 2)),
-                  child: const Center(child: LucideIcon('Check', size: 12, color: AppColors.bg, stroke: 3)),
-                ),
-              ),
-          ]),
         ),
       );
 }

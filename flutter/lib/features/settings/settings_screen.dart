@@ -136,24 +136,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         ListGroup(title: '독서 환경', children: [
           ListItem(label: '진동', right: Toggle(label: '진동', value: _s.haptics, onChange: (v) => _s.set({'haptics': v}))),
-          ListItem(label: '움직임 줄이기', value: _motion.where((m) => m.id == _s.reduceMotion).firstOrNull?.short, onPress: _motionSheet),
+          ListItem(label: '움직임 줄이기', value: _motion.where((m) => m.id == _s.reduceMotion).firstOrNull?.short, chevron: true, onPress: _motionSheet),
         ]),
-        const SectionBand(),
+        // 줄 아래 설명 없이 이름만, 묶음 사이는 내용 폭 안 옅은 선, 바닥은 가운데 '책장 한켠'(2026-11-17 사용자 시안)
+        const SectionBand(inset: true),
         ListGroup(title: '내 기록', children: [
           // 백업·복원은 뺐다(2026-11-17 사용자: 기록은 계정에 보관, 다른 앱에서 갈아타는 가져오기만)
-          ListItem(label: '계정 및 동기화', sub: _syncAvailable ? '기록은 계정에 보관돼요' : '기록은 이 기기에 저장돼요', chevron: true, onPress: () => openBackup(context)),
+          ListItem(label: '계정 및 동기화', chevron: true, onPress: () => openBackup(context)),
           // 다른 앱·엑셀에 정리해 둔 책을 한 번에(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어')
-          ListItem(label: '책 목록 가져오기', sub: '엑셀·CSV 파일로 여러 권을 한 번에', chevron: true, onPress: () => openImportList(context)),
+          ListItem(label: '책 목록 가져오기', chevron: true, onPress: () => openImportList(context)),
           // 커뮤니티가 열렸고 서버를 쓰는 빌드일 때만
           if (communityOpen.value && _syncAvailable) ListItem(label: '커뮤니티 공개 프로필', chevron: true, onPress: () => openCommunityProfile(context)),
         ]),
-        const SectionBand(),
+        const SectionBand(inset: true),
         ListGroup(title: '앱 안내', children: [
-          ListItem(label: '문의하기', sub: _mail, onPress: _mailTo),
-          ListItem(label: '개인정보 처리방침', onPress: _privacySheet),
+          ListItem(label: '문의하기', chevron: true, onPress: _mailTo),
+          ListItem(label: '개인정보 처리방침', chevron: true, onPress: _privacySheet),
           ListItem(label: '앱 정보', value: _version),
         ]),
-        const BrandFooter(),
+        const BrandFooter(center: true),
       ],
     );
   }

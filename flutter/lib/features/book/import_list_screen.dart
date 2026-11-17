@@ -3,13 +3,19 @@
 // 못 찾은 줄은 목록에 남겨 알려 주고, 누르면 그 검색어로 책 추가를 연다. 읽기 상태 열이 있으면 그대로 옮긴다
 library;
 
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MethodChannel;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../domain/book_list_import.dart';
 import '../../domain/library.dart' show ReadStatus;
 import '../../services/book_search.dart';
 import '../../store/library_model.dart';
+import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
@@ -23,6 +29,7 @@ Future<void> openImportList(BuildContext context) => Navigator.of(context, rootN
 
 /// 한 번에 몇 권씩 찾을지(서버에 한꺼번에 몰리지 않게)
 const _parallel = 3;
+const _files = MethodChannel('app.covebook/files');
 
 class _Line {
   _Line(this.row);
@@ -215,32 +222,133 @@ class _ImportListScreenState extends State<ImportListScreen> {
     );
   }
 
+  // 예시 파일: 열 이름이 있는 CSV(UTF-8 BOM이라 엑셀에서도 한글이 안 깨진다). 안드로이드 10+는 다운로드/책장한켠에, 아니면 공유로
+  Future<void> _sample() async {
+    const name = '책장한켠 예시.csv';
+    const csv = '\uFEFF제목,저자,ISBN,읽기 상태\r\n소년이 온다,한강,9788936434120,읽은 책\r\n데미안,헤르만 헤세,,읽는 중\r\n모순,양귀자,,읽고 싶은\r\n';
+    try {
+      final dir = await getTemporaryDirectory();
+      final f = File('${dir.path}/$name');
+      await f.writeAsString(csv);
+      if (await _files.invokeMethod<bool>('canSaveDownload').catchError((_) => false) == true) {
+        await _files.invokeMethod<String>('saveDownload', {'path': f.path, 'name': name, 'mime': 'text/csv'});
+        f.delete().ignore();
+        if (mounted) appAlert(context, '예시 파일을 저장했어요', '다운로드 › 책장한켠 폴더의 ‘$name’을 엑셀에서 열어 내 책으로 고친 뒤 여기서 골라 주세요.');
+      } else {
+        await SharePlus.instance.share(ShareParams(files: [XFile(f.path, mimeType: 'text/csv')], title: name));
+      }
+    } catch (_) {
+      if (mounted) appAlert(context, '예시 파일을 저장하지 못했어요', '저장 공간을 확인하고 다시 해 주세요.');
+    }
+  }
+
+  // 2026-11-17 사용자 시안: 큰 두 줄 제목 · 한 줄 설명 · 파일 고르기 · 예시 파일 · 펼치는 두 줄(지원하는 파일과 항목 / 가져오기 전 확인)
   Widget _intro() => Screen(
         title: '책 목록 가져오기',
-        footer: Btn(label: '파일 고르기', busy: _reading, onPress: _pick),
         children: [
-          Text('엑셀이나 CSV로 정리해 둔 책 목록을 한 번에 넣어요.', style: AppType.body),
-          const SizedBox(height: Space.l),
-          for (final t in const [
-            '첫 줄에 ‘제목’, ‘저자’, ‘ISBN’ 같은 열 이름이 있으면 더 정확하게 찾아요. 다른 독서 앱에서 내보낸 파일도 열 이름이 있으면 그대로 읽어요.',
-            'ISBN이 있으면 그 판으로, 없으면 제목과 저자로 찾아요. 찾은 책은 넣기 전에 한 번 더 확인해요.',
-            '‘읽기 상태’ 열(읽은 책·읽는 중·읽고 싶은)이 있으면 상태도 옮겨요.',
-            '엑셀 파일(.xlsx)은 그대로, CSV는 ‘CSV UTF-8’로 저장한 파일을 골라 주세요.',
-          ])
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.s),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Padding(padding: const EdgeInsets.only(top: 9, right: Space.s), child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle))),
-                Expanded(child: Text(t, style: AppType.sub)),
-              ]),
+          const SizedBox(height: Space.s),
+          Semantics(header: true, child: Text('다른 곳의 책 목록을\n한 번에 가져오세요', style: AppType.title.copyWith(fontSize: 26, height: 36 / 26))),
+          const SizedBox(height: Space.m),
+          Text('엑셀이나 CSV 파일을 선택해 주세요.', style: AppType.body.copyWith(color: AppColors.inkSoft)),
+          const SizedBox(height: Space.xl),
+          Btn(label: '파일 고르기', busy: _reading, onPress: _pick),
+          const SizedBox(height: Space.s),
+          Center(
+            child: Semantics(
+              button: true,
+              label: '예시 파일 내려받기',
+              excludeSemantics: true,
+              onTap: _sample,
+              child: Pressable(
+                onPress: _sample,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: Space.hit),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Space.s),
+                    child: Center(
+                      widthFactor: 1,
+                      child: Text('예시 파일 내려받기', style: AppType.sub.copyWith(decoration: TextDecoration.underline, decorationColor: AppColors.inkSoft)),
+                    ),
+                  ),
+                ),
+              ),
             ),
+          ),
           if (_error != null)
             Padding(
-              padding: const EdgeInsets.only(top: Space.l),
+              padding: const EdgeInsets.only(top: Space.m),
               child: Semantics(liveRegion: true, child: Text(_error!, style: AppType.sub.copyWith(color: AppColors.danger))),
             ),
+          const SizedBox(height: Space.xl),
+          const _Fold(title: '지원하는 파일과 항목', lines: [
+            '엑셀 파일(.xlsx)은 그대로, CSV는 ‘CSV UTF-8’로 저장한 파일을 골라 주세요.',
+            '첫 줄에 ‘제목’, ‘저자’, ‘ISBN’ 같은 열 이름이 있으면 더 정확하게 찾아요. 다른 독서 앱에서 내보낸 파일도 열 이름이 있으면 그대로 읽어요.',
+            '‘읽기 상태’ 열(읽은 책·읽는 중·읽고 싶은)이 있으면 상태도 옮겨요.',
+          ]),
+          const _Fold(title: '가져오기 전 확인해 주세요', last: true, lines: [
+            'ISBN이 있으면 그 판으로, 없으면 제목과 저자로 찾아요.',
+            '찾은 책은 넣기 전에 한 번 더 확인해요. 이미 서재에 있는 책은 중복으로 넣지 않아요.',
+            '읽기 상태가 없으면 ‘읽고 싶은’ 책으로 넣어요.',
+          ]),
+          const SizedBox(height: Space.m),
+          Text('XLSX, CSV 파일 지원', style: AppType.caption),
         ],
       );
+}
+
+/// 누르면 펼쳐지는 줄(위아래 옅은 선, 오른쪽 ⌄)
+class _Fold extends StatefulWidget {
+  const _Fold({required this.title, required this.lines, this.last = false});
+  final String title;
+  final List<String> lines;
+  final bool last;
+
+  @override
+  State<_Fold> createState() => _FoldState();
+}
+
+class _FoldState extends State<_Fold> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final line = Container(height: 1, color: AppColors.sectionLine);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      line,
+      Semantics(
+        button: true,
+        expanded: _open,
+        label: widget.title,
+        excludeSemantics: true,
+        onTap: () => setState(() => _open = !_open),
+        child: Pressable(
+          onPress: () => setState(() => _open = !_open),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 60),
+            child: Row(children: [
+              Expanded(child: Text(widget.title, style: AppType.rowStrong)),
+              AnimatedRotation(turns: _open ? 0.5 : 0, duration: const Duration(milliseconds: 160), child: const LucideIcon('ChevronDown', size: 22, color: AppColors.inkSoft)),
+            ]),
+          ),
+        ),
+      ),
+      if (_open)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Space.l),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final t in widget.lines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Space.s),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(padding: const EdgeInsets.only(top: 10, right: Space.s), child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle))),
+                  Expanded(child: Text(t, style: AppType.sub)),
+                ]),
+              ),
+          ]),
+        ),
+      if (widget.last) line,
+    ]);
+  }
 }
 
 class _Head extends StatelessWidget {

@@ -65,6 +65,7 @@ class _BookScreenState extends State<BookScreen> {
   String _tab = 'info';
   bool _pageEdit = false;
   bool _noteEdit = false; // 평가 탭 한줄평을 고치는 중
+  bool _roundEdit = false; // 내 기록 탭 읽은 기간 날짜를 고치는 중
   Timer? _noteTimer;
   final _note = TextEditingController();
   final _page = TextEditingController();
@@ -312,7 +313,7 @@ class _BookScreenState extends State<BookScreen> {
     // 평가 탭(2026-11-17 사용자 시안): 별은 표지·제목·저자 아래 가운데, 그 아래 '한줄평'(오른쪽 수정)과 '감상 N'(오른쪽 쓰기).
     // 한줄평은 회색 상자 없이 글만 두고 '수정'을 누르면 그 자리에서 고친다. 별점·한줄평은 나만 본다
     // 개수는 제목 옆에 작은 회색 글('감상 1개', 2026-11-17 사용자 시안)
-    Widget sectionHead(String title, String link, VoidCallback onLink, {String? count}) => Row(children: [
+    Widget sectionHead(String title, String? link, VoidCallback? onLink, {String? count}) => Row(children: [
           Expanded(
             child: Semantics(
               header: true,
@@ -321,7 +322,7 @@ class _BookScreenState extends State<BookScreen> {
               ])),
             ),
           ),
-          TextLink(label: link, soft: true, onPress: onLink),
+          if (link != null && onLink != null) TextLink(label: link, soft: true, onPress: onLink),
         ]);
     void endNote() {
       _noteTimer?.cancel();
@@ -572,15 +573,22 @@ class _BookScreenState extends State<BookScreen> {
                     ),
                 ]),
               ),
-          // 읽은 기간(회차): 날짜를 고친다
-          const H2('읽은 기간'),
+          // 읽은 기간(회차, 2026-11-17 사용자 시안): 테두리 카드에 'N회차'·상태, 시작일·완독일. 오른쪽 '수정'을 누르면 그 자리에서 날짜를 고른다
+          const SizedBox(height: 44),
+          sectionHead('읽은 기간', rounds.isEmpty ? null : (_roundEdit ? '완료' : '수정'), () => setState(() => _roundEdit = !_roundEdit)),
+          const SizedBox(height: Space.s),
           if (rounds.isNotEmpty)
             Column(children: [
-              for (final r in rounds) _RoundCard(key: ValueKey('${r.id}|${r.startedAt}|${r.finishedAt}'), round: r, onSave: (s, f) => _model.updateRound(r.id, startedAt: s, finishedAt: f)),
+              for (final r in rounds)
+                _roundEdit
+                    ? _RoundCard(key: ValueKey('${r.id}|${r.startedAt}|${r.finishedAt}'), round: r, onSave: (s, f) => _model.updateRound(r.id, startedAt: s, finishedAt: f))
+                    : _RoundView(round: r),
             ])
           else
             Text('읽기 시작하면 회차가 생겨요. 날짜는 나중에 고칠 수 있어요.', style: AppType.sub),
-          H2('남긴 갈피${marks.isNotEmpty ? ' · ${marks.length}' : ''}'),
+          // 남긴 갈피: 제목 옆 작은 회색 개수(감상과 같은 모양), 없으면 가운데 한 줄
+          const SizedBox(height: 44),
+          sectionHead('남긴 갈피', null, null, count: '${marks.length}개'),
           if (marks.isNotEmpty) ...[
             ListGroup(children: [
               for (final m in marks.take(5))
@@ -614,7 +622,7 @@ class _BookScreenState extends State<BookScreen> {
             ]),
             Padding(padding: const EdgeInsets.only(top: Space.m), child: Btn(label: '갈피 보드로 보기', kind: 'secondary', onPress: () => openBookmarkBoard(context, id))),
           ] else
-            Empty(title: '아직 남긴 갈피가 없어요', action: '첫 갈피 남기기', actionKind: 'secondary', onAction: () => openNewBookmark(context, book: widget.id)),
+            Padding(padding: const EdgeInsets.symmetric(vertical: 40), child: Center(child: Text('아직 남긴 갈피가 없어요', style: AppType.sub))),
         ]);
 
     return Screen(
@@ -681,7 +689,46 @@ class _BookScreenState extends State<BookScreen> {
   }
 }
 
-/// 회차 하나: 위 구분선 + '1회차 · 읽는 중' + 시작일·완독일(달력 고르기). 완독일은 시작일 이후·시작일은 완독일 이전만 고를 수 있다
+/// 회차 하나(보기): 테두리 카드 안 '1회차'·오른쪽 상태, 시작일·완독일(2026.11.14, 없으면 —)
+class _RoundView extends StatelessWidget {
+  const _RoundView({required this.round});
+  final Round round;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = round;
+    String day(String? x) => x != null && isDay(x) ? x.replaceAll('-', '.') : '—';
+    Widget col(String label, String v) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: AppType.caption),
+          const SizedBox(height: 4),
+          Text(v, style: AppType.label.copyWith(fontSize: 17, fontFeatures: const [FontFeature.tabularFigures()])),
+        ]);
+    return Semantics(
+      container: true,
+      label: '${r.index}회차, ${r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중'}, 시작일 ${day(r.startedAt)}, 완독일 ${r.finishedAt != null ? day(r.finishedAt) : '없음'}',
+      excludeSemantics: true,
+      child: Container(
+        margin: const EdgeInsets.only(top: Space.s),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(child: Text('${r.index}회차${r.index > 1 ? ' · 재독' : ''}', style: AppType.rowStrong.copyWith(fontSize: 17))),
+            Text(r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중', style: AppType.sub),
+          ]),
+          const SizedBox(height: Space.l),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: col('시작일', day(r.startedAt))),
+            const SizedBox(width: Space.m),
+            Expanded(child: col('완독일', day(r.finishedAt))),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+/// 회차 하나(고치기): 위 구분선 + '1회차 · 읽는 중' + 시작일·완독일(달력 고르기). 완독일은 시작일 이후·시작일은 완독일 이전만 고를 수 있다
 class _RoundCard extends StatelessWidget {
   const _RoundCard({super.key, required this.round, required this.onSave});
   final Round round;

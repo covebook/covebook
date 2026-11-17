@@ -920,10 +920,15 @@ class ListGroup extends StatelessWidget {
 
 /// 묶음 사이: 화면 끝까지 닿는 1dp 선
 class SectionBand extends StatelessWidget {
-  const SectionBand({super.key});
+  const SectionBand({super.key, this.inset = false});
+
+  /// 내용 폭 안에만 긋는 옅은 선(내 정보·계정 및 동기화 시안, 2026-11-17)
+  final bool inset;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) => inset
+      ? Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Container(height: 1, color: AppColors.sectionLine))
+      : Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
         // 내용 폭 안에서 양옆 여백(24)을 넘어 화면 끝까지
         child: SizedBox(
@@ -1749,6 +1754,52 @@ class TextLink extends StatelessWidget {
       );
 }
 
+/// 필터 시트의 고르는 칸(갈피 유형·내 책 정렬, 2026-11-17 사용자 시안): 테두리 상자, 고르면 진한 테두리와 오른쪽 위 모서리에 체크.
+/// 체크는 둥근 모서리 위에 걸치게(가운데가 모서리 곡선 위, 2026-11-17 사용자 '조금만 오른쪽으로, 모서리에')
+class ChoiceBox extends StatelessWidget {
+  const ChoiceBox({super.key, required this.label, required this.on, required this.onPress});
+  final String label;
+  final bool on;
+  final VoidCallback onPress;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        selected: on,
+        label: label,
+        excludeSemantics: true,
+        onTap: onPress,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPress,
+          child: Stack(clipBehavior: Clip.none, children: [
+            Container(
+              constraints: const BoxConstraints(minHeight: 52),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(Shape.button),
+                border: Border.all(color: on ? AppColors.inkSoft : AppColors.line, width: on ? 1.5 : 1),
+              ),
+              child: Text(label, maxLines: 1, textAlign: TextAlign.center, style: AppType.label),
+            ),
+            if (on)
+              Positioned(
+                top: -8,
+                right: -8,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle, border: Border.all(color: AppColors.bg, width: 2)),
+                  child: const Center(child: LucideIcon('Check', size: 12, color: AppColors.bg, stroke: 3)),
+                ),
+              ),
+          ]),
+        ),
+      );
+}
+
 /// 켜고 끄는 스위치(갈색 둥근 바탕 안에 흰 손잡이, 50×30·손잡이 24). 안드로이드 기본 스위치는 손잡이가 바탕 밖으로 커서 직접 그린다
 class Toggle extends StatelessWidget {
   const Toggle({super.key, required this.value, required this.onChange, required this.label});
@@ -1804,13 +1855,18 @@ class Toggle extends StatelessWidget {
 
 /// 화면 맨 아래 작은 브랜드 줄(짧은 선 + '책장 한켠')
 class BrandFooter extends StatelessWidget {
-  const BrandFooter({super.key});
+  const BrandFooter({super.key, this.center = false});
+
+  /// 가운데 글자만(내 정보 시안, 2026-11-17)
+  final bool center;
 
   @override
   Widget build(BuildContext context) => Semantics(
         label: '책장 한켠',
         excludeSemantics: true,
-        child: Padding(
+        child: center
+            ? Padding(padding: const EdgeInsets.only(top: 96, bottom: Space.l), child: Center(child: Text('책장 한켠', style: AppType.sub)))
+            : Padding(
           padding: const EdgeInsets.only(top: 48),
           child: Row(children: [
             Container(width: 20, height: 2 / MediaQuery.devicePixelRatioOf(context), color: AppColors.inkFaint),

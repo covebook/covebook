@@ -11,7 +11,7 @@ import '../../domain/types.dart';
 
 enum AllBooksSort { recent, title }
 
-const sortLabel = {AllBooksSort.recent: '최근순', AllBooksSort.title: '제목순'};
+const sortLabel = {AllBooksSort.recent: '최신순', AllBooksSort.title: '제목순'};
 
 typedef AllBooksRow = ({Book book, bool onShelf});
 

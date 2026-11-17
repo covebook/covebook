@@ -429,46 +429,71 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
 
   String _selectedTitle(int n) => n > 0 ? '$n권 선택' : '책 선택';
 
-  void _openFilter(List<int> years, int offCount, int hiddenCount) => showSheet<void>(
-        context,
-        title: '필터',
-        scroll: true,
-        builder: (ctx) => StatefulBuilder(builder: (ctx, redraw) {
-          void set(VoidCallback f) {
-            setState(f);
-            redraw(() {});
-          }
-
-          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            FilterGroup(title: '정렬', first: true, children: [
-              for (final k in AllBooksSort.values) FilterOption(label: sortLabel[k]!, selected: _sort == k, onPress: () => set(() => _sort = k)),
-            ]),
-            FilterGroup(title: '책장', children: [
-              FilterOption(
-                label: '책장에 없는 책',
-                sub: '$offCount권',
-                right: Toggle(label: '책장에 없는 책', value: _offShelfOnly, onChange: (v) => set(() => _offShelfOnly = v)),
-              ),
-            ]),
-            if (years.isNotEmpty)
-              FilterGroup(title: '완독한 해', children: [
-                for (final y in years) FilterOption(label: '$y년', selected: _year == y, onPress: () => set(() => _year = _year == y ? null : y)),
+  // 2026-11-17 사용자 시안(갈피 필터와 같은 모양): 정렬 두 칸 · 책장에 없는 책만(권수) · 완독한 해 · 숨긴 책 · 적용. 고른 것은 '적용'을 눌러야 걸린다
+  void _openFilter(List<int> years, int offCount, int hiddenCount) {
+    var sort = _sort;
+    var off = _offShelfOnly;
+    var year = _year;
+    showSheet<void>(
+      context,
+      title: '필터',
+      scroll: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        Widget head(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.m), child: Semantics(header: true, child: Text(t, style: AppType.rowStrong)));
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          head('정렬'),
+          Row(children: [
+            for (final (i, k) in AllBooksSort.values.indexed) ...[
+              if (i > 0) const SizedBox(width: Space.s),
+              Expanded(child: ChoiceBox(label: sortLabel[k]!, on: sort == k, onPress: () => set(() => sort = k))),
+            ],
+          ]),
+          const SizedBox(height: Space.l),
+          MergeSemantics(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 60),
+              child: Row(children: [
+                Text('책장에 없는 책만', style: AppType.rowStrong),
+                const SizedBox(width: Space.m),
+                Expanded(child: Text('$offCount권', style: AppType.sub)),
+                Toggle(label: '책장에 없는 책만', value: off, onChange: (v) => set(() => off = v)),
               ]),
-            if (hiddenCount > 0)
-              FilterGroup(title: '숨긴 책', children: [
-                FilterOption(
-                  label: '숨긴 책 보기',
-                  sub: '$hiddenCount권 · 연도 책장에 남아 있는 책',
-                  chevron: true,
-                  onPress: () {
-                    Navigator.pop(ctx);
-                    _openHidden();
-                  },
-                ),
-              ]),
-          ]);
-        }),
-      );
+            ),
+          ),
+          if (years.isNotEmpty) ...[
+            const SizedBox(height: Space.m),
+            head('완독한 해'),
+            Wrap(spacing: Space.s, runSpacing: Space.m, children: [
+              for (final y in years)
+                SizedBox(width: 96, child: ChoiceBox(label: '$y년', on: year == y, onPress: () => set(() => year = year == y ? null : y))),
+            ]),
+          ],
+          if (hiddenCount > 0) ...[
+            const SizedBox(height: Space.m),
+            ListItem(
+              label: '숨긴 책 보기',
+              sub: '$hiddenCount권 · 연도 책장에 남아 있는 책',
+              chevron: true,
+              onPress: () {
+                Navigator.pop(ctx);
+                _openHidden();
+              },
+            ),
+          ],
+          const SizedBox(height: Space.l),
+          Btn(label: '적용', onPress: () {
+            Navigator.pop(ctx);
+            setState(() {
+              _sort = sort;
+              _offShelfOnly = off;
+              _year = year;
+            });
+          }),
+          const SizedBox(height: Space.s),
+        ]);
+      }),
+    );
+  }
 
   /// 고른 책 삭제·숨기기 확인: 무엇이 지워지고 무엇이 남는지 숫자로
   Future<void> _openDelete(List<String> ids) async {

@@ -9,6 +9,18 @@ import 'theme.dart';
 
 /// 로그인 단추: 세 회사 모두 같은 틀(높이 54, 모서리 Shape.button, 가운데 로고+글자)에 각 회사 규칙의 색만 다르다.
 /// 카카오: 노랑 #FEE500·검은 말풍선·글자 85% 검정. Apple: 검정 바탕·흰 로고(HIG 사용자 정의 단추). Google: 옅은 회색 바탕 #F2F2F2·선 없음·네 색 G(브랜딩 지침의 Neutral 모양, 2026-11-17 사용자 시안)
+/// 연결된 계정 줄의 회사 표시(계정 및 동기화 시안, 2026-11-17): Google은 G, 카카오는 노란 원 안 말풍선, Apple은 검은 사과
+Widget brandLogo(String provider, {double size = 36}) => switch (provider) {
+      'google' => SvgPicture.string(BrandButton._googleSvg, width: size * 0.8, height: size * 0.8),
+      'kakao' => Container(
+          width: size,
+          height: size,
+          decoration: const BoxDecoration(color: Color(0xFFFEE500), shape: BoxShape.circle),
+          child: Center(child: SvgPicture.string(BrandButton._kakaoSvg, width: size * 0.55, height: size * 0.55)),
+        ),
+      _ => Icon(Icons.apple, size: size * 0.9, color: const Color(0xFF000000)),
+    };
+
 class BrandButton extends StatefulWidget {
   const BrandButton({super.key, required this.label, required this.bg, required this.fg, required this.logo, required this.onPress, required this.border});
 
