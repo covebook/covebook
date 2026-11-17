@@ -492,7 +492,7 @@ class _BookScreenState extends State<BookScreen> {
               Text(pct != null ? '$pct% 읽음' : '전체 쪽수 미입력', style: AppType.caption),
               const SizedBox(width: Space.m),
               Expanded(
-                child: WordText(['총 ${formatDuration(readMs)}', if (sessions > 0) '$sessions회', if (done > 0) '완독 $done회'].join(' · '), textAlign: TextAlign.right, style: AppType.caption),
+                child: WordText(['총 ${formatDuration(readMs)}', if (sessions > 0) '$sessions회', if (done > 0) '완독 $done회'].join('   '), textAlign: TextAlign.right, style: AppType.caption),
               ),
             ]),
           ),
@@ -547,27 +547,30 @@ class _BookScreenState extends State<BookScreen> {
           if (recent.isEmpty)
             Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('타이머로 읽으면 여기에 쌓여요', style: AppType.sub))
           else
-            for (final x in recent.take(3))
-              Semantics(
-                button: true,
-                label: '${dayOf(x.startedAt)}, ${timeRange(x.startedAt, x.endedAt)}, ${formatDuration(x.durationMs)}, 고치기',
-                excludeSemantics: true,
-                onTap: () => openSessionEdit(context, x.id),
-                child: Pressable(
-                  onPress: () => openSessionEdit(context, x.id),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Space.s),
-                    child: Row(children: [
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(dayOf(x.startedAt), style: AppType.row),
-                          Padding(padding: const EdgeInsets.only(top: 2), child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.caption)),
-                        ]),
+            // 같은 날짜는 묶고(날짜 한 줄 아래 시간대는 연하게, 읽은 시간은 오른쪽에 진하게), 구분선 없이 날짜 사이 여백으로(2026-11-17 시안). 최근 5개
+            for (final (gi, g) in _byDay(recent.take(5).toList(), dayOf).indexed)
+              Padding(
+                padding: EdgeInsets.only(top: gi == 0 ? Space.s : Space.l + 4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Semantics(header: true, child: Text(g.day, style: AppType.row)),
+                  for (final x in g.items)
+                    Semantics(
+                      button: true,
+                      label: '${g.day}, ${timeRange(x.startedAt, x.endedAt)}, ${formatDuration(x.durationMs)}, 고치기',
+                      excludeSemantics: true,
+                      onTap: () => openSessionEdit(context, x.id),
+                      child: Pressable(
+                        onPress: () => openSessionEdit(context, x.id),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 40),
+                          child: Row(children: [
+                            Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.sub)),
+                            Text(formatDuration(x.durationMs), style: AppType.rowStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                          ]),
+                        ),
                       ),
-                      Text(formatDuration(x.durationMs), style: AppType.row),
-                    ]),
-                  ),
-                ),
+                    ),
+                ]),
               ),
           // 읽은 기간(회차): 날짜를 고친다
           const H2('읽은 기간'),
@@ -726,4 +729,18 @@ class _RoundCard extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// 독서 기록을 날짜별로 묶는다(최근 날짜부터, 들어온 순서 그대로)
+List<({String day, List<Session> items})> _byDay(List<Session> list, String Function(String) dayOf) {
+  final out = <({String day, List<Session> items})>[];
+  for (final x in list) {
+    final d = dayOf(x.startedAt);
+    if (out.isNotEmpty && out.last.day == d) {
+      out.last.items.add(x);
+    } else {
+      out.add((day: d, items: [x]));
+    }
+  }
+  return out;
 }
