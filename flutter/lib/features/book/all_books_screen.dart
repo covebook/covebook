@@ -24,6 +24,7 @@ import '../../store/mini_timer_store.dart' show miniTimerSpace;
 import '../../store/placement_store.dart';
 import '../../store/reading_store.dart';
 import '../../ui/book_visual.dart';
+import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
@@ -450,15 +451,25 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             ],
           ]),
           const SizedBox(height: Space.l),
-          MergeSemantics(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 60),
-              child: Row(children: [
-                Text('책장에 없는 책만', style: AppType.rowStrong),
-                const SizedBox(width: Space.m),
-                Expanded(child: Text('$offCount권', style: AppType.sub)),
-                Toggle(label: '책장에 없는 책만', value: off, onChange: (v) => set(() => off = v)),
-              ]),
+          // 줄 어디를 눌러도 켜고 끈다. 화면 읽기는 '책장에 없는 책만, N권' 한 번(이름이 두 번 읽혔다)
+          Semantics(
+            container: true,
+            toggled: off,
+            label: '책장에 없는 책만, $offCount권',
+            onTap: () => set(() => off = !off),
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => set(() => off = !off),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 60),
+                child: Row(children: [
+                  Text('책장에 없는 책만', style: AppType.rowStrong),
+                  const SizedBox(width: Space.m),
+                  Expanded(child: Text('$offCount권', style: AppType.sub)),
+                  Toggle(label: '책장에 없는 책만', value: off, onChange: (v) => set(() => off = v)),
+                ]),
+              ),
             ),
           ),
           if (years.isNotEmpty) ...[
@@ -764,7 +775,8 @@ class _BookListRow extends StatelessWidget {
                     if ((note ?? '').isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 3 + Space.xs),
-                        child: Text(note!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink)),
+                        // 낱말 단위로 줄을 바꾼다('한/다고'처럼 끊기지 않게)
+                        child: Text(keepAll(note!), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink)),
                       ),
                   ]),
                 ),

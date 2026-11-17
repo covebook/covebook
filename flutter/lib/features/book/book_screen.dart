@@ -323,7 +323,8 @@ class _BookScreenState extends State<BookScreen> {
             ),
           ),
           // 머리줄은 글 높이만 차지한다(누르는 칸은 위아래로 조금 넘친다): 제목과 내용 사이를 시안처럼 좁게(2026-11-17)
-          if (link != null && onLink != null) SizedBox(height: 30, child: OverflowBox(minHeight: 0, maxHeight: 48, child: TextLink(label: link, soft: true, onPress: onLink))),
+          // 높이만 30으로 줄인다(넓이는 글자만큼). OverflowBox로 감쌌더니 줄 안에서 넓이가 끝없이 커져 제목이 한 글자씩 세로로 깨졌다(2026-11-18)
+          if (link != null && onLink != null) SizedBox(height: 30, child: TextLink(label: link, soft: true, onPress: onLink)),
         ]);
     void endNote() {
       _noteTimer?.cancel();
