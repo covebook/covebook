@@ -251,9 +251,9 @@ class _ReadListState extends State<ReadList> {
           child: Pressable(
             onPress: () => _tapRow(id),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(children: [
-                coverOf(id, 44),
+                coverOf(id, 40),
                 const SizedBox(width: Space.l),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [

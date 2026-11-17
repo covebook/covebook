@@ -28,6 +28,17 @@ class StatsScreen extends StatefulWidget {
   State<StatsScreen> createState() => _StatsScreenState();
 }
 
+/// 많이 읽은 시간대 이름: 새벽·오전·낮·오후·저녁·밤(시안 '밤 11시')
+String _dayPart(int h) => switch (h) {
+      0 => '밤 12시',
+      < 6 => '새벽 $h시',
+      < 12 => '오전 $h시',
+      12 => '낮 12시',
+      < 18 => '오후 ${h - 12}시',
+      < 21 => '저녁 ${h - 12}시',
+      _ => '밤 ${h - 12}시',
+    };
+
 /// 통계 칸 사이 간격(2026-11-17 사용자: 항목 사이를 더 넓게)
 const _gap = 56.0;
 
@@ -141,7 +152,7 @@ class _StatsScreenState extends State<StatsScreen> {
       if (_view == 'records' && book != null) Padding(padding: const EdgeInsets.only(top: Space.m), child: BookRecordView(lib: lib, id: book)),
       // 달 넘기기는 왼쪽에 '‹ 2026년 11월 ›', 오른쪽에 '월별 ⌄'(분석만)
       Padding(
-        padding: const EdgeInsets.only(top: Space.m, bottom: Space.m),
+        padding: const EdgeInsets.only(top: Space.xs, bottom: Space.s),
         child: Row(children: [
           Transform.translate(
             offset: const Offset(-12, 0),
@@ -173,7 +184,8 @@ class _StatsScreenState extends State<StatsScreen> {
           value: selected != null ? (monthly ? '${int.parse(selected.substring(8))}일' : '${int.parse(selected.substring(5))}월') : null,
         ),
         const SizedBox(height: Space.s),
-        ReadingChart(bars: bars, selected: selected, unit: monthly ? '일' : '월', tip: false, plotH: 190, onSelect: (k) => setState(() => _picked = k)),
+        // 그래프 높이는 시안의 약 1.5배(2026-11-17 사용자: 높낮이를 좀 더 높게)
+        ReadingChart(bars: bars, selected: selected, unit: monthly ? '일' : '월', tip: false, plotH: 160, onSelect: (k) => setState(() => _picked = k)),
       ],
       if (_view == 'records') ..._records(lib, st0, sessions, activeDays, periodName, title, row, rowValue, period, book),
       if (_view == 'calendar')
@@ -236,7 +248,7 @@ class _StatsScreenState extends State<StatsScreen> {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, maxLines: 1, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 22, height: 30 / 22, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+            child: Text(value, maxLines: 1, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 19, height: 26 / 19, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
           ),
         ]);
     // 한 번에 읽은 시간 위 카드: 평균 | 가장 오래(테두리 상자, 가운데 세로 선)
@@ -245,7 +257,7 @@ class _StatsScreenState extends State<StatsScreen> {
       label: '한 번에 평균 ${summary.count > 0 ? _shortMs(summary.averageMs) : '없음'}, 가장 오래 읽은 시간 ${summary.count > 0 ? _shortMs(summary.longestMs) : '없음'}',
       excludeSemantics: true,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
         child: IntrinsicHeight(
           child: Row(children: [
@@ -260,7 +272,7 @@ class _StatsScreenState extends State<StatsScreen> {
       const SizedBox(height: _gap),
       MiniBars(
         title: '많이 읽은 시간대',
-        bars: [for (var h = 0; h < 24; h++) MiniBar('$h', hourLabel(h), hours[h])],
+        bars: [for (var h = 0; h < 24; h++) MiniBar('$h', _dayPart(h), hours[h])],
         labels: [for (final h in const [0, 6, 12, 18, 23]) (h, '$h시')],
         emptyText: empty,
         valueText: (b) => formatDuration(b.value),

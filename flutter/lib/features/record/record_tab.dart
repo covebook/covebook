@@ -194,7 +194,7 @@ class _RecordTabState extends State<RecordTab> {
           Row(children: [
             for (final (i, k) in MarkKind.values.indexed) ...[
               if (i > 0) const SizedBox(width: Space.s),
-              Expanded(child: ChoiceBox(label: markKindLabel[k]!, on: kind == k, onPress: () => set(() => kind = k))),
+              Expanded(child: ChoiceBox(label: k == MarkKind.all ? '전체' : markKindLabel[k]!, on: kind == k, onPress: () => set(() => kind = k))),
             ],
           ]),
           const SizedBox(height: Space.l),

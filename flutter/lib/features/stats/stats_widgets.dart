@@ -379,7 +379,7 @@ class StatHead extends StatelessWidget {
 }
 
 class MiniBars extends StatefulWidget {
-  const MiniBars({super.key, required this.title, required this.bars, required this.labels, required this.emptyText, required this.valueText, this.extra, this.plotH = 132, this.labelLines = 1});
+  const MiniBars({super.key, required this.title, required this.bars, required this.labels, required this.emptyText, required this.valueText, this.extra, this.plotH = 96, this.labelLines = 1});
   final String title;
   final List<MiniBar> bars;
   final List<(int, String)> labels;

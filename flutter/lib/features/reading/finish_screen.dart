@@ -300,7 +300,8 @@ Future<void> showSavedSheet(BuildContext context, {required String? bookId, requ
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.page),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 360),
+                // 화면 폭의 약 8할(시안 308)
+                constraints: const BoxConstraints(maxWidth: 308),
                 child: Material(
                   color: AppColors.bg,
                   borderRadius: BorderRadius.circular(Shape.dialog + 2),

@@ -711,7 +711,10 @@ Color _hexColor(String hex) => Color(0xFF000000 | int.parse(hex.replaceAll('#', 
 
 /// 목록 한 줄: 이름(+ 아래 설명) · 오른쪽 값 · 화살표(다른 화면으로 넘어가는 줄에만)
 class ListItem extends StatelessWidget {
-  const ListItem({super.key, required this.label, this.sub, this.value, this.onPress, this.danger = false, this.chevron = false, this.right, this.icon, this.selected});
+  const ListItem({super.key, required this.label, this.sub, this.value, this.onPress, this.danger = false, this.chevron = false, this.right, this.icon, this.selected, this.tight = false});
+
+  /// 줄 높이 50(내 정보 시안, 2026-11-17): 위아래 12
+  final bool tight;
   final String label;
   final String? sub;
   final String? value;
@@ -740,13 +743,13 @@ class ListItem extends StatelessWidget {
       child: Pressable(
         onPress: tap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Space.row),
+          constraints: BoxConstraints(minHeight: tight ? Space.hit : Space.row),
           child: Row(
             children: [
               if (icon != null) SizedBox(width: 32, child: Align(alignment: Alignment.centerLeft, child: ExcludeSemantics(child: icon))),
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(top: sub != null ? 18 : 16, bottom: sub != null ? 18 : 16, right: right != null || value != null || chevron ? 12 : 0),
+                  padding: EdgeInsets.only(top: sub != null ? 18 : (tight ? 12 : 16), bottom: sub != null ? 18 : (tight ? 12 : 16), right: right != null || value != null || chevron ? 12 : 0),
                   child: ExcludeSemantics(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -763,7 +766,7 @@ class ListItem extends StatelessWidget {
                   constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.55),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: ExcludeSemantics(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub.copyWith(fontSize: 15))),
+                    child: ExcludeSemantics(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub.copyWith(fontSize: tight ? 16 : 15))),
                   ),
                 ),
               ?right,
@@ -927,7 +930,7 @@ class SectionBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => inset
-      ? Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Container(height: 1, color: AppColors.sectionLine))
+      ? Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Container(height: 1, color: AppColors.sectionLine))
       : Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
         // 내용 폭 안에서 양옆 여백(24)을 넘어 화면 끝까지
@@ -1716,7 +1719,10 @@ class SelectField extends StatelessWidget {
 
 /// 글자 버튼(밑줄 없이 굵은 갈색 = 이어서 할 일, 회색 = 조심스러운 일)
 class TextLink extends StatelessWidget {
-  const TextLink({super.key, required this.label, required this.onPress, this.soft = false, this.disabled = false, this.start = false});
+  const TextLink({super.key, required this.label, required this.onPress, this.soft = false, this.disabled = false, this.start = false, this.ink = false});
+
+  /// 본문 색(내 책 '선택', 2026-11-17 시안)
+  final bool ink;
   final String label;
   final VoidCallback onPress;
   final bool soft, disabled;
@@ -1745,7 +1751,7 @@ class TextLink extends StatelessWidget {
                 // 가운데 정렬은 양옆 8을 누르는 자리로 둔다(지금 앱 hitSlop 8). 왼쪽 정렬은 글자가 위 글줄과 맞게 여백 없이
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: start ? 0 : 8),
-                  child: Center(widthFactor: 1, child: WordText(label, style: AppType.sub.copyWith(fontFamily: AppFonts.uiBold, color: soft ? AppColors.inkSoft : AppColors.accent))),
+                  child: Center(widthFactor: 1, child: WordText(label, style: AppType.sub.copyWith(fontFamily: AppFonts.uiBold, color: soft ? AppColors.inkSoft : ink ? AppColors.ink : AppColors.accent))),
                 ),
               ),
             ),
@@ -1774,7 +1780,7 @@ class ChoiceBox extends StatelessWidget {
           onTap: onPress,
           child: Stack(clipBehavior: Clip.none, children: [
             Container(
-              constraints: const BoxConstraints(minHeight: 52),
+              constraints: const BoxConstraints(minHeight: Space.hit),
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
               decoration: BoxDecoration(

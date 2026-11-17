@@ -10,7 +10,7 @@ NAMES = {
     'Eraser': 'eraser', 'MoreHorizontal': 'dots', 'MoreVertical': 'dots-vertical', 'Paintbrush': 'brush', 'PenLine': 'pencil',
     'Play': 'player-play', 'Timer': 'stopwatch', 'Plus': 'plus', 'Search': 'search', 'Settings': 'settings', 'Star': 'star',
     'Undo2': 'arrow-back-up', 'Volume2': 'volume', 'VolumeX': 'volume-off', 'X': 'x', 'Share': 'share-2',
-    'UserRound': 'user', 'Heart': 'heart', 'MessageCircle': 'message-circle', 'LayoutGrid': 'layout-grid', 'ListIcon': 'list',
+    'UserRound': 'user', 'Heart': 'heart', 'MessageCircle': 'message-circle', 'LayoutGrid': 'layout-grid', 'ListIcon': 'menu-2',
     'SlidersHorizontal': 'adjustments-horizontal', 'StickyNote': 'note', 'MoveDiagonal2': 'arrows-diagonal',
     'ScanBarcode': 'barcode', 'FileSpreadsheet': 'file-spreadsheet',
 }

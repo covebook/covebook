@@ -212,7 +212,7 @@ class _BackupScreenState extends State<BackupScreen> {
       ],
       Semantics(header: true, child: Text('동기화', style: AppType.section)),
       const SizedBox(height: Space.l),
-      Semantics(liveRegion: true, child: Text(headline, style: AppType.title.copyWith(fontSize: 24, height: 32 / 24))),
+      Semantics(liveRegion: true, child: Text(headline, style: AppType.title.copyWith(fontSize: 26, height: 34 / 26))),
       for (final t in sub) Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(t, style: AppType.sub)),
       if (on && !s.paused) ...[
         const SizedBox(height: Space.l + 4),
@@ -226,7 +226,7 @@ class _BackupScreenState extends State<BackupScreen> {
       ],
       if (on) ...[
         const SectionBand(inset: true),
-        ListItem(label: '계정 관리', chevron: true, onPress: () => _openManage(context)),
+        ListItem(tight: true, label: '계정 관리', chevron: true, onPress: () => _openManage(context)),
       ],
     ];
   }

@@ -221,7 +221,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                 offset: const Offset(10, 0),
                 child: Row(children: [
                   if (rows.isNotEmpty)
-                    TextLink(label: '선택', onPress: () {
+                    TextLink(label: '선택', ink: true, onPress: () {
                       _say(null);
                       _startManage();
                     }),
@@ -355,7 +355,8 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
               onLongPress: () => _startManage(r.book.id),
             );
           }
-          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [if (i > 1) const AppDivider(), row]);
+          // 줄 사이 선 없이 여백만(2026-11-17 내 책 목록 시안)
+          return row;
         },
       );
     }
@@ -705,8 +706,8 @@ class _PickMark extends StatelessWidget {
 
 /// 작은 앞모습(목록 줄 왼쪽, 칸 폭 64): 지금 앱 StandaloneBook 앞면 배율 0.42(설계 단위 → dp). 판형과 상관없이 모든 책을 같은 크기로(격자와 같은 규칙)
 Widget _thumb(Library lib, String id) {
-  final w = (mm(128) + 8) * 0.66; // 추정 판형 폭 + 둘레 여백 4DU×2(2026-11-17 시안: 목록 표지 폭 약 64)
-  return SizedBox(width: 72, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w, uniform: true))));
+  final w = (mm(128) + 8) * 0.61; // 추정 판형 폭 + 둘레 여백 4DU×2(2026-11-17 시안: 목록 표지 폭 약 61)
+  return SizedBox(width: 66, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w, uniform: true))));
 }
 
 /// 목록 한 줄(시안): 표지 + 제목 + 저자·상태 + 한 줄 감상 두 줄. 메모가 있으면 오른쪽 위 메모 아이콘을 눌러 작은 상자로 본다
@@ -729,7 +730,7 @@ class _BookListRow extends StatelessWidget {
           child: Pressable(
             onPress: onPress,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _thumb(lib, book.id),
                 const SizedBox(width: 18),

@@ -322,7 +322,8 @@ class _BookScreenState extends State<BookScreen> {
               ])),
             ),
           ),
-          if (link != null && onLink != null) TextLink(label: link, soft: true, onPress: onLink),
+          // 머리줄은 글 높이만 차지한다(누르는 칸은 위아래로 조금 넘친다): 제목과 내용 사이를 시안처럼 좁게(2026-11-17)
+          if (link != null && onLink != null) SizedBox(height: 30, child: OverflowBox(minHeight: 0, maxHeight: 48, child: TextLink(label: link, soft: true, onPress: onLink))),
         ]);
     void endNote() {
       _noteTimer?.cancel();
@@ -342,7 +343,7 @@ class _BookScreenState extends State<BookScreen> {
               setState(() => _noteEdit = true);
             }
           }),
-          const SizedBox(height: Space.s),
+          const SizedBox(height: 6),
           if (_noteEdit)
             Container(
               constraints: const BoxConstraints(minHeight: 56),
@@ -551,7 +552,7 @@ class _BookScreenState extends State<BookScreen> {
             // 같은 날짜는 묶고(날짜 한 줄 아래 시간대는 연하게, 읽은 시간은 오른쪽에 진하게), 구분선 없이 날짜 사이 여백으로(2026-11-17 시안). 최근 5개
             for (final (gi, g) in _byDay(recent.take(5).toList(), dayOf).indexed)
               Padding(
-                padding: EdgeInsets.only(top: gi == 0 ? Space.s : Space.l + 4),
+                padding: EdgeInsets.only(top: gi == 0 ? Space.s : 14),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Semantics(header: true, child: Text(g.day, style: AppType.row)),
                   for (final x in g.items)
@@ -563,9 +564,9 @@ class _BookScreenState extends State<BookScreen> {
                       child: Pressable(
                         onPress: () => openSessionEdit(context, x.id),
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 40),
+                          constraints: const BoxConstraints(minHeight: 31),
                           child: Row(children: [
-                            Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.sub)),
+                            Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.sub.copyWith(fontSize: 15))),
                             Text(formatDuration(x.durationMs), style: AppType.rowStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                           ]),
                         ),
@@ -701,7 +702,7 @@ class _RoundView extends StatelessWidget {
     Widget col(String label, String v) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: AppType.caption),
           const SizedBox(height: 4),
-          Text(v, style: AppType.label.copyWith(fontSize: 17, fontFeatures: const [FontFeature.tabularFigures()])),
+          Text(v, style: AppType.label.copyWith(fontSize: 16, fontFeatures: const [FontFeature.tabularFigures()])),
         ]);
     return Semantics(
       container: true,
@@ -709,14 +710,14 @@ class _RoundView extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         margin: const EdgeInsets.only(top: Space.s),
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Expanded(child: Text('${r.index}회차${r.index > 1 ? ' · 재독' : ''}', style: AppType.rowStrong.copyWith(fontSize: 17))),
-            Text(r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중', style: AppType.sub),
+            Expanded(child: Text('${r.index}회차${r.index > 1 ? ' · 재독' : ''}', style: AppType.rowStrong.copyWith(fontSize: 16))),
+            Text(r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중', style: AppType.caption),
           ]),
-          const SizedBox(height: Space.l),
+          const SizedBox(height: Space.m),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(child: col('시작일', day(r.startedAt))),
             const SizedBox(width: Space.m),

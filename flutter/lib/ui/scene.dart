@@ -341,7 +341,8 @@ void drawRow(
           spot: wallSpot,
           cellToPx: _wallCellToPx(c, px, area),
           key: keys.wall,
-          soft: frameOn ? (box: <double>[frameX0, frameX1, -far, roofed ? space : far], r: <double>[_backCornerR, _softW]) : null,
+          // 뒷벽 가장자리 번짐은 안쪽 곡면의 절반 폭: 뒷벽 위 그늘 띠가 옆·천장 곡면으로 1~2화소에 끊겨 꼭지점에 밝은 선이 보였다(2026-11-17 사용자 사진 1)
+          soft: frameOn ? (box: <double>[frameX0, frameX1, -far, roofed ? space : far], r: <double>[_backCornerR, mm(look.coveMm) / 2]) : null,
         ),
     );
   }

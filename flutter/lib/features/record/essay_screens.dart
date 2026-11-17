@@ -59,7 +59,7 @@ class EssayRow extends StatelessWidget {
       child: Pressable(
         onPress: onOpen ?? () => openEssay(context, essay.id),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.l),
+          padding: EdgeInsets.symmetric(vertical: compact ? Space.m : Space.l),
           child: compact
               ? Row(children: [
                   Expanded(
