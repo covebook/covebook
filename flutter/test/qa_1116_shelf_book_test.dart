@@ -116,7 +116,7 @@ void main() {
                   spin: 0,
                   spinMax: 30,
                   spinRange: null,
-                  depth: title == null ? null : (lo: -20, hi: 20, z: 0),
+                  depth: title == null ? null : (lo: -20.0, hi: 20.0, z: 0.0, back: 20.0),
                   canUndo: false,
                   onPose: (_) {},
                   onLean: (_) {},
@@ -145,7 +145,7 @@ void main() {
       final moved = <int>[];
       await tester.pumpWidget(panel(title: '작별하지 않는다', scale: 2, onMove: moved.add, canMove: (left: false, right: true)));
       expect(tester.takeException(), isNull);
-      expect(find.text('위치'), findsOneWidget);
+      expect(find.text('앞뒤'), findsOneWidget);
       expect(find.text('기대기'), findsOneWidget);
       // 왼쪽 끝이면 왼쪽 단추는 꺼져 있다
       await tester.tap(find.bySemanticsLabel('왼쪽으로 한 칸 옮기기'), warnIfMissed: false);

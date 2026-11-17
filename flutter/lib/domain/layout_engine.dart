@@ -905,6 +905,23 @@ EditResult shiftOnStack(ShelfLayout layout, BookMap books, String bookId, double
   return (lo: -shelfFront + (box.z - lo), hi: shelfDepth - (hi - box.z), z: box.z);
 }
 
+/// 실제로 갈 수 있는 앞뒤 범위: 벽만 본 [depthRange]에서 옆·뒤 책에 닿는 곳까지 줄인 것(조작부 막대가 보이는 범위).
+/// 앞뒤 옮기기([setDepth])를 양 끝으로 한 번씩 해 보고 닿은 자리를 잰다. back은 벽 쪽 끝(막대 숫자 '가장 뒤에서 몇 mm'의 기준)
+/// (2026-11-18 사용자: 책 앞에 두면 뒤 책 때문에 못 가는데 막대는 벽만 보고 범위를 보였다)
+({double lo, double hi, double z, double back}) reachableDepth(ShelfLayout layout, BookMap books, String bookId) {
+  final r = depthRange(layout, books, bookId);
+  double reach(double target) {
+    if ((target - r.z).abs() < 0.01) return r.z;
+    final e = setDepth(layout, books, bookId, target);
+    final z = e.ok ? boxOf(e.layout!, books, bookId)?.z : null;
+    return z ?? r.z;
+  }
+
+  // 벽 범위(지금 자리가 밖이면 지금 자리까지) 안으로만: 눕힌 책은 옮긴 뒤 상자 기준점이 조금 더 갈 수 있다
+  final lo = math.max(reach(r.lo), math.min(r.lo, r.z)), hi = math.min(reach(r.hi), math.max(r.hi, r.z));
+  return (lo: math.min(lo, r.z), hi: math.max(hi, r.z), z: r.z, back: r.hi);
+}
+
 /// 앞뒤(깊이) 옮기기: 다른 책은 밀지 않고, 옆 책·벽·받침에 닿으면 가능한 데까지만
 EditResult setDepth(ShelfLayout layout, BookMap books, String bookId, double z, [bool? prevLean]) {
   final p = placementOf(layout, bookId);

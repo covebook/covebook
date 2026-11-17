@@ -56,7 +56,7 @@ class DecoratePanel extends StatelessWidget {
   final double spin;
   final double spinMax;
   final ({double lo, double hi})? spinRange;
-  final ({double lo, double hi, double z})? depth;
+  final ({double lo, double hi, double z, double back})? depth;
   final bool canUndo;
   final ValueChanged<Pose> onPose;
   final ValueChanged<int> onLean;
@@ -188,7 +188,8 @@ class DecoratePanel extends StatelessWidget {
                       ]),
                     ),
                   if (depth != null)
-                    _Row(label: '위치', child: _DepthSlider(key: ValueKey(('d', bookKey)), lo: depth!.lo, hi: depth!.hi, value: depth!.z, onChange: onDepth)),
+                    // '위치'는 좌우로 읽혀 '앞뒤'로(2026-11-18 사용자: 옮기면 기대는 각이 바뀌어야 한다고 봄. 이 막대는 앞뒤만 옮긴다)
+                    _Row(label: '앞뒤', child: _DepthSlider(key: ValueKey(('d', bookKey)), lo: depth!.lo, hi: depth!.hi, back: depth!.back, value: depth!.z, onChange: onDepth)),
                   if (title != null && turns)
                     _Row(label: '회전', child: _SpinSlider(key: ValueKey(('s', bookKey, pose)), value: spin, max: spinMax, range: spinRange, onChange: onSpin)),
                   if (title != null && !turns)
@@ -524,10 +525,11 @@ class _SpinSliderState extends State<_SpinSlider> {
   }
 }
 
-/// 위치(앞뒤) 막대: 막대 한 폭이 선반 깊이 전체, 왼쪽이 벽 쪽(가장 뒤). 숫자는 가장 뒤에서 앞으로 몇 mm
+/// 앞뒤 막대: 막대 한 폭이 선반 깊이 전체, 왼쪽이 벽 쪽(가장 뒤). 옅은 띠는 실제로 갈 수 있는 범위(옆·뒤 책에 닿는 곳까지),
+/// 숫자는 벽 쪽 끝(back)에서 앞으로 몇 mm
 class _DepthSlider extends StatefulWidget {
-  const _DepthSlider({super.key, required this.lo, required this.hi, required this.value, required this.onChange});
-  final double lo, hi, value;
+  const _DepthSlider({super.key, required this.lo, required this.hi, required this.back, required this.value, required this.onChange});
+  final double lo, hi, back, value;
   final ValueChanged<double> onChange;
 
   @override
@@ -542,17 +544,17 @@ class _DepthSliderState extends State<_DepthSlider> {
   Widget build(BuildContext context) {
     const full = shelfFront + shelfDepth;
     final shown = _live ?? widget.value;
-    int mmOf(double z) => math.max(0, ((widget.hi - z) / duPerMm).round());
+    int mmOf(double z) => math.max(0, ((widget.back - z) / duPerMm).round());
     return Row(children: [
       Expanded(
         child: LayoutBuilder(builder: (context, box) {
           final w = math.max(1.0, box.maxWidth - 4);
           double xOf(double z) => (1 - (z + shelfFront) / full) * w;
           double toZ(double dx) => (math.max(widget.lo, math.min(widget.hi, _start - dx / w * full)) * 2).roundToDouble() / 2;
-          final pos = xOf(shown), back = xOf(widget.hi);
+          final pos = xOf(shown), back = xOf(widget.hi), wall = xOf(widget.back);
           return Semantics(
             slider: true,
-            label: '위치',
+            label: '앞뒤',
             value: '가장 뒤에서 ${mmOf(shown)}밀리미터 앞',
             // 늘이고 줄인 값도 함께(없으면 화면 읽기를 켠 디버그 빌드에서 의미 구조 검사에 걸렸다)
             increasedValue: '가장 뒤에서 ${mmOf(math.max(widget.lo, math.min(widget.hi, widget.value + 10 * duPerMm)))}밀리미터 앞',
@@ -570,7 +572,7 @@ class _DepthSliderState extends State<_DepthSlider> {
               },
               child: Padding(
                 padding: const EdgeInsets.only(left: 4),
-                child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: (back, xOf(widget.lo)), fill: (back, math.max(back, pos)), thumb: pos))),
+                child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: (back, xOf(widget.lo)), fill: (wall, math.max(wall, pos)), thumb: pos))),
               ),
             ),
           );
