@@ -368,10 +368,10 @@ class _ReadListState extends State<ReadList> {
           padding: const EdgeInsets.only(top: Space.section),
           child: Row(children: [
             Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.heading))),
-            // +는 오른쪽 끝(아래 '▶ 읽기'와 같은 선)에 맞춘다: 누르는 칸 48 가운데 26 그림이라 남는 11만큼 밀어 둔다(2026-11-17 사용자 '+ 위치랑 두께')
+            // +는 오른쪽 끝(아래 '▶ 읽기'와 같은 선)에 맞춘다: 누르는 칸 48 가운데 22 그림이라 남는 13만큼 밀어 둔다. 시안처럼 작고 옅은 회색(2026-11-17 사용자 '+ 위치랑 두께')
             Transform.translate(
-              offset: const Offset(11, 0),
-              child: IconBtn(label: '읽기 목록에 책 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.ink, stroke: 2)),
+              offset: const Offset(13, 0),
+              child: IconBtn(label: '읽기 목록에 책 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 22, color: AppColors.inkSoft)),
             ),
           ]),
         ),

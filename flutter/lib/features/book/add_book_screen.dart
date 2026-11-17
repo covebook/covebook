@@ -788,13 +788,13 @@ class _ResultRowState extends State<_ResultRow> {
                 widget.owned ? const SizedBox(width: 24) : PickMark(on: widget.picked)
               else
                 // 오른쪽 + (이미 서재에 있는 책은 체크: 눌러도 별도 소장본으로 넣을지 묻는다)
-                // 그림 오른쪽 끝을 내용 오른쪽 끝(검색칸 끝)에 맞춘다: 누르는 칸 48 가운데 26 그림이라 남는 11만큼 밀어 둔다
+                // 그림 오른쪽 끝을 내용 오른쪽 끝(검색칸 끝)에 맞춘다: 누르는 칸 48 가운데 22 그림이라 남는 13만큼 밀어 둔다. 시안처럼 작고 옅은 회색
                 Transform.translate(
-                  offset: const Offset(11, 0),
+                  offset: const Offset(13, 0),
                   child: SizedBox(
                     width: Space.hit,
                     height: Space.hit,
-                    child: Center(child: widget.owned ? const LucideIcon('Check', size: 24, color: AppColors.accent, stroke: 2) : const LucideIcon('Plus', size: 26, color: AppColors.ink, stroke: 1.6)),
+                    child: Center(child: widget.owned ? const LucideIcon('Check', size: 22, color: AppColors.accent, stroke: 2) : const LucideIcon('Plus', size: 22, color: AppColors.inkSoft)),
                   ),
                 ),
             ]),

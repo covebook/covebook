@@ -102,3 +102,9 @@
 - 순서는 카카오 · Google · Apple. 색은 각 회사 규칙: 카카오 `#FEE500` 바탕·검은 말풍선·글자 85% 검정 / Google 옅은 회색 `#F2F2F2` 바탕·선 없음·네 색 G·글자 `#1F1F1F`(Neutral) / Apple 검정 바탕·흰 로고·흰 글자.
 - 문구는 'OO로 계속하기'로 맞춘다(Google 영어 그림 단추는 2026-11-16에 뺐다).
 - 연결된 계정은 위 목록에 '… 계정 연결됨' 줄로 보이고 그 단추는 사라진다. '서버 계정 삭제'는 단추들 아래 따로 둔다.
+
+## 아이콘
+
+- 화면 안 선 아이콘은 모두 Tabler Icons(MIT) 한 벌: `LucideIcon(이름)`(이름은 예전 lucide 이름 그대로), 24칸 기준 선 굵기 1.8(`stroke`로 바꾼다). 표는 `tool/gen_icons.py`가 `tool/tabler_icons/`에서 `lib/gen/lucide.g.dart`로 만든다. 새 아이콘은 표(NAMES)와 SVG를 더한다.
+- 예외: 하단 탭 아이콘(`tab_icons.dart`), 책장 머리 입체 아이콘(그림), 재생·일시정지 채운 모양(`PlayIcon`·`PauseIcon`), Apple 로고.
+- 목록 오른쪽 끝 +는 22·옅은 회색(`inkSoft`)이고 그림 오른쪽 끝을 내용 오른쪽 끝에 맞춘다(누르는 칸 48).

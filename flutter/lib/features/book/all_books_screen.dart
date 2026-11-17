@@ -225,13 +225,13 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                       _say(null);
                       _startManage();
                     }),
-                  // 격자·목록 두 아이콘을 늘 보이고 지금 보기는 진하게(2026-11-17 사용자 시안)
+                  // 격자·목록 두 아이콘을 늘 같은 색으로 보인다(2026-11-17 사용자 시안). 지금 보기는 화면 읽기에서 '선택됨'
                   Semantics(
                     selected: _grid,
                     child: IconBtn(
                       label: '표지 격자로 보기',
                       onPress: () => setState(() => _lastGrid = _grid = true),
-                      child: LucideIcon('LayoutGrid', color: _grid ? AppColors.ink : AppColors.inkFaint),
+                      child: const LucideIcon('LayoutGrid', color: AppColors.ink),
                     ),
                   ),
                   Semantics(
@@ -239,7 +239,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     child: IconBtn(
                       label: '목록으로 보기',
                       onPress: () => setState(() => _lastGrid = _grid = false),
-                      child: LucideIcon('ListIcon', color: _grid ? AppColors.inkFaint : AppColors.ink),
+                      child: const LucideIcon('ListIcon', color: AppColors.ink),
                     ),
                   ),
                   FilterIcon(active: conditions.isNotEmpty, onPress: () => _openFilter(years, offCount, hiddenCount)),
@@ -680,8 +680,8 @@ class _PickMark extends StatelessWidget {
 
 /// 작은 앞모습(목록 줄 왼쪽, 칸 폭 64): 지금 앱 StandaloneBook 앞면 배율 0.42(설계 단위 → dp). 판형과 상관없이 모든 책을 같은 크기로(격자와 같은 규칙)
 Widget _thumb(Library lib, String id) {
-  final w = (mm(128) + 8) * 0.48; // 추정 판형 폭 + 둘레 여백 4DU×2(2026-11-17 시안: 목록 표지를 조금 크게)
-  return SizedBox(width: 70, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w, uniform: true))));
+  final w = (mm(128) + 8) * 0.66; // 추정 판형 폭 + 둘레 여백 4DU×2(2026-11-17 시안: 목록 표지 폭 약 64)
+  return SizedBox(width: 72, child: Center(child: ExcludeSemantics(child: BookVisual(lib: lib, id: id, width: w, uniform: true))));
 }
 
 /// 목록 한 줄(시안): 표지 + 제목 + 저자·상태 + 한 줄 감상 두 줄. 메모가 있으면 오른쪽 위 메모 아이콘을 눌러 작은 상자로 본다
