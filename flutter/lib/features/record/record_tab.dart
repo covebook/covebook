@@ -156,47 +156,64 @@ class _RecordTabState extends State<RecordTab> {
 
   // ── 필터 시트 ──
 
-  Future<void> _openMarkFilter() => showSheet<void>(
-        context,
-        title: '필터',
-        builder: (ctx) => StatefulBuilder(
-          builder: (ctx, set) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            FilterGroup(title: '책', first: true, children: [
-              FilterOption(
-                label: _markBook == null ? '모든 책' : _titleOf(_markBook!),
-                chevron: true,
-                onPress: () {
-                  Navigator.pop(ctx);
-                  _openMarkBooks(board: false);
-                },
+  // 갈피 필터(2026-11-17 사용자 시안, 높이·여백은 시안보다 조금 넉넉히): 책 한 줄(모든 책 ›) · 유형 세 칸 · 아껴둔 갈피만 · 적용.
+  // 고른 것은 '적용'을 눌러야 걸린다. 갈피 보드는 머리줄 격자 아이콘으로 옮겼다
+  Future<void> _openMarkFilter() {
+    var book = _markBook;
+    var kind = _kind;
+    var saved = _savedOnly;
+    return showSheet<void>(
+      context,
+      title: '필터',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          // 책: 왼쪽 '책', 오른쪽 고른 책 이름 ›
+          Semantics(
+            button: true,
+            label: '책, ${book == null ? '모든 책' : _titleOf(book!)}',
+            excludeSemantics: true,
+            onTap: () => _openMarkBooks(board: false, current: book, onPick: (id) => set(() => book = id)),
+            child: Pressable(
+              onPress: () => _openMarkBooks(board: false, current: book, onPick: (id) => set(() => book = id)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 56),
+                child: Row(children: [
+                  Text('책', style: AppType.rowStrong),
+                  const SizedBox(width: Space.l),
+                  Expanded(child: Text(book == null ? '모든 책' : _titleOf(book!), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                  const SizedBox(width: 4),
+                  const LucideIcon('ChevronRight', size: 20, color: AppColors.inkSoft),
+                ]),
               ),
-            ]),
-            FilterGroup(title: '유형', children: [
-              for (final k in MarkKind.values)
-                FilterOption(
-                  label: markKindLabel[k]!,
-                  selected: _kind == k,
-                  onPress: () {
-                    setState(() => _kind = k);
-                    set(() {});
-                  },
-                ),
-            ]),
-            // 갈피 보드(책 한 권씩): 고른 책이 있으면 그 책, 없으면 책부터
-            FilterGroup(title: '보기', children: [
-              FilterOption(
-                label: '갈피 보드로 보기',
-                sub: '책 한 권의 갈피를 넓은 보드에 흩어 붙여 봐요',
-                chevron: true,
-                onPress: () {
-                  Navigator.pop(ctx);
-                  _openBoard();
-                },
-              ),
-            ]),
+            ),
+          ),
+          Container(height: 1 / MediaQuery.devicePixelRatioOf(ctx), color: AppColors.line),
+          const SizedBox(height: Space.l + 4),
+          Semantics(header: true, child: Text('유형', style: AppType.rowStrong)),
+          const SizedBox(height: Space.m),
+          Row(children: [
+            for (final (i, k) in MarkKind.values.indexed) ...[
+              if (i > 0) const SizedBox(width: Space.s),
+              Expanded(child: _KindBox(label: markKindLabel[k]!, on: kind == k, onPress: () => set(() => kind = k))),
+            ],
           ]),
-        ),
-      );
+          const SizedBox(height: Space.l),
+          // 아껴둔 갈피만(예전 머리줄 아이콘)
+          ListItem(label: '아껴둔 갈피만', right: Toggle(label: '아껴둔 갈피만', value: saved, onChange: (v) => set(() => saved = v))),
+          const SizedBox(height: Space.l),
+          Btn(label: '적용', onPress: () {
+            Navigator.pop(ctx);
+            setState(() {
+              _markBook = book;
+              _kind = kind;
+              _savedOnly = saved;
+            });
+          }),
+          const SizedBox(height: Space.s),
+        ]),
+      ),
+    );
+  }
 
   void _openBoard() {
     final books = _booksOf(_marks.map((m) => m.myBookId));
@@ -208,18 +225,20 @@ class _RecordTabState extends State<RecordTab> {
     }
   }
 
-  Future<void> _openMarkBooks({required bool board}) {
+  Future<void> _openMarkBooks({required bool board, String? current, ValueChanged<String?>? onPick}) {
     final all = _marks;
     return _openBookChoice(
       title: board ? '보드로 볼 책' : '책 선택',
       books: _booksOf(all.map((m) => m.myBookId)),
       unit: (n) => '갈피 $n개',
       allSub: board ? null : '갈피 ${all.length}개',
-      current: board ? null : _markBook,
+      current: board ? null : (onPick != null ? current : _markBook),
       searchLabel: '갈피를 볼 책 찾기',
       onPick: (id) {
         if (board) {
           if (id != null) openBookmarkBoard(context, id);
+        } else if (onPick != null) {
+          onPick(id);
         } else {
           setState(() => _markBook = id);
         }
@@ -407,18 +426,9 @@ class _RecordTabState extends State<RecordTab> {
       ..._countRows(
         '갈피 ${list.length}개',
         [
-          // 아껴둔 갈피만: 켜면 채운 갈색 표시(카드의 아껴둔 표시와 같은 모양), 다른 조건과 함께 걸린다
-          MergeSemantics(
-            child: Semantics(
-              toggled: _savedOnly,
-              child: IconBtn(
-                label: '아껴둔 갈피만 보기',
-                onPress: () => setState(() => _savedOnly = !_savedOnly),
-                child: LucideIcon('Bookmark', size: 22, color: _savedOnly ? AppColors.accent : AppColors.ink, fill: _savedOnly ? AppColors.accent : null),
-              ),
-            ),
-          ),
-          FilterIcon(active: _markBook != null || _kind != MarkKind.all, onPress: _openMarkFilter),
+          // 갈피 보드(책 한 권의 갈피를 넓은 보드에): 격자 아이콘(2026-11-17 시안). 아껴둔 갈피만은 필터 안으로 옮겼다
+          IconBtn(label: '갈피 보드로 보기', onPress: _openBoard, child: const LucideIcon('LayoutGrid', size: 22)),
+          FilterIcon(active: _markBook != null || _kind != MarkKind.all || _savedOnly, onPress: _openMarkFilter),
         ],
         conditions,
         () => setState(() {
@@ -558,6 +568,51 @@ class _BookChoice extends StatelessWidget {
               ]),
             ),
           ),
+        ),
+      );
+}
+
+/// 필터 유형 한 칸: 테두리 상자, 고르면 진한 테두리와 오른쪽 위 체크(2026-11-17 시안)
+class _KindBox extends StatelessWidget {
+  const _KindBox({required this.label, required this.on, required this.onPress});
+  final String label;
+  final bool on;
+  final VoidCallback onPress;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        selected: on,
+        label: label,
+        excludeSemantics: true,
+        onTap: onPress,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPress,
+          child: Stack(clipBehavior: Clip.none, children: [
+            Container(
+              constraints: const BoxConstraints(minHeight: 52),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(Shape.button),
+                border: Border.all(color: on ? AppColors.inkSoft : AppColors.line, width: on ? 1.5 : 1),
+              ),
+              child: Text(label, maxLines: 1, textAlign: TextAlign.center, style: AppType.label.copyWith(color: on ? AppColors.ink : AppColors.ink)),
+            ),
+            if (on)
+              Positioned(
+                top: -7,
+                right: -5,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle, border: Border.all(color: AppColors.bg, width: 2)),
+                  child: const Center(child: LucideIcon('Check', size: 12, color: AppColors.bg, stroke: 3)),
+                ),
+              ),
+          ]),
         ),
       );
 }

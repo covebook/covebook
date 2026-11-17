@@ -9,10 +9,15 @@ NAMES = {
     'ChevronDown': 'chevron-down', 'ChevronLeft': 'chevron-left', 'ChevronRight': 'chevron-right', 'ChevronUp': 'chevron-up',
     'Eraser': 'eraser', 'MoreHorizontal': 'dots', 'MoreVertical': 'dots-vertical', 'Paintbrush': 'brush', 'PenLine': 'pencil',
     'Play': 'player-play', 'Timer': 'stopwatch', 'Plus': 'plus', 'Search': 'search', 'Settings': 'settings', 'Star': 'star',
-    'Undo2': 'arrow-back-up', 'Volume2': 'volume', 'VolumeX': 'volume-off', 'X': 'x', 'Share': 'share-2', 'AudioLines': 'music',
+    'Undo2': 'arrow-back-up', 'Volume2': 'volume', 'VolumeX': 'volume-off', 'X': 'x', 'Share': 'share-2',
     'UserRound': 'user', 'Heart': 'heart', 'MessageCircle': 'message-circle', 'LayoutGrid': 'layout-grid', 'ListIcon': 'list',
     'SlidersHorizontal': 'adjustments-horizontal', 'StickyNote': 'note', 'MoveDiagonal2': 'arrows-diagonal',
     'ScanBarcode': 'barcode', 'FileSpreadsheet': 'file-spreadsheet',
+}
+
+# Tabler에 없는 것만 예외로 직접(같은 24칸·선 굵기): 소리 막대는 lucide audio-lines(ISC) 모양 그대로(2026-11-17 읽기 장면 시안)
+EXTRA = {
+    'AudioLines': '<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>',
 }
 
 root = os.path.dirname(os.path.abspath(__file__))
@@ -28,6 +33,9 @@ for name, f in NAMES.items():
     # 24칸 테두리 투명 상자는 뺀다(채우기 색을 줄 때 상자까지 칠해진다)
     body = re.sub(r'<path stroke="none" d="M0 0h24v24H0z" fill="none"\s*/>', '', body)
     body = re.sub(r'\s+', ' ', body).replace(' />', '/>').replace('> <', '><').strip()
+    lines.append(f"  '{name}': '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"{{c}}\" stroke-width=\"{{w}}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">{body}</svg>',")
+
+for name, body in EXTRA.items():
     lines.append(f"  '{name}': '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"{{c}}\" stroke-width=\"{{w}}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">{body}</svg>',")
 
 out = os.path.join(root, '..', 'lib', 'gen', 'lucide.g.dart')

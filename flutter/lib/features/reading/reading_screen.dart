@@ -480,21 +480,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               ),
             ),
           ]),
-          // 왼쪽 지금 장면(소리), 오른쪽 읽는 책 이름
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-            child: Row(children: [
-              LucideIcon(_soundOff ? 'VolumeX' : 'AudioLines', size: 18, color: _light, stroke: 1.9),
-              const SizedBox(width: 8),
-              Text(_soundOff ? '${sceneName(scene)} · 소리 꺼짐' : sceneName(scene), style: AppType.sub.copyWith(color: _light, shadows: _shade)),
-              const SizedBox(width: Space.m),
-              Expanded(
-                child: !soundOnly && bookId != null
-                    ? Text(bookTitle(lib, bookId) ?? '', textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: _light, shadows: _shade))
-                    : const SizedBox.shrink(),
-              ),
-            ]),
-          ),
+          // 장면·책 이름 줄은 뺐다: 조작부에 책·소리 이름이 이미 있다(2026-11-17 사용자 시안)
         ]),
       ),
     );
@@ -522,15 +508,21 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                     child: Pressable(
                       onPress: _pickBook,
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 60),
+                        constraints: const BoxConstraints(minHeight: 64),
                         child: Row(children: [
                           if (!soundOnly && bookId != null)
-                            // 책을 바꾸면 표지도 새로 그린다(같은 자리 위젯이 이전 책 표지를 들고 있었다, 2026-11-15 QA 수아 F5)
-                            IgnorePointer(child: LinkedCover(key: ValueKey(bookId), lib: lib, id: bookId, width: 44))
+                            // 책을 바꾸면 표지도 새로 그린다(같은 자리 위젯이 이전 책 표지를 들고 있었다, 2026-11-15 QA 수아 F5).
+                            // 표지 모서리는 둥글게·옅은 그림자(2026-11-17 시안)
+                            IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), boxShadow: [cssShadow(const Color(0x22000000), 0, 2, 6)]),
+                                child: ClipRRect(borderRadius: BorderRadius.circular(6), child: LinkedCover(key: ValueKey(bookId), lib: lib, id: bookId, width: 52)),
+                              ),
+                            )
                           else
                             Container(
-                              width: 44,
-                              height: 56,
+                              width: 52,
+                              height: 66,
                               decoration: BoxDecoration(
                                 color: AppColors.surface,
                                 borderRadius: BorderRadius.circular(4),
@@ -541,9 +533,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                           const SizedBox(width: Space.m),
                           Expanded(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(soundOnly ? '소리와 함께 쉬어 가요' : bookTitle(lib, bookId) ?? '책 연결하기', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-                              const SizedBox(height: Space.xs),
-                              Text(soundOnly ? '독서 시간은 기록하지 않아요' : bookId != null ? '책 변경' : '책 없이 시작해도 좋아요', style: AppType.caption),
+                              Text(soundOnly ? '소리와 함께 쉬어 가요' : bookTitle(lib, bookId) ?? '책 연결하기', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong.copyWith(fontSize: 19, height: 26 / 19)),
+                              const SizedBox(height: 2),
+                              Text(soundOnly ? '독서 시간은 기록하지 않아요' : bookId != null ? _authorOf(lib, bookId) : '책 없이 시작해도 좋아요', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
                             ]),
                           ),
                         ]),
@@ -559,14 +551,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                   excludeSemantics: true,
                   child: Pressable(
                     onPress: () => setState(() => _open = false),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: Space.touch, minHeight: 48),
-                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const LucideIcon('ChevronDown', color: AppColors.inkSoft),
-                        const SizedBox(height: 2),
-                        Text('접기', style: AppType.caption),
-                      ]),
-                    ),
+                    // 글자 없이 ⌄만(2026-11-17 시안)
+                    child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronDown', size: 26, color: AppColors.inkSoft))),
                   ),
                 ),
               ]),
@@ -588,7 +574,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                         _Elapsed(
                           running: ticking,
                           builder: (ms) => Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-                            Text(clock(ms), style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 48, height: 56 / 48, color: AppColors.ink, fontFeatures: _tabular)),
+                            Text(clock(ms), style: const TextStyle(fontFamily: AppFonts.ui, fontSize: 64, height: 72 / 64, color: AppColors.ink, fontFeatures: _tabular)),
                             Positioned(
                               left: -100,
                               right: -100,
@@ -864,6 +850,12 @@ class _ElapsedState extends State<_Elapsed> {
   Widget build(BuildContext context) => widget.builder(ReadingStore.instance.elapsed);
 }
 
+/// 책 저자(조작부 책 줄 아래 글)
+String _authorOf(Library lib, String id) {
+  final e = lib.editions[lib.books[id]?.editionId ?? ''];
+  return e != null && e.authors.isNotEmpty ? e.authors.join(', ') : '';
+}
+
 /// 조작부 양옆 칸(분위기·목표): 아이콘 + 두 줄까지 글자
 class _Side extends StatelessWidget {
   const _Side({required this.icon, required this.text, required this.label, required this.onPress});
@@ -883,9 +875,9 @@ class _Side extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.xs),
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                LucideIcon(icon, size: 26),
+                LucideIcon(icon, size: 30, color: AppColors.inkSoft),
                 const SizedBox(height: Space.xs),
-                Text(text, maxLines: 2, textAlign: TextAlign.center, style: AppType.caption.copyWith(color: AppColors.ink)),
+                Text(text, maxLines: 2, textAlign: TextAlign.center, style: AppType.sub.copyWith(color: AppColors.inkSoft)),
               ]),
             ),
           ),
@@ -921,10 +913,10 @@ class _RoundState extends State<_Round> {
           child: Transform.scale(
             scale: _down ? 0.96 : 1,
             child: Container(
-              width: 72,
-              height: 72,
+              width: 84,
+              height: 84,
               decoration: BoxDecoration(shape: BoxShape.circle, color: _down ? AppColors.accentPressed : AppColors.accent),
-              child: Center(child: widget.playing ? const PauseIcon(width: 7, height: 26, gap: 8, color: AppColors.onAccent) : const PlayIcon(size: 34, color: AppColors.onAccent)),
+              child: Center(child: widget.playing ? const PauseIcon(width: 9, height: 32, gap: 10, color: AppColors.onAccent) : const PlayIcon(size: 38, color: AppColors.onAccent)),
             ),
           ),
         ),
