@@ -534,7 +534,8 @@ class _BookScreenState extends State<BookScreen> {
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(minHeight: Space.dense),
                           child: Row(children: [
-                            Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.caption)),
+                            // 다른 화면 기록 줄과 같은 크기(시간대 16 · 읽은 시간 18, 2026-11-18 사용자 '독서 기록 글자가 좀 작다')
+                            Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.sub)),
                             Text(formatDuration(x.durationMs), style: AppType.rowStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                           ]),
                         ),

@@ -304,25 +304,28 @@ Future<void> showSavedSheet(BuildContext context, {required String? bookId, requ
                 child: Material(
                   color: AppColors.bg,
                   borderRadius: BorderRadius.circular(Shape.dialog + 2),
+                  // 왼쪽 정렬로 낮게: 왼쪽 표지, 오른쪽에 제목 · 저자 · 'N분 기록했어요', 아래 확인(2026-11-18 사용자 '세로로 너무 길고 왼쪽 정렬이 나을 듯')
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(Space.l + 4, Space.xl, Space.l + 4, Space.l + 4),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      if (sb != null && se != null)
-                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 56)),
-                          const SizedBox(width: Space.l),
-                          Flexible(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        if (sb != null && se != null) ...[
+                          ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 52)),
+                          const SizedBox(width: Space.m + 2),
+                        ],
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                            if (sb != null && se != null) ...[
                               Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
                               if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
-                            ]),
-                          ),
-                        ])
-                      else
-                        Text('책 없이 읽은 시간', textAlign: TextAlign.center, style: AppType.sub),
-                      const SizedBox(height: Space.l + 4),
-                      WordText(done, textAlign: TextAlign.center, style: AppType.heading),
-                      const SizedBox(height: Space.l + 4),
+                            ] else
+                              Text('책 없이 읽은 시간', style: AppType.sub),
+                            const SizedBox(height: Space.s),
+                            WordText(done, style: AppType.rowStrong),
+                          ]),
+                        ),
+                      ]),
+                      const SizedBox(height: Space.l),
                       Btn(label: '확인', onPress: () => Navigator.pop(ctx)),
                     ]),
                   ),

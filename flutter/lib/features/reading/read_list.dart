@@ -341,7 +341,8 @@ class _ReadListState extends State<ReadList> {
             ),
           ),
         if (hasFeatured) ...[
-          Padding(padding: const EdgeInsets.only(top: Space.xl, bottom: Space.m), child: Text(fActive ? (running ? '읽는 중' : '잠깐 멈춘 책') : '최근 읽던 책', style: AppType.sub)),
+          // 위아래 간격은 시안처럼 촘촘하게(2026-11-18 사용자 '간격이 좀 이상하네')
+          Padding(padding: const EdgeInsets.only(top: Space.l, bottom: Space.m), child: Text(fActive ? (running ? '읽는 중' : '잠깐 멈춘 책') : '최근 읽던 책', style: AppType.sub)),
           Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Semantics(
               button: true,
@@ -365,9 +366,10 @@ class _ReadListState extends State<ReadList> {
         ],
         // 내 읽기 목록(오른쪽 +: 읽을 책·다 읽은 책이나 책 없이 읽기를 여러 개 골라 더한다)
         Padding(
-          padding: const EdgeInsets.only(top: Space.section),
+          padding: const EdgeInsets.only(top: Space.xl),
           child: Row(children: [
-            Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.heading))),
+            // 구역 제목은 앱 공통 구역 제목(19)
+            Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.section))),
             // +는 오른쪽 끝(아래 '▶ 읽기'와 같은 선)에 맞춘다: 누르는 칸 48 가운데 22 그림이라 남는 13만큼 밀어 둔다. 시안처럼 작고 옅은 회색(2026-11-17 사용자 '+ 위치랑 두께')
             Transform.translate(
               offset: const Offset(13, 0),

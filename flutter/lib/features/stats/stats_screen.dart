@@ -117,7 +117,8 @@ class _StatsScreenState extends State<StatsScreen> {
     Widget cover(String? id) => id != null && lib.books.containsKey(id)
         ? LinkedCover(lib: lib, id: id, width: _coverW)
         : const RealCover(title: '책 없음', color: '#F2F4F6', width: _coverW, ratio: 0.7);
-    final rowValue = AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    // 읽은 시간은 책 정보 › 내 기록의 독서 기록 줄과 같은 크기(18)
+    final rowValue = AppType.rowStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
     Widget row({required String? id, required String label, required Widget middle, required Widget right, VoidCallback? onPress}) => Semantics(
           button: onPress != null,
           label: label,
