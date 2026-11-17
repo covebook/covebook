@@ -28,6 +28,9 @@ class StatsScreen extends StatefulWidget {
   State<StatsScreen> createState() => _StatsScreenState();
 }
 
+/// 통계 칸 사이 간격(2026-11-17 사용자: 항목 사이를 더 넓게)
+const _gap = 56.0;
+
 class _StatsScreenState extends State<StatsScreen> {
   final _model = LibraryModel.instance;
   Library? get _lib => _model.loaded ? _model.lib : null;
@@ -134,52 +137,44 @@ class _StatsScreenState extends State<StatsScreen> {
           }),
         ),
       ),
-      // 책 선택은 두 칸 모두 같은 자리: 달력·그래프·숫자가 함께 바뀐다
+      // 책 선택은 제목 줄 오른쪽(두 칸 모두 같은 자리: 달력·그래프·숫자가 함께 바뀐다, 2026-11-17 통계 시안)
+      if (_view == 'records' && book != null) Padding(padding: const EdgeInsets.only(top: Space.m), child: BookRecordView(lib: lib, id: book)),
+      // 달 넘기기는 왼쪽에 '‹ 2026년 11월 ›', 오른쪽에 '월별 ⌄'(분석만)
       Padding(
-        padding: const EdgeInsets.only(top: Space.s),
-        child: Align(alignment: Alignment.centerRight, child: FilterButton(plain: true, label: title(book) ?? '모든 책', active: book != null, onPress: () => _pickBook(lib))),
-      ),
-      if (_view == 'records' && book != null) BookRecordView(lib: lib, id: book),
-      Padding(
-        padding: const EdgeInsets.only(top: Space.s, bottom: Space.l),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconBtn(label: monthly ? '이전 달' : '이전 해', onPress: () => _shift(-1), child: const LucideIcon('ChevronLeft')),
-          const SizedBox(width: Space.l),
-          ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 168),
-            child: Semantics(
-              header: true,
-              child: Text(monthly ? '$_y년 $_m월' : '$_y년', textAlign: TextAlign.center, style: AppType.title.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-            ),
+        padding: const EdgeInsets.only(top: Space.m, bottom: Space.m),
+        child: Row(children: [
+          Transform.translate(
+            offset: const Offset(-12, 0),
+            child: IconBtn(label: monthly ? '이전 달' : '이전 해', onPress: () => _shift(-1), child: const LucideIcon('ChevronLeft')),
           ),
-          const SizedBox(width: Space.l),
+          Semantics(
+            header: true,
+            child: Text(monthly ? '$_y년 $_m월' : '$_y년', style: AppType.heading.copyWith(fontSize: 22, fontFeatures: const [FontFeature.tabularFigures()])),
+          ),
+          const SizedBox(width: 2),
           IconBtn(
             label: monthly ? '다음 달' : '다음 해',
             disabled: monthly ? _y * 12 + _m >= now.year * 12 + now.month : _y >= now.year,
             onPress: () => _shift(1),
             child: const LucideIcon('ChevronRight'),
           ),
+          const Spacer(),
+          if (_view == 'records') FilterButton(plain: true, label: _yearly ? '연도별' : '월별', onPress: _periodSheet),
         ]),
       ),
-      if (_view == 'records')
-        Padding(
-          padding: const EdgeInsets.only(bottom: Space.l),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            AppChip(label: '월별', on: !_yearly, onPress: () => setState(() {
-              _yearly = false;
-              _picked = null;
-            })),
-            const SizedBox(width: Space.s),
-            AppChip(label: '연도별', on: _yearly, onPress: () => setState(() {
-              _yearly = true;
-              _picked = null;
-            })),
-          ]),
-        ),
       if (_view == 'calendar')
         ReadingCalendar(lib: lib, y: _y, m: _m, days: days, selected: selected, today: today, onSelect: (d) => setState(() => _picked = d))
-      else
-        ReadingChart(bars: bars, selected: selected, unit: monthly ? '일' : '월', onSelect: (k) => setState(() => _picked = k)),
+      else ...[
+        ..._summary(st0, sessions, activeDays, periodName),
+        const SizedBox(height: _gap),
+        StatHead(
+          title: monthly ? '날짜별 독서' : '월별 독서',
+          top: selected != null ? formatDuration(selMs) : null,
+          value: selected != null ? (monthly ? '${int.parse(selected.substring(8))}일' : '${int.parse(selected.substring(5))}월') : null,
+        ),
+        const SizedBox(height: Space.s),
+        ReadingChart(bars: bars, selected: selected, unit: monthly ? '일' : '월', tip: false, plotH: 190, onSelect: (k) => setState(() => _picked = k)),
+      ],
       if (_view == 'records') ..._records(lib, st0, sessions, activeDays, periodName, title, row, rowValue, period, book),
       if (_view == 'calendar')
         if (selected != null) ...[
@@ -219,6 +214,10 @@ class _StatsScreenState extends State<StatsScreen> {
     return Screen(
       back: !widget.tab,
       title: widget.tab ? '통계' : '내 기록',
+      right: Padding(
+        padding: const EdgeInsets.only(top: 10, right: 10),
+        child: FilterButton(plain: true, label: title(book) ?? '모든 책', active: book != null, onPress: () => _pickBook(lib)),
+      ),
       // 떠 있는 하단바 아래까지 내용이 내려가게
       bottomPad: widget.tab ? TabBarStyle.contentPad - Space.section : 0,
       children: children,
@@ -231,56 +230,61 @@ class _StatsScreenState extends State<StatsScreen> {
     final hours = hourBars(sessions), lengths = lengthBins(sessions), wd = weekdayBars(sessions);
     final top = topBooks(sessions, 3).where((r) => lib.books.containsKey(r.id)).toList();
     const empty = '이 기간에는 기록이 없어요.';
+    Widget pair(String label, String value) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: AppType.caption),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, maxLines: 1, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 22, height: 30 / 22, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+          ),
+        ]);
+    // 한 번에 읽은 시간 위 카드: 평균 | 가장 오래(테두리 상자, 가운데 세로 선)
+    final lengthCard = Semantics(
+      container: true,
+      label: '한 번에 평균 ${summary.count > 0 ? _shortMs(summary.averageMs) : '없음'}, 가장 오래 읽은 시간 ${summary.count > 0 ? _shortMs(summary.longestMs) : '없음'}',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
+        child: IntrinsicHeight(
+          child: Row(children: [
+            Expanded(child: pair('한 번에 평균', summary.count > 0 ? _shortMs(summary.averageMs) : '-')),
+            Container(width: 1, margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), color: AppColors.line),
+            Expanded(child: pair('가장 오래 읽은 시간', summary.count > 0 ? _shortMs(summary.longestMs) : '-')),
+          ]),
+        ),
+      ),
+    );
     return [
-      Padding(
-        padding: const EdgeInsets.only(top: Space.l, bottom: Space.s),
-        child: Semantics(header: true, child: Text('$periodName 독서', maxLines: 1, style: AppType.row)),
-      ),
-      Semantics(
-        label: '$periodName 독서 ${formatDuration(st0.readMs)}, 일시정지 제외, 읽은 날 $activeDays일, 독서 ${sessions.length}회',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(formatDuration(st0.readMs),
-              style: const TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 36, height: 44 / 36, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
-          Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text('읽은 날 $activeDays일 · 독서 ${sessions.length}회', style: AppType.sub)),
-        ]),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(top: Space.l),
-        child: Row(children: [
-          StatNumber(label: '한 번 평균', value: summary.count > 0 ? _shortMs(summary.averageMs) : '-'),
-          const SizedBox(width: Space.m),
-          StatNumber(label: '가장 길게', value: summary.count > 0 ? _shortMs(summary.longestMs) : '-'),
-        ]),
-      ),
-      const SectionBand(),
+      const SizedBox(height: _gap),
       MiniBars(
-        title: '읽은 시간대',
+        title: '많이 읽은 시간대',
         bars: [for (var h = 0; h < 24; h++) MiniBar('$h', hourLabel(h), hours[h])],
-        labels: [for (final h in const [0, 6, 12, 18]) (h, '$h시')],
+        labels: [for (final h in const [0, 6, 12, 18, 23]) (h, '$h시')],
         emptyText: empty,
-        summary: (p) => '${p.name}에 가장 많이 읽었어요 · ${formatDuration(p.value)}',
         valueText: (b) => formatDuration(b.value),
       ),
-      const SectionBand(),
+      const SizedBox(height: _gap),
       MiniBars(
-        title: '한 번에 읽는 길이',
+        title: '한 번에 읽은 시간',
         bars: [for (var i = 0; i < lengths.length; i++) MiniBar(lengthBinsDef[i].key, lengthBinsDef[i].name, lengths[i])],
-        labels: [for (var i = 0; i < lengthBinsDef.length; i++) (i, lengthBinsDef[i].short)],
+        labels: [for (var i = 0; i < lengthBinsDef.length; i++) (i, lengthBinsDef[i].name)],
+        labelLines: 2,
+        extra: lengthCard,
         emptyText: empty,
-        summary: (p) => '${p.name}로 가장 자주 읽었어요 · ${p.value}번',
-        valueText: (b) => '${b.value}번',
+        valueText: (b) => '${b.value}회',
       ),
-      const SectionBand(),
+      const SizedBox(height: _gap),
       MiniBars(
-        title: '요일별',
+        title: '많이 읽은 요일',
         bars: [for (var i = 0; i < 7; i++) MiniBar(weekdays[i], '${weekdays[i]}요일', wd[i])],
         labels: [for (var i = 0; i < 7; i++) (i, weekdays[i])],
         emptyText: empty,
-        summary: (p) => '${p.name}에 가장 많이 읽었어요 · ${formatDuration(p.value)}',
         valueText: (b) => formatDuration(b.value),
       ),
       if (top.isNotEmpty) ...[
-        const SectionBand(),
+        const SizedBox(height: _gap),
         Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Semantics(header: true, child: Text('많이 읽은 책', style: AppType.section))),
         for (final r in top)
           row(
@@ -290,7 +294,7 @@ class _StatsScreenState extends State<StatsScreen> {
             right: Text(_shortMs(r.ms), style: rowValue),
           ),
       ],
-      const SectionBand(),
+      const SizedBox(height: _gap - Space.l),
       ListGroup(children: [
         // 넣은 책·지금 서재(모든 책일 때만): '전체 책'의 권수와 맞춰 볼 수 있게
         if (book == null) ListItem(label: '넣은 책', value: '${bookCounts(lib, period).added}권'),
@@ -308,6 +312,69 @@ class _StatsScreenState extends State<StatsScreen> {
       ]),
     ];
   }
+
+  // 큰 숫자: '이번 달 읽은 시간'과 '15시간 45분'(숫자 크게·단위 작게), 그 아래 읽은 날 · 독서 횟수(2026-11-17 시안)
+  List<Widget> _summary(PeriodStats st0, List<Session> sessions, int activeDays, String periodName) {
+    final ms = st0.readMs;
+    final h = ms ~/ 3600000, m = (ms % 3600000) ~/ 60000, s = (ms % 60000) ~/ 1000;
+    final parts = <(String, String)>[
+      if (h > 0) ('$h', '시간'),
+      if (m > 0 || (h == 0 && ms >= 60000)) ('$m', '분'),
+      if (ms < 60000) ('$s', '초'),
+    ];
+    const big = TextStyle(fontFamily: AppFonts.uiTitle, fontSize: 48, height: 58 / 48, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()]);
+    final unit = AppType.heading.copyWith(fontFamily: AppFonts.uiMedium, fontSize: 22);
+    Widget stat(String label, String value) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: AppType.caption),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(fontFamily: AppFonts.uiBold, fontSize: 24, height: 32 / 24, color: AppColors.ink, fontFeatures: [FontFeature.tabularFigures()])),
+          ]),
+        );
+    return [
+      Semantics(
+        container: true,
+        label: '$periodName 읽은 시간 ${formatDuration(ms)}, 읽은 날 $activeDays일, 독서 ${sessions.length}회',
+        excludeSemantics: true,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('$periodName 읽은 시간', style: AppType.sub),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text.rich(TextSpan(children: [
+              for (final (i, (n, u)) in parts.indexed) ...[
+                if (i > 0) const TextSpan(text: '  '),
+                TextSpan(text: n, style: big),
+                TextSpan(text: ' $u', style: unit),
+              ],
+            ])),
+          ),
+          const SizedBox(height: Space.l),
+          Row(children: [stat('읽은 날', '$activeDays일'), stat('독서 횟수', '${sessions.length}회')]),
+        ]),
+      ),
+    ];
+  }
+
+  void _periodSheet() => showSheet<void>(
+        context,
+        title: '기간',
+        builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          for (final (y, label) in const [(false, '월별'), (true, '연도별')])
+            FilterOption(
+              label: label,
+              selected: _yearly == y,
+              onPress: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _yearly = y;
+                  _picked = null;
+                });
+              },
+            ),
+        ]),
+      );
 
   Future<void> _pickBook(Library lib) async {
     final withSessions = <String>[];

@@ -741,7 +741,9 @@ vec4 _tex2(vec2 q) {
     float d = softR.x - length(max(q, vec2(0.0))) - min(max(q.x, q.y), 0.0);
     // 천장 양옆 번짐 폭은 앞에서 넓고(softR.y) 뒤로 갈수록 좁다(Flutter 2026-11-16 사용자 '이음새에 선이 남으면 안 된다'):
     // 천장과 옆벽 위 끝의 밝기 차는 앞쪽에서 크고(147 · 158) 뒷벽 쪽에서 거의 없다. 뒤까지 넓게 비우면 세 면 꼭지점이 밝게 비쳤다
-    float sw = tN.y < -0.5 ? mix(0.5, softR.y, clamp((DEPTH - P.z) / (DEPTH + FFRONT), 0.0, 1.0)) : softR.y;
+    // 천장 번짐 폭: 앞쪽은 안쪽 모서리 곡면 반지름 그대로(옆벽으로 꺾임 없이 넘어간다), 뒷벽 바로 앞 반지름 길이에서만 좁힌다.
+    // 앞에서부터 줄이면(예전) 번짐 끝이 사선이 되어 모서리에 비스듬한 선이 보였고, 뒤까지 넓히면 뒷벽 둥근 꼭지점 밑이 비어 밝은 틈이 났다(2026-11-17)
+    float sw = tN.y < -0.5 ? mix(0.5, softR.y, clamp((DEPTH - P.z) / max(softR.y, 0.001), 0.0, 1.0)) : softR.y;
     return max(front, smoothstep(0.0, sw, d));
   }
   // 평면 위 점 Q가 그려지는 캔버스 자리: 사상 P = (O + p.x Ux + p.y Vy) / w의 역(면 안 두 축 Au, Av로 푼다)

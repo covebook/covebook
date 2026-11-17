@@ -85,19 +85,21 @@
    }
    // 안쪽 모서리 번짐: 뒷벽·천장·판 윗면은 맞닿은 면 위에 그려진다. 실제 모서리는 곡면이라 한 면의 빛이 다른 면의 빛으로 서서히 넘어가므로, 그린 면이 모서리 쪽에서 투명해져 밑면이 비치게 한다.
    // 면 좌표: 뒷벽은 (x, y), 천장·판 윗면은 (x, z × 눌림): 화면에서 눌린 깊이를 눌린 만큼 줄여 폭이 화면에서 같게 보인다. 둥근 사각형 안쪽 거리라 꼭지점도 둥글다
-@@ -1337,7 +1339,10 @@
+@@ -1337,7 +1339,12 @@
      float2 c2 = float2(softBox.x + softBox.y, softBox.z + softBox.w) * 0.5;
      float2 q = abs(u - c2) - (float2(softBox.y - softBox.x, softBox.w - softBox.z) * 0.5 - float2(softR.x));
      float d = softR.x - length(max(q, float2(0.0))) - min(max(q.x, q.y), 0.0);
 -    return max(front, smoothstep(0.0, softR.y, d));
 +    // 천장 양옆 번짐 폭은 앞에서 넓고(softR.y) 뒤로 갈수록 좁다(Flutter 2026-11-16 사용자 '이음새에 선이 남으면 안 된다'):
 +    // 천장과 옆벽 위 끝의 밝기 차는 앞쪽에서 크고(147 · 158) 뒷벽 쪽에서 거의 없다. 뒤까지 넓게 비우면 세 면 꼭지점이 밝게 비쳤다
-+    float sw = tN.y < -0.5 ? mix(0.5, softR.y, clamp((DEPTH - P.z) / (DEPTH + FFRONT), 0.0, 1.0)) : softR.y;
++    // 천장 번짐 폭: 앞쪽은 안쪽 모서리 곡면 반지름 그대로(옆벽으로 꺾임 없이 넘어간다), 뒷벽 바로 앞 반지름 길이에서만 좁힌다.
++    // 앞에서부터 줄이면(예전) 번짐 끝이 사선이 되어 모서리에 비스듬한 선이 보였고, 뒤까지 넓히면 뒷벽 둥근 꼭지점 밑이 비어 밝은 틈이 났다(2026-11-17)
++    float sw = tN.y < -0.5 ? mix(0.5, softR.y, clamp((DEPTH - P.z) / max(softR.y, 0.001), 0.0, 1.0)) : softR.y;
 +    return max(front, smoothstep(0.0, sw, d));
    }
    // 평면 위 점 Q가 그려지는 캔버스 자리: 사상 P = (O + p.x Ux + p.y Vy) / w의 역(면 안 두 축 Au, Av로 푼다)
    float2 pxOf(float3 Q, float3 Au, float3 Av) {
-@@ -1355,7 +1360,10 @@
+@@ -1355,7 +1362,10 @@
    float3 coveOf(float3 P) {
      float3 c = float3(0.0);
      if (env.x < 1.5 || ${COVE_R > 0 ? 'false' : 'true'} || P.z < ${f(-FRAME_FRONT - 0.5)} || (abs(tN.z) > 0.5 && P.z < ${f(-SHELF_FRONT + 0.5)})) return c;
@@ -109,7 +111,7 @@
      if (abs(tN.x) < 0.5 && tN.y > -0.5) c.x += coveB(P.x - ${f(FRAME_X0)}, ${f(COVE_WIDE)}) - coveB(${f(FRAME_X1)} - P.x, ${f(COVE_WIDE)});
      return c;
    }
-@@ -1369,8 +1377,14 @@
+@@ -1369,8 +1379,14 @@
      float b1 = slope(arc(bev1.w - dot(P, bev1.xyz), PLANKR));
      // 판 앞면 양 끝: 윤곽(PLANK_END_R)과 같은 반지름으로 법선이 옆으로 돈다. 윤곽만 둥글고 빛이 평면이면 곡면으로 보이지 않는다(2026-11-05 사용자 '선반 끝 곡선')
      float be = endR > 0.0 ? slope(arc(${f(SHELF_X1)} - P.x, endR)) - slope(arc(P.x - ${f(SHELF_X0)}, endR)) : 0.0;
@@ -126,7 +128,7 @@
      // 구멍 앞 끝 둥근 테(반지름 RIMR): 구멍(둥근 사각형, 모서리 RIMC)까지 거리 d로 벽 법선이 구멍 안쪽 면 법선 쪽으로 돈다
      if (rim.x < rim.y) {
        float2 c = float2(rim.x + rim.y, rim.z + rim.w) * 0.5;
-@@ -1382,12 +1396,19 @@
+@@ -1382,12 +1398,19 @@
        if (d < RIMR) {
          float2 g = length(qp) > 1e-4 ? qp / length(qp) : (q.x > q.y ? float2(1.0, 0.0) : float2(0.0, 1.0));
          // 원호 단면(앞에서 본 자리 sin θ = t): 벽 쪽은 천천히, 안쪽 끝에서 빠르게 돌아 테가 또렷하게 꺾인다(2026-11-05 사용자 사진, 제곱근으로 돌리면 넓게 번져 흐릿했다).
@@ -150,7 +152,7 @@
        }
      }
      // 면 좌표: u = 판 길이 방향(x, 옆을 향한 틀 안쪽 면은 세로: 결이 틀 길이로 난다), v = 면 안의 다른 방향
-@@ -1402,12 +1423,25 @@
+@@ -1402,12 +1425,25 @@
      bool beyond = env.x > 1.5 && abs(tN.z) < 0.5 && tN.y < 0.5 && (P.z > DEPTH + 0.01 || P.z < -FFRONT - 0.01 || (abs(tN.x) > 0.5 && P.y > env.z + 0.01));
      float3 Pb = beyond ? float3(P.x, abs(tN.x) > 0.5 ? min(P.y, env.z - ${f(BAKE_HALF)}) : P.y, clamp(P.z, -FFRONT + ${f(DEEP_HALF)}, DEPTH - ${f(DEEP_HALF)})) : P;
      float2 pb = beyond && liveEnv < 0.5 ? pxOf(Pb, Au, Av) : p;

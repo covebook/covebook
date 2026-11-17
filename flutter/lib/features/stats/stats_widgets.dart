@@ -209,31 +209,37 @@ class _Paper extends StatelessWidget {
 }
 
 // ---------- 막대 그래프 ----------
-const _plotH = 170.0, _tipH = 44.0, _axisW = 38.0, _labelH = 26.0;
+const _plotH = 170.0, _axisW = 38.0, _labelH = 26.0;
 
 class ReadingChart extends StatelessWidget {
-  const ReadingChart({super.key, required this.bars, required this.selected, required this.unit, required this.onSelect});
+  const ReadingChart({super.key, required this.bars, required this.selected, required this.unit, required this.onSelect, this.tip = true, this.plotH = _plotH});
   final List<Bar> bars;
   final String? selected;
   final String unit;
   final ValueChanged<String> onSelect;
 
+  /// 고른 막대 위 말풍선. 끄면 값은 그래프 위 머리줄이 보인다(2026-11-17 통계 시안)
+  final bool tip;
+  final double plotH;
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: _tipH + _plotH + _labelH,
+  Widget build(BuildContext context) {
+    final tipH = tip ? _ReadingChartDims.tipH : 14.0;
+    return SizedBox(
+        height: tipH + plotH + _labelH,
         child: LayoutBuilder(builder: (context, c) {
           final w = c.maxWidth;
           final max = bars.fold<num>(0, (a, b) => math.max(a, b.ms));
           final ticks = yTicks(max);
-          double scale(num ms) => max > 0 ? ms / max * (_plotH - 6) : 0;
+          double scale(num ms) => max > 0 ? ms / max * (plotH - 6) : 0;
           final plotW = math.max(0.0, w - _axisW);
           final cell = bars.isEmpty ? 0.0 : plotW / bars.length;
           final barW = math.max(3.0, math.min(unit == '월' ? 14.0 : 7.0, cell * 0.6));
           double cx(int i) => _axisW + cell * (i + 0.5);
           final sel = bars.indexWhere((b) => b.key == selected && b.ms > 0);
-          const base = _tipH + _plotH;
+          final base = tipH + plotH;
           double barH(num ms) => math.max(barW, scale(ms));
-          final tip = sel < 0 ? null : '${bars[sel].label}$unit · ${formatDuration(bars[sel].ms)}';
+          final tip = sel < 0 || !this.tip ? null : '${bars[sel].label}$unit · ${formatDuration(bars[sel].ms)}';
           // 말풍선 폭(글자 폭 + 좌우 10)
           final tipW = tip == null
               ? 0.0
@@ -260,15 +266,15 @@ class ReadingChart extends StatelessWidget {
               painter: _ChartPainter(bars: bars, ticks: [for (final t in ticks) base - scale(t * 60000)], w: w, base: base, cx: cx, barW: barW, barH: barH, sel: sel),
             ),
             for (final t in ticks) Positioned(left: 0, width: _axisW - 6, top: base - scale(t * 60000) - 9, child: Text(tickLabel(t), style: _small)),
-            const Positioned(left: 0, width: _axisW - 6, top: base - 9, child: Text('0', style: _small)),
+            Positioned(left: 0, width: _axisW - 6, top: base - 9, child: Text('0', style: _small)),
             for (final n in xLabels(bars.length))
               Positioned(left: cx(n - 1) - 15, width: 30, top: base + 6, child: Text('$n', textAlign: TextAlign.center, style: _small)),
             for (var i = 0; i < bars.length; i++)
               Positioned(
                 left: _axisW + cell * i,
                 width: cell,
-                top: _tipH,
-                height: _plotH + _labelH,
+                top: tipH,
+                height: plotH + _labelH,
                 child: Semantics(
                   button: bars[i].ms > 0,
                   selected: i == sel,
@@ -276,7 +282,7 @@ class ReadingChart extends StatelessWidget {
                   child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: bars[i].ms > 0 ? () => onSelect(bars[i].key) : null),
                 ),
               ),
-            if (sel >= 0) ...[
+            if (sel >= 0 && tip != null) ...[
               if (tipBase < barTop) Positioned(left: cx(sel) - 0.5, top: tipBase - 12, width: 1, height: barTop - tipBase + 12, child: const ColoredBox(color: AppColors.accent)),
               Positioned(
                 left: tipLeft,
@@ -301,6 +307,11 @@ class ReadingChart extends StatelessWidget {
           ]);
         }),
       );
+  }
+}
+
+abstract final class _ReadingChartDims {
+  static const tipH = 44.0;
 }
 
 class _ChartPainter extends CustomPainter {
@@ -345,16 +356,44 @@ class MiniBar {
   final num value;
 }
 
-const _miniPlotH = 110.0, _miniLabelH = 24.0, _miniBarMax = 26.0;
+const _miniLabelH = 24.0, _miniBarMax = 52.0;
+
+/// 통계 한 칸 머리줄(2026-11-17 시안): 왼쪽 제목, 오른쪽 가장 많은(또는 고른) 것 굵게와 그 값 회색 한 줄 아래
+class StatHead extends StatelessWidget {
+  const StatHead({super.key, required this.title, this.top, this.value});
+  final String title;
+  final String? top, value;
+
+  @override
+  Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: Semantics(header: true, child: Text(title, style: AppType.section))),
+        if (top != null)
+          Semantics(
+            liveRegion: true,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(top!, style: AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+              if (value != null) Text(value!, style: AppType.caption.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+            ]),
+          ),
+      ]);
+}
 
 class MiniBars extends StatefulWidget {
-  const MiniBars({super.key, required this.title, required this.bars, required this.labels, required this.emptyText, required this.summary, required this.valueText});
+  const MiniBars({super.key, required this.title, required this.bars, required this.labels, required this.emptyText, required this.valueText, this.extra, this.plotH = 132, this.labelLines = 1});
   final String title;
   final List<MiniBar> bars;
   final List<(int, String)> labels;
   final String emptyText;
-  final String Function(MiniBar peak) summary;
   final String Function(MiniBar bar) valueText;
+
+  /// 머리줄과 그래프 사이(한 번에 읽은 시간의 평균·가장 오래 카드)
+  final Widget? extra;
+
+  /// 그래프 높이(2026-11-17 사용자: 높낮이를 더 높게)
+  final double plotH;
+
+  /// 아래 이름 줄 수(길이 칸은 '30분~1시간'처럼 두 줄)
+  final int labelLines;
 
   @override
   State<MiniBars> createState() => _MiniBarsState();
@@ -370,32 +409,39 @@ class _MiniBarsState extends State<MiniBars> {
     final peak = max > 0 ? bars.firstWhere((b) => b.value == max) : null;
     final chosen = bars.where((b) => b.key == _picked && b.value > 0).firstOrNull;
     final shown = chosen ?? peak;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Semantics(header: true, child: Text(widget.title, style: AppType.section)),
-      Padding(
-        padding: const EdgeInsets.only(top: 2, bottom: 14),
-        child: Text(shown == null ? widget.emptyText : chosen != null ? '${chosen.name} · ${widget.valueText(chosen)}' : widget.summary(shown), style: AppType.sub),
-      ),
+    final plotH = widget.plotH;
+    final labelH = _miniLabelH + (widget.labelLines - 1) * 18.0;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      StatHead(title: widget.title, top: shown?.name, value: shown == null ? null : widget.valueText(shown)),
+      if (shown == null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(widget.emptyText, style: AppType.sub)),
+      if (widget.extra != null) Padding(padding: const EdgeInsets.only(top: Space.l), child: widget.extra),
+      const SizedBox(height: Space.l),
       SizedBox(
-        height: _miniPlotH + _miniLabelH,
+        height: plotH + labelH,
         child: LayoutBuilder(builder: (context, c) {
           final w = c.maxWidth;
           final cell = bars.isEmpty ? 0.0 : w / bars.length;
-          final barW = math.max(3.0, math.min(_miniBarMax, cell * 0.62));
-          double barH(num v) => math.max(barW, v / max * (_miniPlotH - 6));
+          // 칸이 좁은 시간대(24칸)는 가는 막대, 넓은 길이·요일 칸은 넓은 막대
+          final barW = math.max(3.0, math.min(_miniBarMax, cell * (bars.length > 12 ? 0.62 : 0.7)));
+          double barH(num v) => math.max(math.min(barW, 10.0), v / max * (plotH - 6));
           return Stack(clipBehavior: Clip.none, children: [
             CustomPaint(
-              size: Size(w, _miniPlotH + 2),
-              painter: _MiniPainter(bars: bars, cell: cell, barW: barW, barH: barH, shownKey: shown?.key),
+              size: Size(w, plotH + 2),
+              painter: _MiniPainter(bars: bars, cell: cell, barW: barW, barH: barH, shownKey: shown?.key, plotH: plotH),
             ),
             for (final (at, text) in widget.labels)
-              Positioned(left: cell * (at + 0.5) - 24, width: 48, top: _miniPlotH + 6, child: Text(text, maxLines: 1, textAlign: TextAlign.center, style: _small)),
+              Positioned(
+                left: cell * (at + 0.5) - math.max(24.0, cell / 2),
+                width: math.max(48.0, cell),
+                top: plotH + 6,
+                child: Text(text, maxLines: widget.labelLines, textAlign: TextAlign.center, style: _small),
+              ),
             for (var i = 0; i < bars.length; i++)
               Positioned(
                 left: cell * i,
                 width: cell,
                 top: 0,
-                height: _miniPlotH + _miniLabelH,
+                height: plotH + labelH,
                 child: Semantics(
                   button: bars[i].value > 0,
                   selected: shown != null && bars[i].key == shown.key,
@@ -411,15 +457,15 @@ class _MiniBarsState extends State<MiniBars> {
 }
 
 class _MiniPainter extends CustomPainter {
-  _MiniPainter({required this.bars, required this.cell, required this.barW, required this.barH, required this.shownKey});
+  _MiniPainter({required this.bars, required this.cell, required this.barW, required this.barH, required this.shownKey, required this.plotH});
   final List<MiniBar> bars;
-  final double cell, barW;
+  final double cell, barW, plotH;
   final double Function(num) barH;
   final String? shownKey;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawLine(Offset(0, _miniPlotH), Offset(size.width, _miniPlotH), Paint()
+    canvas.drawLine(Offset(0, plotH), Offset(size.width, plotH), Paint()
       ..color = AppColors.line
       ..strokeWidth = 1);
     for (var i = 0; i < bars.length; i++) {
@@ -427,7 +473,7 @@ class _MiniPainter extends CustomPainter {
       if (b.value <= 0) continue;
       final bh = barH(b.value);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(cell * (i + 0.5) - barW / 2, _miniPlotH - bh, barW, bh), Radius.circular(math.min(barW / 2, 6))),
+        RRect.fromRectAndRadius(Rect.fromLTWH(cell * (i + 0.5) - barW / 2, plotH - bh, barW, bh), Radius.circular(math.min(barW / 2, 8))),
         Paint()..color = b.key == shownKey ? AppColors.accent : AppColors.track,
       );
     }
