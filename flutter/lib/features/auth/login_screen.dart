@@ -73,9 +73,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final p = _sync.providers;
     final off = _busy != null;
     final buttons = <Widget>[
+      // 카카오 · Google · Apple 순(2026-11-17 사용자 시안)
       if (p.kakao) BrandButton.kakao(onPress: off ? null : () => _login('kakao')),
-      if (p.apple) BrandButton.apple(onPress: off ? null : () => _login('apple')),
       if (p.google) BrandButton.google(onPress: off ? null : () => _login('google')),
+      if (p.apple) BrandButton.apple(onPress: off ? null : () => _login('apple')),
     ];
     Widget bottom;
     if (_ready == null) {
@@ -124,8 +125,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: WordText('로그인하는 중…', textAlign: TextAlign.center, style: AppType.caption),
                   ),
                 bottom,
-                const SizedBox(height: Space.l),
-                WordText('로그인하면 기록이 서버에 보관되어 폰을 바꿔도 이어 봐요.', textAlign: TextAlign.center, style: AppType.caption),
+                // 단추 아래 긴 설명은 뺐다(2026-11-17 사용자 '구구절절 설명 지워'): 처리방침 글자 단추만
+                const SizedBox(height: Space.xl),
                 Center(
                   child: TextButton(
                     style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft, minimumSize: const Size(Space.hit, Space.hit)),

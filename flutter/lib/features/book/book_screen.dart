@@ -62,6 +62,7 @@ class _BookScreenState extends State<BookScreen> {
   final _model = LibraryModel.instance;
   String _tab = 'info';
   bool _pageEdit = false;
+  bool _noteEdit = false; // 평가 탭 한줄평을 고치는 중
   Timer? _noteTimer;
   final _note = TextEditingController();
   final _page = TextEditingController();
@@ -159,7 +160,7 @@ class _BookScreenState extends State<BookScreen> {
     showSheet<void>(
       context,
       builder: (ctx) => ListGroup(children: [
-        ListItem(label: '이미지로 공유', sub: '한 줄 감상·별점을 넣은 카드', onPress: () {
+        ListItem(label: '이미지로 공유', sub: '한줄평·별점을 넣은 카드', onPress: () {
           Navigator.pop(ctx);
           openBookShare(context, id);
         }),
@@ -306,77 +307,75 @@ class _BookScreenState extends State<BookScreen> {
           if (e.link != null) ListItem(label: '${e.sourceName ?? '판매처'}에서 보기', onPress: () => launchUrl(Uri.parse(e.link!), mode: LaunchMode.externalApplication)),
         ]);
 
-    // 별은 제목 아래 줄에: 별마다 누르는 칸이 48이라 별 줄이 240dp로 넓어져 '내 평가 / 나만 보는 평가예요'가 좁아졌다(2026-11-16 QA 영숙 F12).
-    // 별 그림은 칸 가운데라 첫 별이 글 첫머리와 맞게 칸 여백만큼 왼쪽으로 당긴다
+    // 평가 탭(2026-11-17 사용자 시안): 별은 표지·제목·저자 아래 가운데, 그 아래 '한줄평'(오른쪽 수정)과 '감상 N'(오른쪽 쓰기).
+    // 한줄평은 회색 상자 없이 글만 두고 '수정'을 누르면 그 자리에서 고친다. 별점·한줄평은 나만 본다
+    Widget sectionHead(String title, String link, VoidCallback onLink) => Row(children: [
+          Expanded(child: Semantics(header: true, child: WordText(title, style: AppType.heading))),
+          TextLink(label: link, soft: true, onPress: onLink),
+        ]);
+    void endNote() {
+      _noteTimer?.cancel();
+      _saveNote();
+      FocusScope.of(context).unfocus();
+      setState(() => _noteEdit = false);
+    }
+    final note = (b.note ?? '').trim();
     Widget ratePane() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Semantics(header: true, child: Text('내 평가', style: AppType.section)),
-          Padding(padding: const EdgeInsets.only(top: 2), child: Text('나만 보는 평가예요', style: AppType.caption)),
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xs),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Transform.translate(
-                offset: const Offset(-(Space.hit - 24) / 2, 0),
-                child: Stars(value: b.rating, onChange: (v) => _model.updateBook(id, rating: v)),
-              ),
-            ),
-          ),
-          Padding(padding: const EdgeInsets.symmetric(vertical: Space.l), child: Container(height: 0.5, color: AppColors.line)),
-          Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('한 줄 감상', style: AppType.label)),
-          Container(
-            constraints: const BoxConstraints(minHeight: 56),
-            decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
-            child: Semantics(
-              label: '한 줄 감상',
-              textField: true,
-              // 여러 줄로 다 보인다(2026-11-16 QA 영숙 F15: 한 줄 칸이라 큰 글씨에서 앞이나 뒤가 잘려 저장됐는지 걱정했다). 줄바꿈은 넣지 않고 완료로 닫는다
-              child: TextField(
-                controller: _note,
-                maxLength: 140,
-                minLines: 1,
-                maxLines: null,
-                keyboardType: TextInputType.text,
-                textInputAction: TextInputAction.done,
-                style: AppType.input,
-                cursorColor: AppColors.accent,
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  counterText: '',
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                  hintText: '이 책은 나에게…',
-                  hintStyle: AppType.input.copyWith(color: AppColors.inkFaint),
+          Center(child: Semantics(label: '내 별점, 나만 봐요', child: Stars(value: b.rating, onChange: (v) => _model.updateBook(id, rating: v)))),
+          const SizedBox(height: Space.xl),
+          sectionHead('한줄평', _noteEdit ? '완료' : (note.isEmpty ? '쓰기' : '수정'), () {
+            if (_noteEdit) {
+              endNote();
+            } else {
+              _note.text = b.note ?? '';
+              setState(() => _noteEdit = true);
+            }
+          }),
+          const SizedBox(height: Space.s),
+          if (_noteEdit)
+            Container(
+              constraints: const BoxConstraints(minHeight: 56),
+              decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
+              child: Semantics(
+                label: '한줄평',
+                textField: true,
+                // 여러 줄로 다 보인다(2026-11-16 QA 영숙 F15). 줄바꿈은 넣지 않고 완료로 닫는다
+                child: TextField(
+                  controller: _note,
+                  autofocus: true,
+                  maxLength: 140,
+                  minLines: 1,
+                  maxLines: null,
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.done,
+                  style: AppType.input,
+                  cursorColor: AppColors.accent,
+                  decoration: InputDecoration(
+                    isCollapsed: true,
+                    counterText: '',
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(16),
+                    hintText: '이 책은 나에게…',
+                    hintStyle: AppType.input.copyWith(color: AppColors.inkFaint),
+                  ),
+                  // 적는 대로 잠깐 뒤 저장한다(입력 중에 칸을 바꾸거나 화면을 떠나도 남게)
+                  onChanged: (_) {
+                    _noteTimer?.cancel();
+                    _noteTimer = Timer(const Duration(milliseconds: 600), _saveNote);
+                  },
+                  onEditingComplete: endNote,
                 ),
-                // 적는 대로 잠깐 뒤 저장한다(입력 중에 칸을 바꾸거나 화면을 떠나도 남게)
-                onChanged: (_) {
-                  _noteTimer?.cancel();
-                  _noteTimer = Timer(const Duration(milliseconds: 600), _saveNote);
-                },
-                onEditingComplete: () {
-                  _noteTimer?.cancel();
-                  _saveNote();
-                  FocusScope.of(context).unfocus();
-                },
               ),
-            ),
-          ),
-          // 긴 감상(기록 > 감상과 같은 데이터, 이 책 것만): 별점·한 줄 감상과 따로 둔다
-          Padding(padding: const EdgeInsets.only(top: Space.xl), child: Container(height: 0.5, color: AppColors.line)),
-          Padding(
-            padding: const EdgeInsets.only(top: Space.l),
-            child: Row(children: [
-              Expanded(child: Semantics(header: true, child: Text('긴 감상', style: AppType.label))),
-              if (essays.isNotEmpty) Text('${essays.length}편', style: AppType.caption),
-            ]),
-          ),
-          if (essays.isEmpty)
-            Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text('이 책을 읽고 든 생각을 길게 남겨요. 별점·한 줄 감상은 그대로예요.', style: AppType.sub))
+            )
           else
-            for (final (i, x) in essays.indexed) ...[if (i > 0) const AppDivider(), EssayRow(key: ValueKey(x.id), lib: lib, essay: x, showBook: false)],
-          Padding(
-            padding: const EdgeInsets.only(top: Space.m),
-            child: Btn(label: essays.isEmpty ? '긴 감상 쓰기' : '감상 더 쓰기', kind: 'secondary', onPress: () => openNewEssay(context, book: id)),
-          ),
+            WordText(note.isEmpty ? '이 책을 한 줄로 남겨 보세요' : note, style: note.isEmpty ? AppType.sub.copyWith(color: AppColors.inkFaint) : AppType.body),
+          const SizedBox(height: Space.section),
+          // 감상(기록 › 감상과 같은 데이터, 이 책 것만)
+          sectionHead(essays.isEmpty ? '감상' : '감상 ${essays.length}', '쓰기', () => openNewEssay(context, book: id)),
+          if (essays.isEmpty)
+            Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('이 책을 읽고 든 생각을 길게 남겨요', style: AppType.sub))
+          else
+            for (final (i, x) in essays.indexed) ...[if (i > 0) const AppDivider(), EssayRow(key: ValueKey(x.id), lib: lib, essay: x, showBook: false, compact: true)],
           if (reviews.available) ...[
             const SectionBand(),
             Padding(padding: const EdgeInsets.only(top: Space.xl), child: ReviewsPane(title: e.title, myRating: b.rating, state: reviews)),

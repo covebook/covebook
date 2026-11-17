@@ -785,51 +785,58 @@ class Segmented<T> extends StatelessWidget {
   final T value;
   final ValueChanged<T> onChange;
 
-  // 위아래 회색 테두리 3까지 누르는 자리(44 → 50, 겉모양은 그대로, 2026-11-16 QA 영숙 F12)
+  // 겉모양은 회색 칸 40(고른 칸 34): 2026-11-17 사용자 '책 정보·평가·내 기록 바가 두껍다'(예전 50).
+  // 누르는 자리는 위아래 빈 4까지 48 그대로(2026-11-16 QA 영숙 F12). 큰 글씨면 칸이 글자만큼 늘어난다
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(14)),
-        child: Row(
-          children: [
-            for (final (id, label) in items)
-              Expanded(
-                child: Semantics(
-                  container: true,
-                  selected: id == value,
-                  button: true,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => onChange(id),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Container(
-                        constraints: const BoxConstraints(minHeight: 44),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        alignment: Alignment.center,
-                        decoration: id == value
-                            ? BoxDecoration(
-                                color: AppColors.bg,
-                                borderRadius: BorderRadius.circular(11),
-                                boxShadow: const [BoxShadow(color: Color(0x14191F28), offset: Offset(0, 4), blurRadius: 10)],
-                              )
-                            : null,
-                        child: Text(label,
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
-                              fontSize: 16,
-                              height: 22 / 16,
-                              color: id == value ? AppColors.ink : AppColors.inkSoft,
-                            )),
+  Widget build(BuildContext context) => Stack(children: [
+        Positioned.fill(
+          top: 4,
+          bottom: 4,
+          child: DecoratedBox(decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12))),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: Row(
+            children: [
+              for (final (id, label) in items)
+                Expanded(
+                  child: Semantics(
+                    container: true,
+                    selected: id == value,
+                    button: true,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onChange(id),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        child: Container(
+                          constraints: const BoxConstraints(minHeight: 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          alignment: Alignment.center,
+                          decoration: id == value
+                              ? BoxDecoration(
+                                  color: AppColors.bg,
+                                  borderRadius: BorderRadius.circular(9),
+                                  boxShadow: const [BoxShadow(color: Color(0x14191F28), offset: Offset(0, 2), blurRadius: 6)],
+                                )
+                              : null,
+                          child: Text(label,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
+                                fontSize: 15,
+                                height: 20 / 15,
+                                color: id == value ? AppColors.ink : AppColors.inkSoft,
+                              )),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
-      );
+      ]);
 }
 
 /// 거르기 단추: 옅은 회색 알약(고르면 갈색), plain이면 글자 + 아래 꺾쇠만
@@ -1231,8 +1238,10 @@ class FilterOption extends StatelessWidget {
 
 /// 검색창: 돋보기 + 입력 + 지우기(입력이 있을 때)
 class SearchField extends StatefulWidget {
-  const SearchField({super.key, required this.value, required this.onChange, this.placeholder, this.label, this.autofocus = false, this.onSubmit, this.busy = false});
+  const SearchField({super.key, required this.value, required this.onChange, this.placeholder, this.label, this.autofocus = false, this.onSubmit, this.busy = false, this.trailing});
   final String value;
+  /// 칸 오른쪽 끝에 둘 단추(예: 책 추가의 바코드). 지우기 단추 오른쪽에 놓인다
+  final Widget? trailing;
   final ValueChanged<String> onChange;
   final String? placeholder;
   final String? label;
@@ -1336,6 +1345,7 @@ class _SearchFieldState extends State<SearchField> {
                 ),
               ),
             ),
+          ?widget.trailing,
         ]),
       );
 }

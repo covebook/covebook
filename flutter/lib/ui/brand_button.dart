@@ -8,7 +8,7 @@ import 'kit.dart';
 import 'theme.dart';
 
 /// 로그인 단추: 세 회사 모두 같은 틀(높이 54, 모서리 Shape.button, 가운데 로고+글자)에 각 회사 규칙의 색만 다르다.
-/// 카카오: 노랑 #FEE500·검은 말풍선·글자 85% 검정. Apple: 검정 바탕·흰 로고(HIG 사용자 정의 단추). Google: 흰 바탕·#747775 선·네 색 G(브랜딩 지침의 '계속하기' 문구)
+/// 카카오: 노랑 #FEE500·검은 말풍선·글자 85% 검정. Apple: 검정 바탕·흰 로고(HIG 사용자 정의 단추). Google: 옅은 회색 바탕 #F2F2F2·선 없음·네 색 G(브랜딩 지침의 Neutral 모양, 2026-11-17 사용자 시안)
 class BrandButton extends StatefulWidget {
   const BrandButton({super.key, required this.label, required this.bg, required this.fg, required this.logo, required this.onPress, required this.border});
 
@@ -19,7 +19,7 @@ class BrandButton extends StatefulWidget {
       : this(key: key, label: 'Apple로 계속하기', bg: const Color(0xFF000000), fg: const Color(0xFFFFFFFF), logo: const Icon(Icons.apple, size: 22, color: Color(0xFFFFFFFF)), border: null, onPress: onPress);
 
   BrandButton.google({Key? key, required VoidCallback? onPress})
-      : this(key: key, label: 'Google로 계속하기', bg: const Color(0xFFFFFFFF), fg: const Color(0xFF1F1F1F), border: const Color(0xFF747775), logo: SvgPicture.string(_googleSvg, width: 20, height: 20), onPress: onPress);
+      : this(key: key, label: 'Google로 계속하기', bg: const Color(0xFFF2F2F2), fg: const Color(0xFF1F1F1F), border: null, logo: SvgPicture.string(_googleSvg, width: 20, height: 20), onPress: onPress);
 
   final String label;
   final Color bg, fg;

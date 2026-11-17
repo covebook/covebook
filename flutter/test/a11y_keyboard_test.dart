@@ -238,7 +238,7 @@ void main() {
       s.dispose();
     });
 
-    testWidgets('전환 칸은 회색 테두리까지 누르는 자리(50)', (t) async {
+    testWidgets('전환 칸은 겉모양 40이어도 누르는 자리 48(2026-11-17 얇게)', (t) async {
       phone(t);
       var v = 'a';
       await t.pumpWidget(MaterialApp(
@@ -251,7 +251,7 @@ void main() {
         ),
       ));
       final box = t.getRect(find.byType(Segmented<String>));
-      expect(box.height, 50);
+      expect(box.height, 48);
       // 회색 테두리 위 끝(1dp 안쪽)을 눌러도 바뀐다
       await t.tapAt(Offset(box.right - 40, box.top + 1));
       await t.pump();

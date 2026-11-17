@@ -485,8 +485,8 @@ class _RecordTabState extends State<RecordTab> {
             Semantics(
               container: true,
               child: Empty(
-                title: '아직 쓴 긴 감상이 없어요',
-                body: keepAll('책을 읽고 든 생각을 길게 남기는 곳이에요.\n별점과 한 줄 감상은 책 정보 › 평가에 있어요.'),
+                title: '아직 쓴 감상이 없어요',
+                body: keepAll('책을 읽고 든 생각을 길게 남기는 곳이에요.\n별점과 한줄평은 책 정보 › 평가에 있어요.'),
                 action: '감상 쓰기',
                 onAction: () => openNewEssay(context),
               ),

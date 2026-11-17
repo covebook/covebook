@@ -22,7 +22,7 @@ import 'book_share.dart';
 
 const _exportW = 1080;
 const _wall = Color(0xFFF3F2F1); // 시안 벽 평균색(재료가 오기 전 빈 카드)
-const _partLabel = {'note': '한 줄 감상', 'rating': '별점', 'time': '독서 시간', 'period': '읽은 기간'};
+const _partLabel = {'note': '한줄평', 'rating': '별점', 'time': '독서 시간', 'period': '읽은 기간'};
 
 Future<void> openBookShare(BuildContext context, String id) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book/share'), builder: (_) => BookShareScreen(id: id)));
@@ -203,7 +203,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
     // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게)
     final missing = {
-      if (!has['note']! || !has['rating']!) 'eval': '한 줄 감상·별점은 아래 ‘내 평가’에 적으면 생겨요',
+      if (!has['note']! || !has['rating']!) 'eval': '한줄평·별점은 아래 ‘내 평가’에 적으면 생겨요',
       if (!has['time']!) 'time': '독서 시간은 타이머로 읽으면 생겨요',
       if (!has['period']!) 'period': '읽은 기간은 시작일·완독일을 적으면 생겨요',
     };
@@ -232,10 +232,20 @@ class _BookShareScreenState extends State<BookShareScreen> {
             ),
           ),
         ),
-        const H2('카드에 넣을 것'),
-        Wrap(spacing: Space.s, runSpacing: Space.s, children: [
-          for (final k in _partLabel.keys) AppChip(label: _partLabel[k]!, on: on[k]! && has[k]!, onPress: has[k]! ? () => toggle(k) : () => _empty(k)),
-        ]),
+        // 표시할 정보: 두 칸씩 체크 상자(2026-11-17 사용자 시안). 내용이 없는 것은 옅게, 누르면 생기는 법을 알린다
+        const H2('표시할 정보'),
+        for (final pair in [['note', 'rating'], ['time', 'period']])
+          Row(children: [
+            for (final k in pair)
+              Expanded(
+                child: _CheckLine(
+                  label: _partLabel[k]!,
+                  on: on[k]! && has[k]!,
+                  enabled: has[k]!,
+                  onPress: has[k]! ? () => toggle(k) : () => _empty(k),
+                ),
+              ),
+          ]),
         if (missing.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: Space.s),
@@ -260,9 +270,51 @@ class _BookShareScreenState extends State<BookShareScreen> {
         FocusScope(
           key: _noteKey,
           node: _noteScope,
-          child: Field(label: '한 줄 감상', value: _note, placeholder: '이 책은 나에게…', multiline: true, minHeight: 56, onChange: (t) => setState(() => _note = t.length > 140 ? t.substring(0, 140) : t)),
+          child: Field(label: '한줄평', value: _note, placeholder: '이 책은 나에게…', multiline: true, minHeight: 56, onChange: (t) => setState(() => _note = t.length > 140 ? t.substring(0, 140) : t)),
         ),
       ],
     );
   }
+}
+
+/// 체크 상자 한 줄(표시할 정보): 네모 상자 24(고르면 갈색 채움 + 흰 체크) + 글. 누르는 자리 48
+class _CheckLine extends StatelessWidget {
+  const _CheckLine({required this.label, required this.on, required this.enabled, required this.onPress});
+  final String label;
+  final bool on, enabled;
+  final VoidCallback onPress;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        checked: on,
+        enabled: enabled,
+        label: label,
+        onTap: onPress,
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPress,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.hit),
+            child: Opacity(
+              opacity: enabled ? 1 : 0.4,
+              child: Row(children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: on ? AppColors.accent : AppColors.bg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: on ? null : Border.all(color: AppColors.inkFaint, width: 1.5),
+                  ),
+                  child: on ? const Center(child: LucideIcon('Check', size: 16, color: AppColors.bg, stroke: 2.6)) : null,
+                ),
+                const SizedBox(width: Space.m),
+                Flexible(child: WordText(label, style: AppType.body)),
+              ]),
+            ),
+          ),
+        ),
+      );
 }

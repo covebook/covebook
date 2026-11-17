@@ -34,9 +34,12 @@ String essayDateLine(Essay e) {
 
 /// 감상 목록 한 줄(표지 · 책 제목 · 지은이 · 감상 제목 · 미리보기 · 쓴 날). 상자 없이 줄로 나눈다
 class EssayRow extends StatelessWidget {
-  const EssayRow({super.key, required this.lib, required this.essay, this.showBook = true, this.onOpen});
+  const EssayRow({super.key, required this.lib, required this.essay, this.showBook = true, this.onOpen, this.compact = false});
   final Library lib;
   final Essay essay;
+
+  /// 책 정보 › 평가의 짧은 줄: 제목 · 쓴 날 · 미리보기 한 줄 · 오른쪽 꺾쇠(2026-11-17 사용자 시안)
+  final bool compact;
 
   /// 책 정보 화면 안에서는 책이 정해져 있어 표지·제목을 빼고 감상만
   final bool showBook;
@@ -57,7 +60,22 @@ class EssayRow extends StatelessWidget {
         onPress: onOpen ?? () => openEssay(context, essay.id),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.l),
-          child: showBook && b != null && e != null ? _withCover(b.id, e.title, author, head, preview) : _text(head, preview),
+          child: compact
+              ? Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _headline(head, lines: 1, size: 17),
+                      Padding(padding: const EdgeInsets.only(top: 2), child: _date()),
+                      if (preview.isNotEmpty)
+                        Padding(padding: const EdgeInsets.only(top: 4), child: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink))),
+                    ]),
+                  ),
+                  const SizedBox(width: Space.s),
+                  const LucideIcon('ChevronRight', size: 20, color: AppColors.inkFaint),
+                ])
+              : showBook && b != null && e != null
+                  ? _withCover(b.id, e.title, author, head, preview)
+                  : _text(head, preview),
         ),
       ),
     );
@@ -146,7 +164,7 @@ class _EssayScreenState extends State<EssayScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _delete() => appAlert(context, '이 감상을 지울까요?', '지우면 되돌릴 수 없어요. 별점·한 줄 감상·갈피는 그대로 남아요.', [
+  Future<void> _delete() => appAlert(context, '이 감상을 지울까요?', '지우면 되돌릴 수 없어요. 별점·한줄평·갈피는 그대로 남아요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('지우기', style: AlertStyle.destructive, onPress: () async {
           final nav = Navigator.of(context);

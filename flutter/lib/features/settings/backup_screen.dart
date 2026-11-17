@@ -268,9 +268,10 @@ class _BackupScreenState extends State<BackupScreen> {
     final canLink = on && !s.paused;
     // 연결할 수 있는 계정: 세 회사 단추를 같은 크기·같은 줄 간격으로(예전엔 카카오는 목록 줄, Apple은 검은 알약, Google은 영어 그림 단추로 셋이 달랐다, 2026-11-16)
     final brands = <Widget>[
+      // 로그인 화면과 같은 순서(카카오 · Google · Apple)
       if (canLink && !s.account.kakao && s.providers.kakao) BrandButton.kakao(onPress: _loggingIn ? null : () => _login('kakao')),
-      if (canLink && !s.account.apple && s.providers.apple) BrandButton.apple(onPress: _loggingIn ? null : () => _login('apple')),
       if (canLink && !s.account.google && s.providers.google) BrandButton.google(onPress: _loggingIn ? null : () => _login('google')),
+      if (canLink && !s.account.apple && s.providers.apple) BrandButton.apple(onPress: _loggingIn ? null : () => _login('apple')),
     ];
     final linked = s.account.kakao || s.account.apple || s.account.google;
     return [
