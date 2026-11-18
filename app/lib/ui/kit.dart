@@ -321,15 +321,73 @@ class Screen extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _padded([?subLine, ...children])),
       ),
     );
+    // 위 줄(뒤로·가운데 제목·오른쪽 단추)
+    final barW = SizedBox(
+      height: 60,
+      child: Stack(
+        children: [
+          if (title != null && headerField == null)
+            Positioned(
+              left: 64,
+              right: 64,
+              top: 4,
+              bottom: 0,
+              child: Center(child: Text(title!, style: AppType.navTitle, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ),
+          Positioned.fill(
+            top: 4,
+            child: Row(children: [
+              if (left != null)
+                Padding(padding: const EdgeInsets.only(left: Space.page), child: left)
+              else if (back)
+                // 누르는 자리 48(꺾쇠 자리는 그대로: 왼쪽 여백을 2 줄인다, 2026-11-16 QA 영숙 F12)
+                Padding(
+                  padding: EdgeInsets.only(left: 8 - (Space.hit - Space.touch) / 2),
+                  child: Semantics(
+                    container: true,
+                    button: true,
+                    label: '뒤로',
+                    onTap: () => Navigator.maybePop(context),
+                    excludeSemantics: true,
+                    child: Pressable(
+                      onPress: () => Navigator.maybePop(context),
+                      child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: 28))),
+                    ),
+                  ),
+                ),
+              if (headerField != null) Expanded(child: Padding(padding: const EdgeInsets.only(left: 2, right: Space.s), child: headerField)) else const Spacer(),
+              if (right != null) Padding(padding: const EdgeInsets.only(right: 10), child: right) else if (headerField != null) const SizedBox(width: Space.page),
+            ]),
+          ),
+        ],
+      ),
+    );
+    final pinnedW = pinned == null ? null : Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!));
+    // 스크롤하는 화면은 위 줄·고정 칸·아래 단추도 내용과 함께 움직인다(2026-11-19 사용자 '상단이랑 하단이 고정, 이런 고정들 다 없애버려':
+    // 감상 쓰기처럼 키보드가 올라오면 고정된 위아래가 쓸 자리를 먹었다). 아래 단추는 내용 끝에 붙는다
+    final scrolled = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (bar) barW,
+        ?pinnedW,
+        content,
+        if (footer != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.page, Space.xl, Space.page, 0),
+            child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer))),
+          ),
+      ],
+    );
     // 독서 중이면 작은 타이머에 마지막 내용이 가리지 않게 아래를 더 비운다
     final body = scroll
         ? ListenableBuilder(
             listenable: ReadingStore.instance,
             builder: (context, _) => SingleChildScrollView(
               padding: EdgeInsets.only(
-                  bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + (footer != null ? 0 : insets.bottom)),
+                  bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + insets.bottom),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              child: content,
+              child: scrolled,
             ),
           )
         : fixed;
@@ -343,53 +401,13 @@ class Screen extends StatelessWidget {
         padding: EdgeInsets.only(top: insets.top, bottom: keyboard),
         child: Column(
           children: [
-            if (bar)
-              SizedBox(
-                height: 60,
-                child: Stack(
-                  children: [
-                    if (title != null && headerField == null)
-                      Positioned(
-                        left: 64,
-                        right: 64,
-                        top: 4,
-                        bottom: 0,
-                        child: Center(child: Text(title!, style: AppType.navTitle, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ),
-                    Positioned.fill(
-                      top: 4,
-                      child: Row(children: [
-                        if (left != null)
-                          Padding(padding: const EdgeInsets.only(left: Space.page), child: left)
-                        else if (back)
-                          // 누르는 자리 48(꺾쇠 자리는 그대로: 왼쪽 여백을 2 줄인다, 2026-11-16 QA 영숙 F12)
-                          Padding(
-                            padding: EdgeInsets.only(left: 8 - (Space.hit - Space.touch) / 2),
-                            child: Semantics(
-                              container: true,
-                              button: true,
-                              label: '뒤로',
-                              onTap: () => Navigator.maybePop(context),
-                              excludeSemantics: true,
-                              child: Pressable(
-                                onPress: () => Navigator.maybePop(context),
-                                child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: 28))),
-                              ),
-                            ),
-                          ),
-                        if (headerField != null) Expanded(child: Padding(padding: const EdgeInsets.only(left: 2, right: Space.s), child: headerField)) else const Spacer(),
-                        if (right != null) Padding(padding: const EdgeInsets.only(right: 10), child: right) else if (headerField != null) const SizedBox(width: Space.page),
-                      ]),
-                    ),
-                  ],
-                ),
-              )
+            if (bar && !scroll)
+              barW
             else if (!scroll)
               tabHead(),
-            if (pinned != null)
-              Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!)),
+            if (pinned != null && !scroll) pinnedW!,
             Expanded(child: body),
-            if (footer != null)
+            if (footer != null && !scroll)
               // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
               FooterReport(
                 child: Container(

@@ -31,7 +31,8 @@ Rect caretOf(WidgetTester t) {
 
 void main() {
   group('키보드(영숙 F1·F13·F14, 현우 F11, 은서 F7)', () {
-    testWidgets('밀어 넣은 화면: 키보드가 열리면 아래 버튼은 키보드 바로 위, 긴 글의 커서 줄은 키보드 위', (t) async {
+    testWidgets('밀어 넣은 화면: 위 줄·아래 버튼도 내용과 함께 스크롤(고정 없음), 키보드가 열리면 커서 줄은 키보드 위, 버튼은 스크롤해서 닿는다', (t) async {
+      // 2026-11-19 사용자 '상단이랑 하단이 고정, 이런 고정들 다 없애버려': 위 줄과 아래 버튼이 키보드와 함께 쓸 자리를 먹었다
       phone(t, safeBottom: 24);
       await t.pumpWidget(MaterialApp(
         home: Screen(
@@ -40,22 +41,25 @@ void main() {
           children: [const SizedBox(height: 400), Field(label: '문장', value: '', multiline: true, onChange: (_) {})],
         ),
       ));
-      // 키보드 없을 때: 버튼 줄 아래 = 12 + 안전 여백 24
-      expect(t.getRect(find.byType(Btn)).bottom, 640 - 24 - 12);
+      // 버튼은 화면 아래가 아니라 내용 끝 바로 뒤
+      final gap = t.getRect(find.byType(Btn)).top - t.getRect(find.byType(TextField)).bottom;
+      expect(gap, inInclusiveRange(Space.xl, Space.xl + 40));
 
       await t.tap(find.byType(TextField));
       await t.pump();
       keyboard(t, 300);
       await t.pumpAndSettle();
-      // 버튼은 키보드(위 끝 340) 바로 위
-      expect(t.getRect(find.byType(Btn)).bottom, 340 - 12);
-
       await t.enterText(find.byType(TextField), List.generate(16, (i) => '줄 $i 띄어쓰기까지 보며 옮긴다').join('\n'));
       await t.pumpAndSettle();
       final caret = caretOf(t);
-      final footerTop = t.getRect(find.byType(Btn)).top - 12;
-      expect(caret.bottom, lessThanOrEqualTo(footerTop));
-      expect(caret.top, greaterThan(60));
+      expect(caret.bottom, lessThanOrEqualTo(340));
+      expect(caret.top, greaterThan(0));
+      // 글을 쓰며 내려가면 위 줄(뒤로)도 같이 올라가 사라진다
+      expect(find.bySemanticsLabel('뒤로').hitTestable(), findsNothing);
+      // 끝까지 밀면 버튼이 키보드 위에 보인다
+      await t.drag(find.byType(SingleChildScrollView), const Offset(0, -3000));
+      await t.pumpAndSettle();
+      expect(t.getRect(find.byType(Btn)).bottom, lessThanOrEqualTo(340));
       expect(t.takeException(), isNull);
     });
 
@@ -66,7 +70,9 @@ void main() {
       ));
       keyboard(t, 300);
       await t.pumpAndSettle();
-      expect(t.getRect(find.byType(Btn)).bottom, 340 - 12);
+      // 스크롤 칸은 키보드 위 340을 다 쓴다(두 번 비키면 40)
+      expect(t.getSize(find.byType(SingleChildScrollView)).height, 340);
+      expect(t.getRect(find.byType(Btn)).bottom, lessThanOrEqualTo(340));
     });
 
     testWidgets('시트도 키보드 위로 올라온다', (t) async {
