@@ -12,7 +12,8 @@ abstract final class AppColors {
   static const surface = Color(0xFFF2F4F6);
 
   /// 로그인 화면 아래쪽 바탕(위 흰색에서 이 색으로 점점, 회색 기운 도는 흰색. 2026-11-18 시안)
-  static const loginFloor = Color(0xFFF1F2F4);
+  // 로그인 화면 아래쪽 회색(2026-11-18 사용자 '하단 그라데이션 좀 더 진하게': F1F2F4 → E4E7EB)
+  static const loginFloor = Color(0xFFE4E7EB);
   static const sectionLine = Color(0xFFEFF1F3);
   static const chipOn = Color(0xFF6C534A);
   static const ink = Color(0xFF191F28);
