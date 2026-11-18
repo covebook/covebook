@@ -108,7 +108,7 @@ var (
 	iapProductNoRestore = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요"}
 )
 
-// iapMe는 결제에 필요한 내 정보를 준다: 스토어에 넘길 계정 연결 값, 지금 가진 것, 구독 상태.
+// iapMe는 결제에 필요한 내 정보를 준다: 스토어에 넘길 계정 연결 값, 지금 가진 것, 구독 상태, 파는 상품.
 // 앱은 결제를 시작하기 전에 이것을 불러 계정 연결 값을 받는다.
 func (s *Server) iapMe(w http.ResponseWriter, r *http.Request) error {
 	user, err := s.user(r)
@@ -133,6 +133,18 @@ func (s *Server) iapMe(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	out["accountToken"] = token
+	// 지금 파는 상품. 켜져 있는 경로의 것만 준다
+	all, err := iapProductList(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	products := []map[string]any{}
+	for _, p := range all {
+		if s.IAP[iap.Route(p["route"].(string))] != nil {
+			products = append(products, p)
+		}
+	}
+	out["products"] = products
 	routes := make([]string, 0, len(s.IAP))
 	for route := range s.IAP {
 		routes = append(routes, string(route))

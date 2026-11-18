@@ -358,6 +358,10 @@ func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNotic
 		WHERE result IN ('received','failed') AND received_at > now() - interval '8 days'
 		  AND (processed_at IS NULL OR processed_at < now() - interval '1 minute' * power(2, least(attempts, 10)))
 		ORDER BY received_at LIMIT $1`, limit)
+
+// iapProductList는 지금 파는 상품이다. 앱이 이 목록의 상품 ID로 스토어에 가격을 묻는다. 가격은 여기에 없다(D22).
+func iapProductList(ctx context.Context, q dbtx) ([]map[string]any, error) {
+	rows, err := q.Query(ctx, "SELECT route, product_id, kind, coalesce(entitlement,''), coalesce(shelves,0) FROM iap_products WHERE active ORDER BY route, kind, product_id")
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +424,21 @@ func iapDueSubscriptions(ctx context.Context, q dbtx, limit int) ([][2]string, e
 			return nil, err
 		}
 		out = append(out, [2]string{route, original})
+
+	out := []map[string]any{}
+	for rows.Next() {
+		var route, id, kind, entitlement string
+		var shelves int
+		if err = rows.Scan(&route, &id, &kind, &entitlement, &shelves); err != nil {
+			return nil, err
+		}
+		p := map[string]any{"route": route, "productId": id, "kind": kind}
+		if kind == "subscription" {
+			p["entitlement"] = entitlement
+		} else {
+			p["shelves"] = shelves
+		}
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }
