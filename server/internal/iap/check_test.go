@@ -6,11 +6,8 @@ import (
 )
 
 func TestCheck(t *testing.T) {
-	want := Expect{BundleID: "app.covebook", Products: map[string]bool{"plus.monthly": true}, AccountToken: "u-1"}
+	want := Expect{BundleID: "app.covebook", Products: map[string]bool{"plus.monthly": true}, AccountTokens: []string{"u-1", "u-old"}}
 	ok := Purchase{BundleID: "app.covebook", ProductID: "plus.monthly", AccountToken: "u-1", State: StatePaid}
-	if errors.Is(Check(ok, want), errTODO) {
-		t.Skip("check.go의 Check를 먼저 채운다")
-	}
 
 	// 표 하나에 경우를 늘어놓고 같은 코드로 돌린다(Go에서 흔한 모양)
 	cases := []struct {
@@ -27,7 +24,13 @@ func TestCheck(t *testing.T) {
 		{"결제 대기", func(p *Purchase) { p.State = StatePending }, ErrNotPaid},
 		{"보류·일시정지", func(p *Purchase) { p.State = StateInactive }, ErrNotPaid},
 		{"상태 값이 비어 있음", func(p *Purchase) { p.State = "" }, ErrNotPaid},
-		// TODO(범수): 빈 AccountToken 경우를 정한 대로 한 줄 추가
+		{"넘겨받은 구독의 옛 값도 내 것", func(p *Purchase) { p.AccountToken = "u-old" }, nil},
+		{"대문자로 와도 같은 값", func(p *Purchase) { p.AccountToken = "U-1" }, nil},
+		{"빈 값은 통과 (앱 밖 구매)", func(p *Purchase) { p.AccountToken = "" }, nil},
+		// 여러 개가 틀리면 더 근본적인 것이 먼저 나온다
+		{"다른 앱이면서 다른 계정", func(p *Purchase) { p.BundleID, p.AccountToken = "com.other", "u-2" }, ErrWrongApp},
+		{"환불됐고 다른 계정", func(p *Purchase) { p.State, p.AccountToken = StateRevoked, "u-2" }, ErrRevoked},
+		{"결제 대기이고 다른 계정", func(p *Purchase) { p.State, p.AccountToken = StatePending, "u-2" }, ErrNotPaid},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
