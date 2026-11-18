@@ -2,6 +2,7 @@ package iap
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 
@@ -10,9 +11,23 @@ import (
 )
 
 type fakeGoogleAPI struct {
-	sub  *androidpublisher.SubscriptionPurchaseV2
-	prod *androidpublisher.ProductPurchaseV2
-	err  error
+	sub   *androidpublisher.SubscriptionPurchaseV2
+	prod  *androidpublisher.ProductPurchaseV2
+	err   error
+	calls *[]string // 확인·소비 호출 기록
+}
+
+func (f fakeGoogleAPI) AcknowledgeSubscription(_ context.Context, pkg, id, token string, _ *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error {
+	*f.calls = append(*f.calls, "ack-sub "+pkg+" "+id+" "+token)
+	return f.err
+}
+func (f fakeGoogleAPI) AcknowledgeProduct(_ context.Context, pkg, id, token, _ string) error {
+	*f.calls = append(*f.calls, "ack-product "+pkg+" "+id+" "+token)
+	return f.err
+}
+func (f fakeGoogleAPI) ConsumeProduct(_ context.Context, pkg, id, token string) error {
+	*f.calls = append(*f.calls, "consume "+pkg+" "+id+" "+token)
+	return f.err
 }
 
 func (f fakeGoogleAPI) VerifySubscriptionV2(context.Context, string, string) (*androidpublisher.SubscriptionPurchaseV2, error) {
@@ -122,5 +137,107 @@ func TestGoogleErrors(t *testing.T) {
 	_, err = (&Google{api: fakeGoogleAPI{sub: &androidpublisher.SubscriptionPurchaseV2{}}}).Lookup(ctx, Ref{Kind: KindSubscription, ID: "x"})
 	if err == nil {
 		t.Fatal("항목이 없는 구독이 통과됨")
+	}
+}
+
+func TestGoogleSubscriptionStatus(t *testing.T) {
+	sub := func(state string, autoRenew bool) *androidpublisher.SubscriptionPurchaseV2 {
+		return &androidpublisher.SubscriptionPurchaseV2{SubscriptionState: state, StartTime: "2026-11-18T03:00:00Z",
+			LineItems: []*androidpublisher.SubscriptionPurchaseLineItem{{ProductId: "plus", ExpiryTime: "2026-12-18T03:00:00Z",
+				AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: autoRenew}}}}
+	}
+	ctx := context.Background()
+	// 유예 중: 구글이 늘려 준 만료 시각이 유예의 끝이다
+	p, err := (&Google{api: fakeGoogleAPI{sub: sub("SUBSCRIPTION_STATE_IN_GRACE_PERIOD", true)}}).Subscription(ctx, "tok")
+	if err != nil || p.State != StatePaid || !p.AutoRenew || !p.GraceUntil.Equal(p.ExpiresAt) || p.OriginalTransactionID != "tok" {
+		t.Fatalf("유예: %+v %v", p, err)
+	}
+	// 해지 예약: 자동 갱신 꺼짐, 유예 아님
+	p, _ = (&Google{api: fakeGoogleAPI{sub: sub("SUBSCRIPTION_STATE_CANCELED", false)}}).Subscription(ctx, "tok")
+	if p.State != StatePaid || p.AutoRenew || !p.GraceUntil.IsZero() {
+		t.Fatalf("해지 예약: %+v", p)
+	}
+}
+
+func TestGoogleConfirm(t *testing.T) {
+	ctx := context.Background()
+	var calls []string
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{calls: &calls}}
+	for _, c := range []struct {
+		ref     Ref
+		consume bool
+		want    string
+	}{
+		{Ref{Kind: KindSubscription, ID: "t1"}, false, "ack-sub app.covebook p t1"},
+		{Ref{Kind: KindProduct, ID: "t2"}, true, "consume app.covebook p t2"},
+		{Ref{Kind: KindProduct, ID: "t3"}, false, "ack-product app.covebook p t3"},
+	} {
+		calls = nil
+		if err := g.Confirm(ctx, c.ref, "p", c.consume); err != nil || len(calls) != 1 || calls[0] != c.want {
+			t.Errorf("%+v: %v %v", c, calls, err)
+		}
+	}
+	// 구독을 소비하라는 것, 종류가 없는 것은 스토어를 부르지 않고 거절한다
+	calls = nil
+	if err := g.Confirm(ctx, Ref{Kind: KindSubscription, ID: "t"}, "p", true); err == nil || len(calls) != 0 {
+		t.Fatal("구독 소비가 통과", calls)
+	}
+	if err := g.Confirm(ctx, Ref{ID: "t"}, "p", false); err == nil || len(calls) != 0 {
+		t.Fatal("종류 없는 확인이 통과", calls)
+	}
+	// 스토어가 실패하면 오류를 돌려준다(부르는 쪽이 다시 시도한다)
+	g = &Google{packageName: "app.covebook", api: fakeGoogleAPI{calls: &calls, err: &googleapi.Error{Code: 503}}}
+	if err := g.Confirm(ctx, Ref{Kind: KindProduct, ID: "t"}, "p", true); err == nil {
+		t.Fatal("실패가 숨겨짐")
+	}
+}
+
+func googlePush(messageID, inner string) []byte {
+	return []byte(`{"message":{"data":"` + base64.StdEncoding.EncodeToString([]byte(inner)) + `","messageId":"` + messageID + `"},"subscription":"projects/x/subscriptions/y"}`)
+}
+
+func TestGoogleParseNotice(t *testing.T) {
+	g := &Google{packageName: "app.covebook"}
+	n, err := g.ParseNotice(googlePush("m-1", `{"version":"1.0","packageName":"app.covebook","eventTimeMillis":"1800000000000","subscriptionNotification":{"version":"1.0","notificationType":2,"purchaseToken":"tok"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Route != RouteGoogle || n.ID != "m-1" || n.Type != "subscription/2" || n.SentAt.IsZero() || n.Test || n.Voided {
+		t.Fatalf("구독 알림: %+v", n)
+	}
+	if *n.Target != (Ref{Kind: KindSubscription, ID: "tok"}) || n.OriginalID != "tok" {
+		t.Fatalf("대상: %+v", n.Target)
+	}
+	n, err = g.ParseNotice(googlePush("m-2", `{"packageName":"app.covebook","oneTimeProductNotification":{"notificationType":1,"purchaseToken":"tok2","sku":"shelf"}}`))
+	if err != nil || n.Type != "product/1" || *n.Target != (Ref{Kind: KindProduct, ID: "tok2"}) || n.OriginalID != "" {
+		t.Fatalf("상품 알림: %+v %v", n, err)
+	}
+	// 환불: 구독이면 구독 줄기로, 한 번 사는 상품이면 상품으로
+	n, err = g.ParseNotice(googlePush("m-3", `{"packageName":"app.covebook","voidedPurchaseNotification":{"purchaseToken":"tok3","orderId":"GPA.1","productType":1,"refundType":1}}`))
+	if err != nil || !n.Voided || n.OrderID != "GPA.1" || *n.Target != (Ref{Kind: KindSubscription, ID: "tok3"}) || n.OriginalID != "tok3" {
+		t.Fatalf("구독 환불: %+v %v", n, err)
+	}
+	n, _ = g.ParseNotice(googlePush("m-4", `{"packageName":"app.covebook","voidedPurchaseNotification":{"purchaseToken":"tok4","orderId":"GPA.2","productType":2,"refundType":1}}`))
+	if !n.Voided || *n.Target != (Ref{Kind: KindProduct, ID: "tok4"}) || n.OriginalID != "" {
+		t.Fatalf("상품 환불: %+v", n)
+	}
+	// 연결 확인 알림, 차지백 검토, 모르는 종류: 오류가 아니다. 다시 물어볼 대상이 없을 뿐이다
+	if n, err = g.ParseNotice(googlePush("m-5", `{"packageName":"app.covebook","testNotification":{"version":"1.0"}}`)); err != nil || !n.Test || n.Target != nil {
+		t.Fatalf("테스트 알림: %+v %v", n, err)
+	}
+	if n, err = g.ParseNotice(googlePush("m-6", `{"packageName":"app.covebook","pendingRefundReviewNotification":{"orderId":"GPA.3"}}`)); err != nil || n.Type != "refund-review" || n.OrderID != "GPA.3" {
+		t.Fatalf("환불 검토: %+v %v", n, err)
+	}
+	if n, err = g.ParseNotice(googlePush("m-7", `{"packageName":"app.covebook","나중에생긴알림":{}}`)); err != nil || n.Type != "unknown" || n.Target != nil {
+		t.Fatalf("모르는 종류: %+v %v", n, err)
+	}
+	// 다른 앱의 알림과 틀린 본문은 받지 않는다
+	if _, err = g.ParseNotice(googlePush("m-8", `{"packageName":"com.other","subscriptionNotification":{"notificationType":2,"purchaseToken":"t"}}`)); !errors.Is(err, ErrWrongApp) {
+		t.Fatalf("다른 앱: %v", err)
+	}
+	for _, body := range []string{``, `{}`, `{"message":{"data":"e30="}}`, `{"message":{"data":"@@@","messageId":"m"}}`, `{"message":{"data":"bm90IGpzb24=","messageId":"m"}}`} {
+		if _, err := g.ParseNotice([]byte(body)); err == nil {
+			t.Errorf("본문 %q가 통과", body)
+		}
 	}
 }

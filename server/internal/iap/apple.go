@@ -2,10 +2,14 @@ package iap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/awa/go-iap/appstore"
 	"github.com/awa/go-iap/appstore/api"
 )
 
@@ -14,6 +18,8 @@ import (
 type appleAPI interface {
 	GetTransactionInfo(ctx context.Context, transactionID string) (*api.TransactionInfoResponse, error)
 	ParseSignedTransaction(signed string) (*api.JWSTransaction, error)
+	GetALLSubscriptionStatuses(ctx context.Context, originalTransactionID string, query *url.Values) (*api.StatusResponse, error)
+	ParseJWSEncodeString(signed string) (interface{}, error)
 }
 
 // AppleConfig는 App Store Server API 키다. 값은 환경변수에서 읽고 저장소에 적지 않는다.
@@ -24,17 +30,29 @@ type AppleConfig struct {
 	BundleID string
 }
 
-type Apple struct{ api appleAPI }
+type Apple struct {
+	api      appleAPI
+	bundleID string
+	// verifyNotice는 알림의 서명과 인증서 사슬을 확인하고 내용을 푼다. 시험에서는 가짜로 바꾼다.
+	verifyNotice func(signed string, into *appstore.SubscriptionNotificationV2DecodedPayload) error
+}
 
 // NewApple은 운영에 먼저 묻고, 없으면 샌드박스에 묻는 클라이언트를 만든다.
 // 심사와 TestFlight 구매가 샌드박스 거래라서 필요하다(ADR-0002 D15).
 func NewApple(c AppleConfig) *Apple {
-	return &Apple{api: api.NewStoreClientWithSandboxFallback(&api.StoreConfig{
-		KeyContent: c.KeyP8,
-		KeyID:      c.KeyID,
-		Issuer:     c.IssuerID,
-		BundleID:   c.BundleID,
-	})}
+	verifier := appstore.New()
+	return &Apple{
+		api: api.NewStoreClientWithSandboxFallback(&api.StoreConfig{
+			KeyContent: c.KeyP8,
+			KeyID:      c.KeyID,
+			Issuer:     c.IssuerID,
+			BundleID:   c.BundleID,
+		}),
+		bundleID: c.BundleID,
+		verifyNotice: func(signed string, into *appstore.SubscriptionNotificationV2DecodedPayload) error {
+			return verifier.ParseNotificationV2WithClaim(signed, into)
+		},
+	}
 }
 
 func (a *Apple) Route() Route { return RouteApple }
@@ -90,4 +108,106 @@ func msTime(ms int64) time.Time {
 		return time.Time{}
 	}
 	return time.UnixMilli(ms).UTC()
+}
+
+// Subscription은 원 거래 ID로 구독의 지금 상태를 묻는다.
+// 애플의 답에는 그 구독 그룹의 줄기들이 들어 있다. 물어본 원 거래 ID의 줄기를 고른다.
+func (a *Apple) Subscription(ctx context.Context, originalID string) (Purchase, error) {
+	rsp, err := a.api.GetALLSubscriptionStatuses(ctx, originalID, nil)
+	if err != nil {
+		if errors.Is(err, api.TransactionIdNotFoundError) || errors.Is(err, api.OriginalTransactionIdNotFoundError) {
+			return Purchase{}, fmt.Errorf("apple 구독 %s: %w", originalID, ErrNotFound)
+		}
+		return Purchase{}, fmt.Errorf("apple 구독 상태 조회 %s: %w", originalID, err)
+	}
+	for _, group := range rsp.Data {
+		for _, item := range group.LastTransactions {
+			if item.OriginalTransactionId != originalID {
+				continue
+			}
+			t, err := a.api.ParseSignedTransaction(item.SignedTransactionInfo)
+			if err != nil {
+				return Purchase{}, fmt.Errorf("apple 서명 확인 %s: %w", originalID, err)
+			}
+			p := fromApple(t)
+			p.State = appleStatus(item.Status, p.State)
+			parsed, err := a.api.ParseJWSEncodeString(item.SignedRenewalInfo)
+			if err != nil {
+				return Purchase{}, fmt.Errorf("apple 갱신 정보 서명 확인 %s: %w", originalID, err)
+			}
+			r, ok := parsed.(*api.JWSRenewalInfoDecodedPayload)
+			if !ok {
+				return Purchase{}, fmt.Errorf("apple 갱신 정보 %s: 모르는 형식", originalID)
+			}
+			p.AutoRenew = r.AutoRenewStatus == api.AutoRenewStatusOn
+			p.GraceUntil = msTime(r.GracePeriodExpiresDate)
+			return p, nil
+		}
+	}
+	return Purchase{}, fmt.Errorf("apple 구독 %s: 답에 그 줄기가 없음: %w", originalID, ErrNotFound)
+}
+
+// appleStatus는 애플의 구독 상태 값을 지급 판단용 상태로 줄인다. 1 활성과 4 유예만 권한이 있다.
+// 3 결제 재시도와 2 만료는 권한이 없고, 5는 환불·취소다. 모르는 값은 권한 없음으로 둔다.
+func appleStatus(status api.AutoRenewSubscriptionStatus, fromTransaction State) State {
+	if fromTransaction == StateRevoked {
+		return StateRevoked
+	}
+	switch status {
+	case api.SubscriptionActive, api.SubscriptionGracePeriod:
+		return StatePaid
+	case api.SubscriptionRevoked:
+		return StateRevoked
+	}
+	return StateInactive
+}
+
+// Confirm은 애플에서는 할 일이 없다. 앱이 지급 응답을 받은 뒤 거래를 끝낸다(ADR-0002 D10).
+func (a *Apple) Confirm(context.Context, Ref, string, bool) error { return nil }
+
+// ParseNotice는 애플 서버 알림(V2)의 본문을 확인하고 푼다.
+// 서명·인증서 확인은 라이브러리가 한다. 우리 앱의 알림인지(번들 ID)는 여기서 본다.
+func (a *Apple) ParseNotice(body []byte) (Notice, error) {
+	var envelope struct {
+		SignedPayload string `json:"signedPayload"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil || envelope.SignedPayload == "" {
+		return Notice{}, errors.New("apple 알림: 본문 형식이 다름")
+	}
+	var payload appstore.SubscriptionNotificationV2DecodedPayload
+	if err := a.verifyNotice(envelope.SignedPayload, &payload); err != nil {
+		return Notice{}, fmt.Errorf("apple 알림 서명 확인: %w", err)
+	}
+	if payload.NotificationUUID == "" {
+		return Notice{}, errors.New("apple 알림: 알림 ID가 없음")
+	}
+	kind := string(payload.NotificationType)
+	if payload.Subtype != "" {
+		kind += "/" + string(payload.Subtype)
+	}
+	n := Notice{Route: RouteApple, ID: payload.NotificationUUID, Type: kind, SentAt: msTime(payload.SignedDate), Test: payload.NotificationType == "TEST"}
+	bundle, environment := payload.Data.BundleID, payload.Data.Environment
+	if bundle == "" { // 묶음 알림(갱신일 일괄 연장 등)은 data 대신 summary에 있다
+		bundle, environment = payload.Summary.BundleID, payload.Summary.Environment
+	}
+	if bundle != a.bundleID {
+		return Notice{}, fmt.Errorf("apple 알림 %s: %w", n.ID, ErrWrongApp)
+	}
+	n.Env = EnvSandbox
+	if strings.EqualFold(environment, string(api.Production)) {
+		n.Env = EnvProduction
+	}
+	if signed := string(payload.Data.SignedTransactionInfo); signed != "" {
+		t, err := a.api.ParseSignedTransaction(signed)
+		if err != nil {
+			return Notice{}, fmt.Errorf("apple 알림 %s 거래 서명 확인: %w", n.ID, err)
+		}
+		ref := Ref{Kind: KindProduct, ID: t.TransactionID}
+		if t.Type == api.AutoRenewable {
+			ref.Kind = KindSubscription
+			n.OriginalID = t.OriginalTransactionId
+		}
+		n.Target = &ref
+	}
+	return n, nil
 }
