@@ -3,6 +3,7 @@
 - 작성일: 2026-11-18
 - 작성: 범수
 - 받는 사람: 정환
+- 만들 기능 목록: [법규 때문에 만들어야 하는 기능](2026-11-18-compliance-features.md)
 - 자세한 내용: [ADR-0001](../adr/0001-iap-server-go.md), [ADR-0002](../adr/0002-iap-design.md), [ADR-0003](../adr/0003-iap-compliance.md), [고지 문구 템플릿](../legal/notice-templates.md)
 - 가격은 이 문서에 없음. 결제 계획 보고(파일로 전달) 참고
 - 법률 자문이 아님. 공개 자료 조사 결과
