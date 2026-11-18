@@ -281,3 +281,28 @@ func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbo
 	}
 	return out, nil
 }
+
+// iapProductList는 지금 파는 상품이다. 앱이 이 목록의 상품 ID로 스토어에 가격을 묻는다. 가격은 여기에 없다(D22).
+func iapProductList(ctx context.Context, q dbtx) ([]map[string]any, error) {
+	rows, err := q.Query(ctx, "SELECT route, product_id, kind, coalesce(entitlement,''), coalesce(shelves,0) FROM iap_products WHERE active ORDER BY route, kind, product_id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var route, id, kind, entitlement string
+		var shelves int
+		if err = rows.Scan(&route, &id, &kind, &entitlement, &shelves); err != nil {
+			return nil, err
+		}
+		p := map[string]any{"route": route, "productId": id, "kind": kind}
+		if kind == "subscription" {
+			p["entitlement"] = entitlement
+		} else {
+			p["shelves"] = shelves
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}

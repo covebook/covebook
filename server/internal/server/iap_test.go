@@ -143,6 +143,29 @@ func TestIAPMe(t *testing.T) {
 	if routes, _ := body["routes"].([]any); len(routes) != 2 || routes[0] != "apple" {
 		t.Fatalf("routes: %v", body["routes"])
 	}
+	// 파는 상품 목록: 이 시험이 넣은 상품이 경로마다 들어 있고 가격은 없다
+	mine := 0
+	for _, raw := range body["products"].([]any) {
+		p := raw.(map[string]any)
+		if _, hasPrice := p["price"]; hasPrice {
+			t.Fatal("상품 목록에 가격이 있음")
+		}
+		switch p["productId"] {
+		case e.shelf:
+			if p["kind"] != "product" || p["shelves"] != float64(2) {
+				t.Fatalf("선반 상품: %v", p)
+			}
+			mine++
+		case e.plus:
+			if p["kind"] != "subscription" || p["entitlement"] != "plus" {
+				t.Fatalf("구독 상품: %v", p)
+			}
+			mine++
+		}
+	}
+	if mine != 4 {
+		t.Fatalf("내 상품 %d개 (경로 2 x 상품 2 = 4여야 함)", mine)
+	}
 }
 
 func TestIAPShelfPurchase(t *testing.T) {
