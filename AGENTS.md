@@ -18,4 +18,5 @@
 - 결제 화면은 빌드 플래그로 꺼 둔 채 머지한다(main push마다 TestFlight가 돌기 때문).
 - 마이그레이션 번호는 머지 직전에 main과 맞춘다.
 - 가격, 사업자 정보, 스토어 키는 저장소·이슈·PR에 적지 않는다(공개 저장소).
-- 결정 기록은 `docs/adr/`에 있다: `0001-iap-server-go.md`, `0002-iap-design.md`.
+- 결정 기록은 `docs/adr/`에 있다: `0001-iap-server-go.md`(서버·라이브러리), `0002-iap-design.md`(설계), `0003-iap-compliance.md`(법규 대응).
+- 결제 화면과 알림 문구는 `docs/legal/notice-templates.md`를 따른다. 해지·탈퇴 경로를 숨기거나, 옵션을 미리 선택해 두거나, 거절한 사람에게 같은 팝업을 다시 띄우지 않는다(전자상거래법 다크패턴 규제).
