@@ -31,7 +31,8 @@ class BrandButton extends StatefulWidget {
       : this(key: key, label: 'Apple로 계속하기', bg: const Color(0xFF000000), fg: const Color(0xFFFFFFFF), logo: const Icon(Icons.apple, size: 22, color: Color(0xFFFFFFFF)), border: null, onPress: onPress);
 
   BrandButton.google({Key? key, required VoidCallback? onPress})
-      : this(key: key, label: 'Google로 계속하기', bg: const Color(0xFFF2F2F2), fg: const Color(0xFF1F1F1F), border: null, logo: SvgPicture.string(_googleSvg, width: 20, height: 20), onPress: onPress);
+      // 흰 단추(2026-11-18 사용자: 로그인 아래쪽은 회색 기운 바탕, Google은 흰색 유지). 옅은 테두리로 바탕과 가른다
+      : this(key: key, label: 'Google로 계속하기', bg: const Color(0xFFFFFFFF), fg: const Color(0xFF1F1F1F), border: AppColors.line, logo: SvgPicture.string(_googleSvg, width: 20, height: 20), onPress: onPress);
 
   final String label;
   final Color bg, fg;
