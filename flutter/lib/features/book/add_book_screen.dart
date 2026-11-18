@@ -345,7 +345,13 @@ class _AddBookScreenState extends State<AddBookScreen> {
     return PopScope(
       canPop: widget.title != null,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !_saving) setState(() => _step = 'find');
+        // 확인 단계 안내(판본 쪽수·판형 없음 등)는 그 책 이야기라 검색으로 돌아가면 지운다(2026-11-18: 검색 화면에 남아 있었다)
+        if (!didPop && !_saving) {
+          setState(() {
+            _step = 'find';
+            _notice = null;
+          });
+        }
       },
       child: _confirm(d, ready),
     );
