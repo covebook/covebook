@@ -759,15 +759,102 @@ vec4 _tex2(vec2 q) {
     float g = dot(C, Av);
     return vec2(e * d - b * g, a * g - e * c) / (a * d - b * c);
   }
-  vec3 coveOf(vec3 P) {
+
+  // 안쪽 모서리 그늘(light-model jointShade): 벽·틀·판이 맞닿는 모서리 쪽 어두운 띠가 가리는 몫
+  float jointF(float h, float H, float K) {
+    float d = max(0.0, h);
+    // 곡면 안에서는 모서리에서 기울기 0(light-model jointF): 날카로운 모서리 식이면 두 면 그늘이 V자로 꺾여 모서리마다 어두운 줄이 남는다
+    float sR = d / 9.15000000;
+    if (true && sR < 1.0) d = 9.15000000 * sR * sR * (2.0 - sR);
+    return 0.5 * K * (1.0 - d / sqrt(d * d + H * H));
+  }
+  float jointXs(vec3 P, float w) {
+    return (1.0 - jointF(P.x - 0.00000000, 6.10000000, 0.150000000 * w)) * (1.0 - jointF(366.000000 - P.x, 6.10000000, 0.150000000 * w));
+  }
+  float jointBase(vec3 P, vec3 n) {
+    if (env.x < 1.5 || P.z < -56.9250000 || (abs(n.z) > 0.5 && P.z < -52.8750000)) return 0.0;
+    float k = 1.0;
+    if (abs(n.x) > 0.5) k = (1.0 - jointF(env.z - P.y, 19.8250000, 0.350000000 * (0.450000000 + 0.550000000 * clamp((P.z + 56.4250000) / 178.425000, 0.0, 1.0)))) * (1.0 - jointF(P.y - env.y, 6.10000000, 0.400000000)) * (1.0 - jointF(DEPTH - P.z, 6.10000000, 0.0255000000));
+    else if (abs(n.z) > 0.5) {
+      float fx = max(2.0 * jointF(P.x - 0.00000000, 19.8250000, 1.0), 2.0 * jointF(366.000000 - P.x, 19.8250000, 1.0));
+      float fy = 2.0 * jointF(env.z - P.y, 19.8250000, 1.0);
+      k = (1.0 - jointF(env.z - P.y, 6.10000000, 0.150000000)) * jointXs(P, 0.300000000) * (1.0 - 0.150000000 * fx * fy);
+    }
+    else if (n.y > 0.5) k = jointXs(P, 1.0) * (1.0 - jointF(DEPTH - P.z, 6.10000000, 0.0750000000));
+    else {
+      float t = clamp((P.z + 56.4250000) / 178.425000, 0.0, 1.0);
+      float fx = max(2.0 * jointF(P.x - 0.00000000, 19.8250000, 1.0), 2.0 * jointF(366.000000 - P.x, 19.8250000, 1.0));
+      k = jointXs(P, 0.300000000) * (1.0 - jointF(DEPTH - P.z, 6.10000000, 0.0255000000)) * (1.0 - 0.250000000 * fx * (0.450000000 + 0.550000000 * t));
+    }
+    return 1.0 - k;
+  }
+  // 곡면 안 맞닿은 면의 몫: 모서리 선에서 1, 곡면 끝에서 0(기울기 0)
+  float coveW(float d) {
+    float s = clamp(d / 9.15000000, 0.0, 1.0);
+    return true ? 1.0 - s * s * (3.0 - 2.0 * s) : 0.0;
+  }
+  // 안쪽 모서리 그늘(Flutter 2026-11-18 사용자 '모서리 경계선 없애'): 모서리 곡면 위의 그늘은 거기서 만나는 면들 그늘의 평균이고, 모서리에서 멀어질수록 제 면 값으로 돌아간다.
+  // 맞닿은 면의 값은 그 면 위 모서리 선(이 점을 그 면 평면에 내린 점)에서 잰다. 모서리 선에서는 두 면, 세 면 꼭지점에서는 세 면이 같은 값이 된다(모든 모서리에 같은 규칙).
+  // 예전에는 받는 면마다 그늘 세기가 달라(천장은 뒷벽 쪽 그늘이 약하고 뒷벽은 천장 쪽이 세다) 같은 모서리 선에서 두 면이 다른 빛이 되어 선이 남았다
+  float jointShade(vec3 P, vec3 n) {
+    float sum = jointBase(P, n);
+    float ws = 1.0;
+    float w;
+    if (abs(n.y) < 0.5) {
+      w = coveW(P.y - env.y);
+      if (w > 0.0) { sum += w * jointBase(vec3(P.x, env.y, P.z), vec3(0.0, 1.0, 0.0)); ws += w; }
+      w = coveW(env.z - P.y);
+      if (w > 0.0) { sum += w * jointBase(vec3(P.x, env.z, P.z), vec3(0.0, -1.0, 0.0)); ws += w; }
+    }
+    if (abs(n.x) < 0.5) {
+      w = coveW(P.x - 0.00000000);
+      if (w > 0.0) { sum += w * jointBase(vec3(0.00000000, P.y, P.z), vec3(1.0, 0.0, 0.0)); ws += w; }
+      w = coveW(366.000000 - P.x);
+      if (w > 0.0) { sum += w * jointBase(vec3(366.000000, P.y, P.z), vec3(-1.0, 0.0, 0.0)); ws += w; }
+    }
+    if (abs(n.z) < 0.5) {
+      w = coveW(DEPTH - P.z);
+      if (w > 0.0) { sum += w * jointBase(vec3(P.x, P.y, DEPTH), vec3(0.0, 0.0, -1.0)); ws += w; }
+    }
+    return sum / ws;
+  }
+
+  // 안쪽 모서리 곡면(Flutter 2026-11-18 사용자 '모서리 경계선 없애'): 곡면 법선은 그 점 둘레 면들의 법선을 섞은 것이고, 섞는 몫은 점의 자리와 눈 방향으로만 정한다.
+  // 면 j의 몫 = (j 평면까지 거리로 곡면 안 1 → 곡면 끝 0, 기울기 0) / |nj·V|(V: 점 → 눈). 제 면은 거리 0이라 1 / |n·V|.
+  // 눈을 정면으로 보는 면일수록 몫이 작아 곡면을 많이 돈다(곡면이 화면에서 그 면 쪽 띠에 많이 보인다). 같은 점이면 어느 면에서 재도 법선이 같아
+  // 모서리 선(두 면)·꼭지점(세 면)에서 이어진다(모든 모서리에 같은 규칙). 예전에는 면마다 끝 각이 달라(45°·25°·0°) 모서리 선에서 법선이 어긋나 선이 남았다
+  // 몫의 모양은 실제 원호를 눈에서 본 투영에 맞춘다(Flutter 2026-11-18 시험: 1/|n·V|·부드러운 계단이면 비스듬한 면 쪽으로 곡면 끝에서 바로 돌아 띠 끝에 선이 생겼다).
+  // 원호를 정면에 가까이 보면 곡면 끝에서는 천천히, 모서리 선 가까이에서 빨리 돈다: 거리 몫 (1 − t)^1.5(곡면 끝에서 기울기 0), 보는 정도 몫 |n·V|^−0.42
+  // (두 면이 보는 정도 비 k마다 원호 투영으로 푼 모서리 선 각 tan φ* ≈ k^−0.42, 곡면 안 각은 몇 도 안에서 같다)
+  float coveWt(vec3 nj, vec3 V) { return pow(max(abs(dot(nj, V)), 0.05), -0.42); }
+  float coveS(float d) {
+    float t = clamp(d / 9.15000000, 0.0, 1.0);
+    return true ? pow(1.0 - t, 1.5) : 0.0;
+  }
+  vec3 coveOf(vec3 P, vec3 V) {
     vec3 c = vec3(0.0);
     if (env.x < 1.5 || false || P.z < -56.9250000 || (abs(tN.z) > 0.5 && P.z < -52.8750000)) return c;
-    // 안쪽 면의 위 면(천장) 쪽 끝 각은 앞 45° → 뒤 25°(light-model coveNormal과 같다, Flutter 2026-11-16 사용자 '이음새에 선이 남으면 안 된다'):
-    // 안쪽 면은 앞쪽일수록 밝아(방이 더 보인다) 25°로는 위 끝이 천장(147)보다 밝은 158에서 끝나 대각선 경계가 남았다. 천장은 돌리지 않는다(돌리면 두 면이 다 어두워져 만나는 곳이 골이 된다)
-    float coveTop = abs(tN.x) > 0.5 ? mix(0.785398163, 0.436332313, clamp((P.z + FFRONT) / (DEPTH + FFRONT), 0.0, 1.0)) : 0.436332313;
-    if (abs(tN.y) < 0.5) c.y += coveB(P.y - env.y, 0.436332313) - coveB(env.z - P.y, coveTop);
-    if (abs(tN.x) < 0.5 && tN.y > -0.5) c.x += coveB(P.x - 0.00000000, 0.785398163) - coveB(366.000000 - P.x, 0.785398163);
-    return c;
+    float w0 = coveWt(tN, V);
+    vec3 m = tN * w0;
+    float w;
+    if (abs(tN.y) < 0.5) {
+      w = coveS(P.y - env.y);
+      if (w > 0.0) m += vec3(0.0, 1.0, 0.0) * w * coveWt(vec3(0.0, 1.0, 0.0), V);
+      w = coveS(env.z - P.y);
+      if (w > 0.0) m += vec3(0.0, -1.0, 0.0) * w * coveWt(vec3(0.0, -1.0, 0.0), V);
+    }
+    if (abs(tN.x) < 0.5) {
+      w = coveS(P.x - 0.00000000);
+      if (w > 0.0) m += vec3(1.0, 0.0, 0.0) * w * coveWt(vec3(1.0, 0.0, 0.0), V);
+      w = coveS(366.000000 - P.x);
+      if (w > 0.0) m += vec3(-1.0, 0.0, 0.0) * w * coveWt(vec3(-1.0, 0.0, 0.0), V);
+    }
+    if (abs(tN.z) < 0.5) {
+      w = coveS(DEPTH - P.z);
+      if (w > 0.0) m += vec3(0.0, 0.0, -1.0) * w * coveWt(vec3(0.0, 0.0, -1.0), V);
+    }
+    // 면 법선 크기(1)에 맞춘 더할 몫: tN + c = m / w0
+    return m / w0 - tN;
   }
   
 void main() {
@@ -782,7 +869,9 @@ void main() {
     float b1 = slope(arc(bev1.w - dot(P, bev1.xyz), PLANKR));
     // 판 앞면 양 끝: 윤곽(PLANK_END_R)과 같은 반지름으로 법선이 옆으로 돈다. 윤곽만 둥글고 빛이 평면이면 곡면으로 보이지 않는다(2026-11-05 사용자 '선반 끝 곡선')
     float be = endR > 0.0 ? slope(arc(366.000000 - P.x, endR)) - slope(arc(P.x - 0.00000000, endR)) : 0.0;
-    vec3 cv = coveOf(P);
+    // 점 → 눈(곡면 몫과 반사광이 함께 쓴다)
+    vec3 V = normalize(vec3(cam4.x, cam4.y, cam4.z - cam4.w) - P);
+    vec3 cv = coveOf(P, V);
     vec3 n = normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + cv + vec3(be, 0.0, 0.0));
     // 휜 법선(안쪽 모서리 곡면·구멍 테)과 그 가림을 잴 자리. 테는 구멍 가장자리 바로 안쪽 점에서 잰다(앞 벽 평면 위 점은 안쪽 면을 앞에 둔 가리개로 본다)
     vec3 nB = normalize(tN + cv);
@@ -839,12 +928,18 @@ void main() {
       loss += (envLoss(PB, nB) - envLoss(PB, tN)) / OCC;
       nfF = nB;
     } else if (bent) {
-      // 오목한 곡면은 평평한 면보다 빛을 더 받지 않는다: 휘어서 새로 보게 된 쪽은 맞닿은 면(판·천장·옆벽)이다. 휜 법선이 더 받는 빛(위 하늘 등)은 그 면이 가린 몫으로 뺀다
-      vec3 gain = max(vec3(0.0), openE(P, nB) - openE(P, tN));
-      loss += gain / OCC;
+      // 안쪽 모서리 곡면도 테와 같은 식: 휜 법선이 보는 둘레(벽·판·틀·되비침)의 가림을 그 자리에서 잰다(Flutter 2026-11-18).
+      // 예전에는 '평평한 면보다 빛을 더 받지 않는다'로 잘라 맞닿은 두 면이 모서리 선에서 다른 빛이 되었다
+      // 구운 가림(하늘 가림 + 그늘 몫/OCC)은 그릴 때 OCC를 곱한다: 휜 법선의 하늘 가림도 구운 하늘 가림과 같은 세기로 더한다(OCC로 나누면 곡면만 덜 가려져 밝은 띠가 된다)
+      loss += envLoss(P, nB) - envLoss(P, tN);
+      // 모서리 그늘은 받는 빛의 몫이다: 굽기는 평평한 면 법선의 빛에 곱해 담았으므로 휜 법선의 빛으로 바꾼다
+      if (liveEnv < 0.5) {
+        float jf = jointShade(P, tN);
+        loss += jf * ((skyIrr(nB) - skyIrr(tN)) + KEYC * (DIFF * (max(0.0, dot(nB, LU)) - max(0.0, dot(tN, LU))))) / OCC;
+      }
       nfF = nB;
     }
-    vec4 g = shade(P, n, nfF, normalize(vec3(cam4.x, cam4.y, cam4.z - cam4.w) - P), loss, albedo, eref, ms.w, ms.z, float(_keyTex(vec2(dot(P, kU), dot(P, kV)) + kO).a), sref, kS);
+    vec4 g = shade(P, n, nfF, V, loss, albedo, eref, ms.w, ms.z, float(_keyTex(vec2(dot(P, kU), dot(P, kV)) + kO).a), sref, kS);
     if (DODGE > 1.5) {
       float softA = (softR.y > 0.0 ? softEdge(P) : 1.0) * (1.0 - rimFade);
       { fragColor = vec4(vec3(min(base * vec3(g.rgb), vec3(1.0))) * softA, softA); return; }
