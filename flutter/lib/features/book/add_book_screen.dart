@@ -752,7 +752,8 @@ class _ResultRowState extends State<_ResultRow> {
     return Semantics(
       button: tap != null,
       selected: widget.multi && widget.picked,
-      label: [c.title, if (c.authors.isNotEmpty) c.authors.join(', '), ?pub, if (widget.owned) '내 서재에 있음', action].join(', '),
+      // 여러 권 고르기에서는 서재에 있는 책의 행동 이름이 '내 서재에 있음'이라 두 번 읽지 않는다(2026-11-18)
+      label: [c.title, if (c.authors.isNotEmpty) c.authors.join(', '), ?pub, if (widget.owned && action != '내 서재에 있음') '내 서재에 있음', action].join(', '),
       excludeSemantics: true,
       onTap: tap,
       child: GestureDetector(
