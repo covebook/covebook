@@ -64,6 +64,7 @@ type Purchase struct {
 	RevokedAt             time.Time // 환불·취소된 시각. 애플만 준다
 	GraceUntil            time.Time // 결제 실패 유예가 끝나는 시각. 유예 중이 아니면 zero. Subscription으로 물었을 때만 채워진다
 	AutoRenew             bool      // 자동 갱신이 켜져 있는가. false면 해지 예약. Subscription으로 물었을 때만 믿는다
+	Acknowledged          bool      // 스토어에 확인(acknowledge)이 이미 된 거래인가. 애플은 확인이 없어 항상 true
 	Currency              string    // ISO 4217. 구글 구매 조회에는 없어서 비어 있다
 	PriceMilli            int64     // 금액 x 1000 (ADR-0002 D20). 구글은 0
 	Country               string    // 판매 국가. 스토어가 준 코드 그대로
@@ -76,6 +77,8 @@ var ErrNotFound = errors.New("iap: 스토어에 없는 거래")
 // 메서드는 필요해질 때 늘린다(구독 상태 조회, 알림 해석, 확인은 이슈 #10~#12).
 type Store interface {
 	Route() Route
+	// AppID는 이 스토어에서 우리 앱을 가리키는 값이다(애플 번들 ID, 구글 패키지 이름). Check의 기준으로 쓴다.
+	AppID() string
 	// Lookup은 스토어에 다시 물어본다. 없으면 ErrNotFound를 감싼 오류를 돌려준다.
 	Lookup(ctx context.Context, ref Ref) (Purchase, error)
 	// Subscription은 구독 한 줄기의 지금 상태를 묻는다. 알림을 받았을 때와 정기 대조에서 쓴다.

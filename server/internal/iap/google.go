@@ -39,7 +39,10 @@ func NewGoogle(serviceAccountJSON []byte, packageName string) (*Google, error) {
 	return &Google{api: c, packageName: packageName}, nil
 }
 
-func (g *Google) Route() Route { return RouteGoogle }
+func (g *Google) Route() Route  { return RouteGoogle }
+func (g *Google) AppID() string { return g.packageName }
+
+const googleAcknowledged = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
 
 // Lookup은 구매 토큰으로 묻는다. 구독과 한 번 사는 상품은 조회 주소가 달라 ref.Kind로 가른다.
 func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
@@ -90,6 +93,7 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 		BundleID:              g.packageName, // 응답에 패키지 이름이 없다. 우리 패키지로 물어서 받은 답이다
 		ProductID:             item.ProductId,
 		State:                 subscriptionState(s.SubscriptionState),
+		Acknowledged:          s.AcknowledgementState == googleAcknowledged,
 		Env:                   EnvProduction,
 		PurchasedAt:           started,
 		ExpiresAt:             expires,
@@ -141,6 +145,7 @@ func (g *Google) fromProduct(token string, r *androidpublisher.ProductPurchaseV2
 		ProductID:             r.ProductLineItem[0].ProductId,
 		AccountToken:          r.ObfuscatedExternalAccountId,
 		State:                 state,
+		Acknowledged:          r.AcknowledgementState == googleAcknowledged,
 		Env:                   EnvProduction,
 		PurchasedAt:           bought,
 		Country:               r.RegionCode,

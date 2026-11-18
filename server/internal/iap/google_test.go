@@ -57,7 +57,7 @@ func TestGoogleSubscription(t *testing.T) {
 	if p.ProductID != "plus" || p.PlanID != "monthly" || p.AccountToken != "u-1" || p.Country != "KR" {
 		t.Fatalf("상품·계정 값이 다름: %+v", p)
 	}
-	if p.State != StatePaid || p.Env != EnvSandbox {
+	if p.State != StatePaid || p.Env != EnvSandbox || p.Acknowledged {
 		t.Fatalf("상태·환경이 다름: %+v", p)
 	}
 	// 다른 시간대로 와도 UTC로 맞춘다
@@ -147,6 +147,12 @@ func TestGoogleSubscriptionStatus(t *testing.T) {
 				AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: autoRenew}}}}
 	}
 	ctx := context.Background()
+	// 이미 확인된 구독은 그렇게 표시된다
+	acked := sub("SUBSCRIPTION_STATE_ACTIVE", true)
+	acked.AcknowledgementState = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
+	if p, _ := (&Google{api: fakeGoogleAPI{sub: acked}}).Subscription(ctx, "tok"); !p.Acknowledged {
+		t.Fatal("확인된 구독이 미확인으로 나옴")
+	}
 	// 유예 중: 구글이 늘려 준 만료 시각이 유예의 끝이다
 	p, err := (&Google{api: fakeGoogleAPI{sub: sub("SUBSCRIPTION_STATE_IN_GRACE_PERIOD", true)}}).Subscription(ctx, "tok")
 	if err != nil || p.State != StatePaid || !p.AutoRenew || !p.GraceUntil.Equal(p.ExpiresAt) || p.OriginalTransactionID != "tok" {

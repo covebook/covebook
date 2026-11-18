@@ -8,13 +8,15 @@ import (
 // Fake는 시험용 Store다. 스토어에 "있는" 거래를 미리 넣어 두고 쓴다.
 type Fake struct {
 	R          Route
+	App        string              // AppID가 돌려줄 값
 	Purchases  map[string]Purchase // Ref.ID → 거래
 	Err        error               // 값이 있으면 조회가 항상 이 오류로 실패한다(통신 장애 흉내)
 	Confirmed  []string            // Confirm이 불린 Ref.ID. 순서대로
 	ConfirmErr error               // 값이 있으면 Confirm이 실패한다
 }
 
-func (f *Fake) Route() Route { return f.R }
+func (f *Fake) Route() Route  { return f.R }
+func (f *Fake) AppID() string { return f.App }
 
 func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
 	if f.Err != nil {

@@ -55,7 +55,8 @@ func NewApple(c AppleConfig) *Apple {
 	}
 }
 
-func (a *Apple) Route() Route { return RouteApple }
+func (a *Apple) Route() Route  { return RouteApple }
+func (a *Apple) AppID() string { return a.bundleID }
 
 // Lookup은 거래 ID로 묻는다. 애플은 종류와 상관없이 같은 주소라 ref.Kind는 쓰지 않는다.
 func (a *Apple) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
@@ -87,6 +88,7 @@ func fromApple(t *api.JWSTransaction) Purchase {
 	return Purchase{
 		Route:                 RouteApple,
 		State:                 state,
+		Acknowledged:          true,
 		TransactionID:         t.TransactionID,
 		OriginalTransactionID: t.OriginalTransactionId,
 		BundleID:              t.BundleID,
