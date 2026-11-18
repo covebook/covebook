@@ -277,24 +277,30 @@ func TestIAPSubscriptionAndPlus(t *testing.T) {
 func TestIAPNotificationOnce(t *testing.T) {
 	ctx, db := iapTestDB(t)
 	id := iapTestID(t, "note")
-	first, err := iapRecordNotification(ctx, db, iap.RouteApple, id, "DID_RENEW", `{"a":1}`)
+	apple := iap.Notice{Route: iap.RouteApple, ID: id, Type: "DID_RENEW", Target: &iap.Ref{Kind: iap.KindSubscription, ID: "300"}, OriginalID: "100"}
+	first, err := iapRecordNotification(ctx, db, apple, `{"a":1}`)
 	if err != nil || !first {
 		t.Fatal(first, err)
 	}
-	if again, err := iapRecordNotification(ctx, db, iap.RouteApple, id, "DID_RENEW", `{"a":1}`); err != nil || again {
+	if again, err := iapRecordNotification(ctx, db, apple, `{"a":1}`); err != nil || again {
 		t.Fatal("같은 알림이 두 번 들어감", err)
 	}
-	// 다른 스토어의 같은 ID는 다른 알림이다
-	if ok, err := iapRecordNotification(ctx, db, iap.RouteGoogle, id, "2", `{}`); err != nil || !ok {
+	// 다른 스토어의 같은 ID는 다른 알림이다. 다시 물어볼 대상이 없는 알림도 들어간다
+	if ok, err := iapRecordNotification(ctx, db, iap.Notice{Route: iap.RouteGoogle, ID: id, Type: "test"}, `{}`); err != nil || !ok {
 		t.Fatal(ok, err)
+	}
+	var kind, target, original string
+	if err := db.QueryRow(ctx, "SELECT target_kind,target_id,original_id FROM iap_notifications WHERE route='apple' AND notification_id=$1", id).Scan(&kind, &target, &original); err != nil || kind != "subscription" || target != "300" || original != "100" {
+		t.Fatal(kind, target, original, err)
 	}
 	if err := iapFinishNotification(ctx, db, iap.RouteApple, id, "processed", ""); err != nil {
 		t.Fatal(err)
 	}
 	var result string
 	var errText *string
-	if err := db.QueryRow(ctx, "SELECT result,error FROM iap_notifications WHERE route='apple' AND notification_id=$1", id).Scan(&result, &errText); err != nil || result != "processed" || errText != nil {
-		t.Fatal(result, errText, err)
+	var attempts int
+	if err := db.QueryRow(ctx, "SELECT result,error,attempts FROM iap_notifications WHERE route='apple' AND notification_id=$1", id).Scan(&result, &errText, &attempts); err != nil || result != "processed" || errText != nil || attempts != 1 {
+		t.Fatal(result, errText, attempts, err)
 	}
 }
 
