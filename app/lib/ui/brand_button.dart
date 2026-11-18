@@ -7,7 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'kit.dart';
 import 'theme.dart';
 
-/// 로그인 단추: 세 회사 모두 같은 틀(높이 54, 모서리 Shape.button, 가운데 로고+글자)에 각 회사 규칙의 색만 다르다.
+/// 로그인 단추: 세 회사 모두 같은 틀(높이 48(Btn m과 같다), 모서리 Shape.button, 가운데 로고+글자)에 각 회사 규칙의 색만 다르다.
 /// 카카오: 노랑 #FEE500·검은 말풍선·글자 85% 검정. Apple: 검정 바탕·흰 로고(HIG 사용자 정의 단추). Google: 옅은 회색 바탕 #F2F2F2·선 없음·네 색 G(브랜딩 지침의 Neutral 모양, 2026-11-17 사용자 시안)
 /// 연결된 계정 줄의 회사 표시(계정 및 동기화 시안, 2026-11-17): Google은 G, 카카오는 노란 원 안 말풍선, Apple은 검은 사과
 Widget brandLogo(String provider, {double size = 36}) => switch (provider) {
@@ -31,8 +31,8 @@ class BrandButton extends StatefulWidget {
       : this(key: key, label: 'Apple로 계속하기', bg: const Color(0xFF000000), fg: const Color(0xFFFFFFFF), logo: const Icon(Icons.apple, size: 22, color: Color(0xFFFFFFFF)), border: null, onPress: onPress);
 
   BrandButton.google({Key? key, required VoidCallback? onPress})
-      // 흰 단추(2026-11-18 사용자: 로그인 아래쪽은 회색 기운 바탕, Google은 흰색 유지). 옅은 테두리로 바탕과 가른다
-      : this(key: key, label: 'Google로 계속하기', bg: const Color(0xFFFFFFFF), fg: const Color(0xFF1F1F1F), border: AppColors.line, logo: SvgPicture.string(_googleSvg, width: 20, height: 20), onPress: onPress);
+      // 흰 단추(2026-11-18 사용자: 로그인 아래쪽은 회색 기운 바탕, Google은 흰색 유지, 테두리는 없앤다)
+      : this(key: key, label: 'Google로 계속하기', bg: const Color(0xFFFFFFFF), fg: const Color(0xFF1F1F1F), border: null, logo: SvgPicture.string(_googleSvg, width: 20, height: 20), onPress: onPress);
 
   final String label;
   final Color bg, fg;
@@ -73,7 +73,7 @@ class _BrandButtonState extends State<BrandButton> {
         child: Opacity(
           opacity: off ? 0.45 : 1,
           child: Container(
-            constraints: const BoxConstraints(minHeight: 54),
+            constraints: BoxConstraints(minHeight: Btn.heightOf('m')),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
               color: bg,

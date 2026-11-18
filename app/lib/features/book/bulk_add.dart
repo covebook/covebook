@@ -163,10 +163,7 @@ class _Progress extends StatelessWidget {
                       const SizedBox(height: Space.s),
                       Text('$total권 중 $n권', style: AppType.sub.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                       const SizedBox(height: Space.l),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(value: total == 0 ? null : n / total, minHeight: 6, color: AppColors.accent, backgroundColor: AppColors.surface),
-                      ),
+                      ProgressBar(value: total == 0 ? null : n / total),
                       if (total > 3)
                         Padding(
                           padding: const EdgeInsets.only(top: Space.m),

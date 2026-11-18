@@ -234,10 +234,10 @@ String dayTitle(String day) {
   return (noon: h < 12 ? '오전' : '오후', text: '${h % 12 == 0 ? 12 : h % 12}:${_p2(t.minute)}');
 }
 
-/// '오후 9:10 - 10:00'(오전·오후가 같으면 한 번만). 이음표는 짧은 '-'(2026-11-18 사용자: 긴 줄 '–' 대신)
+/// '오후 9:10-10:00'(오전·오후가 같으면 한 번만). 이음표는 띄우지 않은 짧은 '-'(2026-11-18 사용자 시안: 긴 줄 '–' 대신)
 String timeRange(String startIso, String endIso) {
   final a = _clock(startIso), b = _clock(endIso);
-  return a.noon == b.noon ? '${a.noon} ${a.text} - ${b.text}' : '${a.noon} ${a.text} - ${b.noon} ${b.text}';
+  return a.noon == b.noon ? '${a.noon} ${a.text}-${b.text}' : '${a.noon} ${a.text}-${b.noon} ${b.text}';
 }
 
 /// 시작~끝 사이가 실제 독서 시간보다 1분 넘게 길면(일시정지가 있었으면)

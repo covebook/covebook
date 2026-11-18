@@ -176,10 +176,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text(_searching ? '${_lines.length}권 중 $_searched권 찾았어요' : '$waiting권은 찾지 않았어요', style: AppType.sub),
                 const SizedBox(height: Space.s),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(value: _lines.isEmpty ? 0 : _searched / _lines.length, minHeight: 6, color: AppColors.accent, backgroundColor: AppColors.surface),
-                ),
+                ProgressBar(value: _lines.isEmpty ? 0 : _searched / _lines.length),
                 if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 's', onPress: _searchAll)),
               ]),
             ),

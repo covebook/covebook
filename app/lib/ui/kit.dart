@@ -35,6 +35,38 @@ abstract final class Space {
 /// 정보 사이 구분: 가운데 점(·) 대신 세로줄(2026-11-18 사용자 '가운데 점 전부 빼고 | 선으로'). 글로 이어 붙일 때 쓴다
 const metaSep = ' | ';
 
+/// 진행 막대(쪽수 · 찾기 · 추가 진행): 두께 10, 끝 둥글게. value가 null이면 움직이는 막대
+/// (2026-11-18 사용자 '얇다, 높이 조금 늘리고 다른 곳도': 내 기록 8, 목록 가져오기·여러 권 추가 6이었다)
+class ProgressBar extends StatelessWidget {
+  const ProgressBar({super.key, required this.value, this.soft = false});
+  final double? value;
+
+  /// 옅은 갈색(대표색을 흰 바탕에 65%, 내 기록 쪽수 시안)
+  final bool soft;
+  static const height = 10.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = soft ? AppColors.accent.withValues(alpha: 0.65) : AppColors.accent;
+    final v = value;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(height / 2),
+      child: v == null
+          ? LinearProgressIndicator(minHeight: height, color: fill, backgroundColor: AppColors.line)
+          : SizedBox(
+              height: height,
+              child: Stack(children: [
+                const Positioned.fill(child: ColoredBox(color: AppColors.line)),
+                FractionallySizedBox(
+                  widthFactor: v.clamp(0.0, 1.0),
+                  child: Container(decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.circular(height / 2))),
+                ),
+              ]),
+            ),
+    );
+  }
+}
+
 /// 줄(Row) 안에서 두 글자·단추를 가르는 옅은 세로줄(가운데 점 대신, 2026-11-18)
 class MetaBar extends StatelessWidget {
   const MetaBar({super.key, this.height = 12});
@@ -436,7 +468,8 @@ class H2 extends StatelessWidget {
       );
 }
 
-/// 버튼: 주요(갈색 채움·흰 글자, 화면에 하나), 보조·삭제(흰 바탕 + 회색 선), 글자만. 크기 l 60·m 54·s 44
+/// 버튼: 주요(갈색 채움·흰 글자, 화면에 하나), 보조·삭제(흰 바탕 + 회색 선), 글자만. 크기 l 52·m 48·s 40
+/// (2026-11-18 사용자 '버튼 세로가 너무 높다, 시안같이': 시안 단추는 화면 폭 393 기준 45~50. 예전 l 60·m 54·s 44. 누르는 자리는 늘 48 이상)
 class Btn extends StatefulWidget {
   const Btn({super.key, required this.label, required this.onPress, this.kind = 'primary', this.size = 'm', this.disabled = false, this.busy = false, this.icon});
   final String label;
@@ -446,6 +479,9 @@ class Btn extends StatefulWidget {
   final bool disabled;
   final bool busy;
   final Widget? icon;
+
+  /// 크기별 겉높이(누르는 자리는 위아래를 더해 48 이상)
+  static double heightOf(String size) => switch (size) { 'l' => 52.0, 's' => 40.0, _ => 48.0 };
 
   @override
   State<Btn> createState() => _BtnState();
@@ -466,7 +502,7 @@ class _BtnState extends State<Btn> {
         : outlined
             ? (pressed ? AppColors.input : AppColors.bg)
             : (pressed ? AppColors.line : Colors.transparent);
-    final h = switch (widget.size) { 'l' => 60.0, 's' => 44.0, _ => 54.0 };
+    final h = Btn.heightOf(widget.size);
     final small = widget.size == 's';
     // 화면 읽기: 이름을 한 번만 읽는 버튼 하나(안쪽 글자까지 읽혀 '감상 저장 / 감상 저장'이었다, 2026-11-16 QA 영숙 F9)
     return Semantics(
@@ -482,14 +518,14 @@ class _BtnState extends State<Btn> {
         onTapCancel: off ? null : () => setState(() => _down = false),
         onTapUp: off ? null : (_) => setState(() => _down = false),
         onTap: off ? null : widget.onPress,
-        // 작은 버튼(44)도 누르는 자리는 48: 위아래 빈 자리까지 누른다(겉모양은 그대로, F12)
+        // 작은 버튼(40)도 누르는 자리는 48: 위아래 빈 자리까지 누른다(겉모양은 그대로, F12)
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: math.max(0, Space.hit - h) / 2),
           child: Opacity(
             opacity: !primary && widget.disabled ? 0.45 : 1,
             child: Container(
               constraints: BoxConstraints(minHeight: h),
-              padding: EdgeInsets.symmetric(horizontal: small ? 16 : 20, vertical: small ? 10 : 14),
+              padding: EdgeInsets.symmetric(horizontal: small ? 16 : 20, vertical: small ? 8 : 12),
               decoration: BoxDecoration(
                 color: fill,
                 borderRadius: BorderRadius.circular(Shape.button),
@@ -900,6 +936,9 @@ class FilterButton extends StatelessWidget {
   final bool active;
   final bool plain;
   final Widget? icon;
+
+  /// 크기별 겉높이(누르는 자리는 위아래를 더해 48 이상)
+  static double heightOf(String size) => switch (size) { 'l' => 52.0, 's' => 40.0, _ => 48.0 };
 
   @override
   Widget build(BuildContext context) {

@@ -6,7 +6,7 @@
 
 | 위젯 | 위치 | 하는 일 | 변형 | 상태 |
 |---|---|---|---|---|
-| `Btn` | lib/ui/kit.dart:332 | 버튼 | `kind`: primary(갈색 채움·흰 글자, 화면에 하나) · secondary(흰 바탕+회색 선) · danger(흰 바탕+선, 빨간 글자) · ghost(바탕·선 없이 글자만). `size`: l 60 · m 54 · s 44. `icon` 앞 아이콘 | `disabled`(회색), `busy`(돌림 표시, 누르기 막음) |
+| `Btn` | lib/ui/kit.dart:332 | 버튼 | `kind`: primary(갈색 채움·흰 글자, 화면에 하나) · secondary(흰 바탕+회색 선) · danger(흰 바탕+선, 빨간 글자) · ghost(바탕·선 없이 글자만). `size`: l 52 · m 48 · s 40(2026-11-18 시안에 맞춰 낮춤, 누르는 자리는 48 이상). `icon` 앞 아이콘 | `disabled`(회색), `busy`(돌림 표시, 누르기 막음) |
 | `IconBtn` | kit.dart | 아이콘 단추(누르는 자리 48) | `circle`(둥근 바탕) | `disabled` |
 | `TextLink` | kit.dart:1551 | 글자 버튼(밑줄 없음) | 기본 굵은 갈색 = 이어서 할 일, `soft` 회색 = 조심스러운 일, `start` 왼쪽 정렬 | `disabled` |
 | `Pressable` | kit.dart:57 | 바탕 없는 누를 것(글자·아이콘·목록 줄) | `pressedOpacity`(기본 0.55) | `disabled` |
@@ -100,7 +100,7 @@
 - 주요 버튼(갈색 채움)은 화면에 하나.
 - 아이콘·글자 버튼의 눌림은 투명도 0.55로 통일한다.
 - 누르는 자리는 48dp 이상(`Space.hit`, 2026-11-16 QA).
-- **글자 크기·여백·글씨체·단추 크기는 화면에서 직접 쓰지 않는다**(2026-11-18 사용자: 항목에 따라 다른 곳과 통일해서 관리). 글자는 `AppType` 역할(title 26 · pageTitle 23 · heading 21 · section 19 · row 18 · body 17 · sub/label/labelStrong/bodySmall/buttonSmall 16 · caption 15 · micro 13, 숫자는 display 48 · timer 64 · clock 36 · figure 24, 명조는 quote · reading), 간격은 `Space`(구역 사이 `block` 48 · 촘촘한 줄 `dense` 32), 둥글기는 `Shape`(카드 12), 단추는 `Btn` 크기 l 60 · m 54 · s 44. 시안에 맞추려면 그 역할 값을 바꾸거나 공통 부품을 고친다. 예외는 그린 표지·공유 그림·새긴 해·자동 맞춤 제목뿐.
+- **글자 크기·여백·글씨체·단추 크기는 화면에서 직접 쓰지 않는다**(2026-11-18 사용자: 항목에 따라 다른 곳과 통일해서 관리). 글자는 `AppType` 역할(title 26 · pageTitle 23 · heading 21 · section 19 · row 18 · body 17 · sub/label/labelStrong/bodySmall/buttonSmall 16 · caption 15 · micro 13, 숫자는 display 48 · timer 64 · clock 36 · figure 24, 명조는 quote · reading), 간격은 `Space`(구역 사이 `block` 48 · 촘촘한 줄 `dense` 32), 둥글기는 `Shape`(카드 12), 단추는 `Btn` 크기 l 52 · m 48 · s 40. 시안에 맞추려면 그 역할 값을 바꾸거나 공통 부품을 고친다. 예외는 그린 표지·공유 그림·새긴 해·자동 맞춤 제목뿐.
 
 ## 로그인 단추 (`_BrandButton`, features/settings/backup_screen.dart)
 

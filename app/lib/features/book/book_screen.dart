@@ -110,6 +110,12 @@ class _BookScreenState extends State<BookScreen> {
 
   String get id => widget.id;
 
+  /// 책 공유: 비어 있는 항목을 눌러 돌아오면 그것을 적는 탭으로(평가 · 내 기록)
+  Future<void> _share() async {
+    final tab = await openBookShare(context, id);
+    if (mounted && tab != null) _chooseTab(tab);
+  }
+
   /// 탭을 바꾸면 그 내용 첫머리가 보이게 넘긴다(2026-11-16 QA 영숙 F5: 큰 글씨·작은 화면에서는 큰 표지가 화면을 채워 '평가'를 눌러도
   /// 바뀐 게 안 보였다). 첫머리가 이미 화면 위쪽에 보이면 그대로 둔다
   void _chooseTab(String v) {
@@ -164,7 +170,7 @@ class _BookScreenState extends State<BookScreen> {
       builder: (ctx) => ListGroup(children: [
         ListItem(label: '이미지로 공유', sub: '한줄평, 별점을 넣은 카드', onPress: () {
           Navigator.pop(ctx);
-          openBookShare(context, id);
+          _share();
         }),
         ListItem(label: '책 정보 수정', onPress: () {
           Navigator.pop(ctx);
@@ -457,34 +463,16 @@ class _BookScreenState extends State<BookScreen> {
               ),
             ),
           ]),
-          // 쪽수 진행 막대: 8 두께, 끝은 둥글게(전체 쪽수를 알 때만)
-          if (pc != null && pc > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.s),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: SizedBox(
-                  height: 8,
-                  child: Stack(children: [
-                    Container(color: AppColors.line),
-                    FractionallySizedBox(
-                      widthFactor: ((cur / pc).clamp(0.0, 1.0)).toDouble(),
-                      // 시안처럼 옅은 갈색(대표색을 흰 바탕에 65%)
-                      child: Container(decoration: BoxDecoration(color: AppColors.accent.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(4))),
-                    ),
-                  ]),
-                ),
-              ),
-            ),
+          // 쪽수 진행 막대와 오른쪽 %(2026-11-18 사용자 시안: '% 바 옆에'). 전체 쪽수를 모르면 막대 대신 한 줄 안내
           Padding(
             padding: const EdgeInsets.only(top: Space.s),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(pct != null ? '$pct% 읽음' : '전체 쪽수 미입력', style: AppType.caption),
-              const SizedBox(width: Space.m),
-              Expanded(
-                child: WordText(['총 ${formatDuration(readMs)}', if (sessions > 0) '$sessions회', if (done > 0) '완독 $done회'].join('   '), textAlign: TextAlign.right, style: AppType.caption),
-              ),
-            ]),
+            child: pc != null && pc > 0
+                ? Row(children: [
+                    Expanded(child: ProgressBar(value: (cur / pc).toDouble(), soft: true)),
+                    const SizedBox(width: Space.m),
+                    Text('$pct%', style: AppType.caption.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                  ])
+                : Text('전체 쪽수 미입력', style: AppType.caption),
           ),
           if (_pageEdit)
             Container(
@@ -514,6 +502,12 @@ class _BookScreenState extends State<BookScreen> {
           // 최근 독서 기록: 날짜 · 시간대 · 걸린 시간(누르면 고치기), 전체는 통계에서
           const SizedBox(height: Space.block),
           SectionHead(title: '독서 기록', link: recent.isNotEmpty ? '전체 보기' : null, chevron: true, linkLabel: '독서 기록 전체 보기', onLink: openAllSessions),
+          // 횟수·총 시간은 '독서 기록' 아래 한 줄(2026-11-18 사용자 시안: '9회, 총 41분')
+          if (sessions > 0 || readMs > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: Space.xs),
+              child: Text([if (sessions > 0) '$sessions회', '총 ${formatDuration(readMs)}', if (done > 0) '완독 $done회'].join(', '), style: AppType.sub),
+            ),
           if (recent.isEmpty)
             Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('타이머로 읽으면 여기에 쌓여요', style: AppType.sub))
           else
@@ -599,7 +593,7 @@ class _BookScreenState extends State<BookScreen> {
     return Screen(
       compact: true,
       right: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconBtn(label: '책 공유', onPress: () => openBookShare(context, id), child: const LucideIcon('Share')),
+        IconBtn(label: '책 공유', onPress: _share, child: const LucideIcon('Share')),
         IconBtn(label: '더 보기', onPress: _menu, child: const LucideIcon('MoreHorizontal')),
       ]),
       // 두 단추 중 하나가 두 줄이 되면 높이를 맞춘다

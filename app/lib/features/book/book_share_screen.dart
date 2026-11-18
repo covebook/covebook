@@ -17,6 +17,7 @@ import '../../ui/alert.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import '../reading/start_book.dart' show startReadingBook;
 import '../share/share_scene.dart';
 import 'book_share.dart';
 
@@ -24,8 +25,9 @@ const _exportW = 1080;
 const _wall = Color(0xFFF3F2F1); // 시안 벽 평균색(재료가 오기 전 빈 카드)
 const _partLabel = {'note': '한줄평', 'rating': '별점', 'time': '독서 시간', 'period': '읽은 기간'};
 
-Future<void> openBookShare(BuildContext context, String id) =>
-    Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book/share'), builder: (_) => BookShareScreen(id: id)));
+/// 책 공유 화면. 비어 있는 항목을 누르면 그것을 적는 책 정보 탭 이름('rate' · 'mine')을 돌려주고 닫힌다
+Future<String?> openBookShare(BuildContext context, String id) =>
+    Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<String>(settings: const RouteSettings(name: '/book/share'), builder: (_) => BookShareScreen(id: id)));
 
 class BookShareScreen extends StatefulWidget {
   const BookShareScreen({super.key, required this.id});
@@ -96,8 +98,24 @@ class _BookShareScreenState extends State<BookShareScreen> {
   }
 
 
-  /// 비어 있는 칩: 한 줄 감상은 입력 칸으로(키보드까지), 별점은 별 줄로 내려 주고, 독서 시간·읽은 기간은 생기는 법 안내를 진하게
+  /// 비어 있는 항목을 누르면 바로 그것을 채우는 곳으로(2026-11-18 사용자 '없는 애 누르면 바로 추가 페이지로'):
+  /// 한줄평·별점은 책 정보 › 평가, 읽은 기간은 내 기록(돌려준 탭으로 책 정보가 바꾼다), 독서 시간은 이 책으로 읽기 시작
   void _empty(String k) {
+    switch (k) {
+      case 'note' || 'rating':
+        Navigator.of(context).pop('rate');
+        return;
+      case 'period':
+        Navigator.of(context).pop('mine');
+        return;
+      case 'time':
+        startReadingBook(context, widget.id);
+        return;
+    }
+    _hintFor(k);
+  }
+
+  void _hintFor(String k) {
     _hintTimer?.cancel();
     setState(() => _hint = k == 'note' || k == 'rating' ? 'eval' : k);
     _hintTimer = Timer(const Duration(milliseconds: 2400), () {
@@ -191,9 +209,9 @@ class _BookShareScreenState extends State<BookShareScreen> {
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
     // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게)
     final missing = {
-      if (!has['note']! || !has['rating']!) 'eval': '한줄평, 별점은 책 정보 › 평가에서 적으면 생겨요',
-      if (!has['time']!) 'time': '독서 시간은 타이머로 읽으면 생겨요',
-      if (!has['period']!) 'period': '읽은 기간은 시작일, 완독일을 적으면 생겨요',
+      if (!has['note']! || !has['rating']!) 'eval': '비어 있는 한줄평, 별점을 누르면 평가에서 적을 수 있어요',
+      if (!has['time']!) 'time': '독서 시간을 누르면 이 책으로 타이머를 켜요',
+      if (!has['period']!) 'period': '읽은 기간을 누르면 내 기록에서 날짜를 적어요',
     };
     return Screen(
       title: '책 공유',
