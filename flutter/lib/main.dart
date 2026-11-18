@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
 
+import 'services/frame_log.dart';
+
 import 'domain/reference_home.dart';
 import 'scene_config/spine_look.dart';
 import 'store/skin_store.dart';
@@ -38,6 +40,7 @@ Future<void> main() async {
   // 시작 화면부터 그린다: 아래 준비가 몇 초 걸려 그동안 흰 화면만 보였다(지난 책장 사진이 있으면 그 사진)
   final snap = await usableSnapshot(homeSnapshotFile);
   startedWithSnapshot = snap != null;
+  startFrameLog();
   runApp(StartApp(snapshot: snap));
   // 환경음 배경 재생(잠금 화면·알림): 플레이어를 만들기 전에 준비해 둔다(기다리지 않는다)
   initAmbientBackground().catchError((Object e) {
