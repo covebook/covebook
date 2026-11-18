@@ -32,6 +32,46 @@ abstract final class Space {
   static const hit = 48.0;
 }
 
+/// 정보 사이 구분: 가운데 점(·) 대신 세로줄(2026-11-18 사용자 '가운데 점 전부 빼고 | 선으로'). 글로 이어 붙일 때 쓴다
+const metaSep = ' | ';
+
+/// 줄(Row) 안에서 두 글자·단추를 가르는 옅은 세로줄(가운데 점 대신, 2026-11-18)
+class MetaBar extends StatelessWidget {
+  const MetaBar({super.key, this.height = 12});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+        child: Padding(padding: const EdgeInsets.symmetric(horizontal: Space.s), child: SizedBox(width: 1, height: height, child: const ColoredBox(color: AppColors.metaBar))),
+      );
+}
+
+/// [metaSep]으로 이은 정보 줄: 세로줄만 한 단계 옅게 그리고, 화면 읽기는 쉼표로 읽는다('세로 막대'라고 읽지 않게)
+class MetaText extends StatelessWidget {
+  const MetaText(this.text, {super.key, this.style, this.maxLines, this.overflow, this.textAlign, this.softWrap});
+  final String text;
+  final TextStyle? style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final TextAlign? textAlign;
+  final bool? softWrap;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = text.split(metaSep);
+    if (parts.length == 1) return WordText(text, style: style, maxLines: maxLines, overflow: overflow, textAlign: textAlign, softWrap: softWrap);
+    final base = DefaultTextStyle.of(context).style.merge(style);
+    const bar = TextStyle(color: AppColors.metaBar, fontFamily: AppFonts.ui);
+    final spans = <InlineSpan>[];
+    for (final (i, p) in parts.indexed) {
+      if (i > 0) spans.add(TextSpan(text: ' | ', style: bar));
+      spans.add(TextSpan(text: keepAll(p)));
+    }
+    return Text.rich(TextSpan(style: base, children: spans),
+        maxLines: maxLines, overflow: overflow, textAlign: textAlign, softWrap: softWrap, semanticsLabel: parts.join(', '));
+  }
+}
+
 /// 낱말 단위로 줄을 바꾸는 글자(keepAll: 한글이 '읽기 시 / 작'처럼 낱말 가운데서 끊기지 않게, 2026-11-16 QA 영숙 F6·현우 F10).
 /// 그리는 글자에만 이음표를 넣고, 화면 읽기와 글자 찾기(data)는 원문 그대로다
 class WordText extends Text {
@@ -766,7 +806,7 @@ class ListItem extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         WordText(label, style: AppType.row.copyWith(color: danger ? AppColors.danger : null)),
-                        if (sub != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(sub!, style: AppType.sub)),
+                        if (sub != null) Padding(padding: const EdgeInsets.only(top: 4), child: MetaText(sub!, style: AppType.sub)),
                       ],
                     ),
                   ),
@@ -777,7 +817,7 @@ class ListItem extends StatelessWidget {
                   constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.55),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: ExcludeSemantics(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub)),
+                    child: ExcludeSemantics(child: MetaText(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub)),
                   ),
                 ),
               ?right,

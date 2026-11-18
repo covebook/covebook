@@ -197,7 +197,7 @@ void drawMarkScene(Canvas canvas, double width, MarkStyle style, ui.Image plate,
   canvas.drawParagraph(q.p, Offset(spec.x - 3, top));
   final bottom = top + blockH;
   if (style == MarkStyle.page) {
-    final attr = [input.title, ?input.author].where((s) => s.isNotEmpty).join(' · ');
+    final attr = [input.title, ?input.author].where((s) => s.isNotEmpty).join(' | ');
     final a = _para(attr, family: _fonts.ui, size: 36, color: const Color(0xFF423E3B), width: 640, emboss: true, maxLines: 2);
     canvas.drawParagraph(a, Offset(192, math.min(bottom + 62, 1420)));
     // 맨 아래 '책장 한켠'(넓은 자간) + 양옆 줄, 오른쪽 쪽수

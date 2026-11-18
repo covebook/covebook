@@ -282,7 +282,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
             ShowWhenOpened(
               enabled: custom,
               child: Choice(
-                label: custom ? '직접 정하기 · ${minutesLabel(goal)}' : '직접 정하기',
+                label: custom ? '직접 정하기 | ${minutesLabel(goal)}' : '직접 정하기',
                 selected: custom,
                 onPress: () async {
                   Navigator.pop(ctx);
@@ -612,7 +612,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                   Expanded(
                     child: _Side(
                       icon: _soundOff ? 'VolumeX' : 'AudioLines',
-                      text: _soundOff ? '${sceneName(scene)} · 꺼짐' : sceneName(scene),
+                      text: _soundOff ? '${sceneName(scene)} | 꺼짐' : sceneName(scene),
                       label: '분위기 고르기, ${sceneName(scene)}, ${_soundOff ? '소리 꺼짐' : _settings.muted ? '음소거' : '소리 ${(_settings.volume * 100).round()}%'}',
                       onPress: _moodSheet,
                     ),

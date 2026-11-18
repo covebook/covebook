@@ -207,7 +207,7 @@ class _FinishScreenState extends State<FinishScreen> {
                 child: Text(pending.durationMs < 60000 ? formatDurationPrecise(pending.durationMs) : formatDuration(pending.durationMs),
                     style: AppType.clock),
               ),
-              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text('${hm(pending.startedAt)} ~ ${hm(pending.endedAt)} · 일시정지 시간 제외', style: AppType.caption)),
+              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text('${hm(pending.startedAt)} ~ ${hm(pending.endedAt)} | 일시정지 시간 제외', style: AppType.caption)),
             ]),
           ),
         ),

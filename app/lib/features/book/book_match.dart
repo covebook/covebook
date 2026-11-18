@@ -58,5 +58,5 @@ BookCandidate? matchCandidate(ImportRow row, List<BookCandidate> items) {
 String? publisherLine(BookCandidate c) {
   final year = RegExp(r'\d{4}').firstMatch(c.publishedAt ?? '')?.group(0);
   final parts = [if (c.publisher != null && c.publisher!.trim().isNotEmpty) c.publisher!.trim(), ?year];
-  return parts.isEmpty ? null : parts.join(' · ');
+  return parts.isEmpty ? null : parts.join(' | ');
 }

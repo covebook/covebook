@@ -54,7 +54,7 @@ class ImportRow {
   String get query => isbn ?? [title, author].where((s) => s.isNotEmpty).join(' ');
 
   /// 목록에 보일 이름
-  String get label => title.isNotEmpty ? (author.isNotEmpty ? '$title · $author' : title) : (isbn ?? '');
+  String get label => title.isNotEmpty ? (author.isNotEmpty ? '$title | $author' : title) : (isbn ?? '');
 }
 
 /// 읽은 결과: 줄들 + 찾은 열(머리 이름, 없으면 null) + 실패 사유(encoding · empty · format)

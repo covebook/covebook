@@ -19,5 +19,5 @@ String markLabel(String text, num? page, {int max = 24}) {
   final t = text.trim().replaceAll(_ws, ' ');
   final chars = t.runes.toList();
   final head = t.isEmpty ? '사진 갈피' : '“${chars.length > max ? '${String.fromCharCodes(chars.take(max)).trimRight()}…' : t}”';
-  return page != null && page != 0 ? '$head · ${pageLabel(page)}' : head;
+  return page != null && page != 0 ? '$head | ${pageLabel(page)}' : head;
 }

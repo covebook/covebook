@@ -521,7 +521,7 @@ class _EditBookmarkState extends State<_EditBookmark> {
   Widget build(BuildContext context) {
     final lib = LibraryModel.instance.lib;
     final ed = lib.editions[lib.books[widget.m.myBookId]?.editionId ?? ''];
-    final bookLine = ed == null ? '' : [ed.title, if (ed.authors.isNotEmpty) ed.authors.join(', ')].join(' · ');
+    final bookLine = ed == null ? '' : [ed.title, if (ed.authors.isNotEmpty) ed.authors.join(', ')].join(' | ');
     // 글이 있던 갈피면 사진은 원본으로 곁들인 문장 갈피(QA F11). 치는 동안 제목·칸이 바뀌지 않게 처음 글로 정한다
     final isPhoto = isPhotoMark(widget.m.text, _photo.uri);
     final width = MediaQuery.sizeOf(context).width;

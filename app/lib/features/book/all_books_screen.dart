@@ -190,7 +190,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     // 같은 판을 두 권 넣었으면(별도 소장본) 몇 번째 소장본인지(넣은 차례)
     final copyOf = copyLabels(lib);
 
-    String subOf(AllBooksRow r) => [?statusLabel[lib.books[r.book.id]?.status], ?copyOf[r.book.id], if (r.onShelf) '책장'].join(' · ');
+    String subOf(AllBooksRow r) => [?statusLabel[lib.books[r.book.id]?.status], ?copyOf[r.book.id], if (r.onShelf) '책장'].join(' | ');
 
     final header = Padding(
       padding: EdgeInsets.only(bottom: rows.isEmpty ? 0 : (_grid ? Space.m : Space.xs)),
@@ -252,7 +252,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             Padding(
               padding: const EdgeInsets.only(top: Space.xs),
               child: Row(children: [
-                Expanded(child: Text(conditions.join(' · '), style: AppType.sub.copyWith(color: AppColors.ink), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                Expanded(child: MetaText(conditions.join(' | '), style: AppType.sub.copyWith(color: AppColors.ink), maxLines: 2, overflow: TextOverflow.ellipsis)),
                 Transform.translate(
                   offset: const Offset(8, 0),
                   child: TextLink(label: '조건 해제', soft: true, onPress: () => setState(() {
@@ -314,7 +314,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     book: r.book,
                     width: cellW,
                     sub: r.book.author ?? '',
-                    tail: [?copyOf[r.book.id], if (r.onShelf) '책장'].join(' · '),
+                    tail: [?copyOf[r.book.id], if (r.onShelf) '책장'].join(' | '),
                     label: [r.book.title, ?r.book.author, subOf(r)].where((t) => t.isNotEmpty).join(', '),
                     state: !_selecting
                         ? _CellState.normal
@@ -349,7 +349,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
               lib: lib,
               book: r.book,
               // 2026-11-17 사용자 시안: 저자 · 상태(읽기 전은 쓰지 않는다)만. 소장본 구분은 남긴다
-              sub: [?r.book.author, if (b != null && b.status != ReadStatus.want) statusLabel[b.status]!, ?copyOf[r.book.id]].join(' · '),
+              sub: [?r.book.author, if (b != null && b.status != ReadStatus.want) statusLabel[b.status]!, ?copyOf[r.book.id]].join(' | '),
               note: b?.note,
               memos: memos[r.book.id] ?? const [],
               onPress: () => openBook(context, r.book.id),
@@ -465,7 +465,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             const SizedBox(height: Space.m),
             ListItem(
               label: '숨긴 책 보기',
-              sub: '$hiddenCount권 · 연도 책장에 남아 있는 책',
+              sub: '$hiddenCount권 | 연도 책장에 남아 있는 책',
               chevron: true,
               onPress: () {
                 Navigator.pop(ctx);
@@ -497,7 +497,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     final yearsOf = await archivedYears(keptIds);
     if (!mounted) return;
     final years = {for (final l in yearsOf.values) ...l}.toList()..sort();
-    final yearText = '${years.join('·')}년 책장';
+    final yearText = '${years.join(', ')}년 책장';
     final note = deleteNote(deleteSummary(lib, removed));
     final ok = await showSheet<bool>(
       context,
@@ -537,7 +537,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     await showSheet<void>(
       context,
       title: '숨긴 책',
-      description: '연도 책장에 남아 있어 지우는 대신 숨긴 책이에요. 다시 보이게 하면 갈피·기록과 함께 돌아와요.',
+      description: '연도 책장에 남아 있어 지우는 대신 숨긴 책이에요. 다시 보이게 하면 갈피, 기록과 함께 돌아와요.',
       scroll: true,
       maxHeight: 0.8,
       builder: (ctx) => ListenableBuilder(
@@ -557,7 +557,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(lib.editions[b.editionId]?.title ?? '제목 없음', style: AppType.body, maxLines: 1, overflow: TextOverflow.ellipsis),
                       Text(
-                        [?lib.editions[b.editionId]?.authors.firstOrNull, if (years[b.id]?.isNotEmpty ?? false) '${years[b.id]!.join('·')}년 책장'].join(' · '),
+                        [?lib.editions[b.editionId]?.authors.firstOrNull, if (years[b.id]?.isNotEmpty ?? false) '${years[b.id]!.join(', ')}년 책장'].join(' | '),
                         style: AppType.caption,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -666,7 +666,7 @@ class _GridCell extends StatelessWidget {
                       if (tail.isNotEmpty)
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: box.maxWidth),
-                          child: Text('${sub.isNotEmpty ? ' · ' : ''}$tail', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: AppType.micro),
+                          child: MetaText('${sub.isNotEmpty ? ' | ' : ''}$tail', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: AppType.micro),
                         ),
                     ]),
                   ),
@@ -869,7 +869,7 @@ Future<void> _showMemos(BuildContext iconContext, String bookId, List<BookMemo> 
                                 padding: const EdgeInsets.symmetric(vertical: Space.s),
                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                   Text(m.text, maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink)),
-                                  Padding(padding: const EdgeInsets.only(top: 3), child: Text('${dateShort(m.at)} · ${m.bookmark ? '갈피' : '독서 기록'}', style: AppType.caption)),
+                                  Padding(padding: const EdgeInsets.only(top: 3), child: MetaText('${dateShort(m.at)} | ${m.bookmark ? '갈피' : '독서 기록'}', style: AppType.caption)),
                                 ]),
                               ),
                             ),
@@ -879,7 +879,7 @@ Future<void> _showMemos(BuildContext iconContext, String bookId, List<BookMemo> 
                             onPress: () => open(() => openBook(iconContext, bookId)),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: Space.s),
-                              child: Text('그 밖에 $rest개 · 책 정보에서 모두 보기', style: AppType.caption),
+                              child: Text('그 밖에 $rest개 | 책 정보에서 모두 보기', style: AppType.caption),
                             ),
                           ),
                       ]),

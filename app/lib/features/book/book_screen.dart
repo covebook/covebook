@@ -140,7 +140,7 @@ class _BookScreenState extends State<BookScreen> {
   void _chooseStatus(MyBook b, Round? last, ReadStatus s) {
     if (s == b.status) return;
     if ((s == ReadStatus.reading || s == ReadStatus.paused) && last?.finishedAt != null) {
-      appAlert(context, '다시 읽기를 시작할까요?', '${last!.index + 1}회차가 생기고 진도는 0쪽부터예요. 지난 회차의 완독일·독서 기록·갈피는 그대로 남아요.', [
+      appAlert(context, '다시 읽기를 시작할까요?', '${last!.index + 1}회차가 생기고 진도는 0쪽부터예요. 지난 회차의 완독일, 독서 기록, 갈피는 그대로 남아요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('다시 읽기', onPress: () async {
           await _model.reread(id);
@@ -162,7 +162,7 @@ class _BookScreenState extends State<BookScreen> {
     showSheet<void>(
       context,
       builder: (ctx) => ListGroup(children: [
-        ListItem(label: '이미지로 공유', sub: '한줄평·별점을 넣은 카드', onPress: () {
+        ListItem(label: '이미지로 공유', sub: '한줄평, 별점을 넣은 카드', onPress: () {
           Navigator.pop(ctx);
           openBookShare(context, id);
         }),
@@ -204,12 +204,12 @@ class _BookScreenState extends State<BookScreen> {
             }
           }),
         if (years.isNotEmpty)
-          ListItem(label: '책 숨기기', sub: '${years.join('·')}년 책장에는 남아요', onPress: () {
+          ListItem(label: '책 숨기기', sub: '${years.join(', ')}년 책장에는 남아요', onPress: () {
             Navigator.pop(ctx);
             _confirmDelete(years);
           })
         else
-          ListItem(label: '책 삭제', sub: '갈피·감상·독서 회차까지 지워요', danger: true, onPress: () {
+          ListItem(label: '책 삭제', sub: '갈피, 감상, 독서 회차까지 지워요', danger: true, onPress: () {
             Navigator.pop(ctx);
             _confirmDelete(years);
           }),
@@ -227,7 +227,7 @@ class _BookScreenState extends State<BookScreen> {
     final ok = await showSheet<bool>(
       context,
       title: hide ? '이 책을 숨길까요?' : '이 책을 삭제할까요?',
-      description: hide ? '지금 책장과 책 목록에서 빠지고, ${years.join('·')}년 책장에는 그대로 남아요.' : null,
+      description: hide ? '지금 책장과 책 목록에서 빠지고, ${years.join(', ')}년 책장에는 그대로 남아요.' : null,
       builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
           padding: const EdgeInsets.only(top: Space.xs, bottom: Space.l),
@@ -270,7 +270,7 @@ class _BookScreenState extends State<BookScreen> {
     final readMs = bookReadMs(lib, id);
     final sessions = lib.sessions.values.where((s) => s.myBookId == id).length;
     final done = completions(lib, id);
-    final pub = [?e.publisher, if (e.publishedAt != null && e.publishedAt!.length >= 4) e.publishedAt!.substring(0, 4)].where((x) => x.isNotEmpty).join(' · ');
+    final pub = [?e.publisher, if (e.publishedAt != null && e.publishedAt!.length >= 4) e.publishedAt!.substring(0, 4)].where((x) => x.isNotEmpty).join(' | ');
     final last = rounds.isEmpty ? null : rounds.last;
     final reviews = _reviewsOf(e.isbn13);
     final essays = _model.essaysOf(id);
@@ -579,7 +579,7 @@ class _BookScreenState extends State<BookScreen> {
                             Text('사진 갈피', style: AppType.row),
                           Padding(
                             padding: const EdgeInsets.only(top: Space.s),
-                            child: Text([if (m.page != null && m.page != 0) '${m.page}쪽', dateShort(m.createdAt)].where((x) => x.isNotEmpty).join(' · '), style: AppType.caption),
+                            child: MetaText([if (m.page != null && m.page != 0) '${m.page}쪽', dateShort(m.createdAt)].where((x) => x.isNotEmpty).join(' | '), style: AppType.caption),
                           ),
                         ]),
                       ),
@@ -616,7 +616,7 @@ class _BookScreenState extends State<BookScreen> {
               onPress: () {
                 if (widget.onRead != null) return widget.onRead!(id);
                 if (b.status != ReadStatus.read || last?.finishedAt == null) return unawaited(startReadingBook(context, id));
-                appAlert(context, '다시 읽기를 시작할까요?', '${last!.index + 1}회차가 생기고 진도는 0쪽부터예요. 지난 회차의 완독일·독서 기록·갈피는 그대로 남아요.', [
+                appAlert(context, '다시 읽기를 시작할까요?', '${last!.index + 1}회차가 생기고 진도는 0쪽부터예요. 지난 회차의 완독일, 독서 기록, 갈피는 그대로 남아요.', [
                   const AlertButton('취소', style: AlertStyle.cancel),
                   AlertButton('다시 읽기', onPress: () async {
                     await _model.reread(id);
@@ -682,7 +682,7 @@ class _RoundView extends StatelessWidget {
         padding: const EdgeInsets.only(top: Space.s),
         child: OutlineBox(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Expanded(child: Text('${r.index}회차${r.index > 1 ? ' · 재독' : ''}', style: AppType.labelStrong)),
+            Expanded(child: Text('${r.index}회차${r.index > 1 ? ' | 재독' : ''}', style: AppType.labelStrong)),
             Text(r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중', style: AppType.caption),
           ]),
           // 글자 크기는 시안과 같고 줄 사이가 넓어 밀려 보였다(2026-11-18 사용자): 12 → 8, 이름–값 4 → 2
@@ -717,7 +717,7 @@ class _RoundCard extends StatelessWidget {
       decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.line, width: 1 / MediaQuery.devicePixelRatioOf(context)))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text.rich(TextSpan(
-          text: '${r.index}회차${r.index > 1 ? ' · 재독' : ''}',
+          text: '${r.index}회차${r.index > 1 ? ' | 재독' : ''}',
           style: AppType.rowStrong,
           children: [TextSpan(text: r.finishedAt != null ? '   완독' : r.paused ? '   보류' : '   읽는 중', style: AppType.sub)],
         )),

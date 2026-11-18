@@ -67,7 +67,7 @@ String _coverColor(String title) {
 }
 
 String postFacts(num? durationMs, num? pagesRead) =>
-    [if (durationMs != null && durationMs > 0) '${formatDurationPrecise(durationMs)} 읽음', if (pagesRead != null && pagesRead > 0) '$pagesRead쪽'].join(' · ');
+    [if (durationMs != null && durationMs > 0) '${formatDurationPrecise(durationMs)} 읽음', if (pagesRead != null && pagesRead > 0) '$pagesRead쪽'].join(' | ');
 
 /// 커뮤니티 독서 게시물 한 장(2026-11-01 사용자 '에타·토스증권·스레드처럼'): 사람이 주인공인 글 한 줄 묶음.
 /// [프로필 동그라미] 닉네임 · 시간 / 쓴 글 / 갈피 문장(왼쪽 세로줄) / 책(테두리만 있는 첨부 줄) / 좋아요·댓글.
@@ -82,7 +82,7 @@ class PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = post;
     final facts = postFacts(p.durationMs, p.pagesRead);
-    final bookMeta = [if (p.bookAuthor != null && p.bookAuthor!.isNotEmpty) p.bookAuthor!, if (facts.isNotEmpty) facts].join(' · ');
+    final bookMeta = [if (p.bookAuthor != null && p.bookAuthor!.isNotEmpty) p.bookAuthor!, if (facts.isNotEmpty) facts].join(' | ');
     final meta = AppType.micro;
     return Semantics(
       button: onOpen != null,
@@ -146,7 +146,7 @@ class PostCard extends StatelessWidget {
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(p.bookTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.labelStrong),
-                          if (bookMeta.isNotEmpty) Text(bookMeta, maxLines: 1, overflow: TextOverflow.ellipsis, style: meta),
+                          if (bookMeta.isNotEmpty) MetaText(bookMeta, maxLines: 1, overflow: TextOverflow.ellipsis, style: meta),
                         ]),
                       ),
                     ]),
@@ -201,7 +201,7 @@ void explainWriteError(BuildContext context, Object e, [String fallbackTitle = '
       AlertButton('계정 연결', onPress: () => openBackup(context)),
     ]);
   } else if (needsProfile(e)) {
-    appAlert(context, '공개 닉네임을 정해 주세요', '게시물·후기·댓글에는 계정 이름 대신 공개 닉네임이 보여요.', [
+    appAlert(context, '공개 닉네임을 정해 주세요', '게시물, 후기, 댓글에는 계정 이름 대신 공개 닉네임이 보여요.', [
       const AlertButton('나중에', style: AlertStyle.cancel),
       AlertButton('닉네임 정하기', onPress: () => openCommunityProfile(context)),
     ]);
@@ -211,7 +211,7 @@ void explainWriteError(BuildContext context, Object e, [String fallbackTitle = '
 }
 
 /// 신고 사유(짧게 고르기). 운영자가 /admin/reports에서 확인한다
-const reportReasons = ['스팸·광고', '욕설·혐오', '개인정보 노출', '저작권 침해', '기타'];
+const reportReasons = ['스팸, 광고', '욕설, 혐오', '개인정보 노출', '저작권 침해', '기타'];
 
 Future<void> showReportSheet(BuildContext context, {required String kind, required Object id, required String label}) => showSheet<void>(
       context,

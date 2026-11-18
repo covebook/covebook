@@ -240,7 +240,7 @@ class ComposeScreen extends StatelessWidget {
             () {
               final ed = lib.editions[lib.books[s.myBookId]!.editionId];
               final pages = sessionPages(s.startPage, s.pagesRead);
-              final meta = [day(s.startedAt), formatDurationPrecise(s.durationMs), if (pages != null) '$pages쪽'].join(' · ');
+              final meta = [day(s.startedAt), formatDurationPrecise(s.durationMs), if (pages != null) '$pages쪽'].join(' | ');
               return Semantics(
                 button: true,
                 label: '${ed?.title ?? '책'}, $meta',
@@ -255,7 +255,7 @@ class ComposeScreen extends StatelessWidget {
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(ed?.title ?? '제목 없음', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-                            Padding(padding: const EdgeInsets.only(top: 2), child: Text(meta, style: AppType.caption)),
+                            Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta, style: AppType.caption)),
                           ]),
                         ),
                         const LucideIcon('ChevronRight', size: 18, color: AppColors.inkSoft),
@@ -380,7 +380,7 @@ class _ShareDraftScreenState extends State<ShareDraftScreen> {
               padding: const EdgeInsets.only(top: 8),
               child: Choice(
                 label: q.text.length > 80 ? '${q.text.substring(0, 80)}…' : q.text,
-                sub: [if (q.page != null) '${q.page}쪽', if (q.sessionId == src.session.id) '이번 독서에서 남긴 갈피'].join(' · ').ifEmptyNull,
+                sub: [if (q.page != null) '${q.page}쪽', if (q.sessionId == src.session.id) '이번 독서에서 남긴 갈피'].join(' | ').ifEmptyNull,
                 selected: choice.quoteId == q.id,
                 onPress: () => set(quoteId: q.id),
               ),
@@ -546,7 +546,7 @@ class _PostScreenState extends State<PostScreen> {
             danger: true,
             onPress: () {
               Navigator.pop(ctx);
-              appAlert(context, '${p.nickname}님을 차단할까요?', '서로의 게시물·댓글·후기가 보이지 않고 팔로우도 끊겨요. 내 공개 프로필의 차단 목록에서 풀 수 있어요.', [
+              appAlert(context, '${p.nickname}님을 차단할까요?', '서로의 게시물, 댓글, 후기가 보이지 않고 팔로우도 끊겨요. 내 공개 프로필의 차단 목록에서 풀 수 있어요.', [
                 const AlertButton('취소', style: AlertStyle.cancel),
                 AlertButton('차단', style: AlertStyle.destructive, onPress: () {
                   Community.block(p.userId, true).then((_) => nav.maybePop(), onError: (Object e) {
@@ -723,7 +723,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     }
   }
 
-  void _unblock(({int userId, String nickname}) b) => appAlert(context, '${b.nickname.isEmpty ? '이 사용자' : b.nickname}님 차단을 풀까요?', '서로의 공개 게시물·댓글·후기가 다시 보여요. 팔로우는 다시 해야 해요.', [
+  void _unblock(({int userId, String nickname}) b) => appAlert(context, '${b.nickname.isEmpty ? '이 사용자' : b.nickname}님 차단을 풀까요?', '서로의 공개 게시물, 댓글, 후기가 다시 보여요. 팔로우는 다시 해야 해요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('차단 풀기', onPress: () {
           Community.block(b.userId, false).then((_) {
@@ -774,7 +774,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       return Screen(title: title, children: [
         Empty(
           title: '계정을 연결하면 공개 활동을 할 수 있어요',
-          body: '게시·평가·댓글·팔로우는 Google이나 카카오 계정을 연결한 뒤 할 수 있어요. 연결 전에도 다른 독자의 공개 기록은 볼 수 있어요. 내 서재 기록은 직접 고른 것만 공개돼요.',
+          body: '게시, 평가, 댓글, 팔로우는 Google이나 카카오 계정을 연결한 뒤 할 수 있어요. 연결 전에도 다른 독자의 공개 기록은 볼 수 있어요. 내 서재 기록은 직접 고른 것만 공개돼요.',
           action: '계정 연결하러 가기',
           onAction: () => openBackup(context),
         ),
@@ -788,13 +788,13 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       title: title,
       footer: Btn(label: me.profile != null ? '저장' : '공개 프로필 만들기', size: 'l', disabled: !changed || n.isEmpty || nickError != null, busy: _saving, onPress: _save),
       children: [
-        Padding(padding: const EdgeInsets.only(bottom: Space.group), child: Text('공개 닉네임은 게시물·후기·댓글에 보여요. 로그인한 계정 이름이나 내 서재 기록은 공개되지 않아요.', style: AppType.sub)),
+        Padding(padding: const EdgeInsets.only(bottom: Space.group), child: Text('공개 닉네임은 게시물, 후기, 댓글에 보여요. 로그인한 계정 이름이나 내 서재 기록은 공개되지 않아요.', style: AppType.sub)),
         Field(label: '공개 닉네임', value: _nick, placeholder: '2~20자', error: nickError, onChange: (v) => setState(() => _nick = v.length > 20 ? v.substring(0, 20) : v)),
         Field(label: '소개 (선택)', value: _bio, multiline: true, placeholder: '어떤 책을 즐겨 읽는지 한두 줄로', onChange: (v) => setState(() => _bio = v.length > 200 ? v.substring(0, 200) : v)),
         if (me.profile case final pr?) ...[
           Padding(padding: const EdgeInsets.only(top: Space.section), child: Text('내 공개 활동', style: AppType.section)),
           ListGroup(children: [
-            ListItem(label: '내 공개 페이지 보기', sub: '게시물 ${pr.posts} · 팔로워 ${pr.followers} · 팔로잉 ${pr.following}', chevron: true, onPress: () => openCommunityUser(context, pr.userId)),
+            ListItem(label: '내 공개 페이지 보기', sub: '게시물 ${pr.posts} | 팔로워 ${pr.followers} | 팔로잉 ${pr.following}', chevron: true, onPress: () => openCommunityUser(context, pr.userId)),
           ]),
         ],
         ..._blockList(),
@@ -878,7 +878,7 @@ class _UserScreenState extends State<UserScreen> {
           danger: true,
           onPress: () {
             Navigator.pop(ctx);
-            appAlert(context, '${p.nickname}님을 차단할까요?', '서로의 게시물·댓글·후기가 보이지 않고 팔로우도 끊겨요. 내 공개 프로필의 차단 목록에서 풀 수 있어요.', [
+            appAlert(context, '${p.nickname}님을 차단할까요?', '서로의 게시물, 댓글, 후기가 보이지 않고 팔로우도 끊겨요. 내 공개 프로필의 차단 목록에서 풀 수 있어요.', [
               const AlertButton('취소', style: AlertStyle.cancel),
               AlertButton('차단', style: AlertStyle.destructive, onPress: () {
                 Community.block(widget.id, true).then((_) => nav.maybePop(), onError: (Object e) {
@@ -919,7 +919,7 @@ class _UserScreenState extends State<UserScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Semantics(header: true, child: Text(p.nickname, maxLines: 2, style: AppType.title)),
                 if (p.bio != null && p.bio!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: Space.tight), child: Text(p.bio!, style: AppType.body)),
-                Padding(padding: const EdgeInsets.only(top: Space.s), child: Text('팔로워 ${p.followers} · 팔로잉 ${p.following} · 기록 ${p.posts}', style: AppType.sub)),
+                Padding(padding: const EdgeInsets.only(top: Space.s), child: Text('팔로워 ${p.followers} | 팔로잉 ${p.following} | 기록 ${p.posts}', style: AppType.sub)),
               ]),
             ),
             const SizedBox(width: 16),

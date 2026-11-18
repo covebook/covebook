@@ -315,7 +315,7 @@ class _StatsScreenState extends State<StatsScreen> {
         if (book == null) ListItem(label: '넣은 책', value: '${bookCounts(lib, period).added}권'),
         ListItem(
           label: '완독',
-          sub: st0.completedRounds > st0.completedCount || st0.rereads > 0 ? '완독 ${st0.completedRounds}회 · 재독 ${st0.rereads}회' : null,
+          sub: st0.completedRounds > st0.completedCount || st0.rereads > 0 ? '완독 ${st0.completedRounds}회 | 재독 ${st0.rereads}회' : null,
           value: '${st0.completedCount}권',
         ),
         ListItem(label: '남긴 갈피', value: '${st0.bookmarkCount}개'),

@@ -61,11 +61,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_ready != true) setState(() => _ready = null);
     final ok = await _sync.refreshProviders();
     final p = _sync.providers;
-    if (mounted)
-      setState(
-        () => _ready =
-            ok || _sync.providersKnown || p.kakao || p.apple || p.google,
-      );
+    if (mounted) {
+      setState(() => _ready = ok || _sync.providersKnown || p.kakao || p.apple || p.google);
+    }
   }
 
   Future<void> _login(String provider) async {
@@ -245,9 +243,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-                            ExcludeSemantics(
-                              child: Text('·', style: AppType.caption),
-                            ),
+                            const MetaBar(),
                             TextButton(
                               style: TextButton.styleFrom(
                                 foregroundColor: AppColors.inkSoft,

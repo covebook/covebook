@@ -128,7 +128,7 @@ class _PickerState extends State<_Picker> {
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Padding(
         padding: const EdgeInsets.only(top: Space.tight, bottom: 4),
-        child: SearchField(value: _q, onChange: (v) => setState(() => _q = v), placeholder: '제목·저자', label: '책 찾기'),
+        child: SearchField(value: _q, onChange: (v) => setState(() => _q = v), placeholder: '제목, 저자', label: '책 찾기'),
       ),
       Flexible(
         child: ListView(shrinkWrap: true, keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, children: [
@@ -169,7 +169,7 @@ class _PickerState extends State<_Picker> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(e?.title ?? '', style: AppType.rowStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 4),
-                      Text([if (e != null && e.authors.isNotEmpty) e.authors.join(', '), fixed ? '목록에 있어요' : statusLabel[b.status]!].join(' · '),
+                      MetaText([if (e != null && e.authors.isNotEmpty) e.authors.join(', '), fixed ? '목록에 있어요' : statusLabel[b.status]!].join(' | '),
                           style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ]),
                   ),

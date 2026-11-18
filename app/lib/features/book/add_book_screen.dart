@@ -115,7 +115,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
       ..link = c.link
       ..productId = c.productId;
     final missing = [if (c.pageCount == null) '쪽수', if (c.size == null) '판형'];
-    _toConfirm(d, missing.isEmpty ? null : '${c.sourceName} 판본 기록에 ${missing.join('·')} 정보가 없어요. 알면 적고, 모르면 비워 두세요(장정은 흔한 크기로 만들고 ‘확인 전’으로 표시해요).');
+    _toConfirm(d, missing.isEmpty ? null : '${c.sourceName} 판본 기록에 ${missing.join(', ')} 정보가 없어요. 알면 적고, 모르면 비워 두세요(장정은 흔한 크기로 만들고 ‘확인 전’으로 표시해요).');
   }
 
   /// 같은 ISBN이 이미 서재에 있으면: 기존 책 보기 / 별도 소장본으로 추가. 다시 읽기는 재등록이 아니라 기존 책에서
@@ -428,7 +428,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                     excludeSemantics: true,
                     child: Pressable(
                       onPress: () => launchUrl(Uri.parse(d.link!), mode: LaunchMode.externalApplication),
-                      child: Text.rich(TextSpan(text: ' · ', style: AppType.caption, children: [
+                      child: Text.rich(TextSpan(text: ' | ', style: AppType.caption, children: [
                         TextSpan(text: '원문 보기', style: AppType.caption.copyWith(decoration: TextDecoration.underline, color: AppColors.inkSoft)),
                       ])),
                     ),
@@ -454,7 +454,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('추가 정보', style: AppType.section),
-                    Padding(padding: const EdgeInsets.only(top: 2), child: Text('출판사 · ISBN · 판형 · 읽기 상태', style: AppType.caption)),
+                    Padding(padding: const EdgeInsets.only(top: 2), child: Text('출판사 | ISBN | 판형 | 읽기 상태', style: AppType.caption)),
                   ]),
                 ),
                 LucideIcon(_more ? 'ChevronUp' : 'ChevronDown', color: AppColors.inkSoft),
@@ -473,7 +473,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 const SizedBox(width: Space.m),
                 Expanded(child: Field(label: '판형 세로(mm)', value: d.height, onChange: (t) => setState(() => d.height = t), number: true)),
               ]),
-              Text('쪽수·판형을 모르면 비워 두세요. 책장에는 흔한 크기로 보이고, 상세에는 ‘확인 전’으로 표시돼요.', style: AppType.sub),
+              Text('쪽수, 판형을 모르면 비워 두세요. 책장에는 흔한 크기로 보이고, 상세에는 ‘확인 전’으로 표시돼요.', style: AppType.sub),
               const H2('읽기 상태'),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final s in _statuses) AppChip(label: statusLabel[s]!, on: d.status == s, onPress: () => setState(() => d.status = s)),
@@ -607,7 +607,7 @@ class _FindStepState extends State<_FindStep> {
             onSubmit: () => _search(),
             busy: _busy,
             // 큰 글씨에서는 짧게(2026-11-16 QA 영숙 F3). 화면 읽기 이름은 그대로
-            placeholder: _big(context) ? '제목·저자' : '책 제목·저자로 검색',
+            placeholder: _big(context) ? '제목, 저자' : '책 제목, 저자로 검색',
             label: '제목이나 저자로 찾기',
             // 바코드로 여러 권 찾기: 검색칸 오른쪽 끝(책 고르기에서 왔을 때·여러 권 고르는 중에는 없음)
             trailing: widget.pick || _m.multi
@@ -665,9 +665,9 @@ class _FindStepState extends State<_FindStep> {
                 // 결과 머리: 구역 이름처럼 작게(출처 표시는 YES24 약관)
                 _HeadLine(
                   title: Text.rich(TextSpan(text: '검색 결과 ${items.length}권', style: AppType.sub, children: [
-                    if (_m.provider != null) TextSpan(text: ' · ${_m.provider} 제공', style: AppType.caption),
+                    if (_m.provider != null) TextSpan(text: ' | ${_m.provider} 제공', style: AppType.caption),
                   ])),
-                  titleText: ('검색 결과 ${items.length}권${_m.provider != null ? ' · ${_m.provider} 제공' : ''}', AppType.sub),
+                  titleText: ('검색 결과 ${items.length}권${_m.provider != null ? ' | ${_m.provider} 제공' : ''}', AppType.sub),
                   link: _multiLink,
                   onLink: () => setState(() => _m.multi = true),
                 ),

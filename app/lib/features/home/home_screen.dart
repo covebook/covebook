@@ -304,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
           spinRange: spinRangeOf(l, s.books, id),
           depth: reachableDepth(l, s.books, id),
           canMove: (left: at > 0 || p.stackId != null, right: (at >= 0 && at < items.length - 1) || p.stackId != null),
-          place: '$shelfNo번째 선반 · 왼쪽에서 ${at + 1}번째 / ${items.length}',
+          place: '$shelfNo번째 선반 | 왼쪽에서 ${at + 1}번째 / ${items.length}',
         ));
   }
 
@@ -1276,7 +1276,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         onLongPress: _busy ? null : _run,
         onDecorate: () => _enterDecorate(),
         icons: !_decorating,
-        status: r == null ? _state : '굽기 ${r.bakeTotal}ms · 켠 뒤 ${r.sinceBoot}ms',
+        status: r == null ? _state : '굽기 ${r.bakeTotal}ms | 켠 뒤 ${r.sinceBoot}ms',
       ),
     ),
     );

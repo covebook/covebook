@@ -104,12 +104,12 @@ class _StoreScreenState extends State<StoreScreen> {
     final changed = _choice != _saved || _spine != _savedSpine;
     return Screen(
       // 꾸미기 안 '선반·벽지' 입구와 같은 이름(2026-11-17 같은 일을 다른 말로)
-      title: '선반·벽지',
+      title: '선반, 벽지',
       footer: Btn(label: '적용하기', size: 'l', disabled: !changed, onPress: _apply),
       children: [
         LayoutBuilder(
           builder: (_, box) => Semantics(
-            label: '고른 선반·벽지로 그린 책장 한 칸',
+            label: '고른 선반, 벽지로 그린 책장 한 칸',
             excludeSemantics: true,
             child: Container(
               clipBehavior: Clip.antiAlias,
@@ -140,7 +140,7 @@ class _StoreScreenState extends State<StoreScreen> {
         ),
         Padding(
           padding: const EdgeInsets.only(top: Space.l),
-          child: Text('선반·벽지·벽 색은 바로 바뀌어요. 책과 기록은 그대로예요.', style: AppType.sub),
+          child: Text('선반, 벽지, 벽 색은 바로 바뀌어요. 책과 기록은 그대로예요.', style: AppType.sub),
         ),
       ],
     );

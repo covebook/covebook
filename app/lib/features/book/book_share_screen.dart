@@ -191,9 +191,9 @@ class _BookShareScreenState extends State<BookShareScreen> {
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
     // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게)
     final missing = {
-      if (!has['note']! || !has['rating']!) 'eval': '한줄평·별점은 책 정보 › 평가에서 적으면 생겨요',
+      if (!has['note']! || !has['rating']!) 'eval': '한줄평, 별점은 책 정보 › 평가에서 적으면 생겨요',
       if (!has['time']!) 'time': '독서 시간은 타이머로 읽으면 생겨요',
-      if (!has['period']!) 'period': '읽은 기간은 시작일·완독일을 적으면 생겨요',
+      if (!has['period']!) 'period': '읽은 기간은 시작일, 완독일을 적으면 생겨요',
     };
     return Screen(
       title: '책 공유',

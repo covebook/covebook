@@ -97,12 +97,12 @@ class DecoratePanel extends StatelessWidget {
       if (onSkin != null) ...[
         Semantics(
           button: true,
-          label: '선반·벽지',
+          label: '선반, 벽지',
           onTap: onSkin,
           excludeSemantics: true,
           child: Pressable(
             onPress: onSkin,
-            child: SizedBox(height: 40, child: Center(child: Text('선반·벽지', softWrap: false, style: AppType.caption))),
+            child: SizedBox(height: 40, child: Center(child: Text('선반, 벽지', softWrap: false, style: AppType.caption))),
           ),
         ),
         const SizedBox(width: 14),

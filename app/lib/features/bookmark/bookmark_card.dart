@@ -208,7 +208,7 @@ class BookmarkCard extends StatelessWidget {
     final date = compact ? data.date.replaceFirstMapped(_ymd, (m) => '${int.parse(m[1]!)}월 ${int.parse(m[2]!)}일') : data.date;
     final padBottom = compact ? 20.0 : 34.0;
     final rule = Container(height: hair, color: AppColors.line);
-    final meta = [?data.author, date].where((s) => s.isNotEmpty).join(' · ');
+    final meta = [?data.author, date].where((s) => s.isNotEmpty).join(' | ');
 
     final body = Padding(
       padding: EdgeInsets.fromLTRB(compact ? 24 : 33, compact ? 22 : 36, compact ? 24 : 33, padBottom),
@@ -264,7 +264,7 @@ class BookmarkCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(data.title, style: _srcTitle, maxLines: compact ? 1 : 2, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
-                Text(meta, style: _meta, maxLines: 1, overflow: TextOverflow.ellipsis),
+                MetaText(meta, style: _meta, maxLines: 1, overflow: TextOverflow.ellipsis),
               ]),
             ),
           ),

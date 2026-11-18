@@ -259,7 +259,7 @@ class _BindingEditorState extends State<BindingEditor> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          widget.realCover != null ? '실제 표지' : '그림 없음 · 단색 정면',
+                          widget.realCover != null ? '실제 표지' : '그림 없음 | 단색 정면',
                           style: AppType.sub.copyWith(fontFamily: none ? AppFonts.uiBold : null, color: none ? AppColors.ink : null),
                         ),
                       ),

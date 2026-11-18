@@ -163,7 +163,7 @@ class _YearShelfState extends State<YearShelf> {
     final mine = view.books[best];
     if (mine == null) return;
     setState(() => _sel = best);
-    await showBookSheet(context, best, view: view, status: '${widget.bookcase.year}년 · ${statusLabel[mine.status]}', readOnly: true);
+    await showBookSheet(context, best, view: view, status: '${widget.bookcase.year}년 | ${statusLabel[mine.status]}', readOnly: true);
     if (mounted) setState(() => _sel = null);
   }
 

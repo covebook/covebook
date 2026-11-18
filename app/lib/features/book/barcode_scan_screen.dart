@@ -141,7 +141,7 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
         ),
         Padding(
           padding: const EdgeInsets.only(top: Space.l, bottom: Space.xs),
-          child: Text(_items.isEmpty ? '찾은 책이 여기에 쌓여요. 여러 권을 이어서 비춰도 돼요.' : '찾은 책 ${_items.length}권 · 고른 책 $n권', style: AppType.sub),
+          child: Text(_items.isEmpty ? '찾은 책이 여기에 쌓여요. 여러 권을 이어서 비춰도 돼요.' : '찾은 책 ${_items.length}권 | 고른 책 $n권', style: AppType.sub),
         ),
         Expanded(
           child: ListView(

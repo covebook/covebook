@@ -77,8 +77,8 @@ class ReaderRating extends StatelessWidget {
           const LucideIcon('Star', size: 15, color: AppColors.star, fill: AppColors.star, stroke: 1.4),
           const SizedBox(width: 4),
           Text(_avg(d.average!), style: AppType.labelStrong),
-          const SizedBox(width: 4),
-          Text('· ${d.count}명', style: label),
+          const MetaBar(),
+          Text('${d.count}명', style: label),
         ]),
       ),
     );

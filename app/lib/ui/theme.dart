@@ -20,6 +20,9 @@ abstract final class AppColors {
   static const inkFaint = Color(0xFFB0B8C1);
   static const line = Color(0xFFE5E8EB);
   static const track = Color(0xFFD1D6DB);
+
+  /// 정보 사이 세로줄(가운데 점 대신, 2026-11-18): 글자보다 옅고 흰·회색 바탕 모두에서 보이는 회색
+  static const metaBar = Color(0xFFC9CED4);
   static const accent = Color(0xFF6C534A);
   static const accentPressed = Color(0xFF5A443C);
   static const onAccent = Color(0xFFFFFFFF);

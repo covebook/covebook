@@ -70,8 +70,8 @@ void main() {
     expect(isPhotoMark('옮긴 문장', 'file:///a.jpg'), isFalse);
     expect(isPhotoMark('', null), isFalse);
     expect(pageLabel(118), 'p. 118');
-    expect(markLabel('그날 밤 눈은 그치지 않았다.\n나는 창가에 앉아 그녀가 남긴 쪽지를', 118), '“그날 밤 눈은 그치지 않았다. 나는 창가에…” · p. 118');
-    expect(markLabel('', 52), '사진 갈피 · p. 52');
+    expect(markLabel('그날 밤 눈은 그치지 않았다.\n나는 창가에 앉아 그녀가 남긴 쪽지를', 118), '“그날 밤 눈은 그치지 않았다. 나는 창가에…” | p. 118');
+    expect(markLabel('', 52), '사진 갈피 | p. 52');
     expect(markLabel('짧은 글', null), '“짧은 글”');
   });
 }

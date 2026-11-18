@@ -125,7 +125,7 @@ void main() {
     });
 
     test('결과 줄 출판사 · 연도', () {
-      expect(publisherLine(_c('a', publisher: '창비', publishedAt: '2014-05-19')), '창비 · 2014');
+      expect(publisherLine(_c('a', publisher: '창비', publishedAt: '2014-05-19')), '창비 | 2014');
       expect(publisherLine(_c('a', publishedAt: '2014')), '2014');
       expect(publisherLine(_c('a')), isNull);
     });

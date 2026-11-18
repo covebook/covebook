@@ -693,7 +693,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-                Text([if (e.authors.isNotEmpty) e.authors.first, '갈피 ${_marks.length}개'].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
+                MetaText([if (e.authors.isNotEmpty) e.authors.first, '갈피 ${_marks.length}개'].join(' | '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
               ]),
             ),
             const SizedBox(width: 12),

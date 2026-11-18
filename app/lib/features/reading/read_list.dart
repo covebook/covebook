@@ -335,7 +335,7 @@ class _ReadListState extends State<ReadList> {
             padding: const EdgeInsets.only(top: Space.m),
             child: ListItem(
               label: '저장하지 않은 독서 기록이 있어요',
-              sub: [bookTitle(lib, _reading.pending!.myBookId) ?? '책 없이 읽기', formatDurationPrecise(_reading.pending!.durationMs)].join(' · '),
+              sub: [bookTitle(lib, _reading.pending!.myBookId) ?? '책 없이 읽기', formatDurationPrecise(_reading.pending!.durationMs)].join(' | '),
               chevron: true,
               onPress: _openPending,
             ),

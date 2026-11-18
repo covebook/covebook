@@ -241,13 +241,13 @@ class ReadingChart extends StatelessWidget {
           final sel = bars.indexWhere((b) => b.key == selected && b.ms > 0);
           final base = tipH + plotH;
           double barH(num ms) => math.max(barW, scale(ms));
-          final tip = sel < 0 || !this.tip ? null : '${bars[sel].label}$unit · ${formatDuration(bars[sel].ms)}';
+          final tip = sel < 0 || !this.tip ? null : '${bars[sel].label}$unit | ${formatDuration(bars[sel].ms)}';
           // 말풍선 폭(글자 폭 + 좌우 10)
           final tipW = tip == null
               ? 0.0
               : (TextPainter(
                     text: TextSpan(children: [
-                      TextSpan(text: '${bars[sel].label}$unit · ', style: AppType.micro),
+                      TextSpan(text: '${bars[sel].label}$unit | ', style: AppType.micro),
                       TextSpan(text: formatDuration(bars[sel].ms), style: AppType.micro.copyWith(fontFamily: AppFonts.uiBold)),
                     ]),
                     textDirection: TextDirection.ltr,
@@ -295,7 +295,7 @@ class ReadingChart extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
                   child: Text.rich(TextSpan(children: [
-                    TextSpan(text: '${bars[sel].label}$unit · ', style: AppType.micro.copyWith(color: AppColors.onAccent)),
+                    TextSpan(text: '${bars[sel].label}$unit | ', style: AppType.micro.copyWith(color: AppColors.onAccent)),
                     TextSpan(text: formatDuration(bars[sel].ms), style: AppType.micro.copyWith(fontFamily: AppFonts.uiBold, color: AppColors.onAccent)),
                   ])),
                 ),

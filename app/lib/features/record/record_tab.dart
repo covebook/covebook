@@ -366,7 +366,7 @@ class _RecordTabState extends State<RecordTab> {
               value: _q[section]!,
               onChange: (v) => setState(() => _q[section] = v),
               autofocus: true,
-              placeholder: marks ? '문장·메모에서 찾기' : '감상·책 제목에서 찾기',
+              placeholder: marks ? '문장, 메모에서 찾기' : '감상, 책 제목에서 찾기',
               label: '$what 검색어',
             ),
           ),
@@ -399,7 +399,7 @@ class _RecordTabState extends State<RecordTab> {
           Padding(
             padding: const EdgeInsets.only(bottom: Space.xs),
             child: Row(children: [
-              Expanded(child: Text(conditions.join(' · '), style: AppType.sub.copyWith(color: AppColors.ink), maxLines: 2, overflow: TextOverflow.ellipsis)),
+              Expanded(child: MetaText(conditions.join(' | '), style: AppType.sub.copyWith(color: AppColors.ink), maxLines: 2, overflow: TextOverflow.ellipsis)),
               Transform.translate(offset: const Offset(8, 0), child: TextLink(label: '조건 해제', soft: true, onPress: clear)),
             ]),
           ),
@@ -419,7 +419,7 @@ class _RecordTabState extends State<RecordTab> {
             ? '페이지를 찍어 그대로 붙여 두세요.'
             : q.isNotEmpty
                 ? '다른 낱말로 찾아보세요.'
-                : '조건을 풀거나 다른 책·유형을 골라 보세요.';
+                : '조건을 풀거나 다른 책, 유형을 골라 보세요.';
     final cardW = math.min(MediaQuery.sizeOf(context).width - Space.page * 2, contentMax);
     final bottomPad = _bottomPad;
     return [

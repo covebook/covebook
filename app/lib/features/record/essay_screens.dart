@@ -30,7 +30,7 @@ Future<void> openEditEssay(BuildContext context, String id) => Navigator.of(cont
 String essayDateLine(Essay e, {bool long = false}) {
   final f = long ? dateLong : dateShort;
   final made = f(e.createdAt), changed = f(e.updatedAt);
-  return changed.isNotEmpty && changed != made ? '$made · $changed 고침' : made;
+  return changed.isNotEmpty && changed != made ? '$made | $changed 고침' : made;
 }
 
 /// 감상 목록 한 줄(표지 · 책 제목 · 지은이 · 감상 제목 · 미리보기 · 쓴 날). 상자 없이 줄로 나눈다
@@ -113,7 +113,7 @@ class EssayRow extends StatelessWidget {
                   Text.rich(
                     TextSpan(children: [
                       TextSpan(text: title, style: const TextStyle(fontFamily: AppFonts.uiBold, color: AppColors.ink)),
-                      if (author.isNotEmpty) TextSpan(text: ' · $author', style: const TextStyle(color: AppColors.inkSoft)),
+                      if (author.isNotEmpty) TextSpan(text: ' | $author', style: const TextStyle(color: AppColors.inkSoft)),
                     ]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -166,7 +166,7 @@ class _EssayScreenState extends State<EssayScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _delete() => appAlert(context, '이 감상을 지울까요?', '지우면 되돌릴 수 없어요. 별점·한줄평·갈피는 그대로 남아요.', [
+  Future<void> _delete() => appAlert(context, '이 감상을 지울까요?', '지우면 되돌릴 수 없어요. 별점, 한줄평, 갈피는 그대로 남아요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('지우기', style: AlertStyle.destructive, onPress: () async {
           final nav = Navigator.of(context);

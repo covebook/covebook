@@ -57,8 +57,8 @@ class _BackupScreenState extends State<BackupScreen> {
         context,
         '회원탈퇴할까요?',
         _sync.loginRequired
-            ? '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
-            : '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
+            ? '연결된 로그인과 서버의 독서 기록, 사진 삭제를 요청해요. 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
+            : '연결된 로그인과 서버의 독서 기록, 사진 삭제를 요청해요. 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
         [
           const AlertButton('취소', style: AlertStyle.cancel),
           AlertButton('회원탈퇴', style: AlertStyle.destructive, onPress: () async {
@@ -85,7 +85,7 @@ class _BackupScreenState extends State<BackupScreen> {
   void _logout() => appAlert(
         context,
         '로그아웃할까요?',
-        '이 폰에 있는 책·독서 기록·갈피·감상·사진을 지우고 로그인 화면으로 돌아가요. 서버에 올라간 기록은 그대로라 다시 로그인하면 받아 와요.'
+        '이 폰에 있는 책, 독서 기록, 갈피, 감상, 사진을 지우고 로그인 화면으로 돌아가요. 서버에 올라간 기록은 그대로라 다시 로그인하면 받아 와요.'
             '${ReadingStore.instance.active != null ? ' 지금 읽는 중인 시간은 저장되지 않아요.' : ''}',
         [
           const AlertButton('취소', style: AlertStyle.cancel),

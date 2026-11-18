@@ -38,7 +38,7 @@ void main() {
     // 책 줄 제목 + 그린 표지 위 제목
     expect(find.text('데미안'), findsNWidgets(2));
     expect(find.text('알을 깨는 일'), findsOneWidget);
-    expect(find.text('2026년 11월 16일 · 2026년 11월 17일 고침'), findsOneWidget); // 상세 날짜는 '2026년 11월 16일'(11-17 날짜 통일)
+    expect(find.text('2026년 11월 16일 | 2026년 11월 17일 고침'), findsOneWidget); // 상세 날짜는 '2026년 11월 16일'(11-17 날짜 통일)
     expect(find.widgetWithText(SelectableText, '길게 쓴 감상\n\n둘째 문단'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     expect(find.text('감상 저장'), findsNothing);
@@ -81,7 +81,7 @@ void main() {
     );
     // 책을 보이는 두 줄: 그린 표지 위 제목 + '책 제목 · 지은이' 한 줄(표지 높이에 글 묶음을 맞추려 한 줄로 합쳤다)
     expect(find.text('데미안'), findsNWidgets(2));
-    expect(find.text('데미안 · 헤르만 헤세', findRichText: true), findsNWidgets(2));
+    expect(find.text('데미안 | 헤르만 헤세', findRichText: true), findsNWidgets(2));
     expect(find.text('알을 깨는 일'), findsOneWidget);
     expect(find.text('길게 쓴 감상 둘째 문단'), findsOneWidget);
     expect(find.text('제목 없이 쓴 첫 줄'), findsNWidgets(2));

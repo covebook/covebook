@@ -103,16 +103,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Widget para(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.item), child: WordText(t, style: p));
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             para(_syncAvailable
-                ? '책장 한켠은 카카오·Google·Apple 로그인으로 써요. 책·독서 기록·갈피·감상·사진은 이 기기와 책장 한켠 서버의 내 계정에 저장돼, 폰을 바꿔도 이어 볼 수 있어요. 로그인한 서비스의 회원 식별자와 고른 닉네임이 서버에 저장돼요.'
-                : '책장 한켠은 로그인 없이 써요. 책·독서 기록·갈피·감상·사진은 이 기기 안에만 저장돼요.'),
+                ? '책장 한켠은 카카오, Google, Apple 로그인으로 써요. 책, 독서 기록, 갈피, 감상, 사진은 이 기기와 책장 한켠 서버의 내 계정에 저장돼, 폰을 바꿔도 이어 볼 수 있어요. 로그인한 서비스의 회원 식별자와 고른 닉네임이 서버에 저장돼요.'
+                : '책장 한켠은 로그인 없이 써요. 책, 독서 기록, 갈피, 감상, 사진은 이 기기 안에만 저장돼요.'),
             para('책을 찾으면 검색어가 책장 한켠 서버를 거쳐 YES24로 전송돼요. 서버에 닿지 않거나 결과가 없으면 Google Books로, 그래도 없으면 Open Library로 바로 전송돼요. 인기 많은 책 목록도 책장 한켠 서버에서 받아요. 검색과 표지 그림을 받을 때 IP 주소 같은 통신 정보가 함께 전달돼요.'),
             para('사진은 표지를 넣거나 갈피 원문을 보관하는 데만 쓰고, 읽었다는 인증에는 쓰지 않아요. 갈피 사진의 글자 인식과 바코드 읽기는 기기 안에서 하고, 그 사진을 밖으로 보내지 않아요.'
                 '${_syncAvailable ? ' 동기화를 위해 사진은 책장 한켠 서버에 올라가요.' : ''}'),
             para(_syncAvailable && communityOpen.value
                 ? '내 기록은 공개되지 않아요. 커뮤니티에 직접 올린 글과 고른 항목만 공개돼요.'
-                : '공개되는 기록은 없어요. 별점·한줄평·감상·갈피는 나만 봐요.'),
+                : '공개되는 기록은 없어요. 별점, 한줄평, 감상, 갈피는 나만 봐요.'),
             // 계정 삭제는 서버를 쓰는 빌드에만 있다(로그인 없는 빌드에서 '서버 계정 삭제'를 말하지 않는다)
-            if (_syncAvailable) para('회원탈퇴를 요청하면 연결된 로그인과 서버 기록·사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
+            if (_syncAvailable) para('회원탈퇴를 요청하면 연결된 로그인과 서버 기록, 사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
               child: Btn(label: '처리방침 전문 보기(웹)', kind: 'secondary', onPress: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication)),

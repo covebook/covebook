@@ -69,7 +69,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
         setState(() => _error = switch (p.error) {
               'encoding' => '파일의 글자를 읽지 못했어요. 엑셀에서 ‘CSV UTF-8’로 저장하거나 엑셀 파일(.xlsx)을 그대로 골라 주세요.',
               'empty' => '가져올 책이 없어요. 제목이나 ISBN 열에 값이 있는지 확인해 주세요.',
-              _ => 'CSV·엑셀(.xlsx) 파일만 읽을 수 있어요.',
+              _ => 'CSV, 엑셀(.xlsx) 파일만 읽을 수 있어요.',
             });
         return;
       }
@@ -164,9 +164,9 @@ class _ImportListScreenState extends State<ImportListScreen> {
             child: Text(
               [
                 '${_lines.length}권',
-                if (parse.columns.isNotEmpty) '열: ${parse.columns.values.join(' · ')}',
+                if (parse.columns.isNotEmpty) '열: ${parse.columns.values.join(' | ')}',
                 if (parse.duplicates > 0) '같은 ISBN ${parse.duplicates}줄은 한 번만',
-              ].join(' · '),
+              ].join(' | '),
               style: AppType.caption,
             ),
           ),
@@ -283,7 +283,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
           const _Fold(title: '지원하는 파일과 항목', lines: [
             '엑셀 파일(.xlsx)은 그대로, CSV는 ‘CSV UTF-8’로 저장한 파일을 골라 주세요.',
             '첫 줄에 ‘제목’, ‘저자’, ‘ISBN’ 같은 열 이름이 있으면 더 정확하게 찾아요. 다른 독서 앱에서 내보낸 파일도 열 이름이 있으면 그대로 읽어요.',
-            '‘읽기 상태’ 열(읽은 책·읽는 중·읽고 싶은)이 있으면 상태도 옮겨요.',
+            '‘읽기 상태’ 열(읽은 책, 읽는 중, 읽고 싶은)이 있으면 상태도 옮겨요.',
           ]),
           const _Fold(title: '가져오기 전 확인해 주세요', last: true, lines: [
             'ISBN이 있으면 그 판으로, 없으면 제목과 저자로 찾아요.',
@@ -377,8 +377,8 @@ class _LineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = l.book;
     final sub = b == null
-        ? (l.offline ? '인터넷 연결 없음' : '${l.row.line}번째 줄${l.row.isbn != null ? ' · ISBN ${l.row.isbn}' : ''}')
-        : [?publisherLine(b), if (l.row.status != null) statusLabel[l.row.status]!].join(' · ');
+        ? (l.offline ? '인터넷 연결 없음' : '${l.row.line}번째 줄${l.row.isbn != null ? ' | ISBN ${l.row.isbn}' : ''}')
+        : [?publisherLine(b), if (l.row.status != null) statusLabel[l.row.status]!].join(' | ');
     final selectable = b != null && l.ownedId == null && !l.added;
     return Semantics(
       button: onTap != null,
