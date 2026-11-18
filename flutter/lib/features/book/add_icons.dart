@@ -1,4 +1,4 @@
-// 책 추가 아이콘(바코드·엑셀 파일): 다른 화면과 같은 Tabler 표(lib/gen/lucide.g.dart)를 쓴다(2026-11-17 Tabler로 통일)
+// 책 추가 아이콘(바코드·엑셀 파일): 다른 화면과 같은 아이콘 표(lib/gen/lucide.g.dart, 2026-11-18 Lucide)를 쓴다
 library;
 
 import 'package:flutter/material.dart';
