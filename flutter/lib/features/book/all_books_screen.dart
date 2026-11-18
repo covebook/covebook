@@ -523,7 +523,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
           child: keptIds.isNotEmpty ? Text(_hiddenWhere, style: AppType.caption) : const SizedBox.shrink(),
         ),
         Btn(label: hideOnly ? '숨기기' : '삭제', kind: hideOnly ? 'primary' : 'danger', size: 'l', onPress: () => Navigator.pop(ctx, true)),
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: Center(child: TextLink(label: '취소', soft: true, onPress: () => Navigator.pop(ctx, false)))),
+        SubAction(label: '취소', onPress: () => Navigator.pop(ctx, false)),
       ]),
     );
     if (ok == true) await _deleteNow(ids);

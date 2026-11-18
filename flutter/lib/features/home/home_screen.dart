@@ -1697,14 +1697,15 @@ double get homeHeaderHeight => TabHeader.paddingTop + rnPx(34) - 2 + rnPx(23) + 
 /// 책장 줄 배치에서 하단바 몫(지금 앱 navigation.shelfReserve)
 const navigationShelfReserve = 78.0;
 
-/// 머리줄 오른쪽 아이콘: 칸 34, 그림 31, 맨 끝 칸 가운데가 화면 끝에서 24.3(시안에서 떠낸 그림)
 /// 책장 머리 아이콘 그림 크기(지난 책장 공유 아이콘도 같이 쓴다)
 const headerArtSize = 37.0;
 
-// 2026-11-18 사용자: 점토 아이콘으로 바꾸고 크게(그림 31 → 37, 칸 34 → 40). 공유 아이콘도 같은 크기(headerArtSize)
-const _headerCell = 40.0;
+// 2026-11-18 사용자: 점토 아이콘으로 바꾸고 크게(그림 31 → 37). 이어 '너무 우측에 몰려 있다, 간격 띄워 잘 배치':
+// 아이콘 가운데 사이 40 → 52(그림 사이 빈 곳 3 → 15), 맨 끝 아이콘 가운데는 화면 끝에서 24.3 → 36
+// (그림 몸통 오른쪽 끝이 제목 왼쪽 여백 24와 거울처럼 맞는다. 점토 그림은 그림자 몫이 있어 몸통 폭이 그림의 약 80%)
 const _headerArt = headerArtSize;
-const _headerLastCenter = 24.3;
+const _headerPitch = 52.0;
+const _headerLastCenter = 36.0;
 
 class _Header extends StatelessWidget {
   const _Header({required this.year, required this.status, this.onLongPress, this.onDecorate, this.icons = true});
@@ -1721,7 +1722,7 @@ class _Header extends StatelessWidget {
     return Padding(
       // 머리줄 아래 여백 4, 해는 제목 바로 밑(−2dp, 지금 앱 11-10 조정). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌').
       // 오른쪽은 아이콘 누르는 칸이 그림 칸보다 양옆으로 넓은 만큼(_HeaderIcons.slop) 덜 비운다: 그림 자리는 그대로
-      padding: EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, _headerLastCenter - _headerCell / 2 - (icons ? _HeaderIcons.slop : 0), _headerBottom),
+      padding: EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, _headerLastCenter - Space.hit / 2, _headerBottom),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1754,7 +1755,7 @@ class _Header extends StatelessWidget {
           // 꾸미기 · 추가 · 프로필(2026-11-16 메뉴 구조 개편: 전체 책은 하단 '내 책' 탭과 겹쳐 빼고, 스토어(선반·벽지)는 꾸미기 안에서 연다)
           if (icons)
             Padding(
-              padding: EdgeInsets.only(top: 2.5 - _HeaderIcons.slopY),
+              padding: const EdgeInsets.only(top: 2.5 - _HeaderIcons.slopY),
               child: _HeaderIcons(items: [
                 ('decorate', '꾸미기', onDecorate),
                 ('add', '책 추가', () => openAddBook(context)),
@@ -1769,14 +1770,13 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// 머리 아이콘 줄: 그림 칸은 34×44 그대로(시안), 누르는 칸은 아이콘마다 48×48(Space.hit)
-/// (2026-11-16 QA 영숙 F12: 34×44라 작았다). 이웃 칸이 겹치는 자리는 가까운 아이콘이 받는다. 화면 읽기 칸도 48×48
+/// 머리 아이콘 줄: 아이콘마다 누르는 칸 48×48(Space.hit, 2026-11-16 QA 영숙 F12), 가운데 사이 _headerPitch.
+/// 칸 사이 빈 곳은 가까운 아이콘이 받는다. 화면 읽기 칸도 48×48
 class _HeaderIcons extends StatefulWidget {
   const _HeaderIcons({required this.items});
   final List<(String, String, VoidCallback?)> items;
 
-  /// 그림 칸 밖으로 넓힌 누르는 자리(양옆·위아래)
-  static const slop = (Space.hit - _headerCell) / 2;
+  /// 머리줄 높이(44) 밖으로 넓힌 누르는 자리(위아래)
   static const slopY = (Space.hit - 44) / 2;
 
   @override
@@ -1786,21 +1786,21 @@ class _HeaderIcons extends StatefulWidget {
 class _HeaderIconsState extends State<_HeaderIcons> {
   int? _down;
 
-  int _at(double x) => ((x - _HeaderIcons.slop - _headerCell / 2) / _headerCell).round().clamp(0, widget.items.length - 1);
+  int _at(double x) => ((x - Space.hit / 2) / _headerPitch).round().clamp(0, widget.items.length - 1);
 
   @override
   Widget build(BuildContext context) {
     final n = widget.items.length;
     return SizedBox(
-      width: _headerCell * n + _HeaderIcons.slop * 2,
+      width: _headerPitch * (n - 1) + Space.hit,
       height: Space.hit,
       child: Stack(children: [
         for (final (i, it) in widget.items.indexed) ...[
           Positioned(
-            left: _HeaderIcons.slop + i * _headerCell,
-            top: _HeaderIcons.slopY,
-            width: _headerCell,
-            height: 44,
+            left: i * _headerPitch,
+            top: 0,
+            width: Space.hit,
+            height: Space.hit,
             child: Opacity(
               opacity: _down == i ? pressOpacity : 1,
               // 그림 역할을 빼야 화면 읽기가 '이미지'가 아니라 단추로 읽는다(2026-11-16 QA 영숙 F11)
@@ -1808,7 +1808,7 @@ class _HeaderIconsState extends State<_HeaderIcons> {
             ),
           ),
           Positioned(
-            left: i * _headerCell.toDouble(),
+            left: i * _headerPitch,
             top: 0,
             width: Space.hit,
             height: Space.hit,

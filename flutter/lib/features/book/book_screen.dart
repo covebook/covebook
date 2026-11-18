@@ -242,7 +242,7 @@ class _BookScreenState extends State<BookScreen> {
         WordText(hide ? '내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id])), style: AppType.sub),
         const SizedBox(height: Space.l),
         Btn(label: hide ? '숨기기' : '삭제', kind: hide ? 'primary' : 'danger', size: 'l', onPress: () => Navigator.pop(ctx, true)),
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: Center(child: TextLink(label: '취소', soft: true, onPress: () => Navigator.pop(ctx, false)))),
+        SubAction(label: '취소', onPress: () => Navigator.pop(ctx, false)),
       ]),
     );
     if (ok != true || !mounted) return;

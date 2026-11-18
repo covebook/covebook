@@ -1721,6 +1721,19 @@ class SelectField extends StatelessWidget {
 }
 
 /// 글자 버튼(밑줄 없이 굵은 갈색 = 이어서 할 일, 회색 = 조심스러운 일)
+/// 큰 단추 바로 아래 보조 행동(계속 추가 · 장정 직접 고르기 · 보관만 하기 · 취소).
+/// 간격(Space.xs) · 옅은 글자 · 누르는 높이 48을 한 곳에서 정한다(2026-11-18 사용자: 화면마다 간격·글자색·단추 모양이 달랐다)
+class SubAction extends StatelessWidget {
+  const SubAction({super.key, required this.label, required this.onPress, this.disabled = false});
+  final String label;
+  final VoidCallback onPress;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context) =>
+      Padding(padding: const EdgeInsets.only(top: Space.xs), child: TextLink(label: label, soft: true, disabled: disabled, onPress: onPress));
+}
+
 class TextLink extends StatelessWidget {
   const TextLink({super.key, required this.label, required this.onPress, this.soft = false, this.disabled = false, this.start = false, this.ink = false});
 

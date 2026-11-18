@@ -244,8 +244,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
             next = 'book';
             Navigator.pop(ctx);
           }),
-          const SizedBox(height: Space.s),
-          Btn(label: '한 권 더 추가', kind: 'ghost', onPress: () {
+          SubAction(label: '한 권 더 추가', onPress: () {
             next = 'again';
             Navigator.pop(ctx);
           }),
@@ -312,10 +311,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
           title: '장정 미리보기',
           footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Btn(label: '추가하고 책장에 진열', busy: _saving, onPress: () => _add()),
-            Padding(
-              padding: const EdgeInsets.only(top: Space.xs),
-              child: Center(child: TextLink(label: '보관만 하기', soft: true, disabled: _saving, onPress: () => _add(keep: true))),
-            ),
+            SubAction(label: '보관만 하기', disabled: _saving, onPress: () => _add(keep: true)),
           ]),
           children: [
             BindingEditor(
@@ -377,10 +373,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
       footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // 주요 행동: 추천 장정으로 바로 추가(책장에 놓기). 장정은 고르고 싶을 때만(보조)
         Btn(label: '추천 장정으로 추가', disabled: !ready, busy: _saving, onPress: () => _confirmDuplicate(() => _add())),
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xs),
-          child: Center(child: TextLink(label: '장정 직접 고르기', soft: true, disabled: !ready, onPress: () => _confirmDuplicate(_toBinding))),
-        ),
+        SubAction(label: '장정 직접 고르기', disabled: !ready, onPress: () => _confirmDuplicate(_toBinding)),
       ]),
       children: [
         if (_notice != null) Padding(padding: const EdgeInsets.only(top: Space.m, bottom: Space.l), child: _Notice(_notice!)),

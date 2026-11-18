@@ -213,8 +213,7 @@ Future<String?> showBulkDone(BuildContext context, BulkResult r) {
           next = 'books';
           Navigator.pop(ctx);
         }),
-      const SizedBox(height: Space.s),
-      Btn(label: '계속 추가', kind: 'ghost', onPress: () => Navigator.pop(ctx)),
+      SubAction(label: '계속 추가', onPress: () => Navigator.pop(ctx)),
     ]),
   ).then((_) => next);
 }
