@@ -3,8 +3,8 @@
 앱을 AAB로 빌드해 Google Play Console에 올리는 파이프라인.
 
 - 워크플로: `.github/workflows/android-flutter-play.yml` (Actions 이름 "CD: Android Flutter AAB")
-- 앱 id: `app.covebook` (`flutter/android/app/build.gradle.kts`의 `applicationId`. 스토어 등록 후에는 바꿀 수 없다)
-- 빌드 대상: `flutter/`
+- 앱 id: `app.covebook` (`app/android/app/build.gradle.kts`의 `applicationId`. 스토어 등록 후에는 바꿀 수 없다)
+- 빌드 대상: `app/`
 - 옛 React Native 앱(`app/`)과 그 워크플로(`android-playstore-deploy.yml`)는 2026-11-18에 지웠다(마지막 커밋 `4f9e1d9`). 앱 id와 업로드 키가 같아서 Flutter 빌드가 같은 앱의 업데이트로 올라간다.
 
 ## 1. 한 번만 하는 준비

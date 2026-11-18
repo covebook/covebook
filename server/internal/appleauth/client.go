@@ -1,4 +1,4 @@
-// Package appleauth implements Apple's web authorization-code flow. Secrets stay on the server.
+// Package appleauth implements Apple's web authorization-code flow and the in-app (iOS) flow. Secrets stay on the server.
 package appleauth
 
 import (
@@ -39,10 +39,35 @@ type Client struct {
 }
 type Identity struct{ Subject, Email, SealedRefresh string }
 
+// FromEnv is the web client (Services ID, APPLE_CLIENT_ID) that uses the https callback.
 func FromEnv(redirect string, httpClient *http.Client) (*Client, error) {
-	c := &Client{ID: os.Getenv("APPLE_CLIENT_ID"), Team: os.Getenv("APPLE_TEAM_ID"), KeyID: os.Getenv("APPLE_KEY_ID"), Redirect: redirect, HTTP: httpClient}
 	u, err := url.Parse(redirect)
-	if err != nil || u.Scheme != "https" || u.Host == "" || c.ID == "" || c.Team == "" || c.KeyID == "" {
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return nil, errors.New("apple_not_configured")
+	}
+	return newClient(os.Getenv("APPLE_CLIENT_ID"), redirect, httpClient)
+}
+
+// NativeID is the client of in-app Sign in with Apple on iOS: the app's bundle ID.
+func NativeID() string {
+	if v := os.Getenv("APPLE_BUNDLE_ID"); v != "" {
+		return v
+	}
+	return "app.covebook"
+}
+
+// NativeFromEnv is the in-app (iOS) client. Same team and key as the web client, but tokens are issued to the bundle ID.
+func NativeFromEnv(httpClient *http.Client) (*Client, error) {
+	if os.Getenv("APPLE_CLIENT_ID") == "" {
+		return nil, errors.New("apple_not_configured")
+	}
+	return newClient(NativeID(), "", httpClient)
+}
+
+func newClient(id, redirect string, httpClient *http.Client) (*Client, error) {
+	var err error
+	c := &Client{ID: id, Team: os.Getenv("APPLE_TEAM_ID"), KeyID: os.Getenv("APPLE_KEY_ID"), Redirect: redirect, HTTP: httpClient}
+	if c.ID == "" || c.Team == "" || c.KeyID == "" {
 		return nil, errors.New("apple_not_configured")
 	}
 	block, _ := pem.Decode([]byte(strings.ReplaceAll(os.Getenv("APPLE_PRIVATE_KEY"), `\n`, "\n")))
@@ -137,20 +162,51 @@ func (c *Client) Exchange(ctx context.Context, code string, expectedNonceHash []
 	if len(id.Audience) != 1 || id.Audience[0] != c.ID || id.Subject == "" || len(id.Subject) > 255 || id.Nonce == "" || subtle.ConstantTimeCompare(sum[:], expectedNonceHash) != 1 || id.IssuedAt.IsZero() || id.IssuedAt.After(time.Now().Add(time.Minute)) {
 		return Identity{}, errors.New("apple_claims_invalid")
 	}
+	out := Identity{Subject: id.Subject, Email: verifiedEmail(id)}
+	out.SealedRefresh, err = c.seal(id.Subject, token.Refresh)
+	return out, err
+}
+
+// ExchangeNative checks an in-app sign-in: identityToken came from the device (its nonce must be the one the app
+// sent to Apple), and the one-time authorization code is redeemed here for the refresh token used to revoke on account deletion.
+func (c *Client) ExchangeNative(ctx context.Context, code, identityToken, nonce string) (Identity, error) {
+	if code == "" || len(code) > 4096 || identityToken == "" || len(identityToken) > 32768 || nonce == "" || len(nonce) > 256 {
+		return Identity{}, errors.New("apple_native_invalid")
+	}
+	device, err := c.verifier.Verify(ctx, identityToken)
+	if err != nil || len(device.Audience) != 1 || device.Audience[0] != c.ID || device.Subject == "" || len(device.Subject) > 255 || device.IssuedAt.IsZero() || device.IssuedAt.After(time.Now().Add(time.Minute)) || subtle.ConstantTimeCompare([]byte(device.Nonce), []byte(nonce)) != 1 {
+		return Identity{}, errors.New("apple_token_invalid")
+	}
+	var token struct {
+		IDToken string `json:"id_token"`
+		Refresh string `json:"refresh_token"`
+	}
+	if err = c.post(ctx, "/auth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}}, &token); err != nil {
+		return Identity{}, err
+	}
+	if token.IDToken == "" || len(token.IDToken) > 32768 || token.Refresh == "" {
+		return Identity{}, errors.New("apple_token_missing")
+	}
+	server, err := c.verifier.Verify(ctx, token.IDToken)
+	if err != nil || server.Subject != device.Subject {
+		return Identity{}, errors.New("apple_token_invalid")
+	}
+	out := Identity{Subject: device.Subject, Email: verifiedEmail(device)}
+	out.SealedRefresh, err = c.seal(device.Subject, token.Refresh)
+	return out, err
+}
+
+func verifiedEmail(id *oidc.IDToken) string {
 	var claims struct {
 		Email    string          `json:"email"`
 		Verified json.RawMessage `json:"email_verified"`
 	}
-	if id.Claims(&claims) != nil {
-		return Identity{}, errors.New("apple_claims_invalid")
+	if id.Claims(&claims) != nil || len(claims.Email) > 254 || !(string(claims.Verified) == "true" || string(claims.Verified) == `"true"`) {
+		return ""
 	}
-	out := Identity{Subject: id.Subject}
-	if (string(claims.Verified) == "true" || string(claims.Verified) == `"true"`) && len(claims.Email) <= 254 {
-		out.Email = strings.ToLower(strings.TrimSpace(claims.Email))
-	}
-	out.SealedRefresh, err = c.seal(id.Subject, token.Refresh)
-	return out, err
+	return strings.ToLower(strings.TrimSpace(claims.Email))
 }
+
 func (c *Client) aead() (cipher.AEAD, error) {
 	b, e := aes.NewCipher(c.SealKey)
 	if e != nil {
