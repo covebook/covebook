@@ -19,7 +19,8 @@ import '../book/import_list_screen.dart' show openImportList;
 import 'backup_screen.dart' show openBackup;
 import 'terms.dart' show showTermsSheet;
 
-const privacyUrl = 'https://midi-broccoli-56c.notion.site/Covebook-3eb50284670881b0a0e2c6029cea29c7';
+/// 개인정보 처리방침 전문: 우리 서버(server/internal/server/site/privacy.html). 2026-11-18 Notion에서 옮겼다(Google 브랜딩 인증은 우리 도메인이어야 한다)
+const privacyUrl = 'https://covebook.kodeploy.com/privacy';
 const _mail = 'yuntyu01@gmail.com';
 const _motion = [
   (id: 'system', label: '기기 설정 따르기', short: '기기 설정'),
