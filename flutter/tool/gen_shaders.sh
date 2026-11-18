@@ -1,5 +1,6 @@
 #!/bin/bash
-# 빛 셰이더를 만든다: 지금 앱(../app)의 생성기에서 SkSL을 뽑아 → GLSL로 바꿔 shaders/*.frag 에 쓴다.
+# 빛 셰이더를 만든다: 옛 앱(React Native, app/)의 생성기에서 SkSL을 뽑아 → GLSL로 바꿔 shaders/*.frag 에 쓴다.
+# app/ 폴더는 2026-11-18에 저장소에서 지웠다. 생성기는 아직 그 코드에 있어서, 지우기 전 마지막 커밋(APP_REF)에서 꺼내 쓴다.
 # flutter build가 그 파일을 impellerc로 미리 컴파일한다(기기에서 처음 그릴 때 컴파일하지 않는다).
 # 셰이더 식·빛 값을 바꿀 일이 있으면 지금 앱 커밋 + tool/rn_light.patch 를 푼 사본에서 빛 파일을 고쳐 패치를 다시 만들고(지금 앱 폴더는 고치지 않는다) 이것을 다시 돌린다.
 # 관문(S23 측정)을 지나면 생성기를 Dart로 옮기고 node 의존을 없앤다.
@@ -9,15 +10,20 @@ ROOT=$(pwd)
 NODE_BIN=${NODE_BIN:-$HOME/.nvm/versions/node/v22.21.0/bin}
 FLUTTER_BIN=${FLUTTER_BIN:-$HOME/flutter/bin}
 
-# 지금 앱은 커밋된 것을 쓴다(다른 작업의 미커밋 빛 조정이 섞이지 않게): HEAD의 app/을 임시 폴더에 풀고 node_modules만 빌린다.
-# 작업 폴더 그대로 쓰려면 APP_SRC=../app 으로 돌린다
+# 옛 앱은 지우기 전 마지막 커밋의 app/을 임시 폴더에 풀어 쓴다. 다른 커밋을 쓰려면 APP_REF=<커밋>, 풀어 둔 폴더를 쓰려면 APP_SRC=<폴더> 로 돌린다
+APP_REF=${APP_REF:-4f9e1d989e17a06c4fcd6b76ba910c523559397f}
 if [ -z "$APP_SRC" ]; then
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
-  git -C "$ROOT/.." archive HEAD app | tar -x -C "$TMP"
-  ln -s "$ROOT/../app/node_modules" "$TMP/app/node_modules"
+  git -C "$ROOT/.." archive "$APP_REF" app | tar -x -C "$TMP"
+  # node_modules: 작업 폴더에 남아 있으면 빌리고, 없으면 임시 폴더에 새로 깐다
+  if [ -d "$ROOT/../app/node_modules" ]; then
+    ln -s "$ROOT/../app/node_modules" "$TMP/app/node_modules"
+  else
+    (cd "$TMP/app" && PATH=$NODE_BIN:$PATH npm ci --silent)
+  fi
   APP_SRC="$TMP/app"
-  echo "== 지금 앱: 커밋 $(git -C "$ROOT/.." rev-parse --short HEAD)"
+  echo "== 옛 앱: 커밋 $(git -C "$ROOT/.." rev-parse --short "$APP_REF")"
   # Flutter가 고친 빛(tool/rn_light.patch): 지금 앱 빛 파일(조명·스킨 모양·빛 모델·맞추기 값)에 덧대어 만든다. 지금 앱 폴더는 건드리지 않는다.
   # 지금 앱 커밋에 같은 변경이 들어오면(이미 적용됨) 건너뛰고, 맞지 않으면 멈춘다(빛이 어긋난 채 만들지 않게)
   if [ -s "$ROOT/tool/rn_light.patch" ] && [ -z "$NO_LIGHT_PATCH" ]; then

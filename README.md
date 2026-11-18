@@ -1,58 +1,59 @@
 # 책장 한켠
 
-읽은 책을 모아 직접 배치해 꾸미는 책장 앱(가칭). 화면명은 "나의 책장".
+- 읽은 책을 모아 직접 배치해 꾸미는 책장 앱
+- 화면명: "나의 책장"
 
-- 지시서: `docs/HOME_BRIEF.md`(홈), `docs/BOOKSHELF_ASSET_BRIEF.md`(선반·배경 자산 적용), `docs/SPEC.md`(홈 외, Phase 0~6)
-- 시안: `docs/design/`의 레퍼런스 사진 · 캡처: `docs/screenshots/` (00은 시안과 나란히 비교)
-- 자산 규격·임시/최종 구분: `docs/assets.md`
+
+- 앱: `flutter/` (Flutter, Android·iOS)
+- 서버: `server/` (Go, PostgreSQL)
+- 문서: `docs/` ([색인](docs/README.md))
+- 작업 규칙: [`AGENTS.md`](AGENTS.md)
 
 ## 실행
 
-배포 대상은 [`server/README.md`](server/README.md)의 Go 서버다. KoDeploy에는 수동 재배포가 필요하다.
-앱 저장소 테스트는 내장 SQLite를 쓰므로 Node.js 22.13 이상이 필요하다.
-
 ```bash
-cd app && npm install
-npx expo start --port 8095     # Expo Go(SDK 57)
-npm test && npm run typecheck
+cd flutter
+flutter pub get
+flutter run
+flutter test
 
 cd server
-go test ./...                     # PostgreSQL 통합 시험은 별도 테스트 DB가 필요하다
+go test ./...                     # PostgreSQL 통합 시험은 별도 테스트 DB 필요
 DATABASE_URL='postgres://user:pass@localhost:5432/chaekjang?sslmode=disable' go run ./cmd/server # 기본 포트 8080
 ```
 
-자산 스크립트: `python3 app/scripts/measure-shelf.py`(선반 측정·배경 이음새 검사), `python3 app/scripts/extract-reference-assets.py`(시안에서 임시 예시 자산 추출).
+- Flutter 버전: 배포 워크플로와 맞춤 (`.github/workflows/android-flutter-play.yml`의 `flutter-version`)
+- 서버 설정·검증 방법: [`server/README.md`](server/README.md)
+- 서버 운영 반영: KoDeploy에서 손으로 재배포
 
 ## 구조
 
 | 경로 | 역할 |
 |---|---|
-| `app/src/domain/` | 타입, 배치 엔진(이동·쌓기·형태·서랍·검증), 회전 형상, 제목 조판, 카탈로그 매핑·등급 규칙, 모티프 슬롯 30개, 선반 측정값 |
-| `app/src/store/placement-store.ts` | 확정 배치, 로컬 저장(v2: 선반+서랍), 되돌리기, 저장 실패 표시 |
-| `app/src/ui/screenTheme.ts`, `app/src/ui/kit.tsx` | 화면 UI 토큰(색·글자·간격·모양)과 공통 부품. 기준 문서는 `docs/DESIGN.md` |
-| `app/src/db/local-db.ts` | 기기 SQLite(v4: 서버와 같은 정규화 표). 서재, 책장 배치(선반·책 자리 표, 바뀐 줄만 저장), 동기화 대기 목록 |
-| `app/src/ui/` | 종이 배경, 책 렌더러, 선반 줄(선반 PNG)·그림자·드래그 오버레이 |
-| `app/src/features/home/` | 홈, 상세·배치 메뉴, 책 서랍 |
+| `flutter/lib/domain/` | 책·자리 값, 3D 구조, 빛·그림자 계산 |
+| `flutter/lib/scene_config/` | 빛·카메라·스킨 값 |
+| `flutter/lib/db/`, `flutter/lib/store/` | 기기 DB와 서재 읽기·쓰기 |
+| `flutter/lib/services/` | 서버 동기화 등 바깥 연동 |
+| `flutter/lib/features/` | 화면(홈, 책, 갈피, 읽기, 기록, 통계, 공유, 설정, 계정 등) |
+| `flutter/lib/ui/`, `flutter/lib/app/` | 공통 부품, 앱 뼈대와 탭 이동 |
+| `flutter/design-system/` | 디자인 시스템 문서 |
 | `server/internal/server/` | 계정, 동기화, 파일, 도서 API와 DB 마이그레이션 |
 | `server/internal/llm/` | Gemini·GPT 키 관리 게이트웨이 |
+| `server/internal/appleauth/` | Apple 로그인 검증 |
 
-## 과거 상태 기록 (2026-09-27)
+## 배포
 
-**동작 구현(Android 에뮬레이터 Expo Go에서 확인):** 선반 PNG·종이 배경 적용, 세운·기울인·누운(쌓기)·표지 책, 갈피(문장 있는 책), 길게 눌러 같은 칸 자리 바꾸기·다른 선반 끼우기·자동 스크롤, 정보 상자(자세·기울기·자리·서랍), 책 서랍, 되돌리기, 헤더 독서 연도, 앱 재시작 후 복원. 홈은 3개 선반으로 고정하며 초과 선반의 도서는 서랍으로 보존한다.
+| 대상 | 방법 | 문서 |
+|---|---|---|
+| Android (Play) | Actions에서 "CD: Android Flutter AAB"를 손으로 실행 | [`docs/release/android-release.md`](docs/release/android-release.md) |
+| iOS (TestFlight) | main에 `flutter/**` 변경이 푸시되면 자동 실행 | [`docs/release/ios-release.md`](docs/release/ios-release.md) |
+| 서버 | KoDeploy에서 손으로 재배포 | [`server/README.md`](server/README.md) |
 
-**시각 품질:** 예시 18권은 목표 이미지의 개별 책 윤곽을 SVG로 표시하고 실제 윤곽에 맞춰 밀착 배치한다. 3개 선반을 균등 간격으로 중앙 정렬하고, 책·선반의 접촉/확산 그림자를 Skia로 표시한다. 하단은 라벨 없이 채워진 아이콘만 두고 투명하게 겹쳐 그림자가 이어지게 한다. 실제 생성 이미지와 사진 등록 흐름은 아직 연결되지 않았다. 변경 근거·검증·제약은 `docs/HOME_VISUAL_REVIEW.md` 참고.
+## 옛 React Native 앱
 
-**당시 서버·외부 연동:** 카카오·Gemini·GPT는 코드와 가짜 서버 테스트만 있었고 실제 키로 호출하지 않았다. 알라딘 Open API 종료에 따라 고해상도 표지·쪽수 대체 출처 결정이 필요했다. 현재 서버 구성과 검증 방법은 `server/README.md`를 참고한다.
-
-**미구현:** 등록·재장정 흐름(사진 → 식별 확인 → 재장정 → 배치, SPEC Phase 1·3), 로그인·동기화.
-
-**확인하지 않은 것:** iOS, 실제 기기, TalkBack/VoiceOver, 동작 줄이기 설정, 200권 성능(가상화 없음), 저장 실패 경로.
-
-
-## 과거 백엔드·동기화 기록 (2026-10-05)
-
-- **구조:** 앱은 로컬 우선(오프라인 동작)이고, `EXPO_PUBLIC_API_URL`이 있는 빌드에서만 서버와 동기화한다(`app/src/services/sync.ts`, 순수 규칙은 `domain/sync.ts`).
-- **스키마(Flyway V2):** 판본(`editions`+`edition_authors`)·내 책·장정·회차·세션·갈피·파일을 앱 모델 그대로 정규화. 사용자 표는 `(user_id, id)` 복합 키 + 같은 사용자 안 복합 외래키. 공유 카탈로그 `books`는 저자를 `book_authors`로 분리. V8에서 책장 배치 JSON을 `shelves`·`shelf_placements` 표로 나누고 `books`의 계산 열(키·두께 분류, 기본 모티프)을 뺐다(`server/README.md`).
-- **API:** `POST /auth/device`(기기 계정·토큰), `GET /me`, `POST /sync/push`, `GET /sync/pull?since=`, `PUT|GET /files/{id}`(사진), 기존 `/books/search`·`/books/{isbn13}`.
-- **충돌·삭제:** `updatedAt`이 더 새로운 쪽이 이김, 삭제는 `deleted_at` 표시로 전달. 한 번 올리기는 한 트랜잭션.
-- **미구현:** 소셜 로그인 검증(표 `auth_identities`만 준비), 요청 제한, 고아 파일 정리, 배포(HTTPS) — 보고서 `docs/REPORT-2026-10-05-photo-bookmark-rebinding.md` 참고.
+- 2026-11-13: Flutter로 이전 시작
+- 2026-11-18: React Native 앱(`app/`)을 저장소에서 삭제
+- 코드가 남아 있는 마지막 커밋: `4f9e1d9` (`git show 4f9e1d9:app/package.json`으로 꺼내 볼 수 있음)
+- 셰이더 생성기(`flutter/tool/gen_shaders.sh`): 아직 그 코드를 씀. 그 커밋에서 꺼내 실행
+- 2026-11-13 이전 보고서(`docs/reports/`)의 `app/...` 경로: 그 앱 기준
+- 이 README에 있던 과거 기록: [`2026-09-27 상태`](docs/reports/2026-09-27-status.md), [`2026-10-05 백엔드·동기화`](docs/reports/2026-10-05-backend-sync.md)

@@ -50,7 +50,7 @@ argument-hint: "[core|all|페르소나 이름...] [pkg=app.covebook.qa]"
 
 ## 3. 합친 보고서
 
-모든 `report.md`를 읽고 `docs/REPORT-<YYYY-MM-DD>-persona-qa.md`를 쓴다. 이 저장소의 다른 REPORT 문서처럼 짧은 한국어로.
+모든 `report.md`를 읽고 `docs/reports/<YYYY-MM-DD>-persona-qa.md`를 쓴다. `docs/reports/`의 다른 보고서처럼 짧은 한국어로.
 
 1. **머리**: 날짜, 빌드, 기기, 돌린 페르소나, 걸린 시간. 원복 실패가 있으면 맨 위에 경고.
 2. **요약 표**: 페르소나 | 계속 쓸까 | 치명 | 높음 | 보통 | 낮음.
@@ -60,7 +60,7 @@ argument-hint: "[core|all|페르소나 이름...] [pkg=app.covebook.qa]"
 6. **실기기에서 확인할 것**: 각 보고서의 '시험 못 함'을 모아 중복 없이.
 7. **페르소나 한 줄 평** 모음.
 
-증거 중 고칠 것 상위 항목의 스크린샷만 `docs/screenshots/persona-qa-<YYYY-MM-DD>/`로 복사해 보고서에서 가리킨다. 나머지는 `.qa-runs/`에 둔다.
+증거 중 고칠 것 상위 항목의 스크린샷만 `docs/screenshots/<YYYY-MM-DD>-persona-qa/`로 복사해 보고서에서 가리킨다. 나머지는 `.qa-runs/`에 둔다.
 
 ## 4. 마무리
 

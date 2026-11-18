@@ -6,7 +6,7 @@
 |---|---|---|
 | Android | 있음. 세 가지(나의 책장 · 벽 없이 · 투명), AppWidget(RemoteViews), Glance 아님 | `android/app/src/main/kotlin/app/covebook/shelfwidget/` · `res/layout/shelf_widget*.xml` · `res/xml/shelf_widget*_info.xml` |
 | iOS | **없음**. `ios/`에는 Runner뿐이고 WidgetKit 익스텐션이 없다 | — |
-| (참고) 지금 앱 RN | Android 같은 세 가지(이 Flutter 위젯의 원본) | `../app/modules/shelf-widget/android/` |
+| (참고) 옛 앱 RN(2026-11-18 삭제, 커밋 `4f9e1d9`) | Android 같은 세 가지(이 Flutter 위젯의 원본) | `../app/modules/shelf-widget/android/` |
 
 ## Android 위젯
 

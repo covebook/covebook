@@ -7,5 +7,6 @@
 - 같은 작업 폴더를 여러 세션이 함께 쓸 수 있다. `git add -A`·`git add .` 대신 내가 바꾼 파일만 add한다. 남의 미커밋 변경은 건드리지 않는다.
 - 커밋 메시지는 짧은 한국어로 쓴다. `Co-Authored-By` 같은 AI 흔적은 넣지 않는다.
 - 커밋하지 않는 것: `server/.env`, `server/.gradle`·`server/bin`·`server/build`·`server/data`.
-- main push에 `app/**` 변경이 있으면 Play 배포 CI(`.github/workflows/android-playstore-deploy.yml`)가 돈다. 결과를 확인한다.
+- 앱은 Flutter(`flutter/`)다. main push에 `flutter/**` 변경이 있으면 iOS TestFlight CI(`.github/workflows/ios-testflight.yml`)가 돈다. 결과를 확인한다.
+- 안드로이드 Play 배포(`.github/workflows/android-flutter-play.yml`)는 자동으로 돌지 않는다. Actions에서 손으로 돌린다.
 - 서버(`server/**`) 변경은 push만으로 운영에 반영되지 않는다. KoDeploy에서 재배포해야 한다.

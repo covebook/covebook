@@ -1,7 +1,7 @@
 name: "CD: Android Flutter AAB"
 
-# Flutter 앱(flutter/)을 Play 'app.covebook'에 올린다. 지금 앱(RN, app/)과 같은 앱 id·같은 업로드 키라 그 위에 업데이트로 깔린다.
-# 손으로만 돈다(2026-11-18 사용자: Flutter로 빌드해서 스토어에). RN 워크플로(android-playstore-deploy.yml)는 app/** 푸시에 따로 돈다.
+# Flutter 앱(flutter/)을 Play 'app.covebook'에 올린다. 옛 앱(RN)과 같은 앱 id·같은 업로드 키라 그 위에 업데이트로 깔린다.
+# 손으로만 돈다(2026-11-18 사용자: Flutter로 빌드해서 스토어에). RN 앱(app/)과 그 워크플로(android-playstore-deploy.yml)는 2026-11-18에 지웠다.
 on:
   workflow_dispatch:
     inputs:
