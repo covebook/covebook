@@ -2,7 +2,7 @@
 // - 문장은 바로 적어도 되고, 사진을 찍거나 골라 간직할 부분을 자르면 기기 안 문장 인식이 바로 돌아 문장 칸을 채운다(사진은 밖으로 보내지 않는다).
 //   읽은 글자는 사진과 비교해 고칠 수 있고, 인식하지 못한 부분을 지어내지 않는다.
 // - 사진을 고른 뒤 '사진만 저장'을 켜면 글자 없이 종이·테이프 갈피 모양의 사진으로 저장한다. 끄면 원본 사진을 함께 보관할지 고른다.
-// 저장에 실패하면 글·사진을 그대로 두고 다시 시도할 수 있다. 적은 것이 있으면 나가기 전에 묻는다
+// 저장에 실패하면 글·사진을 그대로 두고 다시 시도할 수 있다. 적은 것이 있으면 나가기 전에 묻는다(form_parts DraftGuard)
 // 2026-11-16 QA 은서: 사진만 저장이면 숨은 인식 글을 저장하지 않는다(F2). 처음 방식은 사진 줄 모양으로 고르고(시면 줄바꿈 그대로, F6),
 // 줄 끝 낱말 잇기를 고를 수 있다(F5). 사진의 쪽번호는 쪽수 칸이 비면 채운다. 고친 글은 방식을 바꿔도 지키고 다시 나누는 길을 알린다(F8).
 // 비교하기 쉽게 사진은 잘라 내지 않고 다 보인다(F9). 저장할 때 첫 줄 들여쓰기를 지킨다(F10). 자르기 취소·빈 결과·책 없음은 이유를 보인다(F14·F15)
@@ -23,6 +23,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'book_picker.dart' show pickBook;
 import 'bookmark_detail_screen.dart' show BookmarkDetailScreen;
+import 'form_parts.dart';
 import 'mark_text.dart';
 import 'page_photo.dart';
 import 'photo_plate.dart';
@@ -205,7 +206,6 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
         boardY: widget.boardY,
       );
       if (!mounted) return;
-      _released = true;
       Navigator.of(context).pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/bookmark'), builder: (_) => BookmarkDetailScreen(id: id)));
     } catch (e) {
       // 적은 글·사진은 이 화면에 그대로 있다
@@ -218,15 +218,6 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
     }
   }
 
-  bool _released = false;
-
-  Future<void> _askLeave() => appAlert(context, '쓰던 내용을 버릴까요?', '지금 나가면 저장되지 않아요.', [
-        const AlertButton('계속 쓰기', style: AlertStyle.cancel),
-        AlertButton('버리기', style: AlertStyle.destructive, onPress: () {
-          _released = true;
-          Navigator.of(context).pop();
-        }),
-      ]);
 
   @override
   Widget build(BuildContext context) => qaProbe('newmark', _qaBuild(context));
@@ -235,23 +226,16 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
     final lib = _model.lib;
     final b = _bookId == null ? null : lib.books[_bookId];
     final e = b == null ? null : lib.editions[b.editionId];
-    final width = MediaQuery.sizeOf(context).width;
     final photo = _photo;
-    final recog = _recog;
-    final recognizing = recog?.state == 'running';
-    final empty = recog?.state == 'done' && recog!.empty;
-    final unsure = recog?.state == 'done' ? lowConfidenceLines(recog!.result!) : 0;
-    return PopScope(
-      canPop: _released || !_dirty,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _askLeave();
-      },
+    // 공통 규칙: 쓰던 글 지킴은 갈피 수정·감상과 같은 부품(2026-11-19)
+    return DraftGuard(
+      dirty: () => _dirty,
       child: Screen(
         title: '갈피 남기기',
         // 책을 안 골라 저장이 꺼졌으면 이유를 보인다(QA F15)
         footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (_bookId == null) Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('책을 골라야 저장할 수 있어요', textAlign: TextAlign.center, style: AppType.caption)),
-          Btn(label: '갈피 저장', onPress: _save, busy: _saving, disabled: !_canSave),
+          if (_bookId == null) Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('책을 골라야 저장할 수 있어요', textAlign: TextAlign.center, style: AppType.sub)),
+          Btn(label: '갈피 저장', size: 'l', onPress: _save, busy: _saving, disabled: !_canSave),
         ]),
         children: [
           const SizedBox(height: Space.m),
@@ -272,86 +256,14 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
                 Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('사진을 찍으면 글자를 바로 읽어 아래에 채워요', style: AppType.sub)),
                 Row(children: [
                   Expanded(child: Btn(label: '페이지 찍기', kind: 'secondary', size: 's', onPress: () => _fromPhoto('camera'))),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: Space.s),
                   Expanded(child: Btn(label: '사진 고르기', kind: 'secondary', size: 's', onPress: () => _fromPhoto('library'))),
                 ]),
-                if (_msg != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(_msg!, style: AppType.sub)),
+                if (_msg != null) NoticeText(_msg!, error: true),
               ]),
             )
           else
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.l),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                // 자른 사진(눌러서 크게 보기). 사진만 저장이면 이 모양 그대로 저장된다. 글로 남길 때는 읽은 글과 견주게 잘라 내지 않고 다 보인다(QA F9)
-                Center(child: PhotoPlate(uri: photo.uri, ratio: photo.ratio, width: math.min(_photoOnly ? 300 : 220, width - Space.page * 2), seed: 'new', whole: !_photoOnly)),
-                Padding(
-                  padding: const EdgeInsets.only(top: Space.s),
-                  child: Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: [
-                    AppChip(label: '다시 찍기', onPress: () => _fromPhoto('camera')),
-                    AppChip(label: '다른 사진', onPress: () => _fromPhoto('library')),
-                    AppChip(label: '사진 빼기', onPress: () => setState(() {
-                          _photo = null;
-                          _recog = null;
-                          _modeNote = false;
-                        })),
-                  ]),
-                ),
-                if (_msg != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(_msg!, textAlign: TextAlign.center, style: AppType.sub)),
-                ListItem(label: '사진만 저장', sub: '글자 없이 사진 그대로 남겨요', right: Toggle(label: '사진만 저장', value: _photoOnly, onChange: _choosePhotoOnly)),
-                if (!_photoOnly) ...[
-                  if (!textRecognitionAvailable) const _Notice(textRecognitionReason),
-                  if (recognizing) const Loading(label: '사진 속 글자를 읽는 중이에요'),
-                  if (recog?.state == 'failed')
-                    Padding(
-                      padding: const EdgeInsets.only(top: Space.s),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        const _Notice('글자를 읽지 못했어요. 다시 읽거나, 직접 적거나, 사진만 저장할 수 있어요.', error: true),
-                        const SizedBox(height: Space.s),
-                        Btn(label: '다시 읽기', kind: 'secondary', size: 's', onPress: () => _runOcr(photo)),
-                      ]),
-                    ),
-                  // 빈 결과는 같은 사진을 다시 읽어도 같다: 다시 읽기 대신 사진만 저장(다시 찍기·다른 사진은 사진 아래 칩, QA F15)
-                  if (empty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: Space.s),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        const _Notice('사진에서 글자를 찾지 못했어요. 글자가 크고 반듯하게 보이도록 다시 찍거나, 아래에 직접 적거나, 사진만 저장할 수 있어요.', error: true),
-                        const SizedBox(height: Space.s),
-                        Btn(label: '사진만 저장하기', kind: 'secondary', size: 's', onPress: () => _choosePhotoOnly(true)),
-                      ]),
-                    ),
-                  if (recog?.state == 'done' && !empty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: Space.s),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('읽은 글자를 사진과 비교해 고쳐 주세요. 사진을 누르면 크게 볼 수 있어요.${unsure > 0 ? ' 흐릿하게 읽힌 줄이 $unsure개 있어요.' : ''}', style: AppType.sub),
-                        Padding(
-                          padding: const EdgeInsets.only(top: Space.s),
-                          child: Wrap(spacing: 8, runSpacing: 8, children: [
-                            AppChip(label: '줄 끝 이어 쓰기', on: _lineMode == LineMode.join, onPress: () => _changeLineMode(LineMode.join)),
-                            AppChip(label: '줄바꿈 그대로(시)', on: _lineMode == LineMode.keep, onPress: () => _changeLineMode(LineMode.keep)),
-                          ]),
-                        ),
-                        // 한글 줄 끝: 낱말 가운데서 끊긴 곳만 붙이기(알아서)·늘 붙이기·늘 띄우기(QA F5)
-                        if (_lineMode == LineMode.join)
-                          Padding(
-                            padding: const EdgeInsets.only(top: Space.s),
-                            child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                              Text('줄이 바뀐 곳', style: AppType.caption),
-                              AppChip(label: '알아서 잇기', on: _words == WordJoin.auto, onPress: () => _changeWords(WordJoin.auto)),
-                              AppChip(label: '붙여 잇기', on: _words == WordJoin.attach, onPress: () => _changeWords(WordJoin.attach)),
-                              AppChip(label: '띄어 잇기', on: _words == WordJoin.space, onPress: () => _changeWords(WordJoin.space)),
-                            ]),
-                          ),
-                        if (_modeNote && _edited) ...[
-                          const _Notice('고친 글은 그대로 둬요. 고른 방식으로 다시 나누려면 아래 \'다시 나누기\'를 눌러 주세요. 고친 곳은 사라져요.'),
-                          TextLink(label: '다시 나누기', onPress: _redo, start: true),
-                        ],
-                      ]),
-                    ),
-                ],
-              ]),
-            ),
+            _photoSection(context, photo),
           if (!_asPhoto)
             Field(
               key: ValueKey(('text', _textVersion)),
@@ -375,27 +287,92 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             hint: _photoPage != null && _page.trim() == '$_photoPage' ? '사진의 쪽번호를 넣었어요' : null,
           ),
           Field(label: '한 줄 메모 (선택)', value: _memo, onChange: (t) => setState(() => _memo = t), placeholder: '나만 보는 메모예요. 공유 이미지에는 넣지 않아요', multiline: true, minHeight: 80),
-          if (_saveError != null) _Notice(_saveError!, error: true),
+          if (_saveError != null) NoticeText(_saveError!, error: true),
         ],
       ),
     );
   }
-}
 
-/// 안내 상자(지금 앱 Notice): 옅은 회색 바탕, 오류면 붉은 글자
-class _Notice extends StatelessWidget {
-  const _Notice(this.text, {this.error = false});
-  final String text;
-  final bool error;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-        liveRegion: true,
-        child: Container(
-          margin: const EdgeInsets.only(top: Space.s),
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(Shape.input)),
-          child: Text(text, style: AppType.sub.copyWith(color: error ? AppColors.danger : AppColors.ink)),
+  /// 사진을 넣은 뒤: 사진 · 칩 줄 · 사진만 저장 · 글자 읽기 결과(build가 길어 나눴다, 2026-11-19)
+  Widget _photoSection(BuildContext context, _Photo photo) {
+    final width = MediaQuery.sizeOf(context).width;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.l),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // 자른 사진(눌러서 크게 보기). 사진만 저장이면 이 모양 그대로 저장된다. 글로 남길 때는 읽은 글과 견주게 잘라 내지 않고 다 보인다(QA F9)
+        Center(child: PhotoPlate(uri: photo.uri, ratio: photo.ratio, width: math.min(_photoOnly ? 300 : 220, width - Space.page * 2), seed: 'new', whole: !_photoOnly)),
+        PhotoChips(
+          onCamera: () => _fromPhoto('camera'),
+          onLibrary: () => _fromPhoto('library'),
+          onRemove: () => setState(() {
+            _photo = null;
+            _recog = null;
+            _modeNote = false;
+          }),
         ),
-      );
+        if (_msg != null) NoticeText(_msg!, error: true, center: true),
+        ListItem(label: '사진만 저장', sub: '글자 없이 사진 그대로 남겨요', right: Toggle(label: '사진만 저장', value: _photoOnly, onChange: _choosePhotoOnly)),
+        if (!_photoOnly) ..._recogParts(photo),
+      ]),
+    );
+  }
+
+  /// 글자 읽기: 읽는 중 · 실패(다시 읽기) · 빈 결과(사진만 저장) · 읽은 결과와 줄 나누기 방식
+  List<Widget> _recogParts(_Photo photo) {
+    final recog = _recog;
+    final empty = recog?.state == 'done' && recog!.empty;
+    final unsure = recog?.state == 'done' ? lowConfidenceLines(recog!.result!) : 0;
+    return [
+      if (!textRecognitionAvailable) const NoticeText(textRecognitionReason),
+      if (recog?.state == 'running') const Loading(label: '사진 속 글자를 읽는 중이에요'),
+      if (recog?.state == 'failed')
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const NoticeText('글자를 읽지 못했어요. 다시 읽거나, 직접 적거나, 사진만 저장할 수 있어요.', error: true),
+            const SizedBox(height: Space.s),
+            Btn(label: '다시 읽기', kind: 'secondary', size: 's', onPress: () => _runOcr(photo)),
+          ]),
+        ),
+      // 빈 결과는 같은 사진을 다시 읽어도 같다: 다시 읽기 대신 사진만 저장(다시 찍기·다른 사진은 사진 아래 칩, QA F15)
+      if (empty)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const NoticeText('사진에서 글자를 찾지 못했어요. 글자가 크고 반듯하게 보이도록 다시 찍거나, 아래에 직접 적거나, 사진만 저장할 수 있어요.', error: true),
+            const SizedBox(height: Space.s),
+            Btn(label: '사진만 저장하기', kind: 'secondary', size: 's', onPress: () => _choosePhotoOnly(true)),
+          ]),
+        ),
+      if (recog?.state == 'done' && !empty)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('읽은 글자를 사진과 비교해 고쳐 주세요. 사진을 누르면 크게 볼 수 있어요.${unsure > 0 ? ' 흐릿하게 읽힌 줄이 $unsure개 있어요.' : ''}', style: AppType.sub),
+            Padding(
+              padding: const EdgeInsets.only(top: Space.s),
+              child: Wrap(spacing: Space.s, runSpacing: Space.s, children: [
+                AppChip(label: '줄 끝 이어 쓰기', on: _lineMode == LineMode.join, onPress: () => _changeLineMode(LineMode.join)),
+                AppChip(label: '줄바꿈 그대로(시)', on: _lineMode == LineMode.keep, onPress: () => _changeLineMode(LineMode.keep)),
+              ]),
+            ),
+            // 한글 줄 끝: 낱말 가운데서 끊긴 곳만 붙이기(알아서)·늘 붙이기·늘 띄우기(QA F5)
+            if (_lineMode == LineMode.join)
+              Padding(
+                padding: const EdgeInsets.only(top: Space.s),
+                child: Wrap(spacing: Space.s, runSpacing: Space.s, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  Text('줄이 바뀐 곳', style: AppType.caption),
+                  AppChip(label: '알아서 잇기', on: _words == WordJoin.auto, onPress: () => _changeWords(WordJoin.auto)),
+                  AppChip(label: '붙여 잇기', on: _words == WordJoin.attach, onPress: () => _changeWords(WordJoin.attach)),
+                  AppChip(label: '띄어 잇기', on: _words == WordJoin.space, onPress: () => _changeWords(WordJoin.space)),
+                ]),
+              ),
+            if (_modeNote && _edited) ...[
+              const NoticeText('고친 글은 그대로 둬요. 고른 방식으로 다시 나누려면 아래 \'다시 나누기\'를 눌러 주세요. 고친 곳은 사라져요.'),
+              TextLink(label: '다시 나누기', onPress: _redo, start: true),
+            ],
+          ]),
+        ),
+    ];
+  }
 }

@@ -18,15 +18,14 @@ import 'package:flutter/scheduler.dart';
 import '../../app/app_nav.dart';
 import '../../db/kv_store.dart';
 import '../../domain/bookmark_board.dart';
-import '../../domain/color.dart' show tabColors;
 import '../../domain/library.dart';
 import '../../store/library_model.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../stats/stats_widgets.dart' show LinkedCover;
 import 'board_card.dart';
-import 'bookmark_card.dart' show hexColor;
-import 'bookmark_detail_screen.dart' show PageDots, openBookmark;
+import 'bookmark_detail_screen.dart' show PageDots, markInk, openBookmark;
+import 'mark_text.dart' show isPhotoMark;
 import 'new_bookmark_screen.dart' show openNewBookmark;
 
 const _reach = 2600.0; // 옮겨 붙일 수 있는 범위
@@ -41,14 +40,13 @@ const _turnAt = 0.22;
 const _fling = 700.0;
 const _turnMs = 240;
 const _hold = Duration(milliseconds: 280);
+// 아래 단추 줄 높이(작은 단추 40 + 누르는 자리 위아래 = 48. 44로 셌다, 2026-11-19)
+const _barH = Space.hit;
 const _slop = 6.0;
 const _tapSlop = 8.0;
 
 Future<void> openBookmarkBoard(BuildContext context, String bookId) => Navigator.of(context, rootNavigator: true)
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/bookmark/board'), builder: (_) => BookmarkBoardScreen(first: bookId)));
-
-/// 그 책의 갈피 색(보드 점·고른 테두리·테이프)
-String? _ribbon(Library lib, String id) => ribbonOf(lib, id);
 
 class BookmarkBoardScreen extends StatefulWidget {
   const BookmarkBoardScreen({super.key, required this.first});
@@ -147,23 +145,20 @@ class _BoardScreenState extends State<BookmarkBoardScreen> with SingleTickerProv
     }
   }
 
-  void _back() {
-    final nav = Navigator.of(context);
-    nav.maybePop();
-  }
-
   @override
   Widget build(BuildContext context) {
     final insets = MediaQuery.paddingOf(context);
     final lib = _model.lib;
     final pages = _pages, index = _index;
-    final back = IconBtn(label: '뒤로', onPress: _back, child: const LucideIcon('ChevronLeft', size: 22));
+    // 공통 규칙: 위 줄은 다른 밀어 넣은 화면과 같은 NavBar(줄 60 · 꺾쇠 28, 2026-11-19. 줄 56 · 꺾쇠 22였다)
+    const head = NavBar(title: '갈피 보드');
     if (index < 0) {
-      return ColoredBox(
+      // Material: 글자 기본 모양(없으면 제목·빈 화면 글에 노란 밑줄)
+      return Material(
         color: AppColors.bg,
         child: Padding(
           padding: EdgeInsets.only(top: insets.top),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [back, const Expanded(child: Empty(title: '책을 찾지 못했어요'))]),
+          child: const Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [head, Expanded(child: Empty(title: '책을 찾지 못했어요'))]),
         ),
       );
     }
@@ -173,16 +168,7 @@ class _BoardScreenState extends State<BookmarkBoardScreen> with SingleTickerProv
       child: Stack(children: [
         Column(children: [
           // 다른 상세 화면과 같은 머리줄: 왼쪽 뒤로, 가운데 작은 제목(2026-11-17)
-          Padding(
-            padding: EdgeInsets.fromLTRB(Space.page - 10, insets.top + 4, Space.page, 0),
-            child: SizedBox(
-              height: 56,
-              child: Stack(children: [
-                Positioned.fill(left: 64, right: 64, child: Center(child: Semantics(header: true, child: Text('갈피 보드', style: AppType.navTitle)))),
-                Align(alignment: Alignment.centerLeft, child: back),
-              ]),
-            ),
-          ),
+          Padding(padding: EdgeInsets.only(top: insets.top), child: head),
           Expanded(
             child: ClipRect(
               child: LayoutBuilder(builder: (_, box) {
@@ -208,14 +194,14 @@ class _BoardScreenState extends State<BookmarkBoardScreen> with SingleTickerProv
             left: 0,
             right: 0,
             bottom: insets.bottom + 16,
-            height: 44,
+            height: _barH,
             child: Center(
               // 화면 낭독: 끌지 않고 위아래 조절 동작으로 넘긴다
               child: Semantics(
                 label: '${pages.length}권 중 ${index + 1}번째 책, $title',
                 onIncrease: canNext ? () => _go(1) : null,
                 onDecrease: canPrev ? () => _go(-1) : null,
-                child: PageDots(count: pages.length, index: index, color: hexColor(tabColors(_ribbon(lib, _id), _id).$1)),
+                child: PageDots(count: pages.length, index: index, color: markInk(lib, _id)),
               ),
             ),
           ),
@@ -315,7 +301,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
     _bounds = boardBounds(_spots);
   }
 
-  double get _bottomBar => MediaQuery.paddingOf(context).bottom + 16 + 44; // 아래 '전체 보기·+ 갈피' 줄이 덮는 높이
+  double get _bottomBar => MediaQuery.paddingOf(context).bottom + 16 + _barH; // 아래 '전체 보기·+ 갈피' 줄이 덮는 높이
 
   // 처음 열 때: 마지막에 보던 곳, 없으면 전체 보기
   Future<void> _open() async {
@@ -356,7 +342,8 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
 
   // ---------- 카드 자리 ----------
   double _widthOf(BoardSpot o) => o.id == _picked && _resizeW != null ? _resizeW! : o.w;
-  double _minHeightOf(Bookmark m, double w) => boardHeightAt(w, boardTextChars(m.text), m.photoUri != null ? boardPhotoRatio(m.photoRatio) : 0);
+  // 사진 갈피 판정은 카드 · 필터와 같은 isPhotoMark(글이 있으면 사진을 곁들여도 문장 갈피, 2026-11-19)
+  double _minHeightOf(Bookmark m, double w) => boardHeightAt(w, boardTextChars(m.text), isPhotoMark(m.text, m.photoUri) ? boardPhotoRatio(m.photoRatio) : 0);
 
   /// 카드 가운데(보드 좌표): 왼쪽 위는 추정 높이로 놓고, 돌리기 가운데는 실제 크기의 가운데
   ({Offset c, double w, double h}) _box(Bookmark m, BoardSpot o) {
@@ -679,35 +666,12 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
     final b = lib.books[widget.id];
     final e = b == null ? null : lib.editions[b.editionId];
     if (b == null || e == null) return const SizedBox.shrink();
-    final insets = MediaQuery.paddingOf(context);
-    final color = _ribbon(lib, b.id);
-    final ring = hexColor(tabColors(color, b.id).$1);
+    final color = ribbonOf(lib, b.id);
+    final ring = markInk(lib, b.id);
     final handle = _held == null ? _handleAt() : null;
     return Stack(children: [
       Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Space.page, 6, Space.page, 10),
-          child: Row(children: [
-            SizedBox(width: 34, child: Center(child: LinkedCover(lib: lib, id: widget.id, width: 34))),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-                MetaText([if (e.authors.isNotEmpty) e.authors.first, '갈피 ${_marks.length}개'].join(' | '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
-              ]),
-            ),
-            const SizedBox(width: 12),
-            Btn(
-              label: '목록 보기',
-              kind: 'secondary',
-              size: 's',
-              onPress: () {
-                Navigator.of(context).popUntil((r) => r.isFirst);
-                AppNav.instance.goBookmarks(widget.id);
-              },
-            ),
-          ]),
-        ),
+        _bookRow(lib, e),
         Expanded(
           child: LayoutBuilder(builder: (_, box) {
             final vp = box.biggest;
@@ -739,50 +703,75 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
                       ),
                     ),
                   // 손잡이는 확대·축소와 상관없이 같은 크기로
-                  if (handle != null && _shown)
-                    Positioned(
-                      left: handle.dx - _handle / 2,
-                      top: handle.dy - _handle / 2,
-                      width: _handle,
-                      height: _handle,
-                      child: Semantics(
-                        slider: true,
-                        label: '갈피 크기',
-                        onIncrease: () => _resizeBy(24),
-                        onDecrease: () => _resizeBy(-24),
-                        child: Center(
-                          child: Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(color: AppColors.bg, shape: BoxShape.circle, border: Border.all(color: ring, width: 1.5)),
-                            child: const Center(child: LucideIcon('MoveDiagonal2', size: 14)),
-                          ),
-                        ),
-                      ),
-                    ),
+                  if (handle != null && _shown) _handleKnob(handle, ring),
                 ]),
               ),
             );
           }),
         ),
       ]),
-      // 작은 타이머가 이 줄 위에 뜨게 높이(아래 여백 포함)를 알린다('+ 갈피'를 가렸다, 2026-11-16)
-      Positioned(
-        left: 16,
-        right: 16,
+      _bottomButtons(),
+    ]);
+  }
+
+  /// 보드 위 책 줄: 표지 · 제목 · '저자 | 갈피 N개' · 목록 보기
+  /// 공통 규칙: 책 줄은 BookRow small, 저자는 모두(2026-11-19. 표지 34 · 첫 저자만이었다)
+  Widget _bookRow(Library lib, Edition e) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.page),
+        child: BookRow(
+          cover: LinkedCover(lib: lib, id: widget.id, width: BookRow.coverWidth(BookRowSize.small)),
+          title: e.title,
+          meta: [if (e.authors.isNotEmpty) e.authors.join(', '), '갈피 ${_marks.length}개'].join(metaSep),
+          trailing: Btn(
+            label: '목록 보기',
+            kind: 'secondary',
+            size: 's',
+            onPress: () {
+              Navigator.of(context).popUntil((r) => r.isFirst);
+              AppNav.instance.goBookmarks(widget.id);
+            },
+          ),
+        ),
+      );
+
+  /// 고른 갈피의 폭 손잡이(화면 좌표)
+  Widget _handleKnob(Offset at, Color ring) => Positioned(
+        left: at.dx - _handle / 2,
+        top: at.dy - _handle / 2,
+        width: _handle,
+        height: _handle,
+        child: Semantics(
+          slider: true,
+          label: '갈피 크기',
+          onIncrease: () => _resizeBy(24),
+          onDecrease: () => _resizeBy(-24),
+          child: Center(
+            child: Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(color: AppColors.bg, shape: BoxShape.circle, border: Border.all(color: ring, width: 1.5)),
+              child: const Center(child: LucideIcon('MoveDiagonal2', size: 14)),
+            ),
+          ),
+        ),
+      );
+
+  /// 아래 '전체 보기 · + 갈피'. 작은 타이머가 이 줄 위에 뜨게 높이(아래 여백 포함)를 알린다('+ 갈피'를 가렸다, 2026-11-16)
+  Widget _bottomButtons() => Positioned(
+        // 공통 규칙: 옆 여백은 화면 여백(2026-11-19. 16이었다)
+        left: Space.page,
+        right: Space.page,
         bottom: 0,
         child: FooterReport(
           child: Padding(
-            padding: EdgeInsets.only(bottom: insets.bottom + 16),
+            padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 16),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Btn(label: '전체 보기', kind: 'secondary', size: 's', disabled: _marks.isEmpty, onPress: _fit),
               Btn(label: '갈피', kind: 'secondary', size: 's', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
             ]),
           ),
         ),
-      ),
-    ]);
-  }
+      );
 
   void _resizeBy(double d) {
     final id = _picked;

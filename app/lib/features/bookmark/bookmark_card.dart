@@ -2,6 +2,7 @@
 // 문장 갈피는 오른쪽 위에 한지 테이프, 사진 갈피는 인화 사진. 아래에 출처(표지·제목·저자·날짜), 목록에서는 오른쪽 아래 '아껴두기'
 // 2026-11-16 QA 은서 F11: 글이 있는 갈피는 원본 사진을 곁들여도 문장 갈피(문장이 주인공, 사진은 문장 아래 작게). 쪽 표기는 'p. 118' 하나로.
 // F13: 줄바꿈이 있는 글(시)은 화면 폭 때문에 접힌 줄을 들여 써 진짜 줄바꿈과 구분하고, 목록에서 줄 수를 넘으면 끝에 '…'
+// 카드의 글자 크기·색·여백 숫자는 옛 앱 화소 값 그대로(시안 99% 맞춤, docs/UI_CONVENTIONS.md 9장 예외)
 library;
 
 import 'dart:math' as math;
@@ -183,8 +184,6 @@ final _pageTop = _t(AppFonts.ui, 14, 20, AppColors.inkSoft);
 final _srcTitle = _t(AppFonts.uiBold, 15, 21, AppColors.ink);
 final _meta = _t(AppFonts.ui, 14, 20, AppColors.inkSoft);
 
-final _ymd = RegExp(r'^\d{4}[.\-/](\d{1,2})[.\-/](\d{1,2}).*$');
-
 class BookmarkCard extends StatelessWidget {
   const BookmarkCard({super.key, required this.data, required this.width, required this.seed, this.showMemo = false, this.compact = false, this.onOpen, this.saved = false, this.onToggleSaved});
   final BookmarkCardData data;
@@ -194,81 +193,27 @@ class BookmarkCard extends StatelessWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onToggleSaved;
 
+  /// 표지는 하단의 작은 출처처럼(목록 40×56dp)
+  double get _coverW => compact ? 40.0 : 56.0;
+  double get _padBottom => compact ? 20.0 : 34.0;
+  double get _cardW => compact ? width - 4 : width * 0.857;
+
+  // 날짜는 부르는 쪽이 정한 모양 그대로(목록 dateShort · 상세 dateLong). 목록에서 'YYYY.MM.DD'를 'N월 N일'로 바꾸던 곳은 쓰는 데가 없어 뺐다(2026-11-19)
   @override
   Widget build(BuildContext context) {
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
-    final qt = compact ? (size: 25.0, lh: 38.0) : quoteType(data.text);
-    final cardW = compact ? width - 4 : width * 0.857;
-    final coverW = compact ? 40.0 : 56.0; // 표지는 하단의 작은 출처처럼(목록 40×56dp)
     final tone = paperColors(data.color, data.bookId ?? data.title);
     // 사진만 남긴 갈피만 사진 갈피. 글이 있으면 사진은 문장 아래 원본으로 곁들인다(QA F11)
     final photo = isPhotoMark(data.text, data.photoUri);
-    final attached = !photo && data.photoUri != null && data.photoUri!.isNotEmpty;
-    final page = data.page != null && data.page != 0 ? pageLabel(data.page!) : null;
-    final date = compact ? data.date.replaceFirstMapped(_ymd, (m) => '${int.parse(m[1]!)}월 ${int.parse(m[2]!)}일') : data.date;
-    final padBottom = compact ? 20.0 : 34.0;
     final rule = Container(height: hair, color: AppColors.line);
-    final meta = [?data.author, date].where((s) => s.isNotEmpty).join(' | ');
 
     final body = Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 24 : 33, compact ? 22 : 36, compact ? 24 : 33, padBottom),
+      padding: EdgeInsets.fromLTRB(compact ? 24 : 33, compact ? 22 : 36, compact ? 24 : 33, _padBottom),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        ConstrainedBox(
-          constraints: BoxConstraints(minHeight: compact ? 24 : 28),
-          child: Row(children: [
-            Text(photo ? '사진 갈피' : page ?? '남긴 문장', style: _pageTop),
-            if (photo && page != null) ...[const Spacer(), Transform.translate(offset: const Offset(3, 0), child: Text(page, style: _pageTop))],
-            // 원본 사진을 곁들인 문장 갈피: 테이프와 겹치지 않게 테이프 왼쪽에 작은 표시
-            if (attached) ...[
-              const Spacer(),
-              Padding(
-                padding: EdgeInsets.only(right: compact ? 40 : 44),
-                child: Semantics(container: true, label: '원본 사진 있음', child: const ExcludeSemantics(child: LucideIcon('Camera', size: 16, color: AppColors.inkSoft))),
-              ),
-            ],
-          ]),
-        ),
-        if (photo)
-          Padding(
-            padding: EdgeInsets.only(top: compact ? 14 : 26),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Align(alignment: Alignment.centerLeft, child: PhotoPlate(uri: data.photoUri!, ratio: data.photoRatio, width: cardW - (compact ? 48 : 66) + 3, seed: seed, compact: compact)),
-            ]),
-          )
-        else ...[
-          Padding(
-            padding: EdgeInsets.only(top: compact ? 14 : 33),
-            child: WordWrap(data.text, style: _t(AppFonts.reading, qt.size, qt.lh, const Color(0xFF292725), spacing: -0.45), maxLines: compact ? 4 : null, hang: compact ? null : qt.size),
-          ),
-          // 원본 사진은 문장 아래 작게(눌러서 크게 보기). 목록에서는 머리의 표시만
-          if (attached && !compact)
-            Padding(
-              padding: const EdgeInsets.only(top: 26),
-              child: Align(alignment: Alignment.centerLeft, child: PhotoPlate(uri: data.photoUri!, ratio: data.photoRatio, width: (cardW - 66) * 0.5, seed: seed, compact: true)),
-            ),
-        ],
+        _head(photo),
+        ..._content(photo),
         Padding(padding: EdgeInsets.only(top: compact ? 20 : 30, bottom: compact ? 16 : 20), child: rule),
-        // 표지·제목·저자는 가깝게 한 묶음. 인용문만 명조이고 책 정보는 고딕, 책 이름만 조금 진하게
-        Row(children: [
-          Container(
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: AppColors.line, width: hair)),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: RealCover(uri: data.coverUri, title: data.title, color: data.bookColor ?? data.color ?? '#F2F4F6', width: coverW, ratio: _coverRatio),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(right: compact && onToggleSaved != null ? 40 : 0),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(data.title, style: _srcTitle, maxLines: compact ? 1 : 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                MetaText(meta, style: _meta, maxLines: 1, overflow: TextOverflow.ellipsis),
-              ]),
-            ),
-          ),
-        ]),
+        _source(hair),
         if (showMemo && data.memo != null && data.memo!.isNotEmpty) ...[
           Padding(padding: const EdgeInsets.only(top: 18, bottom: 20), child: rule),
           WordWrap(data.memo!, style: _t(AppFonts.reading, 16, 28, const Color(0xFF38332D))),
@@ -277,7 +222,7 @@ class BookmarkCard extends StatelessWidget {
     );
 
     final card = Container(
-      width: cardW,
+      width: _cardW,
       decoration: BoxDecoration(
         color: cardPaper,
         borderRadius: BorderRadius.circular(8),
@@ -306,21 +251,7 @@ class BookmarkCard extends StatelessWidget {
               child: BookmarkTape(color: hexColor(tone.tape), seed: '$seed-tape', width: compact ? 39 : 44, height: compact ? 43 : 45, paperEdge: compact ? 16 : 13),
             ),
           ),
-        // 아껴두기: 출처 줄의 오른쪽 끝(표지 높이 가운데)
-        if (compact && onToggleSaved != null)
-          Positioned(
-            right: 14,
-            bottom: padBottom + (coverW / _coverRatio - 44) / 2,
-            child: Semantics(
-              button: true,
-              selected: saved,
-              label: saved ? '아껴둔 갈피에서 빼기' : '갈피 아껴두기',
-              child: Pressable(
-                onPress: onToggleSaved,
-                child: SizedBox(width: 44, height: 44, child: Center(child: LucideIcon('Bookmark', size: 22, color: AppColors.inkSoft, fill: saved ? AppColors.inkSoft : null))),
-              ),
-            ),
-          ),
+        if (compact && onToggleSaved != null) _saveToggle(),
       ]),
     );
 
@@ -333,8 +264,8 @@ class BookmarkCard extends StatelessWidget {
           Positioned(
             top: (compact ? 18 : 35) - (compact ? 20 : 37),
             bottom: (compact ? 34 : 36) - (compact ? 36 : 38),
-            left: (width - cardW - 4) / 2,
-            width: cardW + 4,
+            left: (width - _cardW - 4) / 2,
+            width: _cardW + 4,
             child: Transform.rotate(
               angle: (compact ? 1.6 : 2) * _deg,
               child: Container(
@@ -349,4 +280,88 @@ class BookmarkCard extends StatelessWidget {
       ),
     );
   }
+
+  /// 머리 줄: '남긴 문장' 또는 쪽, 사진 갈피면 '사진 갈피'와 오른쪽 쪽, 원본 사진을 곁들였으면 작은 사진 표시
+  Widget _head(bool photo) {
+    final page = data.page != null && data.page != 0 ? pageLabel(data.page!) : null;
+    final attached = !photo && (data.photoUri ?? '').isNotEmpty;
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: compact ? 24 : 28),
+      child: Row(children: [
+        Text(photo ? '사진 갈피' : page ?? '남긴 문장', style: _pageTop),
+        if (photo && page != null) ...[const Spacer(), Transform.translate(offset: const Offset(3, 0), child: Text(page, style: _pageTop))],
+        // 원본 사진을 곁들인 문장 갈피: 테이프와 겹치지 않게 테이프 왼쪽에 작은 표시
+        if (attached) ...[
+          const Spacer(),
+          Padding(
+            padding: EdgeInsets.only(right: compact ? 40 : 44),
+            child: Semantics(container: true, label: '원본 사진 있음', child: const ExcludeSemantics(child: LucideIcon('Camera', size: 16, color: AppColors.inkSoft))),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  /// 본문: 사진 갈피는 인화 사진, 문장 갈피는 문장(+ 원본 사진은 문장 아래 작게)
+  List<Widget> _content(bool photo) {
+    if (photo) {
+      return [
+        Padding(
+          padding: EdgeInsets.only(top: compact ? 14 : 26),
+          child: Align(alignment: Alignment.centerLeft, child: PhotoPlate(uri: data.photoUri!, ratio: data.photoRatio, width: _cardW - (compact ? 48 : 66) + 3, seed: seed, compact: compact)),
+        ),
+      ];
+    }
+    final qt = compact ? (size: 25.0, lh: 38.0) : quoteType(data.text);
+    final attached = (data.photoUri ?? '').isNotEmpty;
+    return [
+      Padding(
+        padding: EdgeInsets.only(top: compact ? 14 : 33),
+        child: WordWrap(data.text, style: _t(AppFonts.reading, qt.size, qt.lh, const Color(0xFF292725), spacing: -0.45), maxLines: compact ? 4 : null, hang: compact ? null : qt.size),
+      ),
+      // 원본 사진은 문장 아래 작게(눌러서 크게 보기). 목록에서는 머리의 표시만
+      if (attached && !compact)
+        Padding(
+          padding: const EdgeInsets.only(top: 26),
+          child: Align(alignment: Alignment.centerLeft, child: PhotoPlate(uri: data.photoUri!, ratio: data.photoRatio, width: (_cardW - 66) * 0.5, seed: seed, compact: true)),
+        ),
+    ];
+  }
+
+  /// 출처: 표지 · 제목 · '저자 | 날짜'. 표지·제목·저자는 가깝게 한 묶음. 인용문만 명조이고 책 정보는 고딕, 책 이름만 조금 진하게
+  Widget _source(double hair) => Row(children: [
+        Container(
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: AppColors.line, width: hair)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: RealCover(uri: data.coverUri, title: data.title, color: data.bookColor ?? data.color ?? '#F2F4F6', width: _coverW, ratio: _coverRatio),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: compact && onToggleSaved != null ? 40 : 0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(data.title, style: _srcTitle, maxLines: compact ? 1 : 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              MetaText([?data.author, data.date].where((s) => s.isNotEmpty).join(metaSep), style: _meta, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ]),
+          ),
+        ),
+      ]);
+
+  /// 아껴두기: 출처 줄의 오른쪽 끝(표지 높이 가운데). 누르는 자리 48(공통 규칙 8장, 44였다). 아이콘 자리는 그대로(오른쪽 14 → 12)
+  Widget _saveToggle() => Positioned(
+        right: 14 - (Space.hit - Space.touch) / 2,
+        bottom: _padBottom + (_coverW / _coverRatio - Space.hit) / 2,
+        child: Semantics(
+          button: true,
+          selected: saved,
+          label: saved ? '아껴둔 갈피에서 빼기' : '갈피 아껴두기',
+          child: Pressable(
+            onPress: onToggleSaved,
+            child: SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('Bookmark', color: AppColors.inkSoft, fill: saved ? AppColors.inkSoft : null))),
+          ),
+        ),
+      );
 }

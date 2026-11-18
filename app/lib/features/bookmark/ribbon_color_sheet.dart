@@ -80,9 +80,10 @@ class _BodyState extends State<_Body> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: hexColor(paperColors(c, bookId).tape),
-                        border: Border.all(color: on ? AppColors.ink : AppColors.line, width: on ? 2 : hair * 2),
+                        // 공통 규칙: 고른 표시는 다른 고르기와 같은 갈색(2026-11-19. 검은 테두리·체크였다)
+                        border: Border.all(color: on ? AppColors.accent : AppColors.line, width: on ? 2 : hair * 2),
                       ),
-                      child: on ? const Center(child: LucideIcon('Check', size: 20, stroke: 2.4)) : null,
+                      child: on ? const Center(child: LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2.4)) : null,
                     ),
                   ),
                 );

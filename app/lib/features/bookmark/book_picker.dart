@@ -82,21 +82,12 @@ class _PickerState extends State<_Picker> {
     setState(() => _picked.contains(k) ? _picked.remove(k) : _picked.add(k));
   }
 
+  /// 고르는 원(여러 권 고르기만). 공통 규칙: RadioMark 하나, 이미 목록에 있으면 흐린 채움(2026-11-19. 24 · 테두리 2 원을 따로 그렸다)
   Widget? _mark(String id) {
     final m = widget.multi;
     if (m == null) return null;
     final fixed = m.fixed.contains(id);
-    final on = fixed || _picked.contains(id);
-    return Container(
-      width: 24,
-      height: 24,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: fixed ? AppColors.inkFaint : on ? AppColors.accent : null,
-        border: Border.all(color: fixed ? AppColors.inkFaint : on ? AppColors.accent : AppColors.track, width: 2),
-      ),
-      child: on ? const Center(child: LucideIcon('Check', size: 14, color: AppColors.onAccent, stroke: 3)) : null,
-    );
+    return RadioMark(on: fixed || _picked.contains(id), dim: fixed);
   }
 
   Widget _item({required Widget child, required bool fixed, required VoidCallback onPress, String? label, bool? checked}) => Semantics(
@@ -105,13 +96,30 @@ class _PickerState extends State<_Picker> {
         enabled: !fixed,
         label: label,
         child: Opacity(
-          opacity: fixed ? 0.45 : 1,
-          child: Pressable(
-            onPress: fixed ? null : onPress,
-            child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 60), child: Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: child)),
-          ),
+          opacity: fixed ? disabledOpacity : 1,
+          child: Pressable(onPress: fixed ? null : onPress, child: child),
         ),
       );
+
+  /// 책 한 줄. 공통 규칙: BookRow small(표지 40 · 제목 rowStrong · '저자 | 상태' sub, 2026-11-19)
+  Widget _book(String id) {
+    final lib = widget.lib, m = widget.multi;
+    final b = lib.books[id]!;
+    final e = lib.editions[b.editionId];
+    final fixed = m?.fixed.contains(id) ?? false;
+    return _item(
+      fixed: fixed,
+      checked: m == null ? null : fixed || _picked.contains(id),
+      label: fixed ? '${e?.title}, 이미 목록에 있어요' : e?.title,
+      onPress: () => _choose(id),
+      child: BookRow(
+        cover: IgnorePointer(child: LinkedCover(lib: lib, id: id, width: BookRow.coverWidth(BookRowSize.small))),
+        title: e?.title ?? '',
+        meta: [if (e != null && e.authors.isNotEmpty) e.authors.join(', '), fixed ? '목록에 있어요' : statusLabel[b.status]!].join(metaSep),
+        trailing: _mark(id),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,17 +128,21 @@ class _PickerState extends State<_Picker> {
     final recent = [for (final id in recentBookIds(lib)) if (lib.books[id]?.hiddenAt == null) id];
     final rest = lib.books.keys.where((id) => !recent.contains(id) && lib.books[id]!.hiddenAt == null);
     final t = _q.trim();
-    final list = [
-      for (final id in [...recent, ...rest])
-        if (t.isEmpty || '${lib.editions[lib.books[id]!.editionId]?.title} ${lib.editions[lib.books[id]!.editionId]?.authors.join(' ')}'.contains(t)) id,
-    ];
+    // 판은 한 번만 찾는다(두 번 찾다 판이 없으면 'null' 글자가 검색에 걸렸다, 2026-11-19)
+    bool hit(String id) {
+      final e = lib.editions[lib.books[id]!.editionId];
+      return e != null && '${e.title} ${e.authors.join(' ')}'.contains(t);
+    }
+
+    final list = [for (final id in [...recent, ...rest]) if (t.isEmpty || hit(id)) id];
     final noneFixed = m != null && m.fixed.contains(m.none);
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Padding(
-        padding: const EdgeInsets.only(top: Space.tight, bottom: 4),
+        padding: const EdgeInsets.only(top: Space.s, bottom: Space.s),
         child: SearchField(value: _q, onChange: (v) => setState(() => _q = v), placeholder: '제목, 저자', label: '책 찾기'),
       ),
       Flexible(
+        // 줄 사이 선 없이(기록 탭 책 고르기와 같은 모양)
         child: ListView(shrinkWrap: true, keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, children: [
           if (widget.onAddNew != null)
             _item(
@@ -138,59 +150,33 @@ class _PickerState extends State<_Picker> {
               checked: null,
               label: '새 책 등록',
               onPress: widget.onAddNew!,
-              child: Text('+ 새 책 등록', style: AppType.row.copyWith(color: AppColors.accent)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: Space.hit),
+                child: Padding(padding: const EdgeInsets.symmetric(vertical: Space.m), child: Text('+ 새 책 등록', style: AppType.row.copyWith(color: AppColors.accent))),
+              ),
             ),
-          if (widget.allowNone && widget.onAddNew != null) const AppDivider(),
+          // 책 없이: 이름은 앱 어디서나 '책 없이 읽기', 표지 자리는 같은 회색 칸(공통 규칙 4장. 한 권 고르기는 '책 연결 없이'였다)
           if (widget.allowNone)
             _item(
               fixed: noneFixed,
               checked: m == null ? null : noneFixed || _picked.contains(m.none),
               onPress: () => _choose(null),
-              child: Row(children: [
-                Expanded(child: Text(m != null ? '책 없이 읽기' : '책 연결 없이', style: AppType.row)),
-                if (m != null) _mark(m.none)!,
-              ]),
+              child: BookRow(
+                cover: NoBookCover(width: BookRow.coverWidth(BookRowSize.small)),
+                title: NoBookCover.name,
+                trailing: m != null ? _mark(m.none) : null,
+              ),
             ),
-          for (final (i, id) in list.indexed) ...[
-            if (i > 0 || widget.allowNone || widget.onAddNew != null) const AppDivider(),
-            Builder(builder: (_) {
-              final b = lib.books[id]!;
-              final e = lib.editions[b.editionId];
-              final fixed = m?.fixed.contains(id) ?? false;
-              return _item(
-                fixed: fixed,
-                checked: m == null ? null : fixed || _picked.contains(id),
-                label: fixed ? '${e?.title}, 이미 목록에 있어요' : e?.title,
-                onPress: () => _choose(id),
-                child: Row(children: [
-                  SizedBox(width: 34, child: Center(child: IgnorePointer(child: LinkedCover(lib: lib, id: id, width: 34)))),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(e?.title ?? '', style: AppType.rowStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 4),
-                      MetaText([if (e != null && e.authors.isNotEmpty) e.authors.join(', '), fixed ? '목록에 있어요' : statusLabel[b.status]!].join(' | '),
-                          style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ]),
-                  ),
-                  if (m != null) ...[const SizedBox(width: 14), _mark(id)!],
-                ]),
-              );
-            }),
-          ],
-          if (list.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Text(t.isNotEmpty ? '맞는 책이 없어요.' : '내 책이 없어요. 먼저 책을 추가해 주세요.', textAlign: TextAlign.center, style: AppType.sub),
-            ),
+          for (final id in list) _book(id),
+          if (list.isEmpty) t.isNotEmpty ? const Empty(title: '맞는 책이 없어요') : const Empty(title: '내 책이 없어요', body: '먼저 책을 추가해 주세요.'),
         ]),
       ),
-      Padding(
-        padding: const EdgeInsets.only(top: Space.tight),
-        child: m != null
-            ? Btn(label: _picked.isEmpty ? '완료' : '완료 (${_picked.length})', onPress: () => widget.onDone?.call(List.of(_picked)))
-            : Btn(label: '닫기', kind: 'ghost', onPress: () => Navigator.pop(context)),
-      ),
+      // 한 권 고르기는 줄을 누르면 닫힌다. 시트에 '닫기' 단추를 두지 않는다(밖 누르기 · 내려 닫기, 공통 규칙 7장)
+      if (m != null)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: Btn(label: _picked.isEmpty ? '완료' : '완료 (${_picked.length})', size: 'l', onPress: () => widget.onDone?.call(List.of(_picked))),
+        ),
     ]);
   }
 }

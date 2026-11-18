@@ -1,6 +1,6 @@
 // 기록 탭(2026-11-16 메뉴 구조 개편): 머리줄 '기록'과 검색·추가(고른 글자 탭에 맞게), 왼쪽 글자 탭 '갈피 | 감상'.
 // 갈피: 예전 갈피 탭 그대로 옮김. 탭 아래 한 줄은 '갈피 N개'와 아껴둔 갈피 켜고 끄기·필터. 책·유형(문장·사진)은 필터 시트에,
-// 걸렸을 때만 '데미안 · 사진 갈피'처럼 조건과 해제를 보인다(기본 조건 칩 줄은 없앴다). 갈피 보드는 필터 시트 '보기'에서.
+// 걸렸을 때만 '데미안 | 사진 갈피'처럼 조건과 해제를 보인다(기본 조건 칩 줄은 없앴다). 갈피 보드는 개수 줄 격자 아이콘에서.
 // 감상: 긴 감상(essay_screens.dart) 목록. '감상 N편'과 필터(책). 표지·책 제목·지은이·미리보기·쓴 날을 상자 없이 줄로
 library;
 
@@ -18,7 +18,6 @@ import '../../ui/alert.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../book/labels.dart';
 import '../bookmark/board_screen.dart' show openBookmarkBoard;
 import '../bookmark/bookmark_card.dart';
 import '../bookmark/bookmark_detail_screen.dart';
@@ -30,7 +29,8 @@ import 'essay_screens.dart';
 
 enum MarkKind { all, text, photo }
 
-const markKindLabel = {MarkKind.all: '모든 유형', MarkKind.text: '문장 갈피', MarkKind.photo: '사진 갈피'};
+// 유형 이름(필터 칸 · 조건 줄). all은 필터 칸 '전체'(읽지 않던 '모든 유형'을 칸 이름으로, 2026-11-19)
+const markKindLabel = {MarkKind.all: '전체', MarkKind.text: '문장 갈피', MarkKind.photo: '사진 갈피'};
 const _sections = [(id: RecordSection.marks, label: '갈피'), (id: RecordSection.essays, label: '감상')];
 
 /// 갈피 거르기(책·유형·아껴둔·검색어). 모두 함께 건다
@@ -157,126 +157,113 @@ class _RecordTabState extends State<RecordTab> {
 
   // ── 필터 시트 ──
 
-  // 갈피 필터(2026-11-17 사용자 시안, 높이·여백은 시안보다 조금 넉넉히): 책 한 줄(모든 책 ›) · 유형 세 칸 · 아껴둔 갈피만 · 적용.
-  // 고른 것은 '적용'을 눌러야 걸린다. 갈피 보드는 머리줄 격자 아이콘으로 옮겼다
-  Future<void> _openMarkFilter() {
-    var book = _markBook;
-    var kind = _kind;
-    var saved = _savedOnly;
+  /// 필터 시트(갈피 · 감상이 같은 모양 · 같은 동작, 2026-11-19 공통 규칙): 책 한 줄(모든 책 ›) · 그 밖 조건 · 적용.
+  /// 책은 필터 시트 위에 겹쳐 고르고, 고른 것은 '적용'을 눌러야 걸린다(2026-11-17 사용자 시안. 감상 필터는 고르면 바로 걸렸다)
+  Future<void> _openFilter({
+    required String? book,
+    required void Function(String? current, ValueChanged<String?> onPick) pickBook,
+    List<Widget> Function(StateSetter set)? more,
+    required void Function(String? book) onApply,
+  }) {
+    var picked = book;
     return showSheet<void>(
       context,
       title: '필터',
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          // 책: 왼쪽 '책', 오른쪽 고른 책 이름 ›
-          Semantics(
-            button: true,
-            label: '책, ${book == null ? '모든 책' : _titleOf(book!)}',
-            excludeSemantics: true,
-            onTap: () => _openMarkBooks(board: false, current: book, onPick: (id) => set(() => book = id)),
-            child: Pressable(
-              onPress: () => _openMarkBooks(board: false, current: book, onPick: (id) => set(() => book = id)),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 56),
-                child: Row(children: [
-                  Text('책', style: AppType.rowStrong),
-                  const SizedBox(width: Space.l),
-                  Expanded(child: Text(book == null ? '모든 책' : _titleOf(book!), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
-                  const SizedBox(width: 4),
-                  const LucideIcon('ChevronRight', size: 20, color: AppColors.inkSoft),
-                ]),
-              ),
-            ),
+          // 공통 규칙: '이름 … 값 ›' 줄은 ListItem(직접 만든 줄이었다)
+          ListItem(label: '책', value: picked == null ? '모든 책' : _titleOf(picked!), chevron: true, onPress: () => pickBook(picked, (id) => set(() => picked = id))),
+          const Hairline(),
+          const SizedBox(height: Space.l),
+          ...?more?.call(set),
+          Btn(
+            label: '적용',
+            size: 'l',
+            onPress: () {
+              Navigator.pop(ctx);
+              onApply(picked);
+            },
           ),
-          Container(height: 1 / MediaQuery.devicePixelRatioOf(ctx), color: AppColors.line),
-          const SizedBox(height: Space.l + 4),
-          const SheetLabel('유형'),
-          Row(children: [
-            for (final (i, k) in MarkKind.values.indexed) ...[
-              if (i > 0) const SizedBox(width: Space.s),
-              Expanded(child: ChoiceBox(label: k == MarkKind.all ? '전체' : markKindLabel[k]!, on: kind == k, onPress: () => set(() => kind = k))),
-            ],
-          ]),
-          const SizedBox(height: Space.l),
-          // 아껴둔 갈피만(예전 머리줄 아이콘)
-          FilterToggleRow(label: '아껴둔 갈피만', value: saved, onChange: (v) => set(() => saved = v)),
-          const SizedBox(height: Space.l),
-          Btn(label: '적용', onPress: () {
-            Navigator.pop(ctx);
-            setState(() {
-              _markBook = book;
-              _kind = kind;
-              _savedOnly = saved;
-            });
-          }),
           const SizedBox(height: Space.s),
         ]),
       ),
     );
   }
 
+  // 갈피 필터(2026-11-17 사용자 시안, 높이·여백은 시안보다 조금 넉넉히): 책 한 줄(모든 책 ›) · 유형 세 칸 · 아껴둔 갈피만 · 적용.
+  // 갈피 보드는 머리줄 격자 아이콘으로 옮겼다
+  Future<void> _openMarkFilter() {
+    var kind = _kind;
+    var saved = _savedOnly;
+    return _openFilter(
+      book: _markBook,
+      pickBook: (current, onPick) => _pickMarkBook(_marks, current: current, onPick: onPick),
+      more: (set) => [
+        const SheetLabel('유형'),
+        Row(children: [
+          for (final (i, k) in MarkKind.values.indexed) ...[
+            if (i > 0) const SizedBox(width: Space.s),
+            Expanded(child: ChoiceBox(label: markKindLabel[k]!, on: kind == k, onPress: () => set(() => kind = k))),
+          ],
+        ]),
+        const SizedBox(height: Space.l),
+        // 아껴둔 갈피만(예전 머리줄 아이콘)
+        FilterToggleRow(label: '아껴둔 갈피만', value: saved, onChange: (v) => set(() => saved = v)),
+        const SizedBox(height: Space.l),
+      ],
+      onApply: (book) => setState(() {
+        _markBook = book;
+        _kind = kind;
+        _savedOnly = saved;
+      }),
+    );
+  }
+
   void _openBoard() {
-    final books = _booksOf(_marks.map((m) => m.myBookId));
+    final marks = _marks;
+    final books = _booksOf(marks.map((m) => m.myBookId));
     final only = _markBook ?? (books.length == 1 ? books.first.id : null);
     if (only != null) {
       openBookmarkBoard(context, only);
     } else {
-      _openMarkBooks(board: true);
+      _pickMarkBook(marks, board: true, onPick: (id) {
+        if (id != null) openBookmarkBoard(context, id);
+      });
     }
   }
 
-  Future<void> _openMarkBooks({required bool board, String? current, ValueChanged<String?>? onPick}) {
-    final all = _marks;
-    return _openBookChoice(
-      title: board ? '보드로 볼 책' : '책 선택',
-      books: _booksOf(all.map((m) => m.myBookId)),
-      unit: (n) => '갈피 $n개',
-      allSub: board ? null : '갈피 ${all.length}개',
-      current: board ? null : (onPick != null ? current : _markBook),
-      searchLabel: '갈피를 볼 책 찾기',
-      onPick: (id) {
-        if (board) {
-          if (id != null) openBookmarkBoard(context, id);
-        } else if (onPick != null) {
-          onPick(id);
-        } else {
-          setState(() => _markBook = id);
-        }
-      },
-    );
-  }
+  /// 갈피가 있는 책 고르기(필터의 책 줄 · 보드로 볼 책). 보드는 '모든 책' 줄 없이
+  Future<void> _pickMarkBook(List<Bookmark> marks, {bool board = false, String? current, required ValueChanged<String?> onPick}) => _openBookChoice(
+        description: board ? '갈피 보드로 볼 책을 골라요' : null,
+        books: _booksOf(marks.map((m) => m.myBookId)),
+        unit: (n) => '갈피 $n개',
+        allSub: board ? null : '갈피 ${marks.length}개',
+        current: current,
+        searchLabel: '갈피를 볼 책 찾기',
+        onPick: onPick,
+      );
 
+  // 감상 필터: 갈피 필터와 같은 시트(고를 것이 책뿐이라 책 줄 + 적용)
   Future<void> _openEssayFilter() {
     final all = _model.essaysOf();
-    return showSheet<void>(
-      context,
-      title: '필터',
-      builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        FilterGroup(title: '책', first: true, children: [
-          FilterOption(
-            label: _essayBook == null ? '모든 책' : _titleOf(_essayBook!),
-            chevron: true,
-            onPress: () {
-              Navigator.pop(ctx);
-              _openBookChoice(
-                title: '책 선택',
-                books: _booksOf(all.map((e) => e.myBookId)),
-                unit: (n) => '감상 $n편',
-                allSub: '감상 ${all.length}편',
-                current: _essayBook,
-                searchLabel: '감상을 볼 책 찾기',
-                onPick: (id) => setState(() => _essayBook = id),
-              );
-            },
-          ),
-        ]),
-      ]),
+    return _openFilter(
+      book: _essayBook,
+      pickBook: (current, onPick) => _openBookChoice(
+        books: _booksOf(all.map((e) => e.myBookId)),
+        unit: (n) => '감상 $n편',
+        allSub: '감상 ${all.length}편',
+        current: current,
+        searchLabel: '감상을 볼 책 찾기',
+        onPick: onPick,
+      ),
+      onApply: (book) => setState(() => _essayBook = book),
     );
   }
 
-  /// 책 선택 시트: 내 책 검색(많을 때) · '모든 책'(allSub가 있을 때) · 표지·이름·수·체크
+  /// 책 고르기 시트: 내 책 검색(많을 때) · '모든 책'(allSub가 있을 때) · 표지·이름·수·고르는 원.
+  /// 공통 규칙: 책을 고르는 시트 이름은 '책 고르기' 하나(갈피 남기기 · 감상 쓰기의 책 고르기와 같은 이름, 2026-11-19. '책 선택' · '보드로 볼 책'이었다)
   Future<void> _openBookChoice({
-    required String title,
+    String? description,
     required List<({String id, int count, String title})> books,
     required String Function(int) unit,
     required String? allSub,
@@ -287,44 +274,43 @@ class _RecordTabState extends State<RecordTab> {
     var bookQ = '';
     return showSheet<void>(
       context,
-      title: title,
+      title: '책 고르기',
+      description: description,
       scroll: true,
       maxHeight: 0.8,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) {
           final shown = books.where((x) => bookQ.trim().isEmpty || x.title.contains(bookQ.trim()));
+          void pick(String? id) {
+            Navigator.pop(ctx);
+            onPick(id);
+          }
+
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             if (books.length > 5)
               Padding(
-                padding: const EdgeInsets.only(bottom: Space.tight),
+                padding: const EdgeInsets.only(bottom: Space.s),
                 child: SearchField(value: bookQ, onChange: (v) => set(() => bookQ = v), placeholder: '내 책 검색', label: searchLabel),
               ),
-            if (allSub != null)
-              _BookChoice(
-                label: '모든 책',
-                sub: allSub,
-                on: current == null,
-                onPress: () {
-                  Navigator.pop(ctx);
-                  onPick(null);
-                },
-              ),
+            // '모든 책'은 표지 없이 글만(제목이 책 줄과 같은 자리에 오게 표지 자리는 비운다)
+            if (allSub != null) _bookChoice(label: '모든 책', sub: allSub, on: current == null, cover: const SizedBox(), onPress: () => pick(null)),
             for (final x in shown)
-              _BookChoice(
+              _bookChoice(
                 label: x.title,
                 sub: unit(x.count),
                 on: current == x.id,
-                cover: LinkedCover(lib: _lib, id: x.id, width: 40),
-                onPress: () {
-                  Navigator.pop(ctx);
-                  onPick(x.id);
-                },
+                cover: IgnorePointer(child: LinkedCover(lib: _lib, id: x.id, width: BookRow.coverWidth(BookRowSize.small))),
+                onPress: () => pick(x.id),
               ),
           ]);
         },
       ),
     );
   }
+
+  /// 책 고르기 줄: 표지 · 이름 · 수 · 고르는 원. 공통 규칙: BookRow small(2026-11-19. 제목 row · 수 caption · 간격 14였다)
+  Widget _bookChoice({required String label, required String sub, required bool on, required Widget cover, required VoidCallback onPress}) =>
+      BookRow(cover: cover, title: label, meta: sub, trailing: RadioMark(on: on), label: '$label, $sub', selected: on, onPress: onPress);
 
   // ── 화면 ──
 
@@ -350,17 +336,18 @@ class _RecordTabState extends State<RecordTab> {
               _searching.add(section);
             }
           }),
-          child: LucideIcon(searching ? 'X' : 'Search'),
+          // 공통 규칙: 머리줄 아이콘은 HeadIcon(회색, 2026-11-19)
+          child: HeadIcon(searching ? 'X' : 'Search'),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: headIconGap),
         marks
-            ? IconBtn(label: '갈피 추가', onPress: () => openNewBookmark(context, book: _markBook, photoOnly: _kind == MarkKind.photo), child: const LucideIcon('Plus'))
-            : IconBtn(label: '감상 쓰기', onPress: () => openNewEssay(context, book: _essayBook), child: const LucideIcon('Plus')),
+            ? IconBtn(label: '갈피 추가', onPress: () => openNewBookmark(context, book: _markBook, photoOnly: _kind == MarkKind.photo), child: const HeadIcon('Plus'))
+            : IconBtn(label: '감상 쓰기', onPress: () => openNewEssay(context, book: _essayBook), child: const HeadIcon('Plus')),
       ]),
       children: [
         if (searching)
           Padding(
-            padding: const EdgeInsets.only(top: Space.tight, bottom: Space.item),
+            padding: const EdgeInsets.only(top: Space.s, bottom: Space.m),
             child: SearchField(
               key: ValueKey(section),
               value: _q[section]!,
@@ -399,7 +386,7 @@ class _RecordTabState extends State<RecordTab> {
           Padding(
             padding: const EdgeInsets.only(bottom: Space.xs),
             child: Row(children: [
-              Expanded(child: MetaText(conditions.join(' | '), style: AppType.sub.copyWith(color: AppColors.ink), maxLines: 2, overflow: TextOverflow.ellipsis)),
+              Expanded(child: MetaText(conditions.join(metaSep), style: AppType.sub.copyWith(color: AppColors.ink), maxLines: 2, overflow: TextOverflow.ellipsis)),
               Transform.translate(offset: const Offset(8, 0), child: TextLink(label: '조건 해제', soft: true, onPress: clear)),
             ]),
           ),
@@ -427,7 +414,9 @@ class _RecordTabState extends State<RecordTab> {
         '갈피 ${list.length}개',
         [
           // 갈피 보드(책 한 권의 갈피를 넓은 보드에): 격자 아이콘(2026-11-17 시안). 아껴둔 갈피만은 필터 안으로 옮겼다
-          IconBtn(label: '갈피 보드로 보기', onPress: _openBoard, child: const LucideIcon('LayoutGrid', size: 22)),
+          // 공통 규칙: 아이콘은 머리줄과 같은 회색 HeadIcon, 사이 headIconGap(2026-11-19. 격자만 검었고 사이가 0이었다)
+          IconBtn(label: '갈피 보드로 보기', onPress: _openBoard, child: const HeadIcon('LayoutGrid')),
+          const SizedBox(width: headIconGap),
           FilterIcon(active: _markBook != null || _kind != MarkKind.all || _savedOnly, onPress: _openMarkFilter),
         ],
         conditions,
@@ -451,9 +440,9 @@ class _RecordTabState extends State<RecordTab> {
                   itemCount: list.length,
                   itemBuilder: (context, i) {
                     final m = list[i];
-                    final b = _lib.books[m.myBookId]!;
-                    final e = _lib.editions[b.editionId];
-                    if (e == null) return const SizedBox.shrink();
+                    // 카드 값은 상세와 같은 cardData(목록 날짜는 dateShort)
+                    final data = cardData(_lib, m, short: true);
+                    if (data == null) return const SizedBox.shrink();
                     return qaProbe('markcard', BookmarkCard(
                       key: ValueKey(m.id),
                       compact: true,
@@ -462,19 +451,7 @@ class _RecordTabState extends State<RecordTab> {
                       onOpen: () => openBookmark(context, m.id),
                       saved: m.savedAt != null,
                       onToggleSaved: () => _toggleSaved(m.id),
-                      data: BookmarkCardData(
-                        text: m.text,
-                        title: e.title,
-                        author: e.authors.join(', '),
-                        page: m.page,
-                        date: dateShort(m.createdAt),
-                        color: ribbonOf(_lib, b.id),
-                        coverUri: e.coverUri,
-                        bookId: b.id,
-                        bookColor: themeColorOf(_lib, b.id),
-                        photoUri: m.photoUri,
-                        photoRatio: m.photoRatio,
-                      ),
+                      data: data,
                     ));
                   },
                 ),
@@ -532,42 +509,4 @@ class _RecordTabState extends State<RecordTab> {
       ),
     ];
   }
-}
-
-/// 책 선택 줄: 표지 · 이름(고르면 굵게) · 수 · 고르는 원
-class _BookChoice extends StatelessWidget {
-  const _BookChoice({required this.label, required this.sub, required this.on, required this.onPress, this.cover});
-  final String label, sub;
-  final bool on;
-  final VoidCallback onPress;
-  final Widget? cover;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        selected: on,
-        label: '$label, $sub',
-        onTap: onPress,
-        excludeSemantics: true,
-        child: Pressable(
-          onPress: onPress,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 64),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(children: [
-                if (cover != null) ...[SizedBox(width: 40, child: Center(child: IgnorePointer(child: cover))), const SizedBox(width: 14)],
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.row.copyWith(fontFamily: on ? AppType.label.fontFamily : null)),
-                    Text(sub, style: AppType.caption),
-                  ]),
-                ),
-                const SizedBox(width: 14),
-                RadioMark(on: on),
-              ]),
-            ),
-          ),
-        ),
-      );
 }

@@ -110,12 +110,12 @@ class _MarkShareState extends State<_MarkShare> {
         child: Center(
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Shape.card),
               border: Border.all(color: AppColors.line, width: hair),
               boxShadow: const [BoxShadow(color: Color(0x14191F28), offset: Offset(0, 6), blurRadius: 20)],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Shape.card),
               child: Container(
                 width: pw,
                 height: ph,
@@ -129,14 +129,16 @@ class _MarkShareState extends State<_MarkShare> {
       if (cut)
         Padding(
           padding: const EdgeInsets.only(bottom: Space.m),
-          child: Text('글이 길어 그림에는 앞부분만 들어가요. 끝에 \'…\'로 표시돼요.', textAlign: TextAlign.center, style: AppType.caption),
+          // 공통 규칙: 안내 글은 sub(2026-11-19. caption이었다)
+          child: Text('글이 길어 그림에는 앞부분만 들어가요. 끝에 \'…\'로 표시돼요.', textAlign: TextAlign.center, style: AppType.sub),
         ),
+      // 시트 안 단추는 l(공통 규칙 7장)
       Row(children: [
         if (_canSave) ...[
-          Expanded(child: Btn(label: _saved ? '저장했어요' : '저장', kind: 'secondary', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
+          Expanded(child: Btn(label: _saved ? '저장했어요' : '저장', kind: 'secondary', size: 'l', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
           const SizedBox(width: Space.s),
         ],
-        Expanded(child: Btn(label: '공유', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
+        Expanded(child: Btn(label: '공유', size: 'l', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
       ]),
     ]);
   }

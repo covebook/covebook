@@ -19,5 +19,6 @@ String markLabel(String text, num? page, {int max = 24}) {
   final t = text.trim().replaceAll(_ws, ' ');
   final chars = t.runes.toList();
   final head = t.isEmpty ? '사진 갈피' : '“${chars.length > max ? '${String.fromCharCodes(chars.take(max)).trimRight()}…' : t}”';
+  // ' | '는 kit metaSep과 같은 글자(이 파일은 화면 부품을 들이지 않는 순수 파일이라 글자로 둔다)
   return page != null && page != 0 ? '$head | ${pageLabel(page)}' : head;
 }

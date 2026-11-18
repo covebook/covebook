@@ -1,5 +1,6 @@
 // 갈피 보기(2026-11-16 QA 은서 F1·영숙 F18): 옆으로 넘긴 뒤 수정에 들어갔다 나와도(뒤로·저장 모두) 보이는 갈피가 수정·삭제 대상이다.
-// 삭제 확인창에 어느 갈피인지 보인다. 큰 글씨에서는 아래 줄이 '수정·공유'만 가운데로 모인다(빈 구분선 없음)
+// 삭제 확인창에 어느 갈피인지 보인다. 큰 글씨에서는 아래 줄이 '수정·공유'만 가운데로 모인다(빈 구분선 없음).
+// 2026-11-19: 수정에서 고친 글이 있으면 나갈 때 묻는다(고치지 않았으면 바로 돌아온다)
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/bookmark/bookmark_card.dart' show BookmarkCard;
 import 'package:chaekjang/features/bookmark/bookmark_detail_screen.dart';
@@ -128,6 +129,29 @@ void main() {
       await t.pumpAndSettle();
     }
     expect(shown(t), 'C');
+  });
+
+  testWidgets('수정에서 글을 고치고 뒤로 가면 묻는다(갈피 남기기 · 감상과 같은 확인창), 버리면 갈피 보기로', (t) async {
+    await open(t);
+    await t.tap(find.text('수정'));
+    await t.pumpAndSettle();
+    expect(find.text('갈피 저장'), findsOneWidget);
+    await t.enterText(find.byType(TextField).first, '고친 글');
+    await t.pump();
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    expect(plain('쓰던 내용을 버릴까요?').evaluate().isNotEmpty, isTrue);
+    await t.tap(find.text('계속 쓰기'));
+    await t.pumpAndSettle();
+    expect(find.byType(PageView), findsNothing, reason: '계속 쓰기면 수정 화면 그대로');
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    await t.tap(find.text('버리기'));
+    await t.pumpAndSettle();
+    expect(find.byType(PageView), findsOneWidget);
+    expect(shown(t), 'A');
+    expect(LibraryModel.instance.lib.bookmarks['A']!.text.startsWith('그날 밤'), isTrue, reason: '버린 글은 저장하지 않는다');
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('F18: 보통 글씨는 서명과 수정·공유가 한 줄, 큰 글씨는 수정·공유만 가운데', (t) async {
