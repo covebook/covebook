@@ -11,6 +11,7 @@ import (
 
 	"github.com/awa/go-iap/appstore"
 	"github.com/awa/go-iap/appstore/api"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // appleAPI는 go-iap 클라이언트에서 우리가 쓰는 메서드만 고른 것이다.
@@ -19,7 +20,6 @@ type appleAPI interface {
 	GetTransactionInfo(ctx context.Context, transactionID string) (*api.TransactionInfoResponse, error)
 	ParseSignedTransaction(signed string) (*api.JWSTransaction, error)
 	GetALLSubscriptionStatuses(ctx context.Context, originalTransactionID string, query *url.Values) (*api.StatusResponse, error)
-	ParseJWSEncodeString(signed string) (interface{}, error)
 }
 
 // AppleConfig는 App Store Server API 키다. 값은 환경변수에서 읽고 저장소에 적지 않는다.
@@ -33,6 +33,8 @@ type AppleConfig struct {
 type Apple struct {
 	api      appleAPI
 	bundleID string
+	// parseRenewal은 서명된 갱신 정보의 서명과 인증서 사슬을 확인하고 내용을 푼다. 시험에서는 가짜로 바꾼다.
+	parseRenewal func(signed string) (*api.JWSRenewalInfoDecodedPayload, error)
 	// verifyNotice는 알림의 서명과 인증서 사슬을 확인하고 내용을 푼다. 시험에서는 가짜로 바꾼다.
 	verifyNotice func(signed string, into *appstore.SubscriptionNotificationV2DecodedPayload) error
 }
@@ -48,7 +50,8 @@ func NewApple(c AppleConfig) *Apple {
 			Issuer:     c.IssuerID,
 			BundleID:   c.BundleID,
 		}),
-		bundleID: c.BundleID,
+		bundleID:     c.BundleID,
+		parseRenewal: parseAppleRenewal,
 		verifyNotice: func(signed string, into *appstore.SubscriptionNotificationV2DecodedPayload) error {
 			return verifier.ParseNotificationV2WithClaim(signed, into)
 		},
@@ -146,13 +149,9 @@ func (a *Apple) Subscription(ctx context.Context, originalID string) (Purchase, 
 			}
 			p := fromApple(t)
 			p.State = appleStatus(item.Status, p.State)
-			parsed, err := a.api.ParseJWSEncodeString(item.SignedRenewalInfo)
+			r, err := a.parseRenewal(item.SignedRenewalInfo)
 			if err != nil {
 				return Purchase{}, fmt.Errorf("apple 갱신 정보 서명 확인 %s: %w", originalID, err)
-			}
-			r, ok := parsed.(*api.JWSRenewalInfoDecodedPayload)
-			if !ok {
-				return Purchase{}, fmt.Errorf("apple 갱신 정보 %s: 모르는 형식", originalID)
 			}
 			p.AutoRenew = r.AutoRenewStatus == api.AutoRenewStatusOn
 			p.GraceUntil = msTime(r.GracePeriodExpiresDate)
@@ -160,6 +159,24 @@ func (a *Apple) Subscription(ctx context.Context, originalID string) (Purchase, 
 		}
 	}
 	return Purchase{}, fmt.Errorf("apple 구독 %s: 답에 그 줄기가 없음: %w", originalID, ErrNotFound)
+}
+
+// parseAppleRenewal은 서명된 갱신 정보(JWS)를 확인하고 푼다.
+// 라이브러리의 ParseJWSEncodeString을 쓰지 않는 이유: 본문에 특정 글자가 있는지로 종류를 추측하고,
+// 점(.)이 없는 문자열에서는 패닉한다. 여기서는 형식을 먼저 보고, 거래와 같은 인증서 사슬 확인을 거친다.
+func parseAppleRenewal(signed string) (*api.JWSRenewalInfoDecodedPayload, error) {
+	if strings.Count(signed, ".") != 2 {
+		return nil, errors.New("서명된 값의 형식이 다름")
+	}
+	key, err := (&appstore.Cert{}).ExtractPublicKeyFromToken(signed)
+	if err != nil {
+		return nil, err
+	}
+	var r api.JWSRenewalInfoDecodedPayload
+	if _, err = jwt.ParseWithClaims(signed, &r, func(*jwt.Token) (interface{}, error) { return key, nil }); err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // appleStatus는 애플의 구독 상태 값을 지급 판단용 상태로 줄인다. 1 활성과 4 유예만 권한이 있다.

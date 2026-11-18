@@ -247,56 +247,84 @@ func TestIAPNotifyRefund(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
 	account := e.accountToken(token)
+	state := func(route, key string) (st string) {
+		if err := e.db.QueryRow(e.ctx, "SELECT state FROM iap_purchases WHERE route=$1 AND transaction_id=$2", route, key).Scan(&st); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+
+	// 구글 선반 환불: 구글의 환불 알림이 곧 근거다. 조회가 여전히 "결제됨"이라고 답해도 선반이 빠진다. 줄은 남는다
 	tok := iapTestID(t, "tok")
 	e.google.Purchases[tok] = e.shelfPurchase(tok, account)
 	e.submit(token, "google", e.shelf, tok, false)
-	refund := iap.Notice{ID: iapTestID(t, "r1"), Type: "voided/2", Voided: true, Target: &iap.Ref{Kind: iap.KindProduct, ID: tok}}
+	e.notify("google", iap.Notice{ID: iapTestID(t, "r1"), Type: "voided/2", Voided: true, OrderID: "GPA.x", Target: &iap.Ref{Kind: iap.KindProduct, ID: tok}}, "Bearer pubsub")
+	e.sweep()
+	if e.me(token)["shelves"] != float64(0) || state("google", tok) != "revoked" {
+		t.Fatalf("구글 환불 뒤 선반 %v, 원장 %s", e.me(token)["shelves"], state("google", tok))
+	}
+	// 그 뒤 같은 구매의 다른 알림이 와도(조회는 계속 "결제됨") 환불 표시가 되살아나지 않는다
+	e.notify("google", iap.Notice{ID: iapTestID(t, "r1b"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: tok}}, "Bearer pubsub")
+	e.sweep()
+	if e.me(token)["shelves"] != float64(0) || state("google", tok) != "revoked" {
+		t.Fatalf("환불 표시가 되살아남: 선반 %v, 원장 %s", e.me(token)["shelves"], state("google", tok))
+	}
+	// 스토어가 그 토큰을 더는 모른다고 답해도 환불은 반영된다
+	gone := iapTestID(t, "gone")
+	e.google.Purchases[gone] = e.shelfPurchase(gone, account)
+	e.submit(token, "google", e.shelf, gone, false)
+	delete(e.google.Purchases, gone)
+	e.notify("google", iap.Notice{ID: iapTestID(t, "r1c"), Type: "voided/2", Voided: true, Target: &iap.Ref{Kind: iap.KindProduct, ID: gone}}, "Bearer pubsub")
+	e.sweep()
+	if state("google", gone) != "revoked" {
+		t.Fatalf("스토어가 모르는 토큰의 환불: %s", state("google", gone))
+	}
 
-	// 환불: 스토어가 환불됐다고 답하면 선반이 빠진다. 줄은 남는다
-	p := e.google.Purchases[tok]
-	p.State = iap.StateRevoked
-	e.google.Purchases[tok] = p
-	e.notify("google", refund, "Bearer pubsub")
+	// 애플 선반 환불과 환불 되돌림: 애플은 거래마다 환불 여부를 알려 준다
+	txn := iapTestID(t, "atxn")
+	a := e.shelfPurchase(txn, account)
+	a.Route, a.TransactionID, a.Acknowledged = iap.RouteApple, txn, true
+	e.apple.Purchases[txn] = a
+	e.submit(token, "apple", e.shelf, txn, false)
+	a.State = iap.StateRevoked
+	e.apple.Purchases[txn] = a
+	e.notify("apple", iap.Notice{ID: iapTestID(t, "r2"), Type: "REFUND", Target: &iap.Ref{Kind: iap.KindProduct, ID: txn}}, "")
 	e.sweep()
-	if e.me(token)["shelves"] != float64(0) {
-		t.Fatalf("환불 뒤 선반: %v", e.me(token)["shelves"])
+	if e.me(token)["shelves"] != float64(0) || state("apple", txn) != "revoked" {
+		t.Fatalf("애플 환불 뒤 선반 %v", e.me(token)["shelves"])
 	}
-	var state string
-	if err := e.db.QueryRow(e.ctx, "SELECT state FROM iap_purchases WHERE route='google' AND transaction_id=$1", tok).Scan(&state); err != nil || state != "revoked" {
-		t.Fatalf("원장 상태 %s %v", state, err)
-	}
-	// 환불이 되돌려짐: 다시 살아난다
-	p.State = iap.StatePaid
-	e.google.Purchases[tok] = p
-	refund.ID = iapTestID(t, "r2")
-	e.notify("google", refund, "Bearer pubsub")
+	a.State = iap.StatePaid
+	e.apple.Purchases[txn] = a
+	e.notify("apple", iap.Notice{ID: iapTestID(t, "r3"), Type: "REFUND_REVERSED", Target: &iap.Ref{Kind: iap.KindProduct, ID: txn}}, "")
 	e.sweep()
-	if e.me(token)["shelves"] != float64(2) {
-		t.Fatalf("환불 되돌림 뒤 선반: %v", e.me(token)["shelves"])
+	if e.me(token)["shelves"] != float64(2) || state("apple", txn) != "paid" {
+		t.Fatalf("애플 환불 되돌림 뒤 선반 %v", e.me(token)["shelves"])
 	}
 
 	// 구독 환불: 구독 상태가 환불로 바뀌어 권한이 없어진다
-	orig, txn := iapTestID(t, "orig"), iapTestID(t, "txn")
-	e.apple.Purchases[txn] = e.subscription(orig, txn, account, time.Now().Add(time.Hour))
-	e.submit(token, "apple", e.plus, txn, false)
-	s := e.apple.Purchases[txn]
-	s.State = iap.StateRevoked
-	e.apple.Purchases[txn] = s
-	e.notify("apple", iap.Notice{ID: iapTestID(t, "r3"), Type: "REFUND", Target: &iap.Ref{Kind: iap.KindSubscription, ID: txn}, OriginalID: orig}, "")
+	orig, stxn := iapTestID(t, "orig"), iapTestID(t, "txn")
+	e.apple.Purchases[stxn] = e.subscription(orig, stxn, account, time.Now().Add(time.Hour))
+	e.submit(token, "apple", e.plus, stxn, false)
+	sp := e.apple.Purchases[stxn]
+	sp.State = iap.StateRevoked
+	e.apple.Purchases[stxn] = sp
+	e.notify("apple", iap.Notice{ID: iapTestID(t, "r4"), Type: "REFUND", Target: &iap.Ref{Kind: iap.KindSubscription, ID: stxn}, OriginalID: orig}, "")
 	e.sweep()
 	if e.me(token)["plus"] != false {
 		t.Fatal("환불된 구독에 권한이 남음")
 	}
-	// 구글 구독 갱신 거래의 환불은 주문 ID로 원장 줄을 찾는다
+	// 구글 구독 갱신 거래의 환불은 주문 ID로 원장 줄을 찾는다. 그 뒤 다른 알림이 와도 표시가 남는다
 	subTok, order := iapTestID(t, "subtok"), iapTestID(t, "GPA")
 	g := e.subscription(subTok, order, account, time.Now().Add(time.Hour))
 	g.Route = iap.RouteGoogle
 	e.google.Purchases[subTok] = g
 	e.submit(token, "google", e.plus, subTok, false)
-	e.notify("google", iap.Notice{ID: iapTestID(t, "r4"), Type: "voided/1", Voided: true, OrderID: order, Target: &iap.Ref{Kind: iap.KindSubscription, ID: subTok}, OriginalID: subTok}, "Bearer pubsub")
+	e.notify("google", iap.Notice{ID: iapTestID(t, "r5"), Type: "voided/1", Voided: true, OrderID: order, Target: &iap.Ref{Kind: iap.KindSubscription, ID: subTok}, OriginalID: subTok}, "Bearer pubsub")
 	e.sweep()
-	if err := e.db.QueryRow(e.ctx, "SELECT state FROM iap_purchases WHERE route='google' AND transaction_id=$1", order).Scan(&state); err != nil || state != "revoked" {
-		t.Fatalf("구글 구독 환불 원장 상태 %s %v", state, err)
+	e.notify("google", subNotice(iapTestID(t, "r6"), subTok, subTok), "Bearer pubsub")
+	e.sweep()
+	if state("google", order) != "revoked" {
+		t.Fatalf("구글 구독 환불 원장 상태 %s", state("google", order))
 	}
 }
 
@@ -447,5 +475,75 @@ func TestIAPNotifySandboxIgnored(t *testing.T) {
 	var n int
 	if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_purchases WHERE transaction_id=$1", tok).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("샌드박스 거래가 원장에 들어감: %d", n)
+	}
+}
+
+// 샌드박스 스위치를 끈 뒤 남은 샌드박스 구독 줄: 대조 작업이 이 줄만 되풀이하지 않게 "확인했다"고 남긴다.
+func TestIAPSweepSkipsUnacceptedLines(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	e.srv.IAPSandbox = true
+	orig, txn := iapTestID(t, "orig"), iapTestID(t, "txn")
+	p := e.subscription(orig, txn, e.accountToken(token), time.Now().Add(time.Hour))
+	p.Env = iap.EnvSandbox
+	e.apple.Purchases[txn] = p
+	if code, _ := e.submit(token, "apple", e.plus, txn, false); code != 200 {
+		t.Fatal("샌드박스 구독 제출 실패")
+	}
+	e.srv.IAPSandbox = false
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_subscriptions SET expires_at=now()-interval '1 minute', updated_at=now()-interval '1 hour' WHERE original_id=$1", orig); err != nil {
+		t.Fatal(err)
+	}
+	e.sweep()
+	var fresh bool
+	if err := e.db.QueryRow(e.ctx, "SELECT updated_at > now() - interval '1 minute' FROM iap_subscriptions WHERE original_id=$1", orig).Scan(&fresh); err != nil || !fresh {
+		t.Fatalf("받지 않는 줄이 확인 표시 없이 남음 (다음 대조에서 또 뽑힘): %v %v", fresh, err)
+	}
+	// 스토어 조회가 실패한 줄도 마찬가지다
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_subscriptions SET updated_at=now()-interval '1 hour' WHERE original_id=$1", orig); err != nil {
+		t.Fatal(err)
+	}
+	e.apple.Err = errors.New("timeout")
+	e.sweep()
+	e.apple.Err = nil
+	if err := e.db.QueryRow(e.ctx, "SELECT updated_at > now() - interval '1 minute' FROM iap_subscriptions WHERE original_id=$1", orig).Scan(&fresh); err != nil || !fresh {
+		t.Fatalf("조회 실패한 줄이 확인 표시 없이 남음: %v %v", fresh, err)
+	}
+}
+
+// 줄이 아직 없을 때 "다른 계정의 복원 제출"과 "알림 처리"가 동시에 돌아도, 알림이 제출한 사람의 구독을 덮어쓰지 않는다.
+func TestIAPSubmitAndNoticeRace(t *testing.T) {
+	e := newIAPEnv(t)
+	a, _ := e.user()
+	b, _ := e.user()
+	accountA := e.accountToken(a)
+	e.accountToken(b)
+	for round := range 8 {
+		orig, txn := iapTestID(t, "orig"), iapTestID(t, "txn")
+		e.apple.Purchases[txn] = e.subscription(orig, txn, accountA, time.Now().Add(time.Hour))
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			if _, err := e.srv.iapSyncSubscription(e.ctx, e.apple, orig); err != nil {
+				t.Error(err)
+			}
+		}()
+		code, body := e.submit(b, "apple", e.plus, txn, true)
+		<-done
+		if code != 200 || body["plus"] != true {
+			t.Fatalf("%d번째: 복원 제출 %d %v", round, code, body)
+		}
+		var owner int64
+		var bID int64
+		if err := e.db.QueryRow(e.ctx, "SELECT s.user_id, (SELECT user_id FROM iap_account_tokens WHERE user_id<>(SELECT user_id FROM iap_account_tokens WHERE token::text=$2) AND user_id=s.user_id LIMIT 1) FROM iap_subscriptions s WHERE original_id=$1", orig, accountA).Scan(&owner, &bID); err != nil {
+			t.Fatalf("%d번째: 복원한 계정이 주인이 아님 (알림이 덮어씀): %v", round, err)
+		}
+		if owner != bID {
+			t.Fatalf("%d번째: 주인 %d", round, owner)
+		}
+		// 다음 판을 위해 b의 구독을 끝낸다
+		if _, err := e.db.Exec(e.ctx, "UPDATE iap_subscriptions SET state='inactive' WHERE original_id=$1", orig); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

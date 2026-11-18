@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -37,11 +38,19 @@ func iapAccountToken(ctx context.Context, tx pgx.Tx, user int64) (string, error)
 
 // iapOwnsToken은 그 계정 연결 값이 이 유저의 것인지 알려 준다. UUID 모양이 아니면 false다.
 func iapOwnsToken(ctx context.Context, q dbtx, user int64, token string) (bool, error) {
+	if !iapIsUUID(token) {
+		return false, nil
+	}
 	var ok bool
-	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM iap_account_tokens
-		WHERE user_id=$1 AND token::text=lower($2))`, user, token).Scan(&ok)
+	err := q.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM iap_account_tokens WHERE user_id=$1 AND token=$2::uuid)", user, token).Scan(&ok)
 	return ok, err
 }
+
+var iapUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// iapIsUUID는 계정 연결 값이 UUID 모양인지 본다. 스토어가 다른 모양을 돌려주면(다른 앱이 넣은 값 등) 빈 값처럼 다룬다.
+// DB에 그대로 넘기면 변환 오류로 요청 전체가 실패한다.
+func iapIsUUID(s string) bool { return iapUUID.MatchString(s) }
 
 // iapProduct는 상품 표의 한 줄이다.
 type iapProduct struct {
@@ -67,11 +76,15 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 	if p.State != iap.StatePaid {
 		return false, errors.New("iap: 결제가 끝나지 않은 거래는 원장에 넣지 않는다")
 	}
+	account := p.AccountToken
+	if !iapIsUUID(account) {
+		account = ""
+	}
 	tag, err := q.Exec(ctx, `INSERT INTO iap_purchases
 		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country,confirmed_at)
 		VALUES($1,$2,$3,$4,nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''),CASE WHEN $13 THEN now() END)
 		ON CONFLICT (route,transaction_id) DO NOTHING`,
-		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, p.AccountToken, p.ProductID, string(kind), string(p.Env),
+		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, account, p.ProductID, string(kind), string(p.Env),
 		p.PurchasedAt, p.Currency, p.PriceMilli, p.Country, p.Acknowledged)
 	if err != nil {
 		return false, err
@@ -284,11 +297,11 @@ func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbo
 
 // iapUserByToken은 계정 연결 값의 주인을 찾는다. 없거나 UUID 모양이 아니면 0이다.
 func iapUserByToken(ctx context.Context, q dbtx, token string) (int64, error) {
-	if token == "" {
+	if !iapIsUUID(token) {
 		return 0, nil
 	}
 	var user int64
-	err := q.QueryRow(ctx, "SELECT user_id FROM iap_account_tokens WHERE token::text=lower($1)", token).Scan(&user)
+	err := q.QueryRow(ctx, "SELECT user_id FROM iap_account_tokens WHERE token=$1::uuid", token).Scan(&user)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
@@ -334,6 +347,11 @@ func iapSyncPurchaseState(ctx context.Context, q dbtx, route iap.Route, key stri
 		}
 		return iapRevokePurchase(ctx, q, route, key, at)
 	case iap.StatePaid:
+		// 환불 되돌림은 애플에만 적용한다. 애플은 거래마다 환불 여부를 알려 준다.
+		// 구글 조회는 "지금 유효한가"만 알려 줘서, 환불 알림으로 표시한 줄을 다음 조회가 되살려 버린다.
+		if route != iap.RouteApple {
+			return false, nil
+		}
 		tag, err := q.Exec(ctx, "UPDATE iap_purchases SET state='paid', revoked_at=NULL, updated_at=now() WHERE route=$1 AND transaction_id=$2 AND state='revoked'", string(route), key)
 		return tag.RowsAffected() == 1, err
 	}
@@ -348,12 +366,13 @@ type iapNoticeRow struct {
 	TargetID   string
 	OriginalID string
 	OrderID    string
+	Type       string // 스토어가 준 알림 종류. "voided/"로 시작하면 구글의 환불·취소 알림
 }
 
 // iapPendingNotifications는 아직 처리하지 못한 알림을 오래된 것부터 고른다.
 // 실패한 것은 시도할수록 간격을 늘린다(1분, 2분, 4분 … 최대 약 17시간). 8일이 지난 것은 더 시도하지 않는다.
 func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNoticeRow, error) {
-	rows, err := q.Query(ctx, `SELECT route, notification_id, coalesce(target_kind,''), coalesce(target_id,''), coalesce(original_id,''), coalesce(order_id,'')
+	rows, err := q.Query(ctx, `SELECT route, notification_id, coalesce(target_kind,''), coalesce(target_id,''), coalesce(original_id,''), coalesce(order_id,''), kind
 		FROM iap_notifications
 		WHERE result IN ('received','failed') AND received_at > now() - interval '8 days'
 		  AND (processed_at IS NULL OR processed_at < now() - interval '1 minute' * power(2, least(attempts, 10)))
@@ -365,7 +384,7 @@ func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNotic
 	var out []iapNoticeRow
 	for rows.Next() {
 		var n iapNoticeRow
-		if err = rows.Scan(&n.Route, &n.ID, &n.Kind, &n.TargetID, &n.OriginalID, &n.OrderID); err != nil {
+		if err = rows.Scan(&n.Route, &n.ID, &n.Kind, &n.TargetID, &n.OriginalID, &n.OrderID, &n.Type); err != nil {
 			return nil, err
 		}
 		out = append(out, n)
@@ -447,4 +466,19 @@ func iapProductList(ctx context.Context, q dbtx) ([]map[string]any, error) {
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// iapLockLine은 구독 줄기 하나를 다루는 동안 다른 요청·작업이 같은 줄기를 다루지 못하게 한다(트랜잭션이 끝나면 풀린다).
+// 줄이 아직 없을 때는 SELECT ... FOR UPDATE가 아무것도 잠그지 못한다. 그 틈에 제출과 알림 처리가 동시에 "줄 없음"을 보고
+// 서로의 결과를 덮어쓰는 것을 막는다.
+func iapLockLine(ctx context.Context, tx pgx.Tx, route iap.Route, originalID string) error {
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", "iap:"+string(route)+":"+originalID)
+	return err
+}
+
+// iapBumpSubscription은 "방금 확인했다"고만 남긴다. 처리하지 않기로 한 줄(받지 않는 거래, 조회 실패)이
+// 대조 작업의 맨 앞에 매번 다시 뽑혀 다른 구독의 차례를 막지 않게 한다.
+func iapBumpSubscription(ctx context.Context, q dbtx, route iap.Route, originalID string) error {
+	_, err := q.Exec(ctx, "UPDATE iap_subscriptions SET updated_at=now() WHERE route=$1 AND original_id=$2", string(route), originalID)
+	return err
 }

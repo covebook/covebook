@@ -75,8 +75,16 @@ type iapHit struct {
 func (s *Server) iapAllow(user int64, now time.Time) bool {
 	s.iapMu.Lock()
 	defer s.iapMu.Unlock()
-	if s.iapHits == nil || len(s.iapHits) > 10000 {
+	if s.iapHits == nil {
 		s.iapHits = map[int64]iapHit{}
+	}
+	// 맵이 커지면 1분이 지난 것만 지운다(전부 비우면 모든 유저의 횟수가 함께 풀린다)
+	if len(s.iapHits) > 10000 {
+		for u, h := range s.iapHits {
+			if now.Sub(h.window) >= time.Minute {
+				delete(s.iapHits, u)
+			}
+		}
 	}
 	h := s.iapHits[user]
 	if now.Sub(h.window) >= time.Minute {
@@ -289,6 +297,10 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	status := "granted"
 	key := iapTransactionKey(asked.Kind, submitted)
 	if asked.Kind == iap.KindSubscription {
+		// 같은 구독 줄기를 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다)
+		if err = iapLockLine(ctx, tx, route, current.OriginalTransactionID); err != nil {
+			return err
+		}
 		owner, e := iapSubscriptionOwner(ctx, tx, route, current.OriginalTransactionID)
 		if e != nil {
 			return e
@@ -349,7 +361,10 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	// 5. 커밋 뒤 스토어 확인. 실패해도 지급은 유지한다. 확인 안 된 줄은 다시 시도한다(이슈 #26, #27).
 	if !submitted.Acknowledged && submitted.State == iap.StatePaid {
 		consume := asked.Kind == iap.KindProduct && bought.Consume
-		if e := store.Confirm(storeCtx, ref, submitted.ProductID, consume); e != nil {
+		// 조회와 시간을 나눠 쓰지 않게 확인에는 제한 시간을 따로 준다
+		confirmCtx, cancelConfirm := context.WithTimeout(ctx, iapStoreTimeout)
+		defer cancelConfirm()
+		if e := store.Confirm(confirmCtx, ref, submitted.ProductID, consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s product=%s err=%v", route, submitted.ProductID, e)
 		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)

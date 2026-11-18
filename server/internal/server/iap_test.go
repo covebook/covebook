@@ -226,6 +226,12 @@ func TestIAPShelfPurchase(t *testing.T) {
 	if code, body = e.submit(thief, "google", e.shelf, id2, false); code != 409 {
 		t.Fatalf("남의 값: %d %v", code, body)
 	}
+	// 계정 연결 값이 UUID 모양이 아닌 구매: 요청이 실패하지 않고, 남의 값으로 보아 거절한다
+	odd := iapTestID(t, "odd")
+	e.google.Purchases[odd] = e.shelfPurchase(odd, "uuid가-아닌-값")
+	if code, body = e.submit(thief, "google", e.shelf, odd, false); code != 409 || errCode(body) != "iap_other_account" {
+		t.Fatalf("UUID가 아닌 값: %d %v", code, body)
+	}
 	// 계정 연결 값이 빈 구매(앱 밖 구매)는 낸 사람에게 준다
 	id3 := iapTestID(t, "tok3")
 	e.google.Purchases[id3] = e.shelfPurchase(id3, "")

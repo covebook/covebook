@@ -8,7 +8,8 @@
 --  * 금액은 통화 1단위 = 1000인 정수(D20). 구글 구매 조회에는 금액이 없어 NULL이다.
 
 -- 스토어에 넘기는 계정 연결 값(애플 appAccountToken, 구글 obfuscatedAccountId). 유저 번호를 밖에 내보내지 않는다(D7).
--- 유저 하나에 여러 개일 수 있다: 애플은 첫 구매 때 값이 굳어 계정을 옮겨도 그대로 오기 때문에, 옮길 때 값도 함께 옮긴다(D8).
+-- 표는 유저 하나에 여러 개를 허용하지만 지금 코드는 하나만 만든다.
+-- 구독을 다른 계정으로 옮겨도(D8) 이 값은 옮기지 않는다. 스토어는 옮긴 뒤에도 옛 값을 보내므로, 구독의 주인은 이 값이 아니라 iap_subscriptions.user_id가 정한다.
 CREATE TABLE iap_account_tokens (
     token      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

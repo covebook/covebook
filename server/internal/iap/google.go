@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -77,7 +78,17 @@ func googleErr(err error) error {
 	if errors.As(err, &ge) && (ge.Code == http.StatusNotFound || ge.Code == http.StatusGone) {
 		return fmt.Errorf("google: %w", ErrNotFound)
 	}
-	return fmt.Errorf("google 구매 조회: %w", err)
+	return fmt.Errorf("google 구매 조회: %w", scrubURL(err))
+}
+
+// scrubURL은 통신 오류에서 요청 주소를 뺀다. 구글 API 주소에는 구매 토큰이 들어 있고,
+// 구매 토큰은 그 자체가 구매 증거라 로그나 DB에 남으면 안 된다(남의 구독을 복원으로 가져갈 수 있다).
+func scrubURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s 요청 실패: %w", ue.Op, ue.Err)
+	}
+	return err
 }
 
 func (g *Google) fromSubscription(token string, s *androidpublisher.SubscriptionPurchaseV2) (Purchase, error) {
@@ -210,7 +221,7 @@ func (g *Google) Confirm(ctx context.Context, ref Ref, productID string, consume
 		return fmt.Errorf("google 확인: 종류 %q, 소비 %v는 맞지 않는 조합", ref.Kind, consume)
 	}
 	if err != nil {
-		return fmt.Errorf("google 확인 %s: %w", productID, err)
+		return fmt.Errorf("google 확인 %s: %w", productID, scrubURL(err))
 	}
 	return nil
 }

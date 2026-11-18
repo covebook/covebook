@@ -143,11 +143,7 @@ func (s *Server) StartIAPWorker(ctx context.Context) {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
-			jobCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			if err := s.iapSweepLocked(jobCtx); err != nil && ctx.Err() == nil {
-				log.Printf("iap sweep failed: %v", err)
-			}
-			cancel()
+			s.iapSweepSafely(ctx)
 			select {
 			case <-ctx.Done():
 				return
@@ -156,6 +152,21 @@ func (s *Server) StartIAPWorker(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// iapSweepSafely는 한 번 돌리되, 그 안에서 패닉이 나도 서버 전체가 죽지 않게 한다.
+// 고루틴의 패닉은 잡지 않으면 프로세스를 내린다. 스토어가 보낸 예상 밖의 값 하나로 서버가 죽으면 안 된다.
+func (s *Server) iapSweepSafely(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("iap sweep panic: %v", r)
+		}
+	}()
+	jobCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	if err := s.iapSweepLocked(jobCtx); err != nil && ctx.Err() == nil {
+		log.Printf("iap sweep failed: %v", err)
+	}
 }
 
 const iapSweepLockKey = 987614003 // migrate.go가 987614002를 쓴다
@@ -180,30 +191,20 @@ type iapSweepResult struct {
 	Notices, NoticesFailed, Confirmed, Refreshed int
 }
 
-// iapSweep은 밀린 일을 한 번 처리한다: 알림 처리, 스토어 확인 재시도, 만료가 다가온 구독 재확인.
+// iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 알림 처리, 만료가 다가온 구독 재확인.
+// 순서: 기한이 있는 것(구글 확인 3일)을 가장 먼저 한다. 한 단계가 실패해도 다음 단계는 돈다.
 func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	var res iapSweepResult
-	notices, err := iapPendingNotifications(ctx, s.DB, 100)
-	if err != nil {
-		return res, err
-	}
-	for _, n := range notices {
-		result, note := s.iapProcessNotice(ctx, n)
-		if result == "failed" {
-			res.NoticesFailed++
-			log.Printf("iap notification failed (will retry): route=%s type-id=%s err=%s", n.Route, n.ID, note)
-		} else {
-			res.Notices++
-		}
-		if err = iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note); err != nil {
-			return res, err
+	var firstErr error
+	keep := func(err error) {
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
 
+	// 1. 스토어 확인을 못 마친 거래
 	unconfirmed, err := iapUnconfirmedPurchases(ctx, s.DB, 100)
-	if err != nil {
-		return res, err
-	}
+	keep(err)
 	for _, u := range unconfirmed {
 		store := s.IAP[u.Route]
 		if store == nil {
@@ -222,29 +223,46 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			log.Printf("iap confirm retry failed: route=%s product=%s err=%v", u.Route, u.ProductID, e)
 			continue
 		}
-		if err = iapMarkConfirmed(ctx, s.DB, u.Route, u.Key); err != nil {
-			return res, err
+		if e = iapMarkConfirmed(ctx, s.DB, u.Route, u.Key); e != nil {
+			keep(e)
+			continue
 		}
 		res.Confirmed++
 	}
 
-	due, err := iapDueSubscriptions(ctx, s.DB, 200)
-	if err != nil {
-		return res, err
+	// 2. 밀린 알림
+	notices, err := iapPendingNotifications(ctx, s.DB, 100)
+	keep(err)
+	for _, n := range notices {
+		result, note := s.iapProcessNotice(ctx, n)
+		if result == "failed" {
+			res.NoticesFailed++
+			log.Printf("iap notification failed (will retry): route=%s id=%s err=%s", n.Route, n.ID, note)
+		} else {
+			res.Notices++
+		}
+		keep(iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note))
 	}
+
+	// 3. 만료가 다가왔거나 지난 구독
+	due, err := iapDueSubscriptions(ctx, s.DB, 200)
+	keep(err)
 	for _, d := range due {
 		route, original := iap.Route(d[0]), d[1]
 		store := s.IAP[route]
 		if store == nil {
+			// 꺼진 경로의 줄이 매번 맨 앞에 뽑히지 않게 한다
+			keep(iapBumpSubscription(ctx, s.DB, route, original))
 			continue
 		}
 		if _, e := s.iapSyncSubscription(ctx, store, original); e != nil {
 			log.Printf("iap subscription refresh failed: route=%s err=%v", route, e)
+			keep(iapBumpSubscription(ctx, s.DB, route, original))
 			continue
 		}
 		res.Refreshed++
 	}
-	return res, nil
+	return res, firstErr
 }
 
 // iapProcessNotice는 알림 한 건을 처리하고 결과(processed, ignored, failed)와 메모를 돌려준다.
@@ -257,6 +275,31 @@ func (s *Server) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, 
 		return "ignored", "다시 물어볼 거래가 없는 알림"
 	}
 	var notes []string
+	// 구글의 환불·취소 알림: 인증을 통과한 구글의 알림이 곧 환불의 근거다. 조회 결과로 판단하지 않는다.
+	// (구글 구매 조회가 환불된 구매를 환불 상태로 돌려준다는 보장이 없고, 오래된 토큰은 조회되지 않는다)
+	voided := strings.HasPrefix(n.Type, "voided/")
+	if voided && n.Route == iap.RouteGoogle {
+		now := time.Now().UTC()
+		// 한 번 사는 상품은 구매 토큰이, 구독의 갱신 거래는 주문 ID가 원장의 키다
+		for _, key := range []string{n.TargetID, n.OrderID} {
+			if key == "" {
+				continue
+			}
+			if _, err := iapRevokePurchase(ctx, s.DB, n.Route, key, now); err != nil {
+				return "failed", err.Error()
+			}
+		}
+		notes = append(notes, "환불 알림 반영")
+		// 구독이면 구독 상태도 스토어의 답으로 맞춘다. 한 번 사는 상품은 여기서 끝낸다(조회가 되살리지 않게)
+		if n.Kind != iap.KindSubscription || n.OriginalID == "" {
+			return "processed", strings.Join(notes, "; ")
+		}
+		m, err := s.iapSyncSubscription(ctx, store, n.OriginalID)
+		if err != nil {
+			return "failed", err.Error()
+		}
+		return "processed", strings.Join(append(notes, m), "; ")
+	}
 	if n.Kind == iap.KindSubscription && n.OriginalID != "" {
 		m, err := s.iapSyncSubscription(ctx, store, n.OriginalID)
 		if err != nil {
@@ -269,12 +312,6 @@ func (s *Server) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, 
 		return "failed", err.Error()
 	}
 	notes = append(notes, m)
-	// 구글 환불 알림의 주문 ID: 구독 갱신 거래는 주문 ID가 원장의 키다.
-	if n.OrderID != "" {
-		if _, err = iapRevokePurchase(ctx, s.DB, n.Route, n.OrderID, time.Now().UTC()); err != nil {
-			return "failed", err.Error()
-		}
-	}
 	return "processed", strings.Join(notes, "; ")
 }
 
@@ -304,14 +341,15 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	}
 	if err = s.iapBasics(ctx, store, cur); err != nil {
 		if errors.Is(err, iap.ErrWrongApp) || errors.Is(err, iap.ErrUnknownProduct) || errors.Is(err, iap.ErrSandbox) {
-			return "받지 않는 거래: " + err.Error(), nil
+			// 받지 않는 거래(샌드박스 스위치가 꺼짐 등)도 "확인했다"고 남긴다. 안 그러면 대조 작업이 이 줄만 되풀이한다
+			return "받지 않는 거래: " + err.Error(), iapBumpSubscription(ctx, s.DB, route, originalID)
 		}
 		return "", err
 	}
 	sub := iapSubscription{Route: route, OriginalID: cur.OriginalTransactionID, ProductID: cur.ProductID, PlanID: cur.PlanID, Env: cur.Env,
 		State: cur.State, ExpiresAt: cur.ExpiresAt, GraceUntil: cur.GraceUntil, AutoRenew: cur.AutoRenew, LatestTxnID: cur.TransactionID}
 	if cur.State == iap.StatePending {
-		return "결제 대기", nil
+		return "결제 대기", iapBumpSubscription(ctx, s.DB, route, originalID)
 	}
 
 	tx, err := s.DB.Begin(ctx)
@@ -319,6 +357,10 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 		return "", err
 	}
 	defer tx.Rollback(ctx)
+	// 같은 줄기를 다루는 제출과 순서를 맞춘다. 줄이 없을 때 둘이 동시에 "없음"을 보면 알림이 제출한 사람의 구독을 덮어쓸 수 있다
+	if err = iapLockLine(ctx, tx, route, sub.OriginalID); err != nil {
+		return "", err
+	}
 	owner, err := iapSubscriptionOwner(ctx, tx, route, sub.OriginalID)
 	if err != nil {
 		return "", err
