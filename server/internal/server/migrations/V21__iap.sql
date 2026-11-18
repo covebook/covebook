@@ -34,7 +34,7 @@ CREATE TABLE iap_products (
 CREATE TABLE iap_purchases (
     id             BIGSERIAL PRIMARY KEY,
     route          TEXT   NOT NULL,
-    transaction_id TEXT   NOT NULL,   -- 애플: 거래 ID. 구글: 주문 ID(없으면 구매 토큰)
+    transaction_id TEXT   NOT NULL,   -- 애플: 거래 ID. 구글 한 번 사는 상품: 구매 토큰. 구글 구독: 주문 ID(없으면 구매 토큰)
     original_id    TEXT   NOT NULL,   -- 구독 줄기를 묶는 값. 애플: 원 거래 ID. 구글: 구매 토큰
     user_id        BIGINT REFERENCES users(id) ON DELETE SET NULL,
     account_token  UUID,              -- 스토어가 돌려준 계정 연결 값. 없는 구매도 있다

@@ -226,13 +226,14 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                       _say(null);
                       _startManage();
                     }),
-                  // 격자·목록 두 아이콘을 늘 같은 색으로 보인다(2026-11-17 사용자 시안). 지금 보기는 화면 읽기에서 '선택됨'
+                  // 격자·목록 두 아이콘을 늘 같은 색으로 보인다(2026-11-17 사용자 시안). 지금 보기는 화면 읽기에서 '선택됨'.
+                  // 색은 옅은 회색(본문색이면 시안보다 진했다, 2026-11-18 사용자)
                   Semantics(
                     selected: _grid,
                     child: IconBtn(
                       label: '표지 격자로 보기',
                       onPress: () => setState(() => _lastGrid = _grid = true),
-                      child: const LucideIcon('LayoutGrid', color: AppColors.ink),
+                      child: const LucideIcon('LayoutGrid', color: AppColors.inkSoft),
                     ),
                   ),
                   Semantics(
@@ -240,7 +241,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     child: IconBtn(
                       label: '목록으로 보기',
                       onPress: () => setState(() => _lastGrid = _grid = false),
-                      child: const LucideIcon('ListIcon', color: AppColors.ink),
+                      child: const LucideIcon('ListIcon', color: AppColors.inkSoft),
                     ),
                   ),
                   FilterIcon(active: conditions.isNotEmpty, onPress: () => _openFilter(years, offCount, hiddenCount)),

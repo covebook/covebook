@@ -263,7 +263,7 @@ return tx.Commit(ctx)
 | 응답의 금액·통화 | 있음 (1000배 정수) | 없음. 주문 조회 API가 따로 있음 |
 | 계정 연결 값 | `appAccountToken` | `obfuscatedExternalAccountId` |
 | 시각 형식 | 밀리초 숫자 | RFC 3339 문자열 |
-| 국가 코드 | `storefront` (형식 미확인) | `regionCode` (ISO 3166-1 alpha-2라고 주석에 있음) |
+| 국가 코드 | `storefront` (세 글자, ISO 3166-1 alpha-3) | `regionCode` (두 글자, alpha-2). 국가 칸에 두 형식이 섞여 들어감 |
 | 시험 구매 표시 | `environment`가 Sandbox | `testPurchase` 칸이 있음 |
 | 요금제 | 상품 ID가 곧 요금제 | 구독 1개 아래 요금제(`basePlanId`) |
 | 결제 대기 상태 | 없음 | 있음 (`PENDING`). 지급하면 안 됨 |
@@ -284,14 +284,17 @@ return tx.Commit(ctx)
 |---|---|---|
 | `go-iap` 함수와 동작 | v1.59.1 소스 (`appstore/api/store.go`, `store_fallback.go`, `model.go`) | 직접 읽음 |
 | `pgx`의 `Rollback` 동작 | `go doc github.com/jackc/pgx/v5 Tx.Rollback` | 직접 읽음 |
-| 애플 `price`가 1000배 단위 | [애플 문서 price](https://developer.apple.com/documentation/appstoreserverapi/price), [개발자 포럼](https://developer.apple.com/forums/thread/767978) | 검색 결과 요약으로만 확인. 애플 문서는 제목만 열리고 본문이 안 읽힘. 브라우저로 직접 확인 필요 |
-| `storefront` 코드 형식, `appAccountToken` 형식 | [애플 문서 JWSTransactionDecodedPayload](https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload) | 미확인. 샌드박스에서 실제 값으로 확인 (#15) |
+| 애플 `price`가 1000배 단위 | [애플 문서 price](https://developer.apple.com/documentation/appstoreserverapi/price), [개발자 포럼](https://developer.apple.com/forums/thread/767978) | 원문 확인. 3300원이면 3300000 |
+| `storefront` 코드 형식 | [애플 문서 storefront](https://developer.apple.com/documentation/appstoreserverapi/storefront) | 원문 확인. ISO 3166-1 alpha-3 |
+| `appAccountToken`이 갱신·변경에서 유지되는지 | 애플 포럼 | 관측이 엇갈림. 샌드박스에서 확인 (이슈 #41) |
 | 인터페이스는 쓰는 쪽 패키지에 | [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments) | 원문 확인. "Go interfaces generally belong in the package that uses values of the interface type, not the package that implements those values." |
 | 오류를 `_`로 버리지 않음 | 같은 문서 Handle Errors 절 | 원문 확인. "Do not discard errors using `_` variables." |
 | 커밋 뒤 `defer` 롤백은 아무 일도 안 함 | [Executing transactions](https://go.dev/doc/database/execute-transactions) | 원문 확인. "If the transaction succeeds, it will be committed before the function exits, making the deferred rollback call a no-op." |
 | `%w`와 `errors.Is` | [Working with Errors in Go 1.13](https://go.dev/blog/go1.13-errors) | 원문 확인. 감싼 오류의 사슬 전체를 따라가며 비교함 |
 | `defer` 위치 실수 | [DEV 글](https://dev.to/mark_saward/go-footguns-go-defer-and-rust-drop-17af) | 검색 결과 요약으로 확인 |
 
+- 애플 문서 읽는 법: 문서 주소 뒤에 `.md`를 붙이면 본문이 읽힘. 일반 주소는 도구로 열면 제목만 나옴
+- 결제에서 신경 쓸 것 전체: [조사 종합](../reports/2026-11-19-iap-pitfalls.md)
 - 더 읽을 것
   - [A Tour of Go](https://go.dev/tour/): 문법 전체. 반나절
   - [Effective Go](https://go.dev/doc/effective_go): 관용적인 쓰기
@@ -303,5 +306,6 @@ return tx.Commit(ctx)
 | 날짜 | 이슈 | 한 것 | 배운 것 |
 |---|---|---|---|
 | 2026-11-18 | #9 | `go-iap` v1.59.1 추가, `iap` 패키지(`Store`, 애플 거래 조회, 가짜), `Check` 자리 | 1~9장 |
+| 2026-11-19 | 조사 | 애플·구글·중국어권·국내 자료 조사, 이슈 #22~#42 | [조사 종합](../reports/2026-11-19-iap-pitfalls.md) |
 | 2026-11-19 | #8 | V21 마이그레이션(표 5개), 저장소 함수와 DB 테스트 | 1장 로컬 DB, 6-1 |
 | 2026-11-18 | #9 | 구글 거래 조회, 인터페이스를 `Lookup(Ref)`로 고침, 상태 값 `State`, 환경변수 읽기 | 4장 고친 기록, 4-1, 9장 구글 비교, 9-1 |

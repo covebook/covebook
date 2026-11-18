@@ -182,6 +182,19 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	if key != g.OriginalTransactionID || currency != nil || price != nil {
 		t.Fatalf("구글 거래: key=%s currency=%v price=%v", key, currency, price)
 	}
+	// 구글 한 번 사는 상품은 주문 ID가 있어도 구매 토큰이 유일 키다. 같은 토큰에 주문 ID만 달라도 한 번만 들어간다
+	g.TransactionID = "GPA.다른-주문"
+	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, g); err != nil || ok {
+		t.Fatal("같은 구매 토큰이 두 번 들어감", ok, err)
+	}
+	// 구글 구독 갱신은 토큰이 같고 주문 ID가 달라서 거래 줄이 따로 생긴다
+	sub := iap.Purchase{Route: iap.RouteGoogle, OriginalTransactionID: iapTestID(t, "subtoken"), ProductID: shelf, State: iap.StatePaid, Env: iap.EnvProduction, PurchasedAt: time.Now().UTC()}
+	for i, order := range []string{iapTestID(t, "GPA.0"), iapTestID(t, "GPA.1")} {
+		sub.TransactionID = order
+		if ok, err := iapRecordPurchase(ctx, db, user, iap.KindSubscription, sub); err != nil || !ok {
+			t.Fatalf("구독 갱신 %d: %v %v", i, ok, err)
+		}
+	}
 }
 
 func TestIAPSubscriptionAndPlus(t *testing.T) {

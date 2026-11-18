@@ -70,7 +70,7 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country)
 		VALUES($1,$2,$3,$4,nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''))
 		ON CONFLICT (route,transaction_id) DO NOTHING`,
-		string(p.Route), iapTransactionKey(p), p.OriginalTransactionID, user, p.AccountToken, p.ProductID, string(kind), string(p.Env),
+		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, p.AccountToken, p.ProductID, string(kind), string(p.Env),
 		p.PurchasedAt, p.Currency, p.PriceMilli, p.Country)
 	if err != nil {
 		return false, err
@@ -78,8 +78,14 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 	return tag.RowsAffected() == 1, nil
 }
 
-// iapTransactionKey는 원장의 유일 키에 쓸 값이다. 구글은 주문 ID가 없는 구매가 있어 그때는 구매 토큰을 쓴다.
-func iapTransactionKey(p iap.Purchase) string {
+// iapTransactionKey는 원장의 유일 키에 쓸 값이다.
+//   - 애플: 거래 ID
+//   - 구글 한 번 사는 상품: 구매 토큰. 구글은 주문 ID를 유일 키로 쓰지 말라고 한다(프로모션 코드 구매는 주문 ID가 없다)
+//   - 구글 구독: 주문 ID. 갱신마다 토큰은 그대로이고 주문 ID가 새로 생긴다. 없으면 구매 토큰
+func iapTransactionKey(kind iap.Kind, p iap.Purchase) string {
+	if p.Route == iap.RouteGoogle && kind == iap.KindProduct {
+		return p.OriginalTransactionID
+	}
 	if p.TransactionID != "" {
 		return p.TransactionID
 	}

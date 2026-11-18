@@ -470,7 +470,11 @@ class _BookScreenState extends State<BookScreen> {
                 ? Row(children: [
                     Expanded(child: ProgressBar(value: (cur / pc).toDouble(), soft: true)),
                     const SizedBox(width: Space.m),
-                    Text('$pct%', style: AppType.caption.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                    // '100%'가 들어갈 폭으로 고정: 진행이 늘어 자릿수가 바뀌어도 막대 길이가 그대로(2026-11-18 사용자 '100% 기준으로')
+                    Stack(alignment: Alignment.centerRight, children: [
+                      Opacity(opacity: 0, child: Text('100%', style: AppType.caption.copyWith(fontFeatures: const [FontFeature.tabularFigures()]))),
+                      Text('$pct%', style: AppType.caption.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                    ]),
                   ])
                 : Text('전체 쪽수 미입력', style: AppType.caption),
           ),
@@ -531,7 +535,8 @@ class _BookScreenState extends State<BookScreen> {
                           child: Row(children: [
                             // 다른 화면 기록 줄과 같은 크기(시간대 16 · 읽은 시간 18, 2026-11-18 사용자 '독서 기록 글자가 좀 작다')
                             Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.sub)),
-                            Text(formatDuration(x.durationMs), style: AppType.rowStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                            // 읽은 시간은 위 날짜('11월 17일')와 같은 글자(2026-11-18 사용자 '20분 글씨체 너무 두껍다')
+                            Text(formatDuration(x.durationMs), style: AppType.row.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                           ]),
                         ),
                       ),

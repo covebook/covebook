@@ -882,7 +882,7 @@ class Segmented<T> extends StatelessWidget {
   final T value;
   final ValueChanged<T> onChange;
 
-  // 겉모양은 회색 칸 40(고른 칸 34): 2026-11-17 사용자 '책 정보·평가·내 기록 바가 두껍다'(예전 50).
+  // 겉모양은 회색 칸 44(고른 칸 38): 2026-11-17 사용자 '책 정보·평가·내 기록 바가 두껍다'(예전 50) → 40은 너무 얇아 조금 키움(2026-11-18 사용자 '조금만 더 키우라고').
   // 누르는 자리는 위아래 빈 4까지 48 그대로(2026-11-16 QA 영숙 F12). 큰 글씨면 칸이 글자만큼 늘어난다
   @override
   Widget build(BuildContext context) => Stack(children: [
@@ -907,7 +907,7 @@ class Segmented<T> extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 7),
                         child: Container(
-                          constraints: const BoxConstraints(minHeight: 34),
+                          constraints: const BoxConstraints(minHeight: 38),
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           alignment: Alignment.center,
                           decoration: id == value
@@ -1233,7 +1233,7 @@ class FilterIcon extends StatelessWidget {
           width: Space.touch,
           height: Space.touch,
           child: Stack(children: [
-            const Center(child: LucideIcon('SlidersHorizontal', size: 22)),
+            const Center(child: LucideIcon('SlidersHorizontal', size: 22, color: AppColors.inkSoft)),
             if (active)
               Positioned(
                 top: 9,
@@ -1443,7 +1443,8 @@ class _SearchFieldState extends State<SearchField> {
                 ),
               ),
             ),
-          ?widget.trailing,
+          // 오른쪽 끝 단추(바코드 등)는 검색어가 비었을 때만: 글자를 넣으면 같은 자리에 지우기(X)가 나온다(둘이 붙으면 선처럼 보였다, 2026-11-18 사용자)
+          if (widget.value.isEmpty && !widget.busy) ?widget.trailing,
         ]),
       );
 }

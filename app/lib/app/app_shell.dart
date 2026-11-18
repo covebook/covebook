@@ -201,6 +201,33 @@ class _AppShellState extends State<AppShell> {
       ], true, true);
       return;
     }
+    if (it == null && reading.stale && reading.active != null) {
+      final a = reading.active!;
+      final title = a.myBookId == null ? null : LibraryModel.instance.lib.editions[LibraryModel.instance.lib.books[a.myBookId]?.editionId]?.title;
+      final days = ((DateTime.now().millisecondsSinceEpoch - a.lastBeat) / 86400000).floor();
+      final when = days >= 1 ? '$days일 전' : '오늘';
+      appAlert(
+        context,
+        '멈춰 둔 독서가 있어요',
+        '$when ${title == null ? '' : '${withJosa('「$title」', '을', '를')} '}${formatDuration(a.accumulatedMs)} 읽다가 멈춰 뒀어요.',
+        [
+          AlertButton('이어 읽기', onPress: () {
+            reading.clearStale();
+            reading.resume();
+            openReadingScene(context);
+          }),
+          AlertButton('여기서 끝내고 기록하기', onPress: () {
+            reading.clearStale();
+            reading.finish();
+            Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
+          }),
+          AlertButton('기록 버리기', style: AlertStyle.destructive, onPress: () => reading.discardActive()),
+        ],
+        true,
+        true,
+      );
+      return;
+    }
     if (it == null) return;
     final at = DateTime.fromMillisecondsSinceEpoch(it.lastBeat.toInt());
     final hm = '${at.hour}:${at.minute.toString().padLeft(2, '0')}';

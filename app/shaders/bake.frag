@@ -747,6 +747,7 @@ vec4 _grid(vec2 q) {
     }
     return m * n.y;
   }
+
   // 안쪽 모서리 그늘(light-model jointShade): 벽·틀·판이 맞닿는 모서리 쪽 어두운 띠가 가리는 몫
   float jointF(float h, float H, float K) {
     float d = max(0.0, h);
@@ -758,7 +759,7 @@ vec4 _grid(vec2 q) {
   float jointXs(vec3 P, float w) {
     return (1.0 - jointF(P.x - 0.00000000, 6.10000000, 0.150000000 * w)) * (1.0 - jointF(366.000000 - P.x, 6.10000000, 0.150000000 * w));
   }
-  float jointShade(vec3 P, vec3 n) {
+  float jointBase(vec3 P, vec3 n) {
     if (env.x < 1.5 || P.z < -56.9250000 || (abs(n.z) > 0.5 && P.z < -52.8750000)) return 0.0;
     float k = 1.0;
     if (abs(n.x) > 0.5) k = (1.0 - jointF(env.z - P.y, 19.8250000, 0.350000000 * (0.450000000 + 0.550000000 * clamp((P.z + 56.4250000) / 178.425000, 0.0, 1.0)))) * (1.0 - jointF(P.y - env.y, 6.10000000, 0.400000000)) * (1.0 - jointF(DEPTH - P.z, 6.10000000, 0.0255000000));
@@ -775,6 +776,37 @@ vec4 _grid(vec2 q) {
     }
     return 1.0 - k;
   }
+  // 곡면 안 맞닿은 면의 몫: 모서리 선에서 1, 곡면 끝에서 0(기울기 0)
+  float coveW(float d) {
+    float s = clamp(d / 9.15000000, 0.0, 1.0);
+    return true ? 1.0 - s * s * (3.0 - 2.0 * s) : 0.0;
+  }
+  // 안쪽 모서리 그늘(Flutter 2026-11-18 사용자 '모서리 경계선 없애'): 모서리 곡면 위의 그늘은 거기서 만나는 면들 그늘의 평균이고, 모서리에서 멀어질수록 제 면 값으로 돌아간다.
+  // 맞닿은 면의 값은 그 면 위 모서리 선(이 점을 그 면 평면에 내린 점)에서 잰다. 모서리 선에서는 두 면, 세 면 꼭지점에서는 세 면이 같은 값이 된다(모든 모서리에 같은 규칙).
+  // 예전에는 받는 면마다 그늘 세기가 달라(천장은 뒷벽 쪽 그늘이 약하고 뒷벽은 천장 쪽이 세다) 같은 모서리 선에서 두 면이 다른 빛이 되어 선이 남았다
+  float jointShade(vec3 P, vec3 n) {
+    float sum = jointBase(P, n);
+    float ws = 1.0;
+    float w;
+    if (abs(n.y) < 0.5) {
+      w = coveW(P.y - env.y);
+      if (w > 0.0) { sum += w * jointBase(vec3(P.x, env.y, P.z), vec3(0.0, 1.0, 0.0)); ws += w; }
+      w = coveW(env.z - P.y);
+      if (w > 0.0) { sum += w * jointBase(vec3(P.x, env.z, P.z), vec3(0.0, -1.0, 0.0)); ws += w; }
+    }
+    if (abs(n.x) < 0.5) {
+      w = coveW(P.x - 0.00000000);
+      if (w > 0.0) { sum += w * jointBase(vec3(0.00000000, P.y, P.z), vec3(1.0, 0.0, 0.0)); ws += w; }
+      w = coveW(366.000000 - P.x);
+      if (w > 0.0) { sum += w * jointBase(vec3(366.000000, P.y, P.z), vec3(-1.0, 0.0, 0.0)); ws += w; }
+    }
+    if (abs(n.z) < 0.5) {
+      w = coveW(DEPTH - P.z);
+      if (w > 0.0) { sum += w * jointBase(vec3(P.x, P.y, DEPTH), vec3(0.0, 0.0, -1.0)); ws += w; }
+    }
+    return sum / ws;
+  }
+
   
 void main() {
   vec2 p = FlutterFragCoord().xy;

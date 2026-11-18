@@ -13,6 +13,12 @@ import '../db/kv_store.dart';
 import '../domain/reading.dart';
 
 const _stateKey = 'reading-state:v2';
+
+/// 켤 때 이보다 짧게 읽고 멈춘 독서는 기록할 것이 없어 지운다
+const staleMinMs = 60 * 1000;
+
+/// 켤 때 이보다 오래 멈춰 있던 독서는 작은 타이머 대신 묻는다
+const staleAfterMs = 12 * 60 * 60 * 1000;
 const _oldKey = 'active-reading:v1';
 const _oldPendingKey = 'finished-reading:v1';
 const _beatMs = 5000;
@@ -30,6 +36,9 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
 
   Active? active;
   Interrupted? interrupted;
+
+  /// 오래 멈춰 둔 독서(켤 때 12시간 넘게 일시정지였던 것): 작은 타이머를 띄우지 않고 앱 틀이 한 번 묻는다(2026-11-18 사용자 '타이머 안 켰는데 들어갈 때마다 뜬다')
+  bool stale = false;
   FinishDraft? pending;
   bool pendingRestored = false;
   bool loaded = false;
@@ -100,8 +109,18 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
           if (a != null && p != null && a.id == p.id) a = null;
         }
         final r = recoverOnLoad(a, _now());
-        await _persist(r.active, p);
-        active = r.active;
+        var ra = r.active;
+        stale = false;
+        // 멈춰 둔 독서(일시정지, 꺼짐 복구 아님): 1분도 안 읽은 것은 남길 기록이 없어 지우고, 12시간 넘게 그대로면 묻는다
+        if (ra != null && ra.runningSince == null && r.interrupted == null) {
+          if (ra.accumulatedMs < staleMinMs) {
+            ra = null;
+          } else if (_now() - ra.lastBeat > staleAfterMs) {
+            stale = true;
+          }
+        }
+        await _persist(ra, p);
+        active = ra;
         interrupted = r.interrupted;
         pending = p;
         pendingRestored = p != null;
@@ -130,6 +149,25 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     _save();
     _stopBeat();
+  }
+
+  /// 오래 멈춰 둔 독서를 이어 읽거나 끝내거나 버린 뒤
+  void clearStale() {
+    if (!stale) return;
+    stale = false;
+    notifyListeners();
+  }
+
+  /// 진행 중 독서만 버린다(저장 전 초안은 그대로)
+  Future<void> discardActive() async {
+    _stopBeat();
+    active = null;
+    interrupted = null;
+    stale = false;
+    spanGap = null;
+    _spanStart = null;
+    notifyListeners();
+    await _persist(null, pending);
   }
 
   void resume() {
