@@ -1,6 +1,8 @@
 # 책장 한켠
 
-읽은 책을 모아 직접 배치해 꾸미는 책장 앱. 화면명은 "나의 책장".
+- 읽은 책을 모아 직접 배치해 꾸미는 책장 앱
+- 화면명: "나의 책장"
+
 
 - 앱: `flutter/` (Flutter, Android·iOS)
 - 서버: `server/` (Go, PostgreSQL)
@@ -16,12 +18,13 @@ flutter run
 flutter test
 
 cd server
-go test ./...                     # PostgreSQL 통합 시험은 별도 테스트 DB가 필요하다
+go test ./...                     # PostgreSQL 통합 시험은 별도 테스트 DB 필요
 DATABASE_URL='postgres://user:pass@localhost:5432/chaekjang?sslmode=disable' go run ./cmd/server # 기본 포트 8080
 ```
 
-- Flutter 버전은 배포 워크플로와 맞춘다(`.github/workflows/android-flutter-play.yml`의 `flutter-version`).
-- 서버 설정과 검증 방법은 [`server/README.md`](server/README.md). 운영 반영은 KoDeploy에서 손으로 재배포한다.
+- Flutter 버전: 배포 워크플로와 맞춤 (`.github/workflows/android-flutter-play.yml`의 `flutter-version`)
+- 서버 설정·검증 방법: [`server/README.md`](server/README.md)
+- 서버 운영 반영: KoDeploy에서 손으로 재배포
 
 ## 구조
 
@@ -48,9 +51,9 @@ DATABASE_URL='postgres://user:pass@localhost:5432/chaekjang?sslmode=disable' go 
 
 ## 옛 React Native 앱
 
-2026-11-13부터 Flutter로 옮겼고, React Native 앱(`app/`)은 2026-11-18에 저장소에서 지웠다.
-
-- 코드가 남아 있는 마지막 커밋: `4f9e1d9` (`git show 4f9e1d9:app/package.json`처럼 꺼내 볼 수 있다)
-- 셰이더 생성기(`flutter/tool/gen_shaders.sh`)는 아직 그 코드를 쓰므로 그 커밋에서 꺼내 돌린다
-- 2026-11-13 이전 보고서(`docs/reports/`)에 나오는 `app/...` 경로는 그 앱 기준이다
+- 2026-11-13: Flutter로 이전 시작
+- 2026-11-18: React Native 앱(`app/`)을 저장소에서 삭제
+- 코드가 남아 있는 마지막 커밋: `4f9e1d9` (`git show 4f9e1d9:app/package.json`으로 꺼내 볼 수 있음)
+- 셰이더 생성기(`flutter/tool/gen_shaders.sh`): 아직 그 코드를 씀. 그 커밋에서 꺼내 실행
+- 2026-11-13 이전 보고서(`docs/reports/`)의 `app/...` 경로: 그 앱 기준
 - 이 README에 있던 과거 기록: [`2026-09-27 상태`](docs/reports/2026-09-27-status.md), [`2026-10-05 백엔드·동기화`](docs/reports/2026-10-05-backend-sync.md)
