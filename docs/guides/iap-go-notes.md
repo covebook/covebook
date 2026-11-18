@@ -206,9 +206,12 @@ return tx.Commit(ctx)
 |---|---|---|
 | `go-iap` 함수와 동작 | v1.59.1 소스 (`appstore/api/store.go`, `store_fallback.go`, `model.go`) | 직접 읽음 |
 | `pgx`의 `Rollback` 동작 | `go doc github.com/jackc/pgx/v5 Tx.Rollback` | 직접 읽음 |
-| 애플 `price`가 1000배 단위 | [애플 문서 price](https://developer.apple.com/documentation/appstoreserverapi/price), [개발자 포럼](https://developer.apple.com/forums/thread/767978) | 검색 결과 요약으로 확인. 원문 페이지는 직접 못 엶 |
+| 애플 `price`가 1000배 단위 | [애플 문서 price](https://developer.apple.com/documentation/appstoreserverapi/price), [개발자 포럼](https://developer.apple.com/forums/thread/767978) | 검색 결과 요약으로만 확인. 애플 문서는 제목만 열리고 본문이 안 읽힘. 브라우저로 직접 확인 필요 |
 | `storefront` 코드 형식, `appAccountToken` 형식 | [애플 문서 JWSTransactionDecodedPayload](https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload) | 미확인. 샌드박스에서 실제 값으로 확인 (#15) |
-| 인터페이스는 쓰는 쪽 패키지에 | [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments) | 검색 결과 요약으로 확인 |
+| 인터페이스는 쓰는 쪽 패키지에 | [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments) | 원문 확인. "Go interfaces generally belong in the package that uses values of the interface type, not the package that implements those values." |
+| 오류를 `_`로 버리지 않음 | 같은 문서 Handle Errors 절 | 원문 확인. "Do not discard errors using `_` variables." |
+| 커밋 뒤 `defer` 롤백은 아무 일도 안 함 | [Executing transactions](https://go.dev/doc/database/execute-transactions) | 원문 확인. "If the transaction succeeds, it will be committed before the function exits, making the deferred rollback call a no-op." |
+| `%w`와 `errors.Is` | [Working with Errors in Go 1.13](https://go.dev/blog/go1.13-errors) | 원문 확인. 감싼 오류의 사슬 전체를 따라가며 비교함 |
 | `defer` 위치 실수 | [DEV 글](https://dev.to/mark_saward/go-footguns-go-defer-and-rust-drop-17af) | 검색 결과 요약으로 확인 |
 
 - 더 읽을 것
