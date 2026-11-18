@@ -15,6 +15,7 @@ import '../../store/settings_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'book_match.dart';
+import 'book_widgets.dart';
 import 'bulk_add.dart';
 
 Future<void> openBarcodeScan(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -134,7 +135,7 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
                   right: 0,
                   bottom: 12,
                   child: IgnorePointer(
-                    child: Text('바코드를 틀 안에 비추면 바로 찾아요', textAlign: TextAlign.center, style: AppType.label.copyWith(color: const Color(0xFFFFFFFF), shadows: const [Shadow(color: Color(0x80000000), blurRadius: 6)])),
+                    child: Text('바코드를 틀 안에 비추면 바로 찾아요', textAlign: TextAlign.center, style: AppType.label.copyWith(color: AppColors.white, shadows: const [Shadow(color: Color(0x80000000), blurRadius: 6)])),
                   ),
                 ),
               ]),
@@ -143,7 +144,7 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
         ),
         Padding(
           padding: const EdgeInsets.only(top: Space.l, bottom: Space.xs),
-          child: Text(_items.isEmpty ? '찾은 책이 여기에 쌓여요. 여러 권을 이어서 비춰도 돼요.' : '찾은 책 ${_items.length}권 | 고른 책 $n권', style: AppType.sub),
+          child: MetaText(_items.isEmpty ? '찾은 책이 여기에 쌓여요. 여러 권을 이어서 비춰도 돼요.' : ['찾은 책 ${_items.length}권', '고른 책 $n권'].join(metaSep), style: AppType.sub),
         ),
         Expanded(
           child: ListView(
@@ -180,6 +181,7 @@ class _CameraError extends StatelessWidget {
       );
 }
 
+/// 찾은 책 한 줄(공용 책 줄 BookRow 작게, 2026-11-19 공통 규칙): 표지 · 제목 · 저자 · 상태, 오른쪽 고르는 원 · 다시 찾기 · 빼기
 class _ScanRow extends StatelessWidget {
   const _ScanRow({required this.s, required this.onToggle, required this.onRetry, required this.onRemove});
   final _Scanned s;
@@ -198,60 +200,22 @@ class _ScanRow extends StatelessWidget {
                     ? '내 서재에 있음'
                     : publisherLine(b);
     final selectable = b != null && s.ownedId == null && !s.busy;
-    return Semantics(
-      button: selectable,
+    return BookRow(
+      cover: RealCover(uri: b?.coverUrl, title: b?.title ?? s.code, color: coverPlaceholder, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
+      title: b?.title ?? 'ISBN ${s.code}',
+      meta: b != null && b.authors.isNotEmpty ? b.authors.join(', ') : null,
+      third: status,
+      trailing: s.busy
+          ? const SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.inkSoft))
+          : selectable
+              ? RadioMark(on: s.picked)
+              : s.offline
+                  // 목록 가져오기 '다시 찾기'와 같은 줄 안 작은 단추(글자만 직접 그렸다)
+                  ? Btn(label: '다시 찾기', kind: 'secondary', size: 's', onPress: onRetry)
+                  : IconBtn(label: '목록에서 빼기', onPress: onRemove, child: const LucideIcon('X', size: 18, color: AppColors.inkSoft)),
+      onPress: selectable ? onToggle : (s.offline ? onRetry : null),
       selected: selectable && s.picked,
       label: [b?.title ?? 'ISBN ${s.code}', ?status].join(', '),
-      excludeSemantics: true,
-      child: Pressable(
-        onPress: selectable ? onToggle : (s.offline ? onRetry : null),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.s),
-          child: Row(children: [
-            RealCover(uri: b?.coverUrl, title: b?.title ?? s.code, color: '#F2F4F6', width: 40, ratio: 0.72),
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(b?.title ?? 'ISBN ${s.code}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-                if (b != null && b.authors.isNotEmpty) Text(b.authors.join(', '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
-                if (status != null)
-                  Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(color: s.ownedId != null ? AppColors.accent : null)),
-              ]),
-            ),
-            const SizedBox(width: Space.s),
-            if (s.busy)
-              const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.inkSoft))
-            else if (selectable)
-              PickMark(on: s.picked)
-            else if (s.offline)
-              // 줄 안이라 폭이 정해지지 않으므로 Btn 대신 글자 버튼
-              Pressable(
-                onPress: onRetry,
-                child: Padding(padding: const EdgeInsets.all(Space.s), child: Text('다시 찾기', style: AppType.button.copyWith(color: AppColors.accent))),
-              )
-            else
-              IconBtn(label: '목록에서 빼기', onPress: onRemove, child: const LucideIcon('X', size: 18, color: AppColors.inkSoft)),
-          ]),
-        ),
-      ),
     );
   }
-}
-
-/// 고름 표시(전체 책 '책장에 진열'과 같은 동그라미 체크): 고르면 대표색 채움 + 흰 체크, 아니면 회색 테두리
-class PickMark extends StatelessWidget {
-  const PickMark({super.key, required this.on});
-  final bool on;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: on ? AppColors.accent : AppColors.bg,
-          border: on ? null : Border.all(color: AppColors.line, width: 1.5),
-        ),
-        child: on ? const Center(child: LucideIcon('Check', size: 14, color: AppColors.onAccent, stroke: 3)) : null,
-      );
 }

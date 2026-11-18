@@ -27,9 +27,13 @@ export '../../domain/binding_draft.dart';
 const _layoutNames = {'spine_a': '기본', 'spine_b': '제목 낮게', 'spine_c': '무늬 낮게'};
 const _materials = ['fine', 'linen', 'matte', 'laid'];
 const _materialNames = {'fine': '고운 종이', 'linen': '린넨', 'matte': '매끈 무광', 'laid': '줄무늬 종이'};
-const _ink = AppColors.accent; // 고른 것 표시(공통 강조색)
 
 int _hex(String h) => int.tryParse(h.substring(1, 7), radix: 16) ?? 0x8F6E55;
+
+/// 추천 장정으로 되돌린 값(장정 편집 '초기화' · 색상 '추천 장정으로 되돌리기'가 같은 값). 무늬 씨앗은 지금 것을 둔다.
+/// 추천 장정에는 재질 · 표지 그림이 없다(BindingDraft.of · recommended)
+BindingDraft resetBinding(BindingDraft rec, num seed) =>
+    BindingDraft(spineColor: rec.spineColor, motif: rec.motif, seed: seed, inkColor: rec.inkColor, accentColor: rec.accentColor, layout: rec.layout);
 
 /// 미리보기 책: 고른 장정으로 그린 책(실제 표지가 있고 그림을 고르지 않았으면 정면은 실제 표지)
 Book previewBook({required String title, String? author, ({num widthMm, num heightMm})? size, num? pages, required BindingDraft binding, String? realCover}) {
@@ -97,7 +101,7 @@ class _BindingEditorState extends State<BindingEditor> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: Space.xs),
           child: Column(
             children: [
               RotatableBook(key: ValueKey(shown), book: shown, frontWidth: math.min(170, width * 0.39), initialSpin: 32, shadow: true),
@@ -108,41 +112,10 @@ class _BindingEditorState extends State<BindingEditor> {
             ],
           ),
         ),
-        // 전환 칸(토스 SegmentedControl처럼): 회색 바탕 안에서 고른 칸만 흰 칸 + 진한 굵은 글자
-        Container(
-          margin: const EdgeInsets.only(top: 16),
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(Shape.input + 3)),
-          child: Row(
-            children: [
-              for (final (id, label) in const [('art', '그림'), ('color', '색상'), ('material', '재질')])
-                Expanded(
-                  child: Semantics(
-                    selected: _tab == id,
-                    button: true,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() => _tab = id),
-                      child: Container(
-                        constraints: const BoxConstraints(minHeight: 42),
-                        alignment: Alignment.center,
-                        decoration: _tab == id
-                            ? BoxDecoration(
-                                color: AppColors.bg,
-                                borderRadius: BorderRadius.circular(Shape.input),
-                                boxShadow: const [BoxShadow(color: Color(0x14191F28), offset: Offset(0, 4), blurRadius: 10)],
-                              )
-                            : null,
-                        child: Text(
-                          label,
-                          style: AppType.caption.copyWith(color: _tab == id ? AppColors.ink : AppColors.inkSoft, fontFamily: _tab == id ? AppFonts.uiBold : AppFonts.ui),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        // 전환 칸은 공용 Segmented(2026-11-19 공통 규칙: 모서리 · 높이 · 그림자를 따로 그린 복사본이었다). 회색 칸은 위 여백 4 안쪽에서 시작해 16 아래에 그대로
+        Padding(
+          padding: const EdgeInsets.only(top: Space.m),
+          child: Segmented<String>(items: const [('art', '그림'), ('color', '색상'), ('material', '재질')], value: _tab, onChange: (id) => setState(() => _tab = id)),
         ),
         switch (_tab) {
           'color' => _colorPane(),
@@ -153,14 +126,8 @@ class _BindingEditorState extends State<BindingEditor> {
     );
   }
 
-  Widget _check(double size, double icon, [Color color = AppColors.onAccent]) => Container(
-    width: size,
-    height: size,
-    decoration: const BoxDecoration(color: _ink, shape: BoxShape.circle),
-    child: Center(
-      child: LucideIcon('Check', size: icon, color: color, stroke: 2.4),
-    ),
-  );
+  /// 고른 칸 모서리 표시: 공용 고르는 원(켬, 20)
+  Widget _check() => const RadioMark(on: true, size: 20);
 
   /// 그림: 6종 3열. 고른 그림만 얇은 테두리 + 작은 체크. 아래에 '그림 없음'(실제 표지가 있으면 실제 표지)
   Widget _artPane() {
@@ -177,7 +144,7 @@ class _BindingEditorState extends State<BindingEditor> {
               padding: const EdgeInsets.only(top: 18),
               child: Wrap(
                 alignment: WrapAlignment.spaceBetween,
-                runSpacing: 16,
+                runSpacing: Space.l,
                 children: [
                   for (final a in coverArtworks)
                     Semantics(
@@ -197,7 +164,7 @@ class _BindingEditorState extends State<BindingEditor> {
                                 padding: const EdgeInsets.all(3),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: v.coverArtId == a.id ? _ink : Colors.transparent, width: 1.5),
+                                  border: Border.all(color: v.coverArtId == a.id ? AppColors.accent : Colors.transparent, width: 1.5),
                                 ),
                                 child: Stack(
                                   fit: StackFit.expand,
@@ -206,16 +173,13 @@ class _BindingEditorState extends State<BindingEditor> {
                                       borderRadius: BorderRadius.circular(5),
                                       child: Image.asset(artworkThumb(a.id), fit: BoxFit.cover),
                                     ),
-                                    if (v.coverArtId == a.id) Positioned(top: 4, right: 4, child: _check(20, 13)),
+                                    if (v.coverArtId == a.id) Positioned(top: Space.xs, right: Space.xs, child: _check()),
                                   ],
                                 ),
                               ),
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  a.name,
-                                  style: AppType.caption.copyWith(fontFamily: v.coverArtId == a.id ? AppFonts.uiBold : null, color: v.coverArtId == a.id ? AppColors.ink : null),
-                                ),
+                                child: Text(a.name, style: v.coverArtId == a.id ? AppType.caption.strong.copyWith(color: AppColors.ink) : AppType.caption),
                               ),
                             ],
                           ),
@@ -240,7 +204,7 @@ class _BindingEditorState extends State<BindingEditor> {
                   decoration: BoxDecoration(
                     color: AppColors.input,
                     borderRadius: BorderRadius.circular(Shape.input),
-                    border: Border.all(color: none ? _ink : AppColors.input),
+                    border: Border.all(color: none ? AppColors.accent : AppColors.input),
                   ),
                   child: Row(
                     children: [
@@ -258,12 +222,13 @@ class _BindingEditorState extends State<BindingEditor> {
                         ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
-                          widget.realCover != null ? '실제 표지' : '그림 없음 | 단색 정면',
-                          style: AppType.sub.copyWith(fontFamily: none ? AppFonts.uiBold : null, color: none ? AppColors.ink : null),
+                        child: MetaText(
+                          widget.realCover != null ? '실제 표지' : ['그림 없음', '단색 정면'].join(metaSep),
+                          style: none ? AppType.sub.strong.copyWith(color: AppColors.ink) : AppType.sub,
                         ),
                       ),
-                      if (none) const LucideIcon('Check', size: 16, color: _ink, stroke: 2.2),
+                      // 고른 표시는 공용 체크(20 · 굵기 2, 16 · 2.2였다)
+                      if (none) const AddedMark(),
                     ],
                   ),
                 ),
@@ -274,11 +239,6 @@ class _BindingEditorState extends State<BindingEditor> {
       },
     );
   }
-
-  Widget _h(String t) => Padding(
-    padding: const EdgeInsets.only(top: Space.section, bottom: Space.item),
-    child: Text(t, style: AppType.section),
-  );
 
   /// 색상: 표지 색 + 이 책에 어울리는 색 + 모든 색. 맨 아래 추천 장정으로 되돌리기
   Widget _colorPane() {
@@ -291,7 +251,8 @@ class _BindingEditorState extends State<BindingEditor> {
       for (final c in bookColors)
         if (!rec.contains(c.hex) && !_fromCover.contains(c.hex)) c,
     ];
-    final same = v.spineColor == rec0.spineColor && v.motif == rec0.motif && v.layout == rec0.layout && (v.material ?? 'fine') == (rec0.material ?? 'fine') && v.coverArtId == null;
+    // 추천 장정에는 재질 · 표지 그림이 없다(resetBinding)
+    final same = v.spineColor == rec0.spineColor && v.motif == rec0.motif && v.layout == rec0.layout && (v.material ?? 'fine') == 'fine' && v.coverArtId == null;
     Widget swatch(String hex, String name) {
       final on = v.spineColor == hex;
       return Semantics(
@@ -304,9 +265,10 @@ class _BindingEditorState extends State<BindingEditor> {
             final t = tonesFor(hex);
             widget.onChange(v.custom(spineColor: hex, inkColor: t.inkColor, accentColor: t.accentColor));
           },
+          // 누르는 칸 48(44였다). 칸 사이를 4 줄여 원 사이 간격은 그대로
           child: SizedBox(
-            width: 44,
-            height: 44,
+            width: Space.hit,
+            height: Space.hit,
             child: Center(
               child: Container(
                 width: 40,
@@ -314,7 +276,7 @@ class _BindingEditorState extends State<BindingEditor> {
                 decoration: BoxDecoration(
                   color: Color(0xFF000000 | _hex(hex)),
                   shape: BoxShape.circle,
-                  border: Border.all(color: on ? _ink : const Color(0x14000000), width: on ? 2.5 : 1),
+                  border: Border.all(color: on ? AppColors.accent : const Color(0x14000000), width: on ? 2.5 : 1),
                 ),
                 child: on ? Center(child: LucideIcon('Check', size: 16, color: Color(0xFF000000 | _hex(tonesFor(hex).inkColor)), stroke: 2.4)) : null,
               ),
@@ -327,32 +289,22 @@ class _BindingEditorState extends State<BindingEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 구역 제목은 공용 H2(화면 읽기 머리, 아래 8. 따로 그린 제목은 아래 12였다)
         if (_fromCover.isNotEmpty) ...[
-          _h('표지 색'),
-          Wrap(spacing: 12, runSpacing: 12, children: [for (final (i, h) in _fromCover.indexed) swatch(h, '표지 색 ${i + 1}')]),
+          const H2('표지 색'),
+          Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final (i, h) in _fromCover.indexed) swatch(h, '표지 색 ${i + 1}')]),
         ],
-        _h('이 책에 어울리는 색'),
-        Wrap(spacing: 12, runSpacing: 12, children: [for (final (i, h) in rec.indexed) swatch(h, i == 0 ? '추천' : '추천 ${i + 1}')]),
-        _h('모든 색'),
-        Wrap(spacing: 12, runSpacing: 12, children: [for (final c in rest) swatch(c.hex, c.name)]),
+        const H2('이 책에 어울리는 색'),
+        Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final (i, h) in rec.indexed) swatch(h, i == 0 ? '추천' : '추천 ${i + 1}')]),
+        const H2('모든 색'),
+        Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final c in rest) swatch(c.hex, c.name)]),
         Padding(
           padding: const EdgeInsets.only(top: Space.group),
           child: TextLink(
             label: '추천 장정으로 되돌리기',
             soft: true,
             disabled: same && v.source != 'custom',
-            onPress: () => widget.onChange(
-              BindingDraft(
-                spineColor: rec0.spineColor,
-                motif: rec0.motif,
-                seed: v.seed,
-                inkColor: rec0.inkColor,
-                accentColor: rec0.accentColor,
-                layout: rec0.layout,
-                material: rec0.material,
-                coverArtId: rec0.coverArtId,
-              ),
-            ),
+            onPress: () => widget.onChange(resetBinding(rec0, v.seed)),
           ),
         ),
       ],
@@ -365,39 +317,38 @@ class _BindingEditorState extends State<BindingEditor> {
     final material = v.material ?? 'fine', layout = v.layout ?? 'spine_a';
     return LayoutBuilder(
       builder: (_, box) {
-        final tile = (box.maxWidth - 16) / 3;
-        Widget tileBox({required bool on, required Widget child, bool spine = false}) => Container(
-          width: tile,
-          height: tile * 0.86,
-          decoration: BoxDecoration(
-            color: spine ? AppColors.bg : AppColors.surface,
-            borderRadius: BorderRadius.circular(Shape.input),
-            border: Border.all(color: on ? _ink : (spine ? AppColors.line : Colors.transparent), width: spine && !on ? 1.5 : 2),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              child,
-              if (on) Positioned(top: 7, right: 7, child: _check(20, 15)),
-            ],
-          ),
-        );
+        // 고르는 칸 하나(재질 견본 · 책등 글자가 같은 꾸밈: 둥근 모서리 · 고르면 갈색 테두리와 모서리 원). 높이는 폭의 0.86
+        Widget tileBox({required double width, required bool on, required Widget child, bool spine = false}) => Container(
+              width: width,
+              height: width * 0.86,
+              decoration: BoxDecoration(
+                color: spine ? AppColors.bg : AppColors.surface,
+                borderRadius: BorderRadius.circular(Shape.input),
+                border: Border.all(color: on ? AppColors.accent : (spine ? AppColors.line : Colors.transparent), width: spine && !on ? 1.5 : 2),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  child,
+                  if (on) Positioned(top: 7, right: 7, child: _check()),
+                ],
+              ),
+            );
         Widget name(String t, bool on) => Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            t,
-            style: AppType.caption.copyWith(fontFamily: on ? AppFonts.uiBold : null, color: on ? AppColors.ink : null),
-          ),
-        );
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(t, style: on ? AppType.caption.strong.copyWith(color: AppColors.ink) : AppType.caption),
+            );
         // 책등 배율: 칸 높이에 맞게
+        final tile = (box.maxWidth - 16) / 3;
+        final swatchW = (box.maxWidth - 24) / 4;
         final spineBook = _book(v);
         final spineH = (spineBook.dims?.height ?? 188) + bookPad * 2;
         final zoom = tile * 0.8 / spineH;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _h('표면'),
+            const H2('표면'),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -410,30 +361,16 @@ class _BindingEditorState extends State<BindingEditor> {
                     child: GestureDetector(
                       onTap: () => widget.onChange(v.custom(material: m)),
                       child: SizedBox(
-                        width: (box.maxWidth - 24) / 4,
+                        width: swatchW,
                         child: Column(
                           children: [
-                            SizedBox(
-                              width: (box.maxWidth - 24) / 4,
-                              child: AspectRatio(
-                                aspectRatio: 1 / 0.86,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surface,
-                                    borderRadius: BorderRadius.circular(Shape.input),
-                                    border: Border.all(color: material == m ? _ink : Colors.transparent, width: 2),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.all(2),
-                                        child: CustomPaint(painter: _MaterialSwatch(m, Color(0xFF000000 | _hex(v.spineColor)))),
-                                      ),
-                                      if (material == m) Positioned(top: 7, right: 7, child: _check(20, 15)),
-                                    ],
-                                  ),
+                            tileBox(
+                              width: swatchW,
+                              on: material == m,
+                              child: Positioned.fill(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(2),
+                                  child: CustomPaint(painter: _MaterialSwatch(m, Color(0xFF000000 | _hex(v.spineColor)))),
                                 ),
                               ),
                             ),
@@ -445,7 +382,7 @@ class _BindingEditorState extends State<BindingEditor> {
                   ),
               ],
             ),
-            _h('책등 글자'),
+            const H2('책등 글자'),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -460,6 +397,7 @@ class _BindingEditorState extends State<BindingEditor> {
                       child: Column(
                         children: [
                           tileBox(
+                            width: tile,
                             on: layout == l,
                             spine: true,
                             child: IgnorePointer(
@@ -494,7 +432,7 @@ class _MaterialSwatch extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
-    final r = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(10));
+    final r = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(Shape.input));
     canvas.save();
     canvas.clipRRect(r);
     canvas.drawRect(Offset.zero & size, Paint()..color = color);

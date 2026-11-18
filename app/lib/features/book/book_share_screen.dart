@@ -49,9 +49,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
   // 미리보기 그림(같은 입력·폭이면 다시 그리지 않는다)
   ui.Image? _preview;
   Object? _previewKey;
-  // 비어 있는 칩을 누르면 쓰는 자리로 데려간다(2026-11-15 QA: 빈 '한 줄 감상'·'별점' 칩은 눌러도 반응이 없었다)
-  String? _hint; // 방금 누른 빈 칩: 그 안내 줄을 잠깐 진하게
-  Timer? _hintTimer;
 
   @override
   void initState() {
@@ -88,7 +85,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
   void dispose() {
     _model.removeListener(_changed);
     _savedTimer?.cancel();
-    _hintTimer?.cancel();
     _preview?.dispose();
     super.dispose();
   }
@@ -96,7 +92,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
   void _changed() {
     if (mounted) setState(() {});
   }
-
 
   /// 비어 있는 항목을 누르면 바로 그것을 채우는 곳으로(2026-11-18 사용자 '없는 애 누르면 바로 추가 페이지로'):
   /// 한줄평·별점은 책 정보 › 평가, 읽은 기간은 내 기록(돌려준 탭으로 책 정보가 바꾼다), 독서 시간은 이 책으로 읽기 시작
@@ -110,17 +105,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
         return;
       case 'time':
         startReadingBook(context, widget.id);
-        return;
     }
-    _hintFor(k);
-  }
-
-  void _hintFor(String k) {
-    _hintTimer?.cancel();
-    setState(() => _hint = k == 'note' || k == 'rating' ? 'eval' : k);
-    _hintTimer = Timer(const Duration(milliseconds: 2400), () {
-      if (mounted) setState(() => _hint = null);
-    });
   }
 
   BookShareData? get _data {
@@ -206,13 +191,13 @@ class _BookShareScreenState extends State<BookShareScreen> {
     final width = MediaQuery.sizeOf(context).width;
     // 미리보기는 화면에 맞춰 줄인 같은 카드(옵션이 보이게 화면 폭의 3/4 정도)
     final previewW = [width - Space.page * 2, math.max(240.0, width * 0.66), 340.0].reduce(math.min);
-    final hair = 1 / MediaQuery.devicePixelRatioOf(context);
+    final hair = Hairline.of(context);
     // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게)
-    final missing = {
-      if (!has['note']! || !has['rating']!) 'eval': '비어 있는 한줄평, 별점을 누르면 평가에서 적을 수 있어요',
-      if (!has['time']!) 'time': '독서 시간을 누르면 이 책으로 타이머를 켜요',
-      if (!has['period']!) 'period': '읽은 기간을 누르면 내 기록에서 날짜를 적어요',
-    };
+    final missing = [
+      if (!has['note']! || !has['rating']!) '비어 있는 한줄평, 별점을 누르면 평가에서 적을 수 있어요',
+      if (!has['time']!) '독서 시간을 누르면 이 책으로 타이머를 켜요',
+      if (!has['period']!) '읽은 기간을 누르면 내 기록에서 날짜를 적어요',
+    ];
     return Screen(
       title: '책 공유',
       footer: Row(children: [
@@ -255,9 +240,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
           Padding(
             padding: const EdgeInsets.only(top: Space.s),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              for (final e in missing.entries)
-                Text(keepAll(e.value),
-                    semanticsLabel: e.value, style: _hint == e.key ? AppType.caption.copyWith(color: AppColors.ink, fontFamily: AppFonts.uiBold) : AppType.caption),
+              for (final t in missing) Text(keepAll(t), semanticsLabel: t, style: AppType.caption),
             ]),
           ),
       ],
@@ -265,7 +248,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
   }
 }
 
-/// 체크 상자 한 줄(표시할 정보): 네모 상자 24(고르면 갈색 채움 + 흰 체크) + 글. 누르는 자리 48
+/// 체크 상자 한 줄(표시할 정보): 공용 정보 넣기 네모(CheckSquare 22) + 글. 누르는 자리 48. 내용이 없는 것은 꺼짐 투명도
 class _CheckLine extends StatelessWidget {
   const _CheckLine({required this.label, required this.on, required this.enabled, required this.onPress});
   final String label;
@@ -284,20 +267,11 @@ class _CheckLine extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: onPress,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(minHeight: Space.hit),
             child: Opacity(
-              opacity: enabled ? 1 : 0.4,
+              opacity: enabled ? 1 : disabledOpacity,
               child: Row(children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: on ? AppColors.accent : AppColors.bg,
-                    borderRadius: BorderRadius.circular(6),
-                    border: on ? null : Border.all(color: AppColors.inkFaint, width: 1.5),
-                  ),
-                  child: on ? const Center(child: LucideIcon('Check', size: 16, color: AppColors.bg, stroke: 2.6)) : null,
-                ),
+                CheckSquare(on: on),
                 const SizedBox(width: Space.m),
                 Flexible(child: WordText(label, style: AppType.bodySmall)),
               ]),

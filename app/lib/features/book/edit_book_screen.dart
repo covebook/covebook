@@ -6,21 +6,16 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../services/photos.dart';
 import '../../store/files.dart' show keepImage;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import 'book_widgets.dart';
 
 Future<void> openEditBook(BuildContext context, String id) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book/edit'), builder: (_) => EditBookScreen(id: id)));
-
-int? _num(String v) {
-  final n = double.tryParse(v.replaceAll(RegExp(r'[^\d.]'), ''));
-  return n != null && n.isFinite && n > 0 ? n.round() : null;
-}
 
 class EditBookScreen extends StatefulWidget {
   const EditBookScreen({super.key, required this.id});
@@ -49,7 +44,8 @@ class _EditBookScreenState extends State<EditBookScreen> {
     };
   }();
   late final Map<String, String?> _f = {..._f0};
-  String? _msg;
+  /// 표지 아래 한 줄: 권한 안내(sub) 또는 오류(빨강)
+  ({String text, bool error})? _msg;
   bool _saving = false, _released = false;
 
   bool get _dirty => _f.entries.any((e) => _f0[e.key] != e.value);
@@ -70,14 +66,14 @@ class _EditBookScreenState extends State<EditBookScreen> {
         if (mounted) {
           setState(() {
             _saving = false;
-            _msg = '표지 사진을 저장하지 못했어요. 다시 골라 주세요.';
+            _msg = (text: '표지 사진을 저장하지 못했어요. 다시 골라 주세요.', error: true);
           });
         }
         return;
       }
     }
-    final w = _num(_f['width']!), h = _num(_f['height']!);
-    final isbn = _f['isbn']!.replaceAll(RegExp(r'[^\dXx]'), '');
+    final w = numOf(_f['width']!), h = numOf(_f['height']!);
+    final isbn = cleanIsbn(_f['isbn']);
     String? opt(String k) => _f[k]!.trim().isEmpty ? null : _f[k]!.trim();
     await _model.updateEdition(
       e.id,
@@ -86,7 +82,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
       publisher: opt('publisher'),
       publishedAt: opt('publishedAt'),
       isbn13: isbn.isEmpty ? null : isbn,
-      pageCount: _num(_f['pages']!),
+      pageCount: numOf(_f['pages']!),
       widthMm: w != null && h != null ? math.min(w, h) : null,
       heightMm: w != null && h != null ? math.max(w, h) : null,
       coverUri: coverUri,
@@ -126,44 +122,37 @@ class _EditBookScreenState extends State<EditBookScreen> {
         title: '책 정보 수정',
         footer: Btn(label: '저장', onPress: _save, busy: _saving, disabled: _f['title']!.trim().isEmpty),
         children: [
-          // 책 추가 '책 확인'과 같은 짜임: 표지 96 · 사이 16 · 작은 보조 버튼
+          // 표지 96 · 사이 16 · 표지 단추(책 확인과 같은 이름 · 모양) · 글자만 '표지 지우기'(2026-11-19 공통 규칙)
           Padding(
             padding: const EdgeInsets.only(top: Space.m),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              RealCover(uri: _f['coverUri'], title: _f['title']!, color: '#F2F4F6', width: 96),
+              RealCover(uri: _f['coverUri'], title: _f['title']!, color: coverPlaceholder, width: 96),
               const SizedBox(width: Space.l),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Btn(
-                    label: '표지 사진 바꾸기',
-                    kind: 'secondary',
-                    size: 's',
-                    onPress: () async {
-                      final r = await pickPhoto('library');
-                      if (!mounted) return;
-                      if (r case PhotoOk(:final uri)) {
-                        setState(() {
-                          _f['coverUri'] = uri;
-                          _f['coverSource'] = 'photo';
-                        });
-                      } else if (r case PhotoFail(reason: 'denied')) {
-                        setState(() => _msg = deniedMessage('library'));
-                      }
-                    },
+                  CoverPhotoButton(
+                    hasCover: _f['coverUri'] != null,
+                    onPicked: (uri) => setState(() {
+                      _f['coverUri'] = uri;
+                      _f['coverSource'] = 'photo';
+                    }),
+                    onDenied: (m) => setState(() => _msg = (text: m, error: false)),
                   ),
                   if (_f['coverUri'] != null)
+                    TextLink(
+                      label: '표지 지우기',
+                      soft: true,
+                      start: true,
+                      onPress: () => setState(() {
+                        _f['coverUri'] = null;
+                        _f['coverSource'] = null;
+                      }),
+                    ),
+                  if (_msg case final m?)
                     Padding(
                       padding: const EdgeInsets.only(top: Space.s),
-                      // 지금 앱: 글자만 있는 작은 단추(좌우 여백 0)
-                      child: Transform.translate(
-                        offset: const Offset(-16, 0),
-                        child: Btn(label: '표지 지우기', kind: 'ghost', size: 's', onPress: () => setState(() {
-                              _f['coverUri'] = null;
-                              _f['coverSource'] = null;
-                            })),
-                      ),
+                      child: Semantics(liveRegion: true, child: WordText(m.text, style: m.error ? AppType.sub.copyWith(color: AppColors.danger) : AppType.sub)),
                     ),
-                  if (_msg != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(_msg!, style: AppType.sub)),
                 ]),
               ),
             ]),

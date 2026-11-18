@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/kit.dart';
-import '../../ui/theme.dart';
 import 'binding_editor.dart';
 
 Future<void> openBindingEditor(BuildContext context, String id) =>
@@ -34,6 +33,8 @@ class _BindingScreenState extends State<BindingScreen> {
         _v = next;
       });
 
+  void _reset() => _set(resetBinding(_recommended, _v.seed));
+
   Future<void> _save() async {
     final nav = Navigator.of(context);
     if (!_touched) return nav.pop();
@@ -51,27 +52,13 @@ class _BindingScreenState extends State<BindingScreen> {
     if (_book == null || e == null) return const Screen(title: '장정 편집', children: [Empty(title: '책을 찾을 수 없어요')]);
     return Screen(
       title: '장정 편집',
+      // 머리줄 글자 단추는 공용 TextLink(회색 보조, 누르는 자리 48, 2026-11-19 공통 규칙). 화면 읽기 이름은 '추천 장정으로 초기화' 그대로
       right: Semantics(
         button: true,
         label: '추천 장정으로 초기화',
         excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _set(BindingDraft(
-            spineColor: _recommended.spineColor,
-            motif: _recommended.motif,
-            seed: _v.seed,
-            inkColor: _recommended.inkColor,
-            accentColor: _recommended.accentColor,
-            layout: _recommended.layout,
-          )),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.only(right: 10, left: 10),
-            child: Text('초기화', style: AppType.sub),
-          ),
-        ),
+        onTap: _reset,
+        child: TextLink(label: '초기화', soft: true, onPress: _reset),
       ),
       footer: Btn(label: '저장', onPress: _save, busy: _saving),
       children: [

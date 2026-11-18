@@ -106,7 +106,7 @@ class MetaText extends StatelessWidget {
 /// 낱말 단위로 줄을 바꾸는 글자(keepAll: 한글이 '읽기 시 / 작'처럼 낱말 가운데서 끊기지 않게, 2026-11-16 QA 영숙 F6·현우 F10).
 /// 그리는 글자에만 이음표를 넣고, 화면 읽기와 글자 찾기(data)는 원문 그대로다
 class WordText extends Text {
-  const WordText(String super.data, {super.key, super.style, super.textAlign, super.maxLines, super.overflow, super.softWrap, super.textScaler, super.semanticsLabel});
+  const WordText(super.data, {super.key, super.style, super.textAlign, super.maxLines, super.overflow, super.softWrap, super.textScaler, super.semanticsLabel});
 
   @override
   Widget build(BuildContext context) =>
@@ -825,7 +825,15 @@ class BookRow extends StatelessWidget {
     this.onPress,
     this.label,
     this.selected,
+    this.dense = false,
+    this.alignTop = false,
   });
+
+  /// 줄이 많은 목록(읽기 탭 '내 읽기 목록')은 위아래 4(2026-11-18 사용자 '간격 촘촘하게' 시안)
+  final bool dense;
+
+  /// 글 묶음 · 오른쪽을 표지 위 끝에 맞춘다(내 책 목록: 큰 표지 옆 글이 위에서 시작, 시안)
+  final bool alignTop;
 
   /// 표지(폭은 [coverWidth])
   final Widget cover;
@@ -852,8 +860,8 @@ class BookRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: Space.m),
-      child: Row(children: [
+      padding: EdgeInsets.symmetric(vertical: dense ? Space.xs : Space.m),
+      child: Row(crossAxisAlignment: alignTop ? CrossAxisAlignment.start : CrossAxisAlignment.center, children: [
         SizedBox(width: coverWidth(size), child: cover),
         const SizedBox(width: Space.l),
         Expanded(

@@ -3,9 +3,9 @@
 // (자리가 모자라면 한 번만 묻는다, place_books). 진열 규칙은 한 권 추가와 같다
 library;
 
-import '../../app/app_nav.dart' show AppNav;
 import 'package:flutter/material.dart';
 
+import '../../app/app_nav.dart' show AppNav;
 import '../../domain/library.dart';
 import '../../domain/rebinding.dart';
 import '../../services/book_search.dart';
@@ -15,6 +15,7 @@ import '../../store/placement_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'all_books_screen.dart' show openAllBooks;
+import 'book_widgets.dart' show cleanIsbn;
 import 'place_books.dart';
 
 /// 추천 장정 계산(책 추가 확인 단계와 같은 식): 표지는 색 추출에만 쓰고(화면에 그리지 않는다) 결과 장정만 저장한다.
@@ -36,7 +37,7 @@ Future<BookArtParams> recommendedArt({
   if (api) await measureCover(coverUri);
   final coverColor = api ? await coverDominantColor(coverUri) : null;
   final year = int.tryParse((publishedAt ?? '').length >= 4 ? publishedAt!.substring(0, 4) : '') ?? 0;
-  final code = (isbn ?? '').replaceAll(RegExp(r'[^\dXx]'), '');
+  final code = cleanIsbn(isbn);
   final built = buildBookArt(
     RebindInput(
       title: title.trim(),
@@ -73,7 +74,7 @@ Future<String> addCandidateBook(BookCandidate picked, {ReadStatus status = ReadS
     coverUri: c.coverUrl,
     apiCover: c.coverUrl != null,
   );
-  final isbn = (c.isbn13 ?? '').replaceAll(RegExp(r'[^\dXx]'), '');
+  final isbn = cleanIsbn(c.isbn13);
   return LibraryModel.instance.addBook(
     title: c.title.trim(),
     authors: [for (final a in c.authors) if (a.trim().isNotEmpty) a.trim()],
@@ -99,7 +100,7 @@ Future<String> addCandidateBook(BookCandidate picked, {ReadStatus status = ReadS
 /// 한 권 추가할 것
 typedef BulkPick = ({BookCandidate book, ReadStatus status});
 
-/// 여러 권 추가 결과: 새 책 id, 책장에 놓은 수, 전체 책에만 보관한 수, 실패한 책 제목
+/// 여러 권 추가 결과: 새 책 id, 책장에 놓은 수, 내 책에만 보관한 수, 실패한 책 제목
 typedef BulkResult = ({List<String> ids, int placed, int kept, bool full, List<String> failed});
 
 /// 여러 권을 차례로 더하고(진행 창) 다 더한 뒤 한 번에 책장에 놓는다. 한 권이 실패해도 나머지는 더한다.
@@ -136,6 +137,7 @@ Future<BulkResult> addBooks(BuildContext context, List<BulkPick> picks) async {
   return (ids: ids, placed: r.placed, kept: ids.length - r.placed, full: r.full, failed: failed);
 }
 
+/// 진행 창: 확인창(appAlert)과 같은 제목 21 · 안쪽 여백 · 폭(2026-11-19 공통 규칙: 제목 19 · 안쪽 28이었다)
 class _Progress extends StatelessWidget {
   const _Progress({required this.done, required this.stop, required this.total});
   final ValueNotifier<int> done;
@@ -147,21 +149,21 @@ class _Progress extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(Space.page),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
+            constraints: const BoxConstraints(maxWidth: 400),
             child: Material(
               color: AppColors.bg,
               borderRadius: BorderRadius.circular(Shape.dialog),
               child: Padding(
-                padding: const EdgeInsets.all(Space.xl),
+                padding: const EdgeInsets.fromLTRB(Space.page, Space.page + 2, Space.page, Space.page),
                 child: ValueListenableBuilder<int>(
                   valueListenable: done,
                   builder: (_, n, _) => Semantics(
                     liveRegion: true,
                     label: '$total권 중 $n권 추가했어요',
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Text('책을 추가하는 중이에요', style: AppType.section),
+                      Semantics(header: true, child: WordText('책을 추가하는 중이에요', style: AppType.heading)),
                       const SizedBox(height: Space.s),
-                      Text('$total권 중 $n권', style: AppType.sub.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                      Text('$total권 중 $n권', style: AppType.sub.tnum),
                       const SizedBox(height: Space.l),
                       ProgressBar(value: total == 0 ? null : n / total),
                       if (total > 3)
@@ -200,13 +202,14 @@ Future<String?> showBulkDone(BuildContext context, BulkResult r) {
     builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       for (final l in lines) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: Text(l, style: AppType.body)),
       const SizedBox(height: Space.l),
+      // 시트 안 단추는 l(2026-11-19 공통 규칙)
       if (r.placed > 0)
-        Btn(label: '책장에서 보기', onPress: () {
+        Btn(label: '책장에서 보기', size: 'l', onPress: () {
           next = 'shelf';
           Navigator.pop(ctx);
         })
       else if (added > 0)
-        Btn(label: '내 책 보기', onPress: () {
+        Btn(label: '내 책 보기', size: 'l', onPress: () {
           next = 'books';
           Navigator.pop(ctx);
         }),

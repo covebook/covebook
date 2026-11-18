@@ -20,8 +20,8 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
 import 'add_book_screen.dart' show openAddBook;
-import 'barcode_scan_screen.dart' show PickMark;
 import 'book_match.dart';
+import 'book_widgets.dart';
 import 'bulk_add.dart';
 
 Future<void> openImportList(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -161,12 +161,12 @@ class _ImportListScreenState extends State<ImportListScreen> {
           Text(_file ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text(
+            child: MetaText(
               [
                 '${_lines.length}권',
-                if (parse.columns.isNotEmpty) '열: ${parse.columns.values.join(' | ')}',
+                if (parse.columns.isNotEmpty) '열: ${parse.columns.values.join(metaSep)}',
                 if (parse.duplicates > 0) '같은 ISBN ${parse.duplicates}줄은 한 번만',
-              ].join(' | '),
+              ].join(metaSep),
               style: AppType.caption,
             ),
           ),
@@ -174,7 +174,8 @@ class _ImportListScreenState extends State<ImportListScreen> {
             Padding(
               padding: const EdgeInsets.only(top: Space.l),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(_searching ? '${_lines.length}권 중 $_searched권 찾았어요' : '$waiting권은 찾지 않았어요', style: AppType.sub),
+                // 진행 숫자는 폭 고정(여러 권 추가 진행 창과 같게)
+                Text(_searching ? '${_lines.length}권 중 $_searched권 찾았어요' : '$waiting권은 찾지 않았어요', style: AppType.sub.tnum),
                 const SizedBox(height: Space.s),
                 ProgressBar(value: _lines.isEmpty ? 0 : _searched / _lines.length),
                 if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 's', onPress: _searchAll)),
@@ -191,7 +192,8 @@ class _ImportListScreenState extends State<ImportListScreen> {
             ),
           if (found.isNotEmpty) ...[
             _Head(
-              title: '찾은 책 ${found.length}권',
+              title: '찾은 책',
+              count: '${found.length}권',
               action: found.every((l) => l.picked) ? '모두 빼기' : '모두 고르기',
               onAction: () => setState(() {
                 final all = found.every((l) => l.picked);
@@ -203,15 +205,15 @@ class _ImportListScreenState extends State<ImportListScreen> {
             for (final l in found) _LineRow(l: l, onTap: () => setState(() => l.picked = !l.picked)),
           ],
           if (owned.isNotEmpty) ...[
-            _Head(title: '이미 서재에 있는 책 ${owned.length}권', note: '중복으로 넣지 않아요'),
+            _Head(title: '이미 서재에 있는 책', count: '${owned.length}권', note: '중복으로 넣지 않아요'),
             for (final l in owned) _LineRow(l: l),
           ],
           if (missing.isNotEmpty) ...[
-            _Head(title: '찾지 못한 책 ${missing.length}권', note: '누르면 그 이름으로 찾아요'),
+            _Head(title: '찾지 못한 책', count: '${missing.length}권', note: '누르면 그 이름으로 찾아요'),
             for (final l in missing) _LineRow(l: l, onTap: l.offline ? null : () => openAddBook(context, q: l.row.title.isNotEmpty ? [l.row.title, l.row.author].where((x) => x.isNotEmpty).join(' ') : l.row.query)),
           ],
           if (added.isNotEmpty) ...[
-            _Head(title: '추가한 책 ${added.length}권'),
+            _Head(title: '추가한 책', count: '${added.length}권'),
             for (final l in added) _LineRow(l: l),
           ],
         ],
@@ -250,27 +252,8 @@ class _ImportListScreenState extends State<ImportListScreen> {
           const SizedBox(height: Space.xl),
           Btn(label: '파일 고르기', busy: _reading, onPress: _pick),
           const SizedBox(height: Space.s),
-          Center(
-            child: Semantics(
-              button: true,
-              label: '예시 파일 내려받기',
-              excludeSemantics: true,
-              onTap: _sample,
-              child: Pressable(
-                onPress: _sample,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: Space.hit),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: Space.s),
-                    child: Center(
-                      widthFactor: 1,
-                      child: Text('예시 파일 내려받기', style: AppType.sub.copyWith(decoration: TextDecoration.underline, decorationColor: AppColors.inkSoft)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          // 글자만 단추는 밑줄 없는 TextLink(2026-11-19 공통 규칙). 다른 곳으로 가는 보조라 회색
+          TextLink(label: '예시 파일 내려받기', soft: true, onPress: _sample),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: Space.m),
@@ -293,7 +276,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
       );
 }
 
-/// 누르면 펼쳐지는 줄(위아래 옅은 선, 오른쪽 ⌄)
+/// 안내 접는 줄 하나(책 확인 '추가 정보'와 같은 FoldRow, 2026-11-19 공통 규칙). 펼치면 점 붙은 안내 글
 class _Fold extends StatefulWidget {
   const _Fold({required this.title, required this.lines, this.last = false});
   final String title;
@@ -308,29 +291,12 @@ class _FoldState extends State<_Fold> {
   bool _open = false;
 
   @override
-  Widget build(BuildContext context) {
-    final line = Container(height: 1, color: AppColors.sectionLine);
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      line,
-      Semantics(
-        button: true,
-        expanded: _open,
-        label: widget.title,
-        excludeSemantics: true,
-        onTap: () => setState(() => _open = !_open),
-        child: Pressable(
-          onPress: () => setState(() => _open = !_open),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 60),
-            child: Row(children: [
-              Expanded(child: Text(widget.title, style: AppType.rowStrong)),
-              AnimatedRotation(turns: _open ? 0.5 : 0, duration: const Duration(milliseconds: 160), child: const LucideIcon('ChevronDown', size: 22, color: AppColors.inkSoft)),
-            ]),
-          ),
-        ),
-      ),
-      if (_open)
-        Padding(
+  Widget build(BuildContext context) => FoldRow(
+        title: widget.title,
+        open: _open,
+        last: widget.last,
+        onToggle: () => setState(() => _open = !_open),
+        child: Padding(
           padding: const EdgeInsets.only(bottom: Space.l),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final t in widget.lines)
@@ -338,33 +304,29 @@ class _FoldState extends State<_Fold> {
                 padding: const EdgeInsets.only(bottom: Space.s),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Padding(padding: const EdgeInsets.only(top: 10, right: Space.s), child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle))),
-                  Expanded(child: Text(t, style: AppType.sub)),
+                  Expanded(child: WordText(t, style: AppType.sub)),
                 ]),
               ),
           ]),
         ),
-      if (widget.last) line,
-    ]);
-  }
+      );
 }
 
+/// 결과 묶음 머리: 공용 구역 머리(제목 19 · 개수 · 아래 설명 · 오른쪽 글자 단추, 2026-11-19 공통 규칙: 설명이 오른쪽 caption이었다)
 class _Head extends StatelessWidget {
-  const _Head({required this.title, this.note, this.action, this.onAction});
+  const _Head({required this.title, this.count, this.note, this.action, this.onAction});
   final String title;
-  final String? note, action;
+  final String? count, note, action;
   final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: Space.xl, bottom: Space.xs),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-          Expanded(child: Semantics(header: true, child: Text(title, style: AppType.section))),
-          if (note != null) Text(note!, style: AppType.caption),
-          if (action != null && onAction != null) TextLink(label: action!, soft: true, onPress: onAction!),
-        ]),
+        child: SectionHead(title: title, count: count, note: note, link: action, linkLabel: action, onLink: onAction),
       );
 }
 
+/// 가져온 한 줄(공용 책 줄 BookRow 작게, 바코드 찾은 책과 같은 모양): 오른쪽 고르는 원 · 이미 있음(흐린 원) · 추가함(체크) · 못 찾음(꺾쇠)
 class _LineRow extends StatelessWidget {
   const _LineRow({required this.l, this.onTap});
   final _Line l;
@@ -374,33 +336,24 @@ class _LineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = l.book;
     final sub = b == null
-        ? (l.offline ? '인터넷 연결 없음' : '${l.row.line}번째 줄${l.row.isbn != null ? ' | ISBN ${l.row.isbn}' : ''}')
-        : [?publisherLine(b), if (l.row.status != null) statusLabel[l.row.status]!].join(' | ');
+        ? (l.offline ? '인터넷 연결 없음' : ['${l.row.line}번째 줄', if (l.row.isbn != null) 'ISBN ${l.row.isbn}'].join(metaSep))
+        : [?publisherLine(b), if (l.row.status != null) statusLabel[l.row.status]!].join(metaSep);
     final selectable = b != null && l.ownedId == null && !l.added;
-    return Semantics(
-      button: onTap != null,
+    return BookRow(
+      cover: RealCover(uri: b?.coverUrl, title: b?.title ?? l.row.title, color: coverPlaceholder, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
+      title: b?.title ?? (l.row.label.isEmpty ? '(제목 없음)' : l.row.label),
+      meta: b != null && b.authors.isNotEmpty ? b.authors.join(', ') : null,
+      third: sub,
+      trailing: selectable
+          ? RadioMark(on: l.picked)
+          : l.added
+              ? const AddedMark()
+              : b == null
+                  ? (l.offline ? null : const Chevron())
+                  : const RadioMark(on: false, dim: true),
+      onPress: onTap,
       selected: selectable && l.picked,
       label: [b?.title ?? l.row.label, if (sub.isNotEmpty) sub].join(', '),
-      excludeSemantics: true,
-      child: Pressable(
-        onPress: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.s),
-          child: Row(children: [
-            RealCover(uri: b?.coverUrl, title: b?.title ?? l.row.title, color: '#F2F4F6', width: 40, ratio: 0.72),
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(b?.title ?? (l.row.label.isEmpty ? '(제목 없음)' : l.row.label), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-                if (b != null && b.authors.isNotEmpty) Text(b.authors.join(', '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
-                if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption),
-              ]),
-            ),
-            const SizedBox(width: Space.s),
-            if (selectable) PickMark(on: l.picked) else if (l.added) const LucideIcon('Check', size: 18, color: AppColors.accent) else if (b == null && !l.offline) const LucideIcon('ChevronRight', size: 18, color: AppColors.inkSoft),
-          ]),
-        ),
-      ),
     );
   }
 }
