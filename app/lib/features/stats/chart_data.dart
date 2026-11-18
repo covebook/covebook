@@ -64,6 +64,7 @@ String hourLabel(int h) {
   return h < 12 ? '오전 $h시' : '오후 ${h - 12}시';
 }
 
+/// 요일 이름(일요일 시작). 앱 안 요일 글자는 모두 이것('일요일'은 뒤에 '요일'을 붙인다)
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
 /// 요일별 읽은 시간(일~토, 시작한 날 기준)
@@ -77,11 +78,11 @@ List<num> weekdayBars(List<Session> sessions) {
 
 /// 한 번에 읽는 길이 칸
 const lengthBinsDef = [
-  (key: 'm10', name: '10분 미만', short: '~10분', max: 10.0),
-  (key: 'm30', name: '10~30분', short: '~30분', max: 30.0),
-  (key: 'm60', name: '30분~1시간', short: '~1시간', max: 60.0),
-  (key: 'm120', name: '1~2시간', short: '~2시간', max: 120.0),
-  (key: 'more', name: '2시간 이상', short: '2시간+', max: double.infinity),
+  (key: 'm10', name: '10분 미만', max: 10.0),
+  (key: 'm30', name: '10~30분', max: 30.0),
+  (key: 'm60', name: '30분~1시간', max: 60.0),
+  (key: 'm120', name: '1~2시간', max: 120.0),
+  (key: 'more', name: '2시간 이상', max: double.infinity),
 ];
 
 List<int> lengthBins(List<Session> sessions) {
@@ -101,9 +102,9 @@ List<int> lengthBins(List<Session> sessions) {
   );
 }
 
-const _speedMinMs = 5 * 60000;
-const _speedMinPages = 3;
+/// 속도를 낼 만큼 읽은 시간(5분)이자 '다 읽기까지'를 맞추는 단위(같은 값 두 이름이었다, 2026-11-19)
 const _fiveMin = 5 * 60000;
+const _speedMinPages = 3;
 
 class BookRecordData {
   const BookRecordData(this.readMs, this.days, this.firstDay, this.lastDay, this.finished, this.pagesPerMin, this.remainingMs);
@@ -126,7 +127,7 @@ BookRecordData bookRecord(Library lib, String id) {
     pages += s.pagesRead! - s.startPage!;
     pagedMs += s.durationMs;
   }
-  final pagesPerMin = pagedMs >= _speedMinMs && pages >= _speedMinPages ? pages / (pagedMs / 60000) : null;
+  final pagesPerMin = pagedMs >= _fiveMin && pages >= _speedMinPages ? pages / (pagedMs / 60000) : null;
   final b = lib.books[id];
   final total = b == null ? null : lib.editions[b.editionId]?.pageCount;
   final left = total != null && total != 0 && b != null && b.status != ReadStatus.read ? total - (b.currentPage ?? 0) : 0;
@@ -220,23 +221,29 @@ String tickLabel(int min) => min >= 60 && min % 60 == 0 ? '${min ~/ 60}시간' :
 /// 가로 글자: 월 보기 1·5·10·15·20·25·마지막 날, 연도 보기 1·3·5·7·9·11·12월
 List<int> xLabels(int count) => count == 12 ? const [1, 3, 5, 7, 9, 11, 12] : [1, 5, 10, 15, 20, 25, count];
 
-const _week = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-
-/// '2026-10-31' → '10월 31일 토요일'
+/// '2026-10-31' → '10월 31일 토요일'(요일 이름은 [weekdays] 하나)
 String dayTitle(String day) {
   final p = day.split('-').map(int.parse).toList();
-  return '${p[1]}월 ${p[2]}일 ${_week[DateTime(p[0], p[1], p[2]).weekday % 7]}';
+  return '${p[1]}월 ${p[2]}일 ${weekdays[DateTime(p[0], p[1], p[2]).weekday % 7]}요일';
 }
 
-({String noon, String text}) _clock(String iso) {
-  final t = _local(iso);
+({String noon, String text}) _clock(DateTime t) {
   final h = t.hour;
   return (noon: h < 12 ? '오전' : '오후', text: '${h % 12 == 0 ? 12 : h % 12}:${_p2(t.minute)}');
 }
 
+/// 시각 하나: '오후 9:05'(앱의 시각 글자는 이것과 [timeRange] 둘뿐, 2026-11-19 공통 규칙: 24시간 '21:05'가 섞여 있었다)
+String timeLabel(DateTime t) {
+  final c = _clock(t.toLocal());
+  return '${c.noon} ${c.text}';
+}
+
+/// 지난 시간: 1분이 안 되면 초까지('45초'), 그 밖은 분까지('3분'). 독서 끝 · 책 바꾸기 · 통계가 같이 쓴다(같은 식이 세 곳에 있었다)
+String formatDurationShort(num ms) => ms < 60000 ? formatDurationPrecise(ms) : formatDuration(ms);
+
 /// '오후 9:10-10:00'(오전·오후가 같으면 한 번만). 이음표는 띄우지 않은 짧은 '-'(2026-11-18 사용자 시안: 긴 줄 '–' 대신)
 String timeRange(String startIso, String endIso) {
-  final a = _clock(startIso), b = _clock(endIso);
+  final a = _clock(_local(startIso)), b = _clock(_local(endIso));
   return a.noon == b.noon ? '${a.noon} ${a.text}-${b.text}' : '${a.noon} ${a.text}-${b.noon} ${b.text}';
 }
 

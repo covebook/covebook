@@ -13,6 +13,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show pickBook;
 import '../community/community_screens.dart' show communityOpen, openCommunityShare;
+import 'stats_widgets.dart' show bookAuthor, bookTitle;
 
 Future<void> openSessionEdit(BuildContext context, String id) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/session'), builder: (_) => SessionEditScreen(id: id)));
@@ -55,8 +56,6 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
     final s = _s, initial = _initial;
     if (s == null || initial == null) return const Screen(title: '독서 기록', children: [Empty(title: '기록을 찾을 수 없어요')]);
     final lib = _model.lib;
-    final b = _f.bookId == null ? null : lib.books[_f.bookId];
-    final e = b == null ? null : lib.editions[b.editionId];
     final patch = sessionEditPatch(s, initial, _f);
     final minutesBad = _f.minutes != initial.minutes && !((num.tryParse(_f.minutes) ?? 0) > 0);
     return PopScope(
@@ -70,8 +69,10 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
       },
       child: Screen(
         title: '독서 기록 수정',
+        // 화면 아래 주요 단추는 l(2026-11-19 공통 규칙)
         footer: Btn(
           label: '저장',
+          size: 'l',
           disabled: patch == null,
           onPress: () {
             if (patch == null) return;
@@ -84,10 +85,12 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
             padding: const EdgeInsets.only(top: Space.item, bottom: Space.group),
             child: Text('지금 저장된 독서 시간: ${formatDurationPrecise(s.durationMs)} (일시정지 제외)', style: AppType.sub),
           ),
+          // 독서 끝의 '연결된 책' 칸과 같은 칸(저자 아래 줄 · 빈 글, 2026-11-19 공통 규칙)
           SelectField(
             label: '연결된 책',
-            value: e?.title,
-            placeholder: '책 없음 (눌러서 연결)',
+            value: bookTitle(lib, _f.bookId),
+            sub: bookAuthor(lib, _f.bookId).isEmpty ? null : bookAuthor(lib, _f.bookId),
+            placeholder: '책 연결하기 (선택)',
             onPress: () async {
               final r = await pickBook(context, lib, allowNone: true);
               if (r.picked) _set(bookId: r.id);
@@ -96,7 +99,7 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
           // 날짜·시각은 눌러서 고른다
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(flex: 13, child: DateField(label: '날짜', value: validDay(_f.day) ? _f.day : '', onChange: (v) => _set(day: v))),
-            const SizedBox(width: 10),
+            const SizedBox(width: Space.m),
             Expanded(flex: 10, child: TimeField(label: '시작 시각', value: validTime(_f.time) ? _f.time : '', onChange: (v) => _set(time: v))),
           ]),
           Field(
@@ -107,10 +110,11 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
             hint: _f.minutes == initial.minutes ? '고치지 않으면 저장된 시간(초 단위)이 그대로 남아요.' : null,
             error: minutesBad ? '1분 이상으로 적어 주세요' : null,
           ),
+          // 쪽 칸은 독서 끝과 같게: 단위 '쪽', 칸 사이 12
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Field(label: '시작 쪽 (선택)', value: _f.startPage, number: true, onChange: (v) => _set(startPage: v))),
-            const SizedBox(width: 10),
-            Expanded(child: Field(label: '도달한 쪽 (선택)', value: _f.pages, number: true, onChange: (v) => _set(pages: v))),
+            Expanded(child: Field(label: '시작 쪽 (선택)', unit: '쪽', value: _f.startPage, number: true, onChange: (v) => _set(startPage: v))),
+            const SizedBox(width: Space.m),
+            Expanded(child: Field(label: '도달한 쪽 (선택)', unit: '쪽', value: _f.pages, number: true, onChange: (v) => _set(pages: v))),
           ]),
           Field(label: '메모 (선택)', value: _f.memo, onChange: (v) => _set(memo: v)),
           // 기록으로 할 일은 줄 목록으로(버튼을 쌓지 않는다). 저장은 아래 고정 버튼 하나

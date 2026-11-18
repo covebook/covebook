@@ -49,7 +49,10 @@ const termsArticles = <(String, List<String>)>[
   ('제10조 (문의)', ['서비스 이용 문의는 앱의 \'내 정보 › 문의하기\'로 보내 주세요.']),
 ];
 
-/// 이용약관 화면(시트): 조마다 굵은 제목과 문단
+/// 안내 시트 문단(이용약관 · 개인정보 처리 안내가 같이 쓴다): 진한 16 · 아래 4
+Widget legalParagraph(String text) => Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: WordText(text, style: AppType.bodySmall));
+
+/// 이용약관 화면(시트): 조마다 굵은 제목(16)과 문단
 Future<void> showTermsSheet(BuildContext context) => showSheet<void>(
       context,
       title: '이용약관',
@@ -61,7 +64,7 @@ Future<void> showTermsSheet(BuildContext context) => showSheet<void>(
             padding: EdgeInsets.only(top: i == 0 ? 0 : Space.l, bottom: Space.xs),
             child: Semantics(header: true, child: Text(title, style: AppType.labelStrong)),
           ),
-          for (final p in paras) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: WordText(p, style: AppType.bodySmall)),
+          for (final p in paras) legalParagraph(p),
         ],
         Padding(padding: const EdgeInsets.only(top: Space.l, bottom: Space.s), child: Text('시행일은 정식 출시 때 정합니다.', style: AppType.caption)),
       ]),

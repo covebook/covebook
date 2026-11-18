@@ -9,29 +9,31 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../features/book/my_books_tab.dart' show MyBooksTab;
-import '../features/record/record_tab.dart' show RecordTab;
-import '../features/community/community_screens.dart' show watchCommunityOpen;
 import '../domain/library.dart';
-import 'app_nav.dart';
-import '../features/home/home_screen.dart';
 import '../domain/reading.dart' show askGapMs, withJosa;
+import '../features/book/my_books_tab.dart' show MyBooksTab;
+import '../features/community/community_screens.dart' show watchCommunityOpen;
+import '../features/home/home_screen.dart';
 import '../features/reading/finish_screen.dart';
+import '../features/reading/read_list.dart';
 import '../features/reading/reading_screen.dart';
-import '../services/warmup.dart';
+import '../features/record/record_tab.dart' show RecordTab;
+import '../features/stats/chart_data.dart' show timeLabel;
+import '../features/stats/stats_screen.dart';
+import '../features/stats/stats_widgets.dart' show bookTitle;
 import '../services/ambient.dart';
 import '../services/cover_colors.dart';
 import '../services/sync.dart';
+import '../services/warmup.dart';
 import '../store/bookcase_store.dart';
 import '../store/library_model.dart';
 import '../store/mini_timer_store.dart';
 import '../store/reading_store.dart';
 import '../store/settings_store.dart';
 import '../ui/alert.dart';
-import '../features/reading/read_list.dart';
-import '../features/stats/stats_screen.dart';
 import '../ui/tab_icons.dart';
 import '../ui/theme.dart';
+import 'app_nav.dart';
 import 'startup.dart';
 
 const _app = MethodChannel('app.covebook/app');
@@ -195,7 +197,7 @@ class _AppShellState extends State<AppShell> {
       appAlert(context, '저장하지 않은 독서 기록이 있어요', '지난번에 끝낸 ${formatDuration(pending.durationMs)} 기록을 아직 저장하거나 버리지 않았어요.', [
         AlertButton('기록 확인하기', onPress: () {
           reading.ackPendingRestored();
-          Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
+          openFinish(context);
         }),
         AlertButton('나중에', style: AlertStyle.cancel, onPress: reading.ackPendingRestored),
       ], true, true);
@@ -203,7 +205,7 @@ class _AppShellState extends State<AppShell> {
     }
     if (it == null && reading.stale && reading.active != null) {
       final a = reading.active!;
-      final title = a.myBookId == null ? null : LibraryModel.instance.lib.editions[LibraryModel.instance.lib.books[a.myBookId]?.editionId]?.title;
+      final title = bookTitle(LibraryModel.instance.lib, a.myBookId);
       final days = ((DateTime.now().millisecondsSinceEpoch - a.lastBeat) / 86400000).floor();
       final when = days >= 1 ? '$days일 전' : '오늘';
       appAlert(
@@ -219,7 +221,7 @@ class _AppShellState extends State<AppShell> {
           AlertButton('여기서 끝내고 기록하기', onPress: () {
             reading.clearStale();
             reading.finish();
-            Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
+            openFinish(context);
           }),
           AlertButton('기록 버리기', style: AlertStyle.destructive, onPress: () => reading.discardActive()),
         ],
@@ -229,8 +231,8 @@ class _AppShellState extends State<AppShell> {
       return;
     }
     if (it == null) return;
-    final at = DateTime.fromMillisecondsSinceEpoch(it.lastBeat.toInt());
-    final hm = '${at.hour}:${at.minute.toString().padLeft(2, '0')}';
+    // 시각은 앱 공통 '오후 9:05'(2026-11-19 공통 규칙: 여기만 24시간 '21:05'였다)
+    final hm = timeLabel(DateTime.fromMillisecondsSinceEpoch(it.lastBeat.toInt()));
     // 1분 미만 꺼졌던 것은 묻지 않고 넣는다(읽던 중일 가능성이 크다)
     if (it.gapMs < askGapMs) {
       _askContinue(true, '지난 독서가 중간에 멈췄어요', '앱이 잠깐(1분 미만) 꺼져 있었어요. 그 시간도 읽은 시간에 넣었어요.');
@@ -271,7 +273,7 @@ class _AppShellState extends State<AppShell> {
         }),
         AlertButton('여기서 끝내고 기록하기', onPress: () {
           reading.finishInterrupted(includeGap: includeGap);
-          Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
+          openFinish(context);
         }),
         AlertButton('나중에 정하기(일시정지로 둠)', style: AlertStyle.cancel, onPress: reading.dismissInterrupted),
       ],
@@ -313,43 +315,45 @@ class _AppShellState extends State<AppShell> {
           ),
           ValueListenableBuilder<bool>(
             valueListenable: tabBarHidden,
-            builder: (context, hidden, _) => hidden || keyboard ? const SizedBox.shrink() : Positioned(
-            left: TabBarStyle.side,
-            right: TabBarStyle.side,
-            bottom: bottom + TabBarStyle.gap,
-            height: TabBarStyle.height,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(TabBarStyle.height / 2),
-                boxShadow: const [TabBarStyle.shadow],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: TabBarStyle.paddingX),
-                child: Row(
-                  children: [
-                    // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 탭 아래 글자는 두지 않는다(메뉴 개편: 아이콘 중심)
-                    for (var i = 0; i < _tabs.length; i++)
-                      Expanded(
-                        child: Semantics(
-                          container: true,
-                          button: true,
-                          selected: i == _index,
-                          label: _tabs[i].label,
-                          onTap: () => tap(i),
-                          excludeSemantics: true,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => tap(i),
-                            child: Center(child: _tabs[i].icon(i == _index ? AppColors.tabInk : AppColors.tabInkSoft, i == _index)),
-                          ),
+            builder: (context, hidden, _) => hidden || keyboard
+                ? const SizedBox.shrink()
+                : Positioned(
+                    left: TabBarStyle.side,
+                    right: TabBarStyle.side,
+                    bottom: bottom + TabBarStyle.gap,
+                    height: TabBarStyle.height,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: BorderRadius.circular(TabBarStyle.height / 2),
+                        boxShadow: const [TabBarStyle.shadow],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: TabBarStyle.paddingX),
+                        child: Row(
+                          children: [
+                            // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 탭 아래 글자는 두지 않는다(메뉴 개편: 아이콘 중심)
+                            for (var i = 0; i < _tabs.length; i++)
+                              Expanded(
+                                child: Semantics(
+                                  container: true,
+                                  button: true,
+                                  selected: i == _index,
+                                  label: _tabs[i].label,
+                                  onTap: () => tap(i),
+                                  excludeSemantics: true,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => tap(i),
+                                    child: Center(child: _tabs[i].icon(i == _index ? AppColors.tabInk : AppColors.tabInkSoft, i == _index)),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+                    ),
+                  ),
           ),
           // 시작 덮개: 지난 책장 사진이 없으면 첫 책장이 다 그려질 때까지 시작 그림(앱 준비 때와 같은 그림)을 덮어 둔다
           if (_cover) const Positioned.fill(child: StartCover()),

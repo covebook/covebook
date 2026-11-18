@@ -1,23 +1,20 @@
-// 설정(지금 앱 app/settings.tsx, 하단 '내 정보' 탭): 독서 환경(진동·움직임 줄이기) / 내 기록(백업 및 복원·커뮤니티 공개 프로필) / 앱 안내(문의·개인정보·앱 정보).
-// 흰 바탕, 줄 사이 선 없음, 묶음 사이 화면 끝까지 닿는 1dp 선. 다른 화면으로 가는 줄에만 화살표.
-// 서버 주소가 없는 빌드는 '이 기기에만 저장' 쪽 문구를 쓴다(지금 앱도 서버를 못 쓰면 같은 문구)
+// 내 정보(지금 앱 app/settings.tsx, 책장 머리 프로필에서 연다): 독서 환경(진동·움직임 줄이기) / 내 기록(계정 및 동기화·책 목록 가져오기·커뮤니티 공개 프로필) /
+// 앱 안내(문의·이용약관·개인정보·앱 정보). 흰 바탕, 줄 사이 선 없음, 묶음 사이 내용 폭 안 옅은 선.
+// 다른 화면이나 시트로 넘어가는 줄에만 꺾쇠(2026-11-19 공통 규칙). 서버 주소가 없는 빌드는 '이 기기에만 저장' 쪽 문구를 쓴다(지금 앱도 서버를 못 쓰면 같은 문구)
 library;
-
 
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-
-import '../community/community_screens.dart' show communityOpen, openCommunityProfile;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/sync.dart';
 import '../../store/settings_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/kit.dart';
-import '../../services/sync.dart';
-import '../../ui/theme.dart';
 import '../book/import_list_screen.dart' show openImportList;
+import '../community/community_screens.dart' show communityOpen, openCommunityProfile;
 import 'backup_screen.dart' show openBackup;
-import 'terms.dart' show showTermsSheet;
+import 'terms.dart' show legalParagraph, showTermsSheet;
 
 /// 개인정보 처리방침 전문: 우리 서버(server/internal/server/site/privacy.html). 2026-11-18 Notion에서 옮겼다(Google 브랜딩 인증은 우리 도메인이어야 한다)
 const privacyUrl = 'https://covebook.kodeploy.com/privacy';
@@ -36,10 +33,7 @@ Future<void> openProfile(BuildContext context) => Navigator.of(context, rootNavi
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/me'), builder: (_) => const SettingsScreen()));
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.tab = false});
-
-  /// 하단 탭으로 둘 때(뒤로 없음, 떠 있는 탭 바만큼 아래 여백). 지금은 머리 프로필에서 밀어 넣어 연다
-  final bool tab;
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -71,23 +65,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  // 하나 고르기 시트: 통계 '기간'과 같은 줄(FilterOption: 고르면 굵게, 모든 줄에 고르는 원), 설명은 시트 공통 설명 자리(2026-11-19 공통 규칙)
   void _motionSheet() => showSheet<void>(
         context,
         title: '움직임 줄이기',
+        description: '켜면 책이 움직이는 연출과 독서 장면의 움직임을 줄여요.',
         builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('켜면 책이 움직이는 연출과 독서 장면의 움직임을 줄여요.', style: AppType.sub)),
-          ListGroup(children: [
-            for (final m in _motion)
-              ListItem(
-                label: m.label,
-                selected: _s.reduceMotion == m.id,
-                right: _s.reduceMotion == m.id ? const LucideIcon('Check', color: AppColors.accent, stroke: 2) : null,
-                onPress: () {
-                  _s.set({'reduceMotion': m.id});
-                  Navigator.pop(ctx);
-                },
-              ),
-          ]),
+          for (final m in _motion)
+            FilterOption(
+              label: m.label,
+              selected: _s.reduceMotion == m.id,
+              onPress: () {
+                _s.set({'reduceMotion': m.id});
+                Navigator.pop(ctx);
+              },
+            ),
         ]),
       );
 
@@ -98,10 +90,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context,
         title: '개인정보 처리 안내',
         scroll: true,
-        maxHeight: 0.8,
+        // 문단 글자·간격은 이용약관 시트와 하나(terms legalParagraph, 2026-11-19 공통 규칙: 여기만 17 · 사이 12였다)
+        maxHeight: 0.85,
         builder: (ctx) {
-          final p = AppType.body.copyWith(color: AppColors.ink);
-          Widget para(String t) => Padding(padding: const EdgeInsets.only(bottom: Space.item), child: WordText(t, style: p));
+          const para = legalParagraph;
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             para(_syncAvailable
                 ? '책장 한켠은 카카오, Google, Apple 로그인으로 써요. 책, 독서 기록, 갈피, 감상, 사진은 이 기기와 책장 한켠 서버의 내 계정에 저장돼, 폰을 바꿔도 이어 볼 수 있어요. 로그인한 서비스의 회원 식별자와 고른 닉네임이 서버에 저장돼요.'
@@ -116,7 +108,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (_syncAvailable) para('회원탈퇴를 요청하면 연결된 로그인과 서버 기록, 사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
-              child: Btn(label: '처리방침 전문 보기(웹)', kind: 'secondary', onPress: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication)),
+              // 시트 안 단추는 l(2026-11-19 공통 규칙)
+              child: Btn(label: '처리방침 전문 보기(웹)', kind: 'secondary', size: 'l', onPress: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication)),
             ),
           ]);
         },
@@ -129,11 +122,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tab = widget.tab;
     return Screen(
       title: '내 정보',
-      back: !tab,
-      bottomPad: tab ? TabBarStyle.contentPad - Space.section : 0,
       children: [
         ListGroup(title: '독서 환경', children: [
           ListItem(label: '진동', right: Toggle(label: '진동', value: _s.haptics, onChange: (v) => _s.set({'haptics': v}))),

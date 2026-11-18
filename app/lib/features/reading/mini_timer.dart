@@ -5,20 +5,19 @@
 // 꾹 누른 채 끌면 자리를 옮긴다(2026-11-17 사용자 '타이머를 꾹 누르고 옮길 수 있게'). 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다
 library;
 
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../../db/kv_store.dart';
-
 import '../../domain/reading.dart';
 import '../../store/mini_timer_store.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import 'play_icons.dart';
 import 'reading_screen.dart';
 
 const _actionsW = 112.0; // 펼친 왼쪽 부분(바로가기 + 재생/일시정지)
@@ -46,7 +45,6 @@ class _MiniTimerState extends State<MiniTimer> {
   final _reading = ReadingStore.instance;
   final _place = MiniTimerPlace.instance;
   bool _open = false;
-  Timer? _tick;
   String _lastKey = '';
 
   /// 사용자가 옮긴 자리(화면 오른쪽·아래 끝에서 거리). 없으면 기본 자리
@@ -69,23 +67,11 @@ class _MiniTimerState extends State<MiniTimer> {
   void dispose() {
     _reading.removeListener(_changed);
     _place.removeListener(_changed);
-    _tick?.cancel();
     super.dispose();
   }
 
   void _changed() {
     if (mounted) setState(() {});
-  }
-
-  void _sync(bool tick) {
-    if (tick) {
-      _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
-    } else {
-      _tick?.cancel();
-      _tick = null;
-    }
   }
 
   @override
@@ -101,10 +87,14 @@ class _MiniTimerState extends State<MiniTimer> {
       _lastKey = key;
       _open = false;
     }
-    final running = _reading.running;
-    _sync(!hidden && running);
     if (hidden) return const SizedBox.shrink();
-    final ms = _reading.elapsed;
+    // 재는 동안 1초마다 다시 그린다(읽기 장면 · 읽기 탭과 같은 타이머)
+    return ElapsedTicker(running: _reading.running, builder: (ms) => _timer(mq, ms));
+  }
+
+  Widget _timer(MediaQueryData mq, num ms) {
+    final path = _place.path;
+    final running = _reading.running;
     final label = clock(ms);
     // 한 시간을 넘으면 숫자가 길어져 원 대신 같은 높이의 캡슐로 넓힌다
     final timeW = label.length > 5 ? miniTimerSize + 24 : miniTimerSize;
@@ -118,8 +108,9 @@ class _MiniTimerState extends State<MiniTimer> {
     final double right = (_moved?.right ?? 16.0).clamp(8.0, math.max(8.0, maxRight)).toDouble();
     final double bottom = (_moved?.bottom ?? minBottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
     final dragging = _dragFrom != null;
-    final hair = 2 / mq.devicePixelRatio;
-    Widget divider() => Container(width: hair, height: 22, color: AppColors.line);
+    // 테두리는 화소 2개
+    final hair = 2 * Hairline.of(context);
+    final speed = reduce ? Duration.zero : const Duration(milliseconds: 180);
     return Stack(children: [
       // 펼친 동안 바깥을 누르면 접는다(아래 화면은 눌리지 않는다)
       if (_open) Positioned.fill(child: Semantics(label: '미니 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
@@ -152,103 +143,97 @@ class _MiniTimerState extends State<MiniTimer> {
             scale: dragging ? 1.08 : 1,
             duration: reduce ? Duration.zero : const Duration(milliseconds: 120),
             child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.bg,
-            borderRadius: BorderRadius.circular(miniTimerSize / 2),
-            border: Border.all(color: AppColors.line, width: hair),
-            boxShadow: const [Shape.floatShadow],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            AnimatedContainer(
-              duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
-              width: _open ? _actionsW : 0,
-              child: AnimatedOpacity(
-                duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
-                opacity: _open ? 1 : 0,
-                child: IgnorePointer(
-                  ignoring: !_open,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.centerRight,
-                      minWidth: _actionsW,
-                      maxWidth: _actionsW,
-                      child: Row(children: [
-                        Semantics(
-                          button: true,
-                          label: '읽기 화면으로 가기',
-                          child: Pressable(
-                            onPress: () {
-                              setState(() => _open = false);
-                              // 쌓아서 연다: 지금 화면은 그대로 남는다
-                              final nav = widget.navigator.currentContext;
-                              if (nav != null) openReadingScene(nav);
-                            },
-                            child: const SizedBox(width: 52, height: miniTimerSize, child: Center(child: LucideIcon('BookOpen'))),
-                          ),
-                        ),
-                        divider(),
-                        Semantics(
-                          button: true,
-                          label: running ? '독서 일시정지' : '독서 다시 시작',
-                          child: Pressable(
-                            onPress: () => running ? _reading.pause() : _reading.resume(),
-                            child: SizedBox(
-                              width: 52,
-                              height: miniTimerSize,
-                              child: Center(
-                                child: running
-                                    ? Row(mainAxisSize: MainAxisSize.min, children: [
-                                        for (final (i, _) in [0, 1].indexed) ...[
-                                          if (i > 0) const SizedBox(width: 5),
-                                          Container(width: 3.5, height: 16, decoration: BoxDecoration(color: AppColors.ink, borderRadius: BorderRadius.circular(1.5))),
-                                        ],
-                                      ])
-                                    : const Padding(padding: EdgeInsets.only(left: 2), child: LucideIcon('Play', size: 20, fill: AppColors.ink)),
-                              ),
-                            ),
-                          ),
-                        ),
-                        divider(),
-                      ]),
-                    ),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(miniTimerSize / 2),
+                border: Border.all(color: AppColors.line, width: hair),
+                boxShadow: const [Shape.floatShadow],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                AnimatedContainer(
+                  duration: speed,
+                  width: _open ? _actionsW : 0,
+                  child: AnimatedOpacity(
+                    duration: speed,
+                    opacity: _open ? 1 : 0,
+                    child: IgnorePointer(ignoring: !_open, child: _actions(running, hair)),
                   ),
                 ),
-              ),
+                _timeButton(label, ms, running, timeW, hair),
+              ]),
             ),
-            Semantics(
-              container: true,
-              button: true,
-              expanded: _open,
-              label: '독서 시간 ${_speak(ms)}${running ? '' : ', 일시정지'}. 눌러서 ${_open ? '접기' : '펼치기'}',
-              onTap: () => setState(() => _open = !_open),
-              excludeSemantics: true,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _open = !_open),
-                child: SizedBox(
-                  width: timeW - hair * 2,
-                  height: miniTimerSize - hair * 2,
-                  // 큰 글씨에서는 동그라미 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA 확인)
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(label,
-                            maxLines: 1,
-                            style: AppType.labelStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ]),
-        ),
           ),
         ),
       ),
     ]);
   }
+
+  /// 펼친 왼쪽: 읽기 화면 바로가기 | 재생·일시정지(그림은 읽기 장면과 같은 PlayIcon · PauseIcon)
+  Widget _actions(bool running, double hair) {
+    Widget divider() => Container(width: hair, height: 22, color: AppColors.line);
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.centerRight,
+        minWidth: _actionsW,
+        maxWidth: _actionsW,
+        child: Row(children: [
+          Semantics(
+            button: true,
+            label: '읽기 화면으로 가기',
+            child: Pressable(
+              onPress: () {
+                setState(() => _open = false);
+                // 쌓아서 연다: 지금 화면은 그대로 남는다
+                final nav = widget.navigator.currentContext;
+                if (nav != null) openReadingScene(nav);
+              },
+              child: const SizedBox(width: 52, height: miniTimerSize, child: Center(child: LucideIcon('BookOpen'))),
+            ),
+          ),
+          divider(),
+          Semantics(
+            button: true,
+            label: running ? '독서 일시정지' : '독서 다시 시작',
+            child: Pressable(
+              onPress: () => running ? _reading.pause() : _reading.resume(),
+              child: SizedBox(
+                width: 52,
+                height: miniTimerSize,
+                child: Center(
+                  child: running ? const PauseIcon(width: 3.5, height: 16, gap: 5, color: AppColors.ink) : const PlayIcon(size: 20, color: AppColors.ink),
+                ),
+              ),
+            ),
+          ),
+          divider(),
+        ]),
+      ),
+    );
+  }
+
+  /// 오른쪽 시간(원): 누르면 펼치고 접는다
+  Widget _timeButton(String label, num ms, bool running, double timeW, double hair) => Semantics(
+        container: true,
+        button: true,
+        expanded: _open,
+        label: '독서 시간 ${_speak(ms)}${running ? '' : ', 일시정지'}. 눌러서 ${_open ? '접기' : '펼치기'}',
+        onTap: () => setState(() => _open = !_open),
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _open = !_open),
+          child: SizedBox(
+            width: timeW - hair * 2,
+            height: miniTimerSize - hair * 2,
+            // 큰 글씨에서는 동그라미 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA 확인)
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: AppType.labelStrong.tnum)),
+              ),
+            ),
+          ),
+        ),
+      );
 }

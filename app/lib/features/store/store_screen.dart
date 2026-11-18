@@ -1,7 +1,8 @@
 // 스토어(지금 앱 app/store.tsx, 2026-11-04 사용자 '선반·벽지·벽 여부를 골라 바꾸게'): 부품을 고르면 위 미리보기(홈 책장과 같은 그림)가 그 자리에서 바뀌고,
 // '적용하기'를 누르면 홈 책장에 바로 반영된다(2026-11-10 '실시간으로'). 고르기만 하고 나가면 원래 스킨으로 되돌린다.
 // Flutter는 벽 있는 책장만: '벽 없이 선반만'(틀 없음)은 옆 벽이 없어 떨어짐 물리가 다시 필요하고 카메라·판 모양이 달라 아직 두지 않는다.
-// 책 측면(색 한 가지·실물 측면·표지 이어 쌓기, scene_config/spine_look)도 고른다. 미리보기가 내 책장 책(실물 표지)이라 고르면 미리보기에서 바로 보인다
+// 책 측면(색 한 가지·실물 측면·표지 이어 쌓기, scene_config/spine_look)도 고른다. 미리보기의 예시 책은 실제 표지가 없어 책 측면은 미리보기에 보이지 않고,
+// 적용하면 홈 책장에서 바뀐다(skin_preview.dart 머리 주석, 화면 아래 안내 문구와 같은 말)
 library;
 
 import 'package:flutter/material.dart';
@@ -90,7 +91,7 @@ class _StoreScreenState extends State<StoreScreen> {
                       decoration: BoxDecoration(
                         color: Color(0xFF000000 | e.value!.color),
                         borderRadius: BorderRadius.circular(Shape.tag),
-                        border: Border.all(color: AppColors.line, width: 1 / MediaQuery.devicePixelRatioOf(context)),
+                        border: Border.all(color: AppColors.line, width: Hairline.of(context)),
                       ),
                     ),
                   ),
@@ -116,7 +117,7 @@ class _StoreScreenState extends State<StoreScreen> {
               decoration: BoxDecoration(
                 color: AppColors.bg,
                 borderRadius: BorderRadius.circular(Shape.sheet),
-                border: Border.all(color: AppColors.line, width: 1 / MediaQuery.devicePixelRatioOf(context)),
+                border: Border.all(color: AppColors.line, width: Hairline.of(context)),
               ),
               child: SkinPreview(width: box.maxWidth, skin: _choice),
             ),
