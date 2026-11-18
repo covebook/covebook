@@ -38,21 +38,20 @@ Widget shelfIcon(Color color, {double size = 26, bool filled = false}) {
   return _svg('${bar(0.6)}${bar(9.8)}${bar(24.46 - bookW / 2, 'transform="rotate(-18 24.46 13.5)"')}', _boxOf(size, 33, 13.5));
 }
 
-/// 내 책: 눕혀 쌓은 책 세 권(내가 가진 책 더미). 책장(세운 책)·읽기(펼친 책)와 모양이 겹치지 않는다.
-/// 찬 모양은 책 사이를 바탕색 틈으로 나눈다(읽기·통계 아이콘과 같은 규칙). 2026-11-18 사용자 '하단 두 번째 책 아이콘 다른 걸로'
+/// 내 책: 닫힌 책 한 권, 아래 왼쪽에서 말려 올라간 책장 면(2026-11-18 사용자가 보낸 그림 그대로).
+/// 윤곽선은 표지 · 말린 면 · 뒤표지 아래 끝을 한 선으로, 찬 모양은 말린 면 틈을 바탕색 선으로 남긴다(읽기·통계 아이콘과 같은 규칙)
 Widget myBooksTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
   final c = _hex(color), b = _hex(bg);
-  // 위부터 조금 왼쪽 책 · 오른쪽으로 밀린 책 · 넓은 책(각 높이 6.6, 찬 모양은 사이 틈 1.0). 윤곽선은 선 굵기만큼 안쪽으로
-  const h = 6.6;
-  const books = [(x: 1.6, y: 1.2, w: 17.4), (x: 3.8, y: 8.8, w: 18.4), (x: 1.2, y: 16.4, w: 21.6)];
-  final inset = filled ? 0.0 : _w / 2;
-  String rect(({double x, double y, double w}) r) =>
-      '<rect x="${r.x + inset}" y="${r.y + inset}" width="${r.w - 2 * inset}" height="${h - 2 * inset}" rx="${filled ? 2.0 : 1.4}" '
-      '${filled ? 'fill="$c"' : 'fill="none" stroke="$c" stroke-width="$_w" $_round'}/>';
-  // 책마다 오른쪽 끝 가까이 짧은 세로 선(종이 면), 찬 모양은 바탕색
-  String edge(({double x, double y, double w}) r) =>
-      '<path d="M${r.x + r.w - 4.6} ${r.y + 2.2} V${r.y + h - 2.2}" fill="none" stroke="${filled ? b : c}" stroke-width="${filled ? 1.5 : 1.8}" $_round/>';
-  return _svg([for (final r in books) '${rect(r)}${edge(r)}'].join(), _boxOf(size, 24, 12.1, 1.04));
+  // 표지(위 왼쪽 4 · 위 오른쪽 4 둥글기) → 오른쪽으로 내려와 말린 면 위 선 → 왼쪽 끝에서 반원으로 말려 → 아래 선 → 아래 오른쪽 작은 모서리 → 뒤표지 아래 끝 → 아래 왼쪽 큰 둥글기
+  // 윤곽선은 선이 굵어(2.4) 말린 면 틈을 크게 잡는다(틈이 좁으면 선끼리 붙어 아래가 두꺼운 막대로 보였다). 찬 모양은 그림처럼 가는 틈
+  const outline = 'M5.2 1.2 H14.8 A4 4 0 0 1 18.8 5.2 V15.2 H6.4 A2 2 0 0 0 6.4 19.2 H18.8 V21.6 A1.2 1.2 0 0 1 17.6 22.8 H5.2 A4 4 0 0 1 1.2 18.8 V5.2 A4 4 0 0 1 5.2 1.2 Z';
+  const solid = 'M5.2 1.2 H14.8 A4 4 0 0 1 18.8 5.2 V21.6 A1.2 1.2 0 0 1 17.6 22.8 H5.2 A4 4 0 0 1 1.2 18.8 V5.2 A4 4 0 0 1 5.2 1.2 Z';
+  return _svg(
+    filled
+        ? '<path d="$solid" fill="$c" stroke="$c" stroke-width="$_w" $_round/><path d="M6.4 18.4 H20" fill="none" stroke="$b" stroke-width="1.6" stroke-linecap="round"/>'
+        : '<path d="$outline" fill="none" stroke="$c" stroke-width="$_w" $_round/>',
+    _boxOf(size, 20, 12, 1.04),
+  );
 }
 
 /// 갈피: 위가 둥글고 아래가 V로 파인 가름끈 종이
