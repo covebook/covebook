@@ -376,7 +376,6 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       child: Screen(
         scroll: false,
         back: !tabHead,
-        compact: _selecting,
         title: tabHead ? '내 책' : (_selecting ? _selectedTitle(pickedBooks.length) : null),
         left: _selecting ? TextLink(label: '취소', soft: true, onPress: _stopSelecting) : null,
         // 밀어 넣은 화면: 제목 대신 뒤로 옆에 검색창(권수는 안내 글자에)

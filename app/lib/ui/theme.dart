@@ -30,7 +30,6 @@ abstract final class AppColors {
   static const danger = Color(0xFFA5483A);
   static const star = Color(0xFFA8865F);
   static const scrim = Color(0x5C191F28);
-  static const iconSoft = Color(0xFF858585);
   static const tabInk = Color(0xFF000000);
   static const tabInkSoft = Color(0xFF787676);
 }
@@ -151,6 +150,18 @@ abstract final class TabBarStyle {
 
 /// 눌린 표시(아이콘·글자 버튼)
 const pressOpacity = 0.55;
+
+/// 꺼진 단추·글자 단추·아이콘의 투명도(하나로, 2026-11-19 공통 규칙: 0.45 · 0.4 · 0.3이 섞여 있었다)
+const disabledOpacity = 0.4;
+
+/// 역할 글자에 붙이는 덧칠 두 가지(그 밖의 덧칠은 색만, docs/UI_CONVENTIONS.md 1장)
+extension AppTypeMods on TextStyle {
+  /// 숫자 폭 고정(시간·쪽수·%가 바뀌어도 글 폭이 그대로)
+  TextStyle get tnum => copyWith(fontFeatures: _tab);
+
+  /// 고른 칸만 굵게
+  TextStyle get strong => copyWith(fontFamily: AppFonts.uiBold);
+}
 
 /// 지금 앱 boxShadow(CSS: 흐림 반경 = 2σ)를 Flutter 그림자로(Flutter blurRadius r → σ = 0.57735·r + 0.5)
 BoxShadow cssShadow(Color color, double dx, double dy, double blur, [double spread = 0]) =>

@@ -596,7 +596,6 @@ class _BookScreenState extends State<BookScreen> {
         ]);
 
     return Screen(
-      compact: true,
       right: Row(mainAxisSize: MainAxisSize.min, children: [
         IconBtn(label: '책 공유', onPress: _share, child: const LucideIcon('Share')),
         IconBtn(label: '더 보기', onPress: _menu, child: const LucideIcon('MoreHorizontal')),

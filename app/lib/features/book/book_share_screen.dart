@@ -215,7 +215,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
     };
     return Screen(
       title: '책 공유',
-      compact: true,
       footer: Row(children: [
         if (_canSave) ...[
           Expanded(child: Btn(label: _saved ? '저장했어요' : '저장', kind: 'secondary', size: 'l', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _run('save'))),

@@ -4,7 +4,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'keep_all.dart';
 import 'kit.dart';
 import 'theme.dart';
 
@@ -50,9 +49,9 @@ Future<void> appAlert(BuildContext context, String title, [String? message, List
               ],
               if (cancel != null) ...[const SizedBox(height: Space.s), btn(cancel, 'ghost')],
             ]);
+      // 뒤로 가기도 바깥 누르기와 같은 규칙(cancelable이면 취소로 닫는다)
       return PopScope(
-        canPop: dismissTo != null,
-        onPopInvokedWithResult: (didPop, _) {},
+        canPop: cancelable && dismissTo != null,
         child: SafeArea(
           child: Center(
             child: Padding(
@@ -68,9 +67,9 @@ Future<void> appAlert(BuildContext context, String title, [String? message, List
                       Flexible(
                         child: SingleChildScrollView(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Semantics(header: true, child: Text(keepAll(title), style: AppType.heading, semanticsLabel: title)),
+                            Semantics(header: true, child: WordText(title, style: AppType.heading)),
                             if (message != null && message.isNotEmpty)
-                              Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(keepAll(message), style: AppType.body.copyWith(color: AppColors.inkSoft), semanticsLabel: message)),
+                              Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText(message, style: AppType.body.copyWith(color: AppColors.inkSoft))),
                           ]),
                         ),
                       ),

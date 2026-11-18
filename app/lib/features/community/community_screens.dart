@@ -564,11 +564,11 @@ class _PostScreenState extends State<PostScreen> {
   @override
   Widget build(BuildContext context) {
     const title = '독서 기록';
-    if (_phase == 'loading') return const Screen(title: title, compact: true, children: [Loading()]);
-    if (_phase == 'gone') return const Screen(title: title, compact: true, children: [Empty(title: '볼 수 없는 게시물이에요', body: '지워졌거나 숨겨진 게시물이에요.')]);
+    if (_phase == 'loading') return const Screen(title: title, children: [Loading()]);
+    if (_phase == 'gone') return const Screen(title: title, children: [Empty(title: '볼 수 없는 게시물이에요', body: '지워졌거나 숨겨진 게시물이에요.')]);
     final p = _post;
     if (_phase == 'error' || p == null) {
-      return Screen(title: title, compact: true, children: [
+      return Screen(title: title, children: [
         Empty(title: '불러오지 못했어요', body: _error, action: '다시 시도', actionKind: 'secondary', onAction: () {
           setState(() => _phase = 'loading');
           _load();
@@ -577,7 +577,6 @@ class _PostScreenState extends State<PostScreen> {
     }
     return Screen(
       title: title,
-      compact: true,
       footer: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
         Expanded(
           child: Container(
@@ -908,7 +907,6 @@ class _UserScreenState extends State<UserScreen> {
     final p = pg.profile;
     return Screen(
       title: '',
-      compact: true,
       right: pg.me ? null : IconBtn(label: '더보기', onPress: () => _menu(p), child: const LucideIcon('MoreHorizontal')),
       children: [
         // 스레드처럼: 이름 크게 + 오른쪽 프로필 동그라미, 소개, '팔로워 N · 팔로잉 N' 한 줄, 팔로우 단추, '독서 기록 | 평가' 탭
