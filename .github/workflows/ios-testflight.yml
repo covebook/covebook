@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['flutter/**', '.github/workflows/ios-testflight.yml', '.github/scripts/ios-signing.py']
+    paths: ['app/**', '.github/workflows/ios-testflight.yml', '.github/scripts/ios-signing.py']
 permissions:
   contents: read
 concurrency:
@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 90
     defaults:
       run:
-        working-directory: flutter
+        working-directory: app
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
@@ -41,7 +41,7 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
-          working-directory: flutter
+          working-directory: app
           bundler-cache: true
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos

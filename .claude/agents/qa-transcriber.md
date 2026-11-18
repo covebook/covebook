@@ -18,7 +18,7 @@ tools: Bash, Read, Write, Grep, Glob
 ## 시험 사진 준비
 
 `docs/qa/fixtures/`의 사진을 쓴다(목록은 그 폴더 README). 사진마다 정답 글이 `.txt`로 옆에 있다.
-없으면 `flutter/assets/fonts/NotoSerifKR-Regular.otf`로 PIL을 써서 책 페이지처럼 만든다(산문·시·흐림·기울어짐·영어). 직접 만든 사진이면 보고서에 '합성 사진'이라고 적는다.
+없으면 `app/assets/fonts/NotoSerifKR-Regular.otf`로 PIL을 써서 책 페이지처럼 만든다(산문·시·흐림·기울어짐·영어). 직접 만든 사진이면 보고서에 '합성 사진'이라고 적는다.
 에뮬에 넣기:
 ```bash
 adb -s $SERIAL push 사진.jpg /sdcard/DCIM/Camera/

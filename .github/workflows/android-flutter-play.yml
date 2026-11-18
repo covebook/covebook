@@ -1,8 +1,13 @@
 name: "CD: Android Flutter AAB"
 
-# Flutter 앱(flutter/)을 Play 'app.covebook'에 올린다. 옛 앱(RN)과 같은 앱 id·같은 업로드 키라 그 위에 업데이트로 깔린다.
-# 손으로만 돈다(2026-11-18 사용자: Flutter로 빌드해서 스토어에). RN 앱(app/)과 그 워크플로(android-playstore-deploy.yml)는 2026-11-18에 지웠다.
+# Flutter 앱(app/)을 Play 'app.covebook'에 올린다. 옛 앱(RN)과 같은 앱 id·같은 업로드 키라 그 위에 업데이트로 깔린다.
+# 2026-11-18 사용자: CI/CD 자동으로 — main에 app/** 변경이 푸시되면 비공개 테스트(alpha)에 자동으로 올린다(예전 RN 워크플로처럼).
+# versionName은 app/pubspec.yaml의 version(+ 앞), versionCode는 분 단위 시각. 손으로 돌리면 트랙·이름을 고를 수 있다
+# 예전 RN 앱과 그 워크플로(android-playstore-deploy.yml)는 2026-11-18에 지웠고, Flutter가 그 자리(app/)로 옮겨 왔다.
 on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/android-flutter-play.yml']
   workflow_dispatch:
     inputs:
       track:
@@ -15,9 +20,9 @@ on:
           - internal
           - beta
       version_name:
-        description: "versionName (예: 0.2.0)"
-        required: true
-        default: "0.2.0"
+        description: "versionName (비우면 app/pubspec.yaml의 version)"
+        required: false
+        default: ""
         type: string
       dry_run:
         description: "AAB 만 만들고 Play 업로드는 건너뛴다"
@@ -40,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: flutter
+        working-directory: app
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +69,7 @@ jobs:
         working-directory: .
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          REQUESTED_PLAY_TRACK: ${{ inputs.track }}
+          REQUESTED_PLAY_TRACK: ${{ inputs.track || 'alpha' }}
         run: |
           python -m pip install --disable-pip-version-check --quiet 'google-auth>=2,<3' 'requests>=2,<3'
           python .github/scripts/check_play_access.py
@@ -83,7 +88,10 @@ jobs:
           # RN 워크플로와 같은 규칙: 2025-01-01부터의 분 단위 시각(단조 증가, 겹치지 않음)
           minutes=$(( ($(date -u +%s) - 1735689600) / 60 ))
           echo "ANDROID_VERSION_CODE=$(( minutes + VERSION_CODE_OFFSET ))" >> "$GITHUB_ENV"
-          echo "ANDROID_VERSION_NAME=${{ inputs.version_name }}" >> "$GITHUB_ENV"
+          name="${{ inputs.version_name }}"
+          # 비었으면(푸시로 돈 때) pubspec의 version에서 + 앞
+          [ -n "$name" ] || name=$(sed -n 's/^version: *\([^+ ]*\).*/\1/p' pubspec.yaml)
+          echo "ANDROID_VERSION_NAME=$name" >> "$GITHUB_ENV"
 
       - name: Restore Android keystore
         env:
@@ -112,7 +120,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: chaekjang-flutter-${{ env.ANDROID_VERSION_CODE }}-aab
-          path: flutter/build/app/outputs/bundle/release/app-release.aab
+          path: app/build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
 
@@ -122,8 +130,8 @@ jobs:
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: app.covebook
-          releaseFiles: flutter/build/app/outputs/bundle/release/app-release.aab
-          track: ${{ inputs.track }}
+          releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
+          track: ${{ inputs.track || 'alpha' }}
           status: completed
 
       - name: Remove signing material
@@ -139,6 +147,6 @@ jobs:
             echo "- package: \`app.covebook\`"
             echo "- versionName: \`${ANDROID_VERSION_NAME}\`"
             echo "- versionCode: \`${ANDROID_VERSION_CODE}\`"
-            echo "- track: \`${{ inputs.track }}\`"
+            echo "- track: \`${{ inputs.track || 'alpha' }}\`"
             echo "- Play 업로드: \`$([ "${{ inputs.dry_run }}" = "true" ] && echo 건너뜀 || echo 실행)\`"
           } >> "$GITHUB_STEP_SUMMARY"

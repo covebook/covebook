@@ -40,7 +40,7 @@ Apple Developer에서 앱 ID에 **Sign in with Apple**을 켜고, 앱과 연결�
 
 ## Covebook 설정
 
-- iOS 앱: **`flutter/`**, Bundle ID **`app.covebook`**. 기존 `app/` React Native/Android 배포 파이프라인과 분리되어 있다.
+- iOS 앱: **`app/`**, Bundle ID **`app.covebook`**. (예전 React Native 앱은 2026-11-18에 지웠다.)
 - 서버 도메인: `covebook.kodeploy.com`
 - Return URL: **`https://covebook.kodeploy.com/auth/apple/callback`**
 - 앱 복귀: `chaekjang://auth/apple`; 기기 계정에 묶인 일회용 claim 티켓을 사용한다.
