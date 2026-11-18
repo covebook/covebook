@@ -25,7 +25,6 @@ import '../../ui/theme.dart';
 import '../stats/stats_widgets.dart' show LinkedCover;
 import 'board_card.dart';
 import 'bookmark_detail_screen.dart' show markInk, openBookmark;
-import 'mark_text.dart' show isPhotoMark;
 import 'new_bookmark_screen.dart' show openNewBookmark;
 
 const _reach = 2600.0; // 옮겨 붙일 수 있는 범위

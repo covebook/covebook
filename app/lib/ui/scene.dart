@@ -212,6 +212,9 @@ List<double> _wallCellToPx(Cam c, Affine px, BakeArea a) {
 /// 자르는 폭은 화소 한 칸(_edgeAa): 두 면 사이는 안쪽 모서리 곡면(셰이더 coveOf)이 두 면의 법선을 모서리 선에서 같게 이어 주므로 섞어 감출 것이 없다.
 /// 예전에는 면마다 다른 폭·둥글기로 비쳐 섞었는데(뒷벽 꼭지점 둥글기·번짐 3mm, 천장 곡면 폭, 판 윗면 절반 폭) 면마다 다른 빛이 섞여 세 면 꼭지점에 밝은 점·세로 선이 남았다(2026-11-18 사용자 '모서리 경계선 없애')
 const _edgeAa = 0.4;
+
+/// 뒷벽 꼭지점 둥글기(세 면이 만나는 뒤 꼭지점이 앞 구멍 모서리처럼 곡선)
+final _backCornerR = mm(look.cornerMm);
 final _roofSoft = (box: <double>[frameX0, frameX1, -far, far], r: <double>[0, _edgeAa]);
 final _plankSoft = (box: <double>[frameX0, frameX1, -far, shelfDepth * look.eyeY / look.dist], r: <double>[0, _edgeAa]);
 
@@ -338,8 +341,9 @@ void drawRow(
           spot: wallSpot,
           cellToPx: _wallCellToPx(c, px, area),
           key: keys.wall,
-          // 뒷벽 가장자리 번짐은 좁게(3mm): 넓히면(곡면 절반 폭) 뒷벽 위 끝 밑에 깔린 면이 없어 흰 줄이 보였다(2026-11-18 시험)
-          soft: frameOn ? (box: <double>[frameX0, frameX1, -far, roofed ? space : far], r: <double>[0, _edgeAa]) : null,
+          // 뒷벽 네 꼭지점은 둥글게(반지름 look.cornerMm, 앞 구멍 테처럼 곡선으로 보이게: 2026-11-19 사용자 '뒷라인도 앞이랑 똑같이 곡선').
+          // 깎인 자리 밑에는 뒤로 늘려 그린 틀 면(옆 · 천장)이 깔린다. 가장자리 번짐은 화소 한 칸(넓히면 위 끝 밑이 비어 흰 줄이 보였다, 2026-11-18)
+          soft: frameOn ? (box: <double>[frameX0, frameX1, -far, roofed ? space : far], r: <double>[_backCornerR, _edgeAa]) : null,
         ),
     );
   }
