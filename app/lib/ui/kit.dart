@@ -232,6 +232,7 @@ class Screen extends StatelessWidget {
     this.left,
     this.headerField,
     this.topBar,
+    this.pinned,
   });
   final List<Widget> children;
   final String? title;
@@ -250,6 +251,9 @@ class Screen extends StatelessWidget {
 
   /// 검색이 주인공인 화면: 제목 대신 뒤로 옆에 검색창
   final Widget? headerField;
+
+  /// 위 줄 바로 아래에 붙어 스크롤해도 움직이지 않는 칸(책 정보의 '책 정보 · 평가 · 내 기록' 전환, 2026-11-18 사용자 '천장 고정')
+  final Widget? pinned;
 
   /// 뒤로 없이도 가운데 제목 줄을 둘지(독서 끝처럼 밀어 넣었지만 뒤로를 막은 화면). 기본은 뒤로가 있을 때만
   final bool? topBar;
@@ -376,6 +380,8 @@ class Screen extends StatelessWidget {
               )
             else if (!scroll)
               tabHead(),
+            if (pinned != null)
+              Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!)),
             Expanded(child: body),
             if (footer != null)
               // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)

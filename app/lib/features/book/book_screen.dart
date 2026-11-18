@@ -622,13 +622,12 @@ class _BookScreenState extends State<BookScreen> {
           ),
         ]),
       ),
+      // 전환 칸은 위 줄 아래에 고정(스크롤하면 위 줄에 가려 잘렸다, 2026-11-18 사용자 '천장이 가리는 거 없애, 천장 고정')
+      pinned: Padding(
+        padding: const EdgeInsets.only(top: Space.xs),
+        child: SizedBox(width: 300, child: Segmented<String>(items: _views, value: _tab, onChange: _chooseTab)),
+      ),
       children: [
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.only(top: Space.xs),
-            child: SizedBox(width: 300, child: Segmented<String>(items: _views, value: _tab, onChange: _chooseTab)),
-          ),
-        ),
         // 표지와 제목·지은이
         // 2026-11-17 시안에 맞춰 표지·간격을 줄였다(표지 170 → 140, 제목 24 → 22)
         Padding(

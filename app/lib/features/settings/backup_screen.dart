@@ -158,6 +158,8 @@ class _BackupScreenState extends State<BackupScreen> {
     final del = on && (s.deletionPending || (s.providers.accountDeletion && !s.paused));
     return [
       if (on) ...[
+        // 위 줄과 첫 구역 사이를 시안만큼 띄운다
+        const SizedBox(height: Space.l),
         Semantics(header: true, child: Text('연결된 계정', style: AppType.caption)),
         const SizedBox(height: Space.m),
         if (linked.isEmpty)
@@ -187,7 +189,8 @@ class _BackupScreenState extends State<BackupScreen> {
       ],
       Semantics(header: true, child: Text('동기화', style: AppType.section)),
       const SizedBox(height: Space.l),
-      Semantics(liveRegion: true, child: Text(headline, style: AppType.title)),
+      // 상태 글은 구역 큰 글(21): 제목(26)이면 너무 컸다(2026-11-18 사용자)
+      Semantics(liveRegion: true, child: Text(headline, style: AppType.heading)),
       for (final t in sub) Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(t, style: AppType.sub)),
       if (on && !s.paused) ...[
         const SizedBox(height: Space.l + 4),
