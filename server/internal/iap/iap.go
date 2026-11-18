@@ -65,6 +65,7 @@ type Purchase struct {
 	GraceUntil            time.Time // 결제 실패 유예가 끝나는 시각. 유예 중이 아니면 zero. Subscription으로 물었을 때만 채워진다
 	AutoRenew             bool      // 자동 갱신이 켜져 있는가. false면 해지 예약. Subscription으로 물었을 때만 믿는다
 	Acknowledged          bool      // 스토어에 확인(acknowledge)이 이미 된 거래인가. 애플은 확인이 없어 항상 true
+	LinkedID              string    // 구글: 이 구독이 대신하는 옛 구독의 구매 토큰(요금제 변경, 만료 전 재가입). 옛 줄기는 끝내야 한다
 	Currency              string    // ISO 4217. 구글 구매 조회에는 없어서 비어 있다
 	PriceMilli            int64     // 금액 x 1000 (ADR-0002 D20). 구글은 0
 	Country               string    // 판매 국가. 스토어가 준 코드 그대로
@@ -72,6 +73,9 @@ type Purchase struct {
 
 // ErrNotFound는 스토어에 그 거래가 없다는 뜻이다. 통신 실패와 구분해서 다룬다.
 var ErrNotFound = errors.New("iap: 스토어에 없는 거래")
+
+// ErrBadNotice는 알림 본문의 형식이 틀렸다는 뜻이다. 서명 확인 실패와 구분한다(형식이 틀린 것은 다시 받아도 같다).
+var ErrBadNotice = errors.New("iap: 알림 형식이 다름")
 
 // ErrBadProof는 앱이 낸 구매 증거가 스토어가 서명한 것이 아니거나 형식이 틀렸다는 뜻이다.
 var ErrBadProof = errors.New("iap: 구매 증거가 올바르지 않음")

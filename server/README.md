@@ -28,6 +28,8 @@ Docker 이미지: `docker build -t chaekjang-go server`. 운영에서는 사진�
 
 ## 결제 스위치
 
+스토어 알림은 `/iap/notifications/apple`, `/iap/notifications/google`로 받는다. 받으면 원문을 저장하고 바로 200을 주며, 처리와 정기 대조(1분마다: 밀린 알림, 스토어 확인 재시도, 만료가 다가온 구독 재확인)는 뒤에서 돈다. 구글 알림은 `IAP_GOOGLE_PUSH_AUDIENCE`, `IAP_GOOGLE_PUSH_EMAIL`이 있어야 받는다.
+
 결제 API(`/iap/me`, `/iap/purchases`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다.
 
 ## 검증과 남은 작업

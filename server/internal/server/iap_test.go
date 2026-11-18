@@ -41,6 +41,13 @@ func newIAPEnv(t *testing.T) *iapEnv {
 	}
 	srv := New(db)
 	srv.IAP = map[iap.Route]iap.Store{iap.RouteApple: e.apple, iap.RouteGoogle: e.google}
+	// 구글 알림 요청의 인증: 시험에서는 "Bearer pubsub"만 통과시킨다
+	srv.iapPushAuth = func(_ context.Context, header string) error {
+		if header != "Bearer pubsub" {
+			return errors.New("bad token")
+		}
+		return nil
+	}
 	e.srv, e.h = srv, srv.Handler()
 	return e
 }

@@ -281,3 +281,145 @@ func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbo
 	}
 	return out, nil
 }
+
+// iapUserByToken은 계정 연결 값의 주인을 찾는다. 없거나 UUID 모양이 아니면 0이다.
+func iapUserByToken(ctx context.Context, q dbtx, token string) (int64, error) {
+	if token == "" {
+		return 0, nil
+	}
+	var user int64
+	err := q.QueryRow(ctx, "SELECT user_id FROM iap_account_tokens WHERE token::text=lower($1)", token).Scan(&user)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return user, err
+}
+
+// iapRefreshSubscription은 구독 줄의 상태만 스토어의 답으로 고친다. 주인은 바꾸지 않는다. 줄이 없으면 false다.
+// 바뀐 것이 없어도 updated_at은 고친다(대조 작업이 방금 확인한 줄을 다시 고르지 않게).
+func iapRefreshSubscription(ctx context.Context, q dbtx, s iapSubscription) (bool, error) {
+	var grace *time.Time
+	if !s.GraceUntil.IsZero() {
+		grace = &s.GraceUntil
+	}
+	tag, err := q.Exec(ctx, `UPDATE iap_subscriptions SET product_id=$3, plan_id=$4, env=$5, state=$6, expires_at=$7, grace_until=$8,
+			auto_renew=$9, latest_transaction_id=nullif($10,''), updated_at=now()
+		WHERE route=$1 AND original_id=$2`, string(s.Route), s.OriginalID, s.ProductID, s.PlanID, string(s.Env), string(s.State), s.ExpiresAt, grace, s.AutoRenew, s.LatestTxnID)
+	return tag.RowsAffected() == 1, err
+}
+
+// iapTouchSubscription은 스토어가 그 구독을 더 알려 주지 않을 때(구글은 만료 60일 뒤) 권한 없음으로 확정한다.
+func iapTouchSubscription(ctx context.Context, q dbtx, route iap.Route, originalID string) error {
+	_, err := q.Exec(ctx, "UPDATE iap_subscriptions SET state=CASE WHEN state='paid' THEN 'inactive' ELSE state END, updated_at=now() WHERE route=$1 AND original_id=$2", string(route), originalID)
+	return err
+}
+
+// iapEndLinked는 새 구독이 대신한 옛 줄기를 끝낸다(구글 요금제 변경·만료 전 재가입). 안 끝내면 한 구매로 두 줄이 권한을 준다.
+func iapEndLinked(ctx context.Context, q dbtx, route iap.Route, linkedID, newID string) error {
+	if linkedID == "" || linkedID == newID {
+		return nil
+	}
+	_, err := q.Exec(ctx, "UPDATE iap_subscriptions SET state='inactive', auto_renew=false, updated_at=now() WHERE route=$1 AND original_id=$2 AND state='paid'", string(route), linkedID)
+	return err
+}
+
+// iapSyncPurchaseState는 원장에 있는 거래의 환불 상태를 스토어의 답에 맞춘다. 줄을 지우지 않는다.
+// 환불되면 revoked로, 환불이 되돌려지면 다시 paid로 고친다. 바뀐 줄이 있으면 true다.
+func iapSyncPurchaseState(ctx context.Context, q dbtx, route iap.Route, key string, state iap.State, revokedAt time.Time) (bool, error) {
+	switch state {
+	case iap.StateRevoked:
+		at := revokedAt
+		if at.IsZero() {
+			at = time.Now().UTC()
+		}
+		return iapRevokePurchase(ctx, q, route, key, at)
+	case iap.StatePaid:
+		tag, err := q.Exec(ctx, "UPDATE iap_purchases SET state='paid', revoked_at=NULL, updated_at=now() WHERE route=$1 AND transaction_id=$2 AND state='revoked'", string(route), key)
+		return tag.RowsAffected() == 1, err
+	}
+	return false, nil
+}
+
+// iapNoticeRow는 처리할 알림 한 건이다.
+type iapNoticeRow struct {
+	Route      iap.Route
+	ID         string
+	Kind       iap.Kind // 다시 물어볼 대상의 종류. 없으면 빈 값
+	TargetID   string
+	OriginalID string
+	OrderID    string
+}
+
+// iapPendingNotifications는 아직 처리하지 못한 알림을 오래된 것부터 고른다.
+// 실패한 것은 시도할수록 간격을 늘린다(1분, 2분, 4분 … 최대 약 17시간). 8일이 지난 것은 더 시도하지 않는다.
+func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNoticeRow, error) {
+	rows, err := q.Query(ctx, `SELECT route, notification_id, coalesce(target_kind,''), coalesce(target_id,''), coalesce(original_id,''), coalesce(order_id,'')
+		FROM iap_notifications
+		WHERE result IN ('received','failed') AND received_at > now() - interval '8 days'
+		  AND (processed_at IS NULL OR processed_at < now() - interval '1 minute' * power(2, least(attempts, 10)))
+		ORDER BY received_at LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []iapNoticeRow
+	for rows.Next() {
+		var n iapNoticeRow
+		if err = rows.Scan(&n.Route, &n.ID, &n.Kind, &n.TargetID, &n.OriginalID, &n.OrderID); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// iapUnconfirmed는 지급했는데 스토어 확인을 마치지 못한 거래다. 구글은 3일 안에 확인하지 않으면 자동 환불한다.
+type iapUnconfirmed struct {
+	Route      iap.Route
+	Key        string
+	OriginalID string
+	ProductID  string
+	Kind       iap.Kind
+}
+
+func iapUnconfirmedPurchases(ctx context.Context, q dbtx, limit int) ([]iapUnconfirmed, error) {
+	rows, err := q.Query(ctx, `SELECT route, transaction_id, original_id, product_id, kind FROM iap_purchases
+		WHERE confirmed_at IS NULL AND state='paid' AND created_at < now() - interval '1 minute' AND created_at > now() - interval '4 days'
+		ORDER BY created_at LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []iapUnconfirmed
+	for rows.Next() {
+		var u iapUnconfirmed
+		if err = rows.Scan(&u.Route, &u.Key, &u.OriginalID, &u.ProductID, &u.Kind); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// iapDueSubscriptions는 스토어에 다시 물어볼 구독을 고른다(애플이 권하는 "갱신 시점 재확인").
+//   - 유효한데 만료(유예 중이면 유예 끝)가 5분 안으로 다가왔거나 지난 것. 갱신됐는지 확인한다. 10분에 한 번
+//   - 권한이 없지만 만료된 지 60일이 안 된 것. 결제 재시도로 되살아났는지 확인한다. 하루에 한 번
+func iapDueSubscriptions(ctx context.Context, q dbtx, limit int) ([][2]string, error) {
+	rows, err := q.Query(ctx, `SELECT route, original_id FROM iap_subscriptions
+		WHERE (state='paid' AND coalesce(grace_until, expires_at) < now() + interval '5 minutes' AND updated_at < now() - interval '10 minutes')
+		   OR (state='inactive' AND expires_at > now() - interval '60 days' AND updated_at < now() - interval '24 hours')
+		ORDER BY updated_at LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][2]string
+	for rows.Next() {
+		var route, original string
+		if err = rows.Scan(&route, &original); err != nil {
+			return nil, err
+		}
+		out = append(out, [2]string{route, original})
+	}
+	return out, rows.Err()
+}

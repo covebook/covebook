@@ -187,14 +187,14 @@ func (a *Apple) ParseNotice(body []byte) (Notice, error) {
 		SignedPayload string `json:"signedPayload"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil || envelope.SignedPayload == "" {
-		return Notice{}, errors.New("apple 알림: 본문 형식이 다름")
+		return Notice{}, fmt.Errorf("apple 알림 본문: %w", ErrBadNotice)
 	}
 	var payload appstore.SubscriptionNotificationV2DecodedPayload
 	if err := a.verifyNotice(envelope.SignedPayload, &payload); err != nil {
 		return Notice{}, fmt.Errorf("apple 알림 서명 확인: %w", err)
 	}
 	if payload.NotificationUUID == "" {
-		return Notice{}, errors.New("apple 알림: 알림 ID가 없음")
+		return Notice{}, fmt.Errorf("apple 알림 ID 없음: %w", ErrBadNotice)
 	}
 	kind := string(payload.NotificationType)
 	if payload.Subtype != "" {

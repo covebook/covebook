@@ -102,6 +102,7 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 		ProductID:             item.ProductId,
 		State:                 subscriptionState(s.SubscriptionState),
 		Acknowledged:          s.AcknowledgementState == googleAcknowledged,
+		LinkedID:              s.LinkedPurchaseToken,
 		Env:                   EnvProduction,
 		PurchasedAt:           started,
 		ExpiresAt:             expires,
@@ -225,15 +226,15 @@ func (g *Google) ParseNotice(body []byte) (Notice, error) {
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(body, &push); err != nil || push.Message.MessageID == "" {
-		return Notice{}, errors.New("google 알림: 본문 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 본문: %w", ErrBadNotice)
 	}
 	raw, err := base64.StdEncoding.DecodeString(push.Message.Data)
 	if err != nil {
-		return Notice{}, errors.New("google 알림: data를 풀 수 없음")
+		return Notice{}, fmt.Errorf("google 알림 data: %w", ErrBadNotice)
 	}
 	var d playstore.DeveloperNotificationV2
 	if err = json.Unmarshal(raw, &d); err != nil {
-		return Notice{}, errors.New("google 알림: 내용 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 내용: %w", ErrBadNotice)
 	}
 	n := Notice{Route: RouteGoogle, ID: push.Message.MessageID}
 	if ms, e := strconv.ParseInt(d.EventTimeMillis, 10, 64); e == nil {

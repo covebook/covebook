@@ -299,6 +299,10 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
+		// 구글: 이 구독이 옛 구독을 대신한 것이면(요금제 변경, 만료 전 재가입) 옛 줄기를 끝낸다.
+		if err = iapEndLinked(ctx, tx, route, current.LinkedID, current.OriginalTransactionID); err != nil {
+			return err
+		}
 		// 제출된 거래 자체도 원장에 남긴다. 이미 있으면 그대로 둔다.
 		if submitted.State == iap.StatePaid {
 			if _, err = iapRecordPurchase(ctx, tx, user, asked.Kind, submitted); err != nil {
