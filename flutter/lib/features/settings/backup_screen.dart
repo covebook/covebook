@@ -1,5 +1,6 @@
-// 계정 및 동기화(설정 → 내 기록): 연결된 계정과 바로 아래 로그아웃 · 다른 계정 연결 · 동기화 상태와 '지금 동기화' · 맨 아래 회원탈퇴.
+// 계정 및 동기화(설정 → 내 기록): 연결된 계정과 바로 아래 로그아웃 · 동기화 상태와 '지금 동기화' · 맨 아래 회원탈퇴.
 // 2026-11-18 사용자: 안쪽 '계정 관리' 화면을 없애고 로그아웃은 연결된 계정 밑에, 회원탈퇴는 맨 밑에.
+// 이어서 '다른 계정으로도 연결'은 지운다: 다른 계정은 로그아웃한 뒤 그 계정으로 로그인한다.
 // 백업 파일 저장·공유·복원은 2026-11-17에 뺐다(사용자: 기록은 계정에, 가져오기만). 화면 모양은 2026-11-17 사용자 시안
 library;
 
@@ -50,32 +51,6 @@ class _BackupScreenState extends State<BackupScreen> {
 
   void _changed() {
     if (mounted) setState(() {});
-  }
-
-  // 연결 전에 알린다: 이 기기의 기록이 계정 기록과 합쳐지고(같은 항목은 더 최근에 고친 쪽), 아무것도 자동 공개되지 않는다
-  void _login(String provider) => appAlert(
-        context,
-        '계정을 연결할까요?',
-        '이 기기의 책·독서 기록·갈피가 계정에 저장된 기록과 합쳐져요. 같은 항목을 양쪽에서 고쳤다면 더 최근에 고친 쪽이 남아요. 연결해도 내 기록은 공개되지 않아요(커뮤니티에는 직접 고른 것만 올라가요).',
-        [
-          const AlertButton('취소', style: AlertStyle.cancel),
-          AlertButton('연결', onPress: () => _doLogin(provider)),
-        ],
-      );
-
-  Future<void> _doLogin(String provider) async {
-    setState(() => _loggingIn = true);
-    try {
-      final r = await (provider == 'apple' ? _sync.linkApple() : provider == 'google' ? _sync.linkGoogle() : _sync.linkKakao());
-      if (!mounted) return;
-      if (r.ok) {
-        appAlert(context, '계정을 연결했어요', r.switched ? '연결된 계정으로 바꿨어요. 기기의 기록은 동기화가 끝나면 합쳐져요.' : '이 기기의 기록을 계정에 연결했어요.');
-      } else if (!r.cancelled) {
-        appAlert(context, '로그인하지 못했어요', r.message);
-      }
-    } finally {
-      if (mounted) setState(() => _loggingIn = false);
-    }
   }
 
   void _removeAccount() => appAlert(
@@ -179,13 +154,6 @@ class _BackupScreenState extends State<BackupScreen> {
       if (last != null) '마지막 동기화  ${syncTimeLabel(last, DateTime.now())}',
       if (s.lastError != null && s.state == SyncState.error) s.lastError!,
     ];
-    final canLink = on && !s.paused;
-    // 다른 계정 연결: 로그인 화면과 같은 순서(카카오 · Google · Apple), 세 단추 같은 크기
-    final brands = <Widget>[
-      if (canLink && !s.account.kakao && s.providers.kakao) BrandButton.kakao(onPress: _loggingIn ? null : () => _login('kakao')),
-      if (canLink && !s.account.google && s.providers.google) BrandButton.google(onPress: _loggingIn ? null : () => _login('google')),
-      if (canLink && !s.account.apple && s.providers.apple) BrandButton.apple(onPress: _loggingIn ? null : () => _login('apple')),
-    ];
     final out = on && s.loginRequired && s.loggedIn && !s.deletionPending;
     final del = on && (s.deletionPending || (s.providers.accountDeletion && !s.paused));
     return [
@@ -215,15 +183,6 @@ class _BackupScreenState extends State<BackupScreen> {
         // 로그아웃은 연결된 계정 바로 밑(2026-11-18 사용자)
         // 무엇이 지워지는지는 누르면 뜨는 확인창이 알린다(줄은 이름만, 시안)
         if (out) ListItem(label: '로그아웃', onPress: _loggingIn ? null : _logout),
-        if (brands.isNotEmpty) ...[
-          const SizedBox(height: Space.l),
-          Semantics(header: true, child: Text(linked.isEmpty ? '계정 연결' : '다른 계정도 연결', style: AppType.caption)),
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xs, bottom: Space.m),
-            child: WordText(linked.isEmpty ? '연결하면 기기를 바꿔도 기록을 이어 봐요' : '어느 계정으로 들어와도 같은 기록을 봐요', style: AppType.sub),
-          ),
-          for (final (i, b) in brands.indexed) Padding(padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s), child: b),
-        ],
         const SectionBand(inset: true),
       ],
       Semantics(header: true, child: Text('동기화', style: AppType.section)),

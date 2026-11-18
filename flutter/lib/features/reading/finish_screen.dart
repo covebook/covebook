@@ -308,9 +308,10 @@ Future<void> showSavedSheet(BuildContext context, {required String? bookId, requ
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      // 표지 52 → 72(2026-11-18 사용자 '썸네일 좀 더 크게'), 글 묶음은 표지 높이 가운데
+                      Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                         if (sb != null && se != null) ...[
-                          ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 52)),
+                          ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 72)),
                           const SizedBox(width: Space.m + 2),
                         ],
                         Expanded(

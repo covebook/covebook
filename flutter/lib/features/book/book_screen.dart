@@ -518,9 +518,10 @@ class _BookScreenState extends State<BookScreen> {
             Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('타이머로 읽으면 여기에 쌓여요', style: AppType.sub))
           else
             // 같은 날짜는 묶고(날짜 한 줄 아래 시간대는 연하게, 읽은 시간은 오른쪽에 진하게), 구분선 없이 날짜 사이 여백으로(2026-11-17 시안). 최근 5개
-            for (final (gi, g) in _byDay(recent.take(5).toList(), dayOf).indexed)
+            for (final g in _byDay(recent.take(5).toList(), dayOf))
               Padding(
-                padding: EdgeInsets.only(top: gi == 0 ? Space.s : Space.m),
+                // 머리–첫 날짜 8 → 12(2026-11-18 사용자 '줄 위치가 좀 더 밑으로': 시안은 머리와 첫 날짜 사이가 더 넓다)
+                padding: const EdgeInsets.only(top: Space.m),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Semantics(header: true, child: Text(g.day, style: AppType.row)),
                   for (final x in g.items)

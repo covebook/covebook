@@ -65,7 +65,8 @@ class EssayRow extends StatelessWidget {
               ? Row(children: [
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _headline(head, lines: 1, size: 17),
+                      // 구역 제목 '감상'(19)과 같은 크기로 보여 구분이 안 됐다(2026-11-18 사용자): 한 단계 작게
+                      _headline(head, lines: 1, style: AppType.labelStrong),
                       Padding(padding: const EdgeInsets.only(top: 2), child: _date()),
                       if (preview.isNotEmpty)
                         Padding(padding: const EdgeInsets.only(top: 4), child: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink))),
@@ -82,8 +83,8 @@ class EssayRow extends StatelessWidget {
     );
   }
 
-  Widget _headline(String head, {int lines = 2, double size = 18}) => Text(head.isEmpty ? '(빈 감상)' : head,
-      maxLines: lines, overflow: TextOverflow.ellipsis, style: AppType.rowStrong);
+  Widget _headline(String head, {int lines = 2, TextStyle? style}) => Text(head.isEmpty ? '(빈 감상)' : head,
+      maxLines: lines, overflow: TextOverflow.ellipsis, style: style ?? AppType.rowStrong);
 
   Widget _date() => Text(essayDateLine(essay), maxLines: 1, style: AppType.micro);
 
@@ -119,7 +120,7 @@ class EssayRow extends StatelessWidget {
                     style: AppType.micro,
                   ),
                   const SizedBox(height: 6),
-                  _headline(head, lines: 1, size: 17),
+                  _headline(head, lines: 1),
                   if (preview.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),

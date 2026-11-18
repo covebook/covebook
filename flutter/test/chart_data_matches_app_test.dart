@@ -56,7 +56,8 @@ void main() {
     expect([5, 60, 120, 150, 180].map(tickLabel).toList(), app);
     expect([xLabels(12), xLabels(30), xLabels(31)], (c['xLabels'] as List).map((x) => (x as List).cast<int>()).toList());
     expect(['2026-10-31', '2026-11-13', '2027-01-01'].map(dayTitle).toList(), (c['dayTitles'] as List).cast<String>());
-    expect(ys.take(8).map((x) => timeRange(x.startedAt, x.endedAt)).toList(), (c['timeRanges'] as List).cast<String>());
+    // 이음표만 지금 앱(–)과 다르다: 2026-11-18 사용자가 짧은 '-'로 바꾸라고 했다
+    expect(ys.take(8).map((x) => timeRange(x.startedAt, x.endedAt)).toList(), (c['timeRanges'] as List).cast<String>().map((t) => t.replaceAll(' – ', ' - ')).toList());
     expect(ys.take(8).map(hasPause).toList(), (c['hasPause'] as List).cast<bool>());
     expect([0, 9, 12, 21].map(hourLabel).toList(), (c['hourLabels'] as List).cast<String>());
   });
