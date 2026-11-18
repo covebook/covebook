@@ -39,7 +39,9 @@ func NewApple(c AppleConfig) *Apple {
 
 func (a *Apple) Route() Route { return RouteApple }
 
-func (a *Apple) LookupTransaction(ctx context.Context, transactionID string) (Purchase, error) {
+// Lookup은 거래 ID로 묻는다. 애플은 종류와 상관없이 같은 주소라 ref.Kind는 쓰지 않는다.
+func (a *Apple) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
+	transactionID := ref.ID
 	rsp, err := a.api.GetTransactionInfo(ctx, transactionID)
 	if err != nil {
 		if errors.Is(err, api.TransactionIdNotFoundError) {
@@ -60,8 +62,13 @@ func fromApple(t *api.JWSTransaction) Purchase {
 	if t.Environment != api.Production {
 		env = EnvSandbox // 모르는 값은 매출에서 빠지는 쪽으로 둔다
 	}
+	state := StatePaid
+	if t.RevocationDate != 0 {
+		state = StateRevoked
+	}
 	return Purchase{
 		Route:                 RouteApple,
+		State:                 state,
 		TransactionID:         t.TransactionID,
 		OriginalTransactionID: t.OriginalTransactionId,
 		BundleID:              t.BundleID,

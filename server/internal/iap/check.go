@@ -15,6 +15,7 @@ var (
 	ErrUnknownProduct = errors.New("iap: 우리가 팔지 않는 상품")
 	ErrWrongAccount   = errors.New("iap: 다른 계정의 거래")
 	ErrRevoked        = errors.New("iap: 환불·취소된 거래")
+	ErrNotPaid        = errors.New("iap: 결제가 끝나지 않았거나 권한이 없는 상태의 거래")
 )
 
 var errTODO = errors.New("iap: Check 구현 전")
@@ -26,7 +27,7 @@ var errTODO = errors.New("iap: Check 구현 전")
 // TODO(범수): 아래를 정해서 5~10줄로 채운다. 설명은 docs/guides/iap-go-notes.md 7장.
 //   - 번들 ID가 다르면 ErrWrongApp
 //   - 상품 ID가 Products에 없으면 ErrUnknownProduct
-//   - 환불·취소된 거래면 ErrRevoked
+//   - p.State가 StateRevoked면 ErrRevoked, StatePaid가 아닌 나머지(대기, 비활성)는 ErrNotPaid
 //   - 계정 값이 다르면 ErrWrongAccount
 //   - 정할 것 1: 거래의 AccountToken이 빈 문자열일 때 통과시킬지, 막을지
 //   - 정할 것 2: 여러 개가 동시에 틀렸을 때 어느 오류를 먼저 돌려줄지

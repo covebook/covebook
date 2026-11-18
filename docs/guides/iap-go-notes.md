@@ -10,7 +10,7 @@
 
 | 이슈 | 내용 | 상태 |
 |---|---|---|
-| #9 | `go-iap` 도입, 결제 경로 인터페이스 | 진행 중. 애플 거래 조회까지 |
+| #9 | `go-iap` 도입, 결제 경로 인터페이스 | 애플·구글 거래 조회, 환경변수 읽기까지 됨. `Check`만 남음 |
 | #8 | 테이블 (V21~) | #6 결정 대기 |
 | #10 | 구매 검증 API | 시작 전 |
 
@@ -88,6 +88,11 @@ type appleAPI interface {
 
   - `go-iap` 클라이언트는 메서드가 30개쯤이지만 우리는 둘만 씀
   - 테스트는 이 둘만 가진 `fakeAppleAPI`를 끼움 (`apple_test.go`). 네트워크 없이 돎
+- 인터페이스를 한 번 고쳤음 (2026-11-18)
+  - 처음: `LookupTransaction(거래ID)`. 애플만 보고 만든 모양
+  - 구글을 붙이니 안 맞음. 구글은 거래 ID가 아니라 구매 토큰으로 묻고, 구독과 한 번 사는 상품의 조회 주소가 다름
+  - 지금: `Lookup(ctx, Ref{Kind, ID})`
+  - 배운 것: 구현이 하나일 때 만든 인터페이스는 그 구현의 모양을 닮음. 두 번째 구현이 생길 때 고치는 것이 정상
 - 인터페이스가 두 겹
   - 안쪽 `appleAPI`: 라이브러리를 가림. `apple.go` 안에서만 보임
   - 바깥 `Store`: 애플·구글을 가림. 서버의 다른 코드는 이것만 봄
@@ -99,6 +104,19 @@ var _ Store = (*Apple)(nil)
 
 - 라이브러리 타입을 밖으로 내보내지 않음. `fromApple`이 `api.JWSTransaction`을 우리 타입 `Purchase`로 바꿈
   - 라이브러리를 바꾸거나 구글을 붙여도 나머지 코드는 그대로
+
+### 4-1. 이번에 쓴 문법
+
+| 문법 | 예 | 뜻 |
+|---|---|---|
+| `errors.As` | `var ge *googleapi.Error; errors.As(err, &ge)` | 감싼 오류 속에서 그 **타입**을 찾아 꺼냄. `catch (GoogleException e)`로 받아 `e.getCode()`를 보는 것 |
+| `switch` | `switch ref.Kind { case KindSubscription: ... }` | `break`가 필요 없음. 맞는 `case` 하나만 실행 |
+| 맵 | `map[string]bool`, `m[k]` | 없는 키는 zero 값(`false`, `""`, `0`). 있는지까지 보려면 `v, ok := m[k]` |
+| 슬라이스 | `[]string`, `append(s, x)`, `len(s)` | `ArrayList` |
+| 함수를 인자로 | `FromEnv(getenv func(string) string)` | 실제로는 `os.Getenv`, 테스트에서는 가짜 환경을 넘김 |
+| 포인터와 `nil` 확인 | `if s.TestPurchase != nil` | 스토어 응답의 선택 칸은 포인터. 확인 없이 `.`으로 들어가면 죽음(Java의 NPE) |
+
+- 모르는 값은 안전한 쪽으로: `subscriptionState`는 아는 상태만 "결제됨"으로 보고 나머지는 전부 "권한 없음" (`google.go`). 구글이 상태를 새로 추가해도 공짜 지급이 안 됨
 
 ## 5. `context`
 
@@ -156,7 +174,7 @@ return tx.Commit(ctx)
 |---|---|
 | 번들 ID | 다른 앱에서 산 진짜 거래를 우리 서버에 제출 |
 | 상품 ID | 우리가 팔지 않는 상품, 오타 |
-| 환불 여부 | 이미 환불받은 거래를 다시 제출 |
+| 상태 (`State`) | 환불받은 거래를 다시 제출, 결제 대기 중인 거래(구글 편의점 결제 등)에 미리 지급 |
 | 계정 값 | 남의 거래 ID를 자기 계정으로 제출 |
 
 - 정할 것 1: 거래의 `AccountToken`이 비어 있을 때
@@ -172,7 +190,7 @@ return tx.Commit(ctx)
 - 쓸 문법
   - `if p.BundleID != want.BundleID { return ErrWrongApp }`
   - 맵 조회: `want.Products[p.ProductID]`는 없으면 `false`
-  - `p.Revoked()`
+  - `p.State != StatePaid`. 환불(`StateRevoked`)만 `ErrRevoked`, 나머지는 `ErrNotPaid`
 
 ## 8. 테스트 쓰는 법
 
@@ -198,7 +216,38 @@ return tx.Commit(ctx)
 - `Price`는 통화 단위의 1000배 정수. 12990이면 12.99. 64비트 정수로 저장
 - 시각은 밀리초. `time.UnixMilli(ms).UTC()`로 바꿈 (ADR-0002 D23)
 - 설정 값 4개: `.p8` 키 내용, 키 ID, 발급자 ID, 번들 ID. 환경변수로만 넣고 저장소·이슈·PR에 적지 않음
-- 구글 (`playstore` 패키지): `New(jsonKey)`, `VerifySubscriptionV2`, `VerifyProductV2`, `AcknowledgeSubscription`, `AcknowledgeProduct`, `ConsumeProduct`. 구현은 다음 단계
+- 구글 (`github.com/awa/go-iap/playstore`, 안쪽은 구글 공식 `androidpublisher` 클라이언트)
+
+| 함수 | 하는 일 |
+|---|---|
+| `New(서비스계정JSON)` | 클라이언트 생성. 만들 때 구글에서 접근 토큰을 한 번 받아 옴 (키가 틀리면 여기서 실패) |
+| `VerifySubscriptionV2(ctx, 패키지, 토큰)` | 구독 조회 |
+| `VerifyProductV2(ctx, 패키지, 토큰)` | 한 번 사는 상품 조회 |
+| `AcknowledgeSubscription`, `AcknowledgeProduct`, `ConsumeProduct` | 확인·소비. #10에서 붙임 |
+
+- 애플과 다른 점 (라이브러리와 구글 클라이언트 타입 정의를 읽어 확인)
+
+| 항목 | 애플 | 구글 |
+|---|---|---|
+| 무엇으로 묻나 | 거래 ID | 구매 토큰 |
+| 구독·일회성 상품 | 같은 주소 | 주소가 다름. 종류를 알려 줘야 함 |
+| 응답의 금액·통화 | 있음 (1000배 정수) | 없음. 주문 조회 API가 따로 있음 |
+| 계정 연결 값 | `appAccountToken` | `obfuscatedExternalAccountId` |
+| 시각 형식 | 밀리초 숫자 | RFC 3339 문자열 |
+| 국가 코드 | `storefront` (형식 미확인) | `regionCode` (ISO 3166-1 alpha-2라고 주석에 있음) |
+| 시험 구매 표시 | `environment`가 Sandbox | `testPurchase` 칸이 있음 |
+| 요금제 | 상품 ID가 곧 요금제 | 구독 1개 아래 요금제(`basePlanId`) |
+| 결제 대기 상태 | 없음 | 있음 (`PENDING`). 지급하면 안 됨 |
+| "없는 거래" | `TransactionIdNotFoundError` | HTTP 404, 410 |
+
+- 구글 구독 상태 → 우리 상태: 이용 중·유예 기간·해지 예약은 "결제됨", 결제 대기는 "대기", 보류·일시정지·만료·모르는 값은 "권한 없음"
+
+### 9-1. 스토어 키 넣는 법
+
+- 환경변수 6개. 이름은 `server/.env.example`에 있음. 값은 KoDeploy 환경에만 넣음
+- 한 스토어의 값이 전부 비면 그 스토어는 꺼짐. 일부만 있으면 서버가 오류를 냄 (`config.go`의 `FromEnv`)
+- 키 내용은 그대로 넣거나 base64로 넣음. 여러 줄 값을 못 넣는 환경 때문
+- 오류 메시지에는 빠진 변수 **이름**만 나옴. 값은 로그에 남기지 않음
 
 ## 10. 출처와 확인 수준
 
@@ -225,3 +274,4 @@ return tx.Commit(ctx)
 | 날짜 | 이슈 | 한 것 | 배운 것 |
 |---|---|---|---|
 | 2026-11-18 | #9 | `go-iap` v1.59.1 추가, `iap` 패키지(`Store`, 애플 거래 조회, 가짜), `Check` 자리 | 1~9장 |
+| 2026-11-18 | #9 | 구글 거래 조회, 인터페이스를 `Lookup(Ref)`로 고침, 상태 값 `State`, 환경변수 읽기 | 4장 고친 기록, 4-1, 9장 구글 비교, 9-1 |
