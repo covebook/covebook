@@ -20,6 +20,10 @@ android {
         applicationId = "app.covebook"
         // 시험 빌드를 실제 앱(같은 id, 다른 서명) 옆에 따로 깔 때: -PappIdSuffix=.chaekjang → app.covebook.chaekjang(지금 앱이 깔린 실기기에서 덮어쓰거나 지우지 않게)
         (project.findProperty("appIdSuffix") as String?)?.let { applicationIdSuffix = it }
+        // 카카오 앱 안 로그인: 카카오계정 창에서 돌아오는 주소 kakao<네이티브 앱 키>://oauth. 카카오는 키마다 패키지가 하나라
+        // 시험 빌드(app.covebook.flqa)는 'QA 시험 빌드' 키. lib/services/native_login.dart의 kakaoNativeKey·kakaoQaNativeKey와 같은 값
+        val qaBuild = (project.findProperty("appIdSuffix") as String?)?.trimStart('.') == "flqa"
+        manifestPlaceholders["kakaoScheme"] = "kakao" + if (qaBuild) "c4bb117637fe6f725f697b033b775ec9" else "86ba9f3ec4b64b2b00d66ddd1aaa2058"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

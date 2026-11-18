@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/widgets.dart';
 
 import '../db/kv_store.dart';
@@ -22,6 +23,7 @@ import '../store/library_store.dart' show layoutState, markBookcasesSynced, read
 import '../store/local_reset.dart';
 import '../store/placement_store.dart';
 import 'auth_link.dart';
+import 'native_login.dart';
 
 const syncBase = String.fromEnvironment('SYNC_URL');
 
@@ -98,6 +100,12 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   ({bool kakao, bool google, bool apple, String nickname}) account = (kakao: false, google: false, apple: false, nickname: '');
   ({bool kakao, bool google, bool apple, bool accountDeletion}) providers = (kakao: false, google: false, apple: false, accountDeletion: false);
 
+  /// 로그인마다 공급자가 확인해 준 이메일(계정 화면에서 어느 계정인지 보여 준다, 2026-11-18). 키는 kakao·google·apple
+  Map<String, String> emails = const {};
+
+  /// 서버가 앱 안 로그인(/auth/<공급자>/native)을 받는지. 재배포 전 서버면 브라우저 흐름만 쓴다
+  bool nativeLoginServer = false;
+
   Future<void>? _pauseLoaded;
   bool _running = false, _again = false, _linking = false, _accountChecked = false, _providersChecked = false, _bookcasesSupported = false, _started = false;
 
@@ -147,6 +155,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final a = (await api('GET', '/auth/providers', null) as Map?) ?? const {};
       providers = (google: a['google'] == true, apple: a['apple'] == true, kakao: a['kakao'] == true, accountDeletion: a['accountDeletion'] == true);
+      nativeLoginServer = a['native'] == true;
       _providersChecked = true;
       notifyListeners();
     } catch (_) {
@@ -169,6 +178,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       if (raw != null) {
         final a = jsonDecode(raw) as Map;
         account = (kakao: a['kakao'] == true, google: a['google'] == true, apple: a['apple'] == true, nickname: (a['nickname'] as String?) ?? '');
+        emails = _emailsOf(a['emails']);
       }
       await _loadPause();
     } catch (_) {
@@ -176,11 +186,18 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  void _setAccount(({bool kakao, bool google, bool apple, String nickname}) a) {
+  void _setAccount(({bool kakao, bool google, bool apple, String nickname}) a, {Map<String, String>? mails}) {
     account = a;
-    KvStore.set(_accountKey, jsonEncode({'kakao': a.kakao, 'google': a.google, 'apple': a.apple, 'nickname': a.nickname})).ignore();
+    if (mails != null) emails = mails;
+    KvStore.set(_accountKey, jsonEncode({'kakao': a.kakao, 'google': a.google, 'apple': a.apple, 'nickname': a.nickname, 'emails': emails})).ignore();
     notifyListeners();
   }
+
+  static Map<String, String> _emailsOf(Object? v) => {
+    if (v is Map)
+      for (final e in v.entries)
+        if (e.value is String && (e.value as String).isNotEmpty) '${e.key}': e.value as String,
+  };
 
   Future<String> _ensureToken() async {
     if (paused) throw StateError('서버 동기화가 중지되어 있어요');
@@ -558,6 +575,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       lastAt = null;
       pending = 0;
       account = (kakao: false, google: false, apple: false, nickname: '');
+      emails = const {};
       _set(state: SyncState.idle, error: null);
     } finally {
       _linking = false;
@@ -599,16 +617,31 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       await _loadPause();
       if (paused) throw StateError('동기화가 중지되어 있어요. 먼저 동기화를 다시 시작해 주세요.');
       final token = await _ensureToken();
-      final returnUrl = 'chaekjang://auth/$provider';
-      final start = (await api('POST', '/auth/$provider/start', token, {'returnUrl': returnUrl, 'accountLifecycle': '1'}))! as Map;
-      final back = await openAuthSession(start['url']! as String);
-      if (back != null && (back.scheme != 'chaekjang' || back.host != 'auth' || back.path != '/$provider')) return fail('로그인 응답 주소가 올바르지 않아요');
-      if (back == null) return fail('로그인을 취소했어요', cancelled: true);
-      final q = back.queryParameters;
-      if (q['error'] != null) return fail(q['error'] == 'denied' ? '로그인을 취소했어요' : '로그인을 마치지 못했어요. 잠시 뒤 다시 시도해 주세요', cancelled: q['error'] == 'denied');
-      final ticket = q['ticket'];
-      if (ticket == null) return fail('로그인 응답을 읽지 못했어요');
-      final c = (await api('POST', '/auth/$provider/claim', token, {'ticket': ticket}))! as Map;
+      // 앱 안 로그인(SDK)이 되면 그 토큰을 서버가 확인한다. SDK가 실패하면(설정·기기 문제) 브라우저 흐름으로 넘어간다
+      Map? c;
+      if (nativeLoginServer && nativeLoginAvailable(provider)) {
+        Map<String, String>? cred;
+        try {
+          cred = await nativeLogin(provider);
+        } on NativeLoginCancelled {
+          return fail('로그인을 취소했어요', cancelled: true);
+        } catch (e) {
+          debugPrint('[login] $provider 앱 안 로그인 실패, 브라우저로: $e');
+        }
+        if (cred != null) c = (await api('POST', '/auth/$provider/native', token, {...cred, 'accountLifecycle': '1'}))! as Map;
+      }
+      if (c == null) {
+        final returnUrl = 'chaekjang://auth/$provider';
+        final start = (await api('POST', '/auth/$provider/start', token, {'returnUrl': returnUrl, 'accountLifecycle': '1'}))! as Map;
+        final back = await openAuthSession(start['url']! as String);
+        if (back != null && (back.scheme != 'chaekjang' || back.host != 'auth' || back.path != '/$provider')) return fail('로그인 응답 주소가 올바르지 않아요');
+        if (back == null) return fail('로그인을 취소했어요', cancelled: true);
+        final q = back.queryParameters;
+        if (q['error'] != null) return fail(q['error'] == 'denied' ? '로그인을 취소했어요' : '로그인을 마치지 못했어요. 잠시 뒤 다시 시도해 주세요', cancelled: q['error'] == 'denied');
+        final ticket = q['ticket'];
+        if (ticket == null) return fail('로그인 응답을 읽지 못했어요');
+        c = (await api('POST', '/auth/$provider/claim', token, {'ticket': ticket}))! as Map;
+      }
       final switched = c['switched'] == true;
       final nickname = (c['nickname'] as String?) ?? '';
       if (switched) {
@@ -618,11 +651,17 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         await LibraryModel.instance.flushPending();
         await queueAllChanges(fullDirty(LibraryModel.instance.lib));
       }
-      await KvStore.set(_tokenKey, c['token']! as String);
+      final newToken = c['token']! as String;
+      await KvStore.set(_tokenKey, newToken);
       _verifiedToken = null;
-      _setAccount(switched
-          ? (kakao: provider == 'kakao', google: provider == 'google', apple: provider == 'apple', nickname: nickname)
-          : (kakao: account.kakao || provider == 'kakao', google: account.google || provider == 'google', apple: account.apple || provider == 'apple', nickname: nickname));
+      _setAccount(
+        switched
+            ? (kakao: provider == 'kakao', google: provider == 'google', apple: provider == 'apple', nickname: nickname)
+            : (kakao: account.kakao || provider == 'kakao', google: account.google || provider == 'google', apple: account.apple || provider == 'apple', nickname: nickname),
+        mails: switched ? const {} : null,
+      );
+      // 연결된 로그인·이메일을 서버에서 다시 받는다
+      _refreshAccount(newToken).ignore();
       syncAfter = true;
       return (ok: true, cancelled: false, switched: switched, message: nickname);
     } catch (e) {
@@ -641,7 +680,8 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       final me = (await api('GET', '/me', token))! as Map;
       if (await KvStore.get(_tokenKey) != token) return;
       final a = (kakao: me['kakao'] == true, google: me['google'] == true, apple: me['apple'] == true, nickname: (me['nickname'] as String?) ?? '');
-      if (a != account) _setAccount(a);
+      final m = _emailsOf(me['emails']);
+      if (a != account || !mapEquals(m, emails)) _setAccount(a, mails: m);
     } catch (_) {
       // 표시용이라 실패해도 동기화는 계속한다
     }
@@ -668,6 +708,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         if (raw == null) return;
         final a = jsonDecode(raw) as Map;
         account = (kakao: a['kakao'] == true, google: a['google'] == true, apple: a['apple'] == true, nickname: (a['nickname'] as String?) ?? '');
+        emails = _emailsOf(a['emails']);
         notifyListeners();
       } catch (_) {
         // 깨진 값은 무시

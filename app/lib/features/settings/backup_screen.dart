@@ -33,6 +33,14 @@ class BackupScreen extends StatefulWidget {
   State<BackupScreen> createState() => _BackupScreenState();
 }
 
+/// 연결된 계정 줄 아래 글: 이메일 → (Apple 전달용 주소면) '이메일 가림' → 닉네임
+String? _accountHint(String provider, SyncService s) {
+  final mail = s.emails[provider];
+  if (mail != null) return mail.endsWith('@privaterelay.appleid.com') ? '이메일 가림' : mail;
+  final nick = s.account.nickname;
+  return provider == 'kakao' && nick.isNotEmpty ? nick : null;
+}
+
 class _BackupScreenState extends State<BackupScreen> {
   final _sync = SyncService.instance;
   bool _loggingIn = false;
@@ -175,8 +183,9 @@ class _BackupScreenState extends State<BackupScreen> {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(names[p]!, style: AppType.rowStrong),
-                      // 서버에는 닉네임만 있다(이메일은 받지 않는다)
-                      if (p == 'kakao' && s.account.nickname.isNotEmpty) Text(s.account.nickname, style: AppType.sub),
+                      // 어느 계정인지: 공급자가 확인해 준 이메일(2026-11-18 사용자 '무슨 이메일로 로그인된지도 없고').
+                      // Apple '이메일 가리기'면 전달용 주소라 그 사실만, 이메일이 없으면(카카오 비즈 앱 전 등) 닉네임
+                      if (_accountHint(p, s) case final hint?) Text(hint, style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ]),
                   ),
                 ]),
