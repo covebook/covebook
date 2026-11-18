@@ -21,7 +21,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart';
 import '../stats/chart_data.dart' show timeRange;
-import '../stats/stats_widgets.dart' show LinkedCover, bookAuthor, bookTitle;
+import '../stats/stats_widgets.dart' show LinkedCover, bookAuthor;
 
 int? _page(String? v) {
   final digits = (v ?? '').replaceAll(RegExp(r'[^\d]'), '');
@@ -280,54 +280,66 @@ class _FinishScreenState extends State<FinishScreen> {
   }
 }
 
-/// 독서 기록 저장 뒤 시트: 이번 기록(책 · 시간 · 쪽) → 이어서 할 수 있는 일(갈피 남기기 · 책 정보 · 통계) → 확인
 /// 저장했어요(2026-11-17 사용자 시안): 가운데 작은 창에 표지 · 제목 · 저자, 'N분 N초 기록했어요', 확인. 뒤는 어둡게, 어디를 눌러도 닫힌다
 Future<void> showSavedDialog(BuildContext context, {required String? bookId, required String sessionId}) {
   final lib = LibraryModel.instance.lib;
   final ss = lib.sessions[sessionId];
-  final title = bookTitle(lib, bookId);
-  final name = title ?? NoBookCover.name;
+  final sb = bookId == null ? null : lib.books[bookId];
+  final se = sb == null ? null : lib.editions[sb.editionId];
+  final author = se != null && se.authors.isNotEmpty ? se.authors.join(', ') : '';
   final done = '${ss == null ? '' : formatDurationPrecise(ss.durationMs)} 기록했어요'.trim();
-  final w = BookRow.coverWidth(BookRowSize.small);
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
     barrierLabel: '닫기',
-    barrierColor: AppColors.scrim,
+    barrierColor: const Color(0x8C000000),
     transitionDuration: const Duration(milliseconds: 180),
-    transitionBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-    // 창 이름은 '책, N분 기록했어요'. 경로를 나누는 이름표는 안쪽 글·단추를 따로 둔다(explicitChildNodes: 없으면 화면 읽기를 켤 때 단언에 걸렸다)
+    // 경로 이름표는 안쪽 글·단추를 따로 둔다(explicitChildNodes가 없으면 화면 읽기를 켤 때 단언에 걸렸다)
     pageBuilder: (ctx, _, _) => Semantics(
       scopesRoute: true,
       namesRoute: true,
       explicitChildNodes: true,
-      label: [name, done].join(', '),
+      label: [se?.title ?? '책 없이 읽은 시간', done].join(', '),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => Navigator.pop(ctx),
         child: SafeArea(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(Space.page),
+              padding: const EdgeInsets.symmetric(horizontal: Space.page),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+                // 화면 폭의 약 8할(시안 308)
+                constraints: const BoxConstraints(maxWidth: 308),
                 child: Material(
                   color: AppColors.bg,
-                  borderRadius: BorderRadius.circular(Shape.dialog),
+                  borderRadius: BorderRadius.circular(Shape.dialog + 2),
+                  // 왼쪽 정렬로 낮게: 왼쪽 표지, 오른쪽에 제목 · 저자 · 'N분 기록했어요', 아래 확인(2026-11-18 사용자 '세로로 너무 길고 왼쪽 정렬이 나을 듯')
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(Space.page, Space.page + 2, Space.page, Space.page),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Semantics(header: true, child: WordText(done, style: AppType.heading)),
-                      const SizedBox(height: Space.s),
-                      ExcludeSemantics(
-                        child: BookRow(
-                          cover: title != null ? LinkedCover(lib: lib, id: bookId!, width: w) : NoBookCover(width: w),
-                          title: name,
-                          meta: bookAuthor(lib, bookId),
-                          titleLines: 2,
-                        ),
+                      // 표지 52 → 72(2026-11-18 사용자 '썸네일 좀 더 크게'). 제목 · 저자는 표지 위 끝, 'N분 기록했어요'는 표지 아래 끝에 맞춘다
+                      // (2026-11-19 사용자 '11초 위치가 좀 애매': 가운데 묶음 끝에 떠 있었다)
+                      IntrinsicHeight(
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          if (sb != null && se != null) ...[
+                            Align(alignment: Alignment.topCenter, child: ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 72))),
+                            const SizedBox(width: Space.m + 2),
+                          ],
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              if (sb != null && se != null) ...[
+                                Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
+                                if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                              ] else
+                                Text('책 없이 읽은 시간', style: AppType.sub),
+                              const Spacer(),
+                              const SizedBox(height: Space.s),
+                              WordText(done, style: AppType.rowStrong),
+                            ]),
+                          ),
+                        ]),
                       ),
-                      const SizedBox(height: Space.xl),
+                      const SizedBox(height: Space.l),
                       Btn(label: '확인', onPress: () => Navigator.pop(ctx)),
                     ]),
                   ),
@@ -338,5 +350,9 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
         ),
       ),
     ),
+    transitionBuilder: (ctx, anim, _, child) {
+      final t = Curves.easeOutCubic.transform(anim.value);
+      return Opacity(opacity: t, child: Transform.scale(scale: 0.96 + 0.04 * t, child: child));
+    },
   );
 }

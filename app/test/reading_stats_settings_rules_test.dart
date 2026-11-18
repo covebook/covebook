@@ -1,5 +1,5 @@
 // 2026-11-19 공통 규칙(읽기 · 통계 · 내 정보): 하나 고르기 시트는 FilterOption + 고르는 원, 책 줄은 BookRow, 책 없음은 '책 없이 읽기',
-// 시각은 '오후 9:05', 1분 미만은 초까지, 저장했어요 창은 확인창과 같은 틀 + 책 줄
+// 시각은 '오후 9:05', 1분 미만은 초까지, 저장했어요 창은 사용자 시안 그대로
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/reading/finish_screen.dart' show showSavedDialog;
 import 'package:chaekjang/features/settings/backup_screen.dart';
@@ -26,6 +26,12 @@ Library lib() => Library(
 Finder plain(String s) => find.byWidgetPredicate((w) {
       final t = w is RichText ? w.text.toPlainText() : null;
       return t != null && t.replaceAll('\u2060', '') == s;
+    });
+
+/// 그 글로 시작하는 글자(이음표를 뺀 글)
+Finder plainStarts(String s) => find.byWidgetPredicate((w) {
+      final t = w is RichText ? w.text.toPlainText() : null;
+      return t != null && t.replaceAll('\u2060', '').startsWith(s);
     });
 
 Future<void> pump(WidgetTester t, Widget w) async {
@@ -86,23 +92,24 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('저장했어요 창: 확인창 틀 + 책 줄(BookRow), 책 없는 기록은 책 없이 읽기', (t) async {
+  testWidgets('저장했어요 창: 사용자 시안 그대로(표지 72 · 제목 · 저자, \'N분 기록했어요\'는 표지 아래 끝), 책 없는 기록은 \'책 없이 읽은 시간\'', (t) async {
     await pump(t, Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showSavedDialog(c, bookId: 'bk1', sessionId: 's1'), child: const Text('열기')))));
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
-    expect(plain('25분 기록했어요'), findsOneWidget);
-    expect(find.byType(BookRow), findsOneWidget);
-    expect(find.bySemanticsLabel('데미안, 25분 기록했어요'), findsOneWidget);
+    expect(plainStarts('25분'), findsOneWidget);
+    expect(find.byType(LinkedCover), findsOneWidget);
+    expect(t.getSize(find.byType(LinkedCover)).width, 72);
+    // 'N분 기록했어요' 아래 끝 = 표지 아래 끝(2026-11-19 사용자 '11초 위치가 애매')
+    expect(t.getRect(plainStarts('25분')).bottom, closeTo(t.getRect(find.byType(LinkedCover)).bottom, 1.5));
     await t.tap(find.text('확인'));
     await t.pumpAndSettle();
-    expect(find.byType(BookRow), findsNothing);
+    expect(plainStarts('25분'), findsNothing);
 
     await pump(t, Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showSavedDialog(c, bookId: null, sessionId: 's2'), child: const Text('열기')))));
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
-    expect(plain('45초 기록했어요'), findsOneWidget);
-    expect(find.byType(NoBookCover), findsOneWidget);
-    expect(find.text(NoBookCover.name), findsOneWidget);
+    expect(plainStarts('45초'), findsOneWidget);
+    expect(find.text('책 없이 읽은 시간'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 }
