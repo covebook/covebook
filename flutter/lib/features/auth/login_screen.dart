@@ -106,15 +106,13 @@ class _LoginScreenState extends State<LoginScreen> {
             constraints: const BoxConstraints(maxWidth: 480),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const SizedBox(height: Space.l),
-              // 책장 그림(우리 앱이 그린 책장을 찍어 자른 것): 화면이 낮으면 줄어든다. 바꾸려면 assets/login/shelf.webp만 바꾼다
-              Flexible(
-                flex: 5,
-                child: ExcludeSemantics(child: Image.asset(loginShelfAsset, fit: BoxFit.contain, alignment: Alignment.topCenter, gaplessPlayback: true)),
-              ),
+              // 위: 책장 그림과 이름·소개. 화면이 낮으면 그림만 줄어들고, 남는 높이는 소개와 단추 사이로 간다
               Expanded(
-                flex: 2,
-                child: Center(
-                  child: Padding(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  // 책장 그림(우리 앱이 그린 책장을 찍어 자른 것). 바꾸려면 assets/login/shelf.webp만 바꾼다
+                  Flexible(child: ExcludeSemantics(child: Image.asset(loginShelfAsset, fit: BoxFit.contain, alignment: Alignment.topCenter, gaplessPlayback: true))),
+                  const SizedBox(height: Space.xl),
+                  Padding(
                     padding: const EdgeInsets.symmetric(horizontal: Space.page),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
                       Semantics(header: true, child: Text('책장 한켠', textAlign: TextAlign.center, style: AppType.hero)),
@@ -122,8 +120,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       WordText('읽은 책을 책장에 진열하고,\n읽은 시간과 문장을 남겨요', textAlign: TextAlign.center, style: AppType.row.copyWith(color: AppColors.inkSoft)),
                     ]),
                   ),
-                ),
+                ]),
               ),
+              const SizedBox(height: Space.xl),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Space.page + Space.s),
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
