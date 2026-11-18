@@ -1,7 +1,9 @@
-# 화면 아이콘 표(lib/gen/lucide.g.dart)를 Lucide 아이콘(ISC, lucide-static 1.75.0, tool/lucide_icons/)으로 만든다.
-# 2026-11-17 Tabler로 통일했다가, 2026-11-18 사용자 'lucide.dev 아이콘으로 바꿔'. 하단 탭·책장 머리 입체 아이콘은 그대로(따로 그린 그림).
-# 이름은 부르는 곳의 이름(예전 lucide 컴포넌트 이름) 그대로. 새 아이콘은 아래 표에 더하고 SVG를 tool/lucide_icons/에 넣는다
-#   (https://cdn.jsdelivr.net/npm/lucide-static@1.75.0/icons/<이름>.svg).
+# 화면 아이콘 표(lib/gen/lucide.g.dart)를 Lucide 아이콘(ISC, tool/lucide_icons/)으로 만든다.
+# 아이콘은 처음 앱(지금 앱 lucide-react-native 1.48.0)과 같은 그림: 처음 옮긴 34개는 그때 표 그대로, 그 뒤 더한 것(ScanBarcode·FileSpreadsheet)과
+# 목록 보기 세 줄(menu)은 같은 1.48.0에서. 2026-11-17 Tabler → 11-18 lucide-static 1.75.0 → 11-19 사용자 '처음 썼던 걸로'(목록 세 줄은 그대로).
+# 하단 탭·책장 머리 입체 아이콘은 그대로(따로 그린 그림).
+# 이름은 부르는 곳의 이름(예전 lucide 컴포넌트 이름) 그대로. 새 아이콘은 아래 표에 더하고 lucide-react-native 1.48.0의 같은 아이콘 SVG를 tool/lucide_icons/에 넣는다
+#   (https://cdn.jsdelivr.net/npm/lucide-static@1.48.0/icons/<이름>.svg).
 #   쓰는 법: python3 tool/gen_icons.py
 import os, re
 
@@ -29,8 +31,8 @@ for name, f in NAMES.items():
     lines.append(f"  '{name}': '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"{{c}}\" stroke-width=\"{{w}}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">{body}</svg>',")
 
 out = os.path.join(root, '..', 'lib', 'gen', 'lucide.g.dart')
-open(out, 'w').write("""// 화면 아이콘: Lucide(ISC, lucide-static 1.75.0, tool/lucide_icons/LICENSE). tool/gen_icons.py 가 만든다 — 손으로 고치지 말 것.
-// 2026-11-17 Tabler로 바꿨다가 2026-11-18 다시 Lucide(사용자 'lucide.dev 아이콘으로')
+open(out, 'w').write("""// 화면 아이콘: Lucide(ISC, 처음 앱과 같은 lucide 1.48.0, tool/lucide_icons/LICENSE). tool/gen_icons.py 가 만든다 — 손으로 고치지 말 것.
+// 2026-11-17 Tabler → 11-18 lucide-static 1.75.0 → 11-19 처음 썼던 아이콘으로(사용자)
 library;
 
 /// 이름 → SVG({c} 색, {w} 선 굵기)

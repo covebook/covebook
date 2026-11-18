@@ -32,7 +32,7 @@
   4. 알림은 늦고, 겹치고, 순서가 바뀌고, 빠짐. 정기 대조 작업이 마지막 방어선
   5. 날짜와 금액을 서버가 계산하지 않음. 스토어가 준 만료 시각을 쓰고, 매출은 정산 보고서 기준
 - 지금 설계에서 고쳐야 할 것: 2장 (6건)
-- 정답이 없어 정해야 하는 것: 8장 (16건)
+- 정해야 하는 것: 8장. 16건을 항목마다 근거를 찾아 판정함. 추가 선반을 소모성으로 둔 결정(ADR-0002 D1)을 다시 봐야 한다는 것이 가장 큰 발견
 - 실측으로만 알 수 있는 것: 9장 (17건)
 
 ## 2. 지금 설계·코드에서 고칠 것
@@ -150,7 +150,7 @@
   - 애플: 실패한 알림 이력. 구글: 무효 구매 목록
 - 선택지 (8장 T5)
   - 주기: 짧으면 호출이 늘고 길면 발견이 늦음. ADR-0002 D4는 하루 1번. 미확인 구매는 3일 기한이 있어 더 자주 봐야 함
-  - 전부 재조회 vs 골라서 재조회: 규모가 작을 때는 전부가 단순
+  - 전부 재조회 vs 골라서 재조회: 애플 권고는 갱신 시점에 맞춘 재확인. 전부 재조회를 권하는 출처는 없음 (8-2 T5)
   - 어디서 돌릴지: KoDeploy가 정기 작업을 지원하는지 미확인 (9장 U15). 안 되면 서버 안에서 타이머로
 - 출처: [애플 알림 이력](https://developer.apple.com/documentation/appstoreserverapi/get-notification-history), [구글 무효 구매](https://developers.google.com/android-publisher/voided-purchases), [闲鱼 资损防控](https://juejin.cn/post/7012456069586747422), [인프런 질문](https://www.inflearn.com/community/questions/1707023)
 
@@ -319,6 +319,7 @@
 - 선택지 (8장 T10)
   - 값이 없는 거래를 제출한 로그인 사용자에게 지급: 편함. 남의 거래 ID를 아는 사람이 가져갈 수 있음
   - 거절하고 "구매 복원"에서만 연결: 안전. 복원 경로를 따로 만들어야 함
+  - 근거 조사 결과: 업계 기본은 첫 번째(제출한 사용자에게 연결). 두 번째는 보수적 선택 (8-2 T10)
   - `Check` 함수(범수가 구현)의 "빈 값" 결정이 이 선택
 
 ### 5-2. 계정 연결 값
@@ -467,27 +468,205 @@
 - 회계 글의 원칙: 줄을 지우거나 고치지 않고 더함. 환불은 반대 줄을 더함. 소규모는 불변 원장 + 반대 기장만으로 충분 (커뮤니티, 掘金)
 - 지금 V21은 환불을 같은 줄의 상태 변경으로 남김. 반대 줄 방식으로 바꿀지 정해야 함 (8장 T15)
 
-## 8. 정답이 없어 정해야 하는 것
+## 8. 정해야 하는 것과 이미 답이 있는 것 (근거 확인본)
 
-| # | 문제 | 난이도 | 근거 장 | 누가 |
+- 2026-11-19에 세 번 고침
+  1. 처음: 16건 모두 "정답 없음"
+  2. 재검토: 내 판단으로 "답 있음" 4건을 가려냄
+  3. 근거 조사: 항목마다 공식 문서, 스토어 엔지니어 답변, 결제 대행사의 기본 동작을 찾아 확정. 2번의 판정 중 T1, T3, T5, T6, T7, T10, T11이 틀리거나 부족했음
+- 판정 기준
+  - 답 있음: 공식 문서나 스토어 엔지니어의 답이 있거나, 여러 출처가 같은 답을 권하고 반대 출처가 없음
+  - 선택: 출처가 갈리거나 공식 답이 없음. 이때는 대행사(RevenueCat, Adapty)의 기본값을 "업계 기본"으로 적음
+- 못 찾은 것: 실제 숫자(대조 주기, 제한 시간)를 공개한 기업 기술 블로그. 국내외 모두 못 엶
+
+### 8-1. 판정표
+
+| # | 문제 | 판정 | 답 또는 업계 기본 | 확신 |
 |---|---|---|---|---|
-| T1 | 스토어 조회가 실패할 때 지급을 보류할지 임시로 줄지 | 상 | 3-1 | 범수 |
-| T2 | 시간 제한 값 (스토어 조회, 재시도, DB 쿼리·락, 앱 대기) | 중 | 3-2 | 범수 |
-| T3 | 만료 직후 갱신 결과가 안 온 틈에 권한을 유지할지 | 상 | 3-3 | 범수, 정환 |
-| T4 | 알림을 받자마자 200을 줄지, 처리 뒤에 줄지 | 중 | 3-4 | 범수 |
-| T5 | 대조 작업의 주기와 범위, 돌릴 곳 | 중 | 3-5 | 범수 |
-| T6 | 구글 확인의 순서, 추가 선반을 소비할지 | 중 | 4-1 | 범수, 정환 |
-| T7 | 유예·보류·일시중지 설정값 | 하 | 4-2, 4-4 | 정환 |
-| T8 | 출시 때 앱 안에서 월↔연 변경을 지원할지 | 중 | 4-5 | 정환 |
-| T9 | 환불 대응: 사용 정보 전송, 반복 환불 계정 | 상 | 4-6 | 정환 |
-| T10 | 계정 연결 값이 없는 구매를 누구에게 줄지 | 상 | 5-1 | 범수 |
-| T11 | 구독을 옮길 때 애플에 새 값을 써넣을지 | 중 | 5-2 | 범수 |
-| T12 | 기기 계정으로 산 뒤 로그인하면 구매를 옮길지 | 상 | 5-3 | 범수, 정환 |
-| T13 | 운영 서버가 샌드박스 거래를 어디까지 받을지 | 상 | 6-1 | 범수, 정환 |
-| T14 | 날짜 표시의 시간대 | 하 | 7-1 | 정환 |
-| T15 | 금액과 장부를 어디까지 남길지 (구글 주문 조회, 반대 줄, 부가세 분리) | 중 | 7-2, 7-5 | 범수, 정환 |
-| T16 | 알람을 어디로 보낼지, 무엇에 울릴지 | 하 | 3-8 | 범수 |
+| T1 | 스토어 조회가 실패할 때 지급 | 상품에 따라 갈림 | 소모성·구글은 보류가 답. 애플 구독은 선택 (보류 / 서명 확인 뒤 임시 지급) | 중 |
+| T2 | 시간 제한 값 | 원칙은 답, 숫자는 선택 | 외부 호출은 트랜잭션 밖. 숫자는 8-3의 참고값에서 시작 | 중 |
+| T3 | 만료 직후의 틈 | 재조회는 답, 버퍼는 선택 | 끊기 전에 재조회. 유예 중이면 유지. 업계 기본은 버퍼 없음, 선택적으로 6시간 | 중 |
+| T4 | 알림 응답 시점 | 답 있음 | 저장하고 바로 2xx, 처리는 뒤에서 | 상 |
+| T5 | 대조 작업 | 있어야 함은 답, 주기는 선택 | 애플 권고는 갱신 시점 재확인과 장애 뒤 이력 조회. 전부 재조회를 권하는 곳은 없음 | 중 |
+| T6 | 구글 확인 | 답 있음. D1과 충돌 | 서버가, 지급 직후. 한 번 사면 영구인 상품은 비소모성으로 등록하고 소비하지 않음 | 상 |
+| T7 | 유예·보류 설정 | 켜는 것은 합의, 일수는 취향 | 애플 16일·모든 갱신, 구글 유예 7 또는 14일 + 보류 30일 | 중 |
+| T8 | 월↔연 변경 UI | 선택 | 최소 구성은 UI 없이 스토어 구독 관리 링크. 애플 쪽 변경은 서버가 반드시 처리 | 중 |
+| T9 | 환불 대응 | 회수는 답, 나머지 선택 | 사용 정보 전송은 대행사마다 기본값이 다름. 동의 없이는 보낼 수 없음 | 중 |
+| T10 | 계정 연결 값이 없거나 다른 구매 | 다른 값은 답, 빈 값은 선택 | 다르면 거절. 비면 업계 기본은 제출한 사용자에게 연결 | 상 / 하 |
+| T11 | 애플에 새 값 써넣기 | 의무 아님. 조건 있음 | 안 써도 됨. 대신 알림을 원 거래 ID로 현재 주인에게 연결해야 함 | 중 |
+| T12 | 익명 구매 뒤 로그인 | 선택 | 업계 기본은 로그인 계정으로 따라가고 한 번에 한 계정 | 중 |
+| T13 | 샌드박스 거래 | 선택 | 받을 수 있어야 함까지만 정해짐. RevenueCat 기본은 전부 지급 | 상 |
+| T14 | 날짜 표시 시간대 | 취향 | 권고 없음. 흔한 것은 기기 시간대에 날짜만 | 하 |
+| T15 | 금액과 장부 | 매출 기준은 답, 나머지 선택 | 매출은 스토어 정산 보고서. 환불은 반대 줄이 일반 권고 | 상 / 중 |
+| T16 | 관측과 알람 | 선택 | 최소 항목은 검증 오류 급증과 알림 미수신 | 하 |
 
+### 8-2. 항목별 근거
+
+**T1. 스토어 조회가 실패할 때**
+
+- 소모성 상품과 구글은 보류
+  - 구글: 서버에서 확인한 뒤 지급. "Don't grant entitlement when the purchase state is PENDING." ([구글 보안](https://developer.android.com/google/play/billing/security))
+  - RevenueCat도 1회성 구매는 임시 지급을 지원하지 않음 ([Offline Entitlements](https://www.revenuecat.com/blog/engineering/introducing-offline-entitlements.md))
+  - 보류에도 시한이 있음: 구글은 3일 안에 확인하지 못하면 자동 환불
+- 애플 구독은 선택
+  - 애플은 서명 확인만으로 충분하다고 함: "There's no need to call our server to verify the signed transaction info." ([WWDC21 10174](https://developer.apple.com/videos/play/wwdc2021/10174/)). 다만 장애 상황을 직접 다룬 문장은 아님
+  - RevenueCat은 2020년 애플 장애(약 5시간, 실패한 구매 50만 건 이상) 때 "temporarily unlock access for anyone who posts a receipt" 뒤 재처리. 교훈으로 "build a fallback receipt validation path for when Apple returns 500 errors" ([사후 분석](https://www.revenuecat.com/blog/engineering/post-mortem-2020-01-24-app-store-outage))
+  - 서명은 그 시점의 사실만 보증. 환불·만료 같은 현재 상태는 모름 (추론)
+- 공통: 끝내지 않은 거래는 앱 시작 때 다시 옴. "the updates listener receives them once, immediately after the app launches." ([애플 Transaction.updates](https://developer.apple.com/documentation/storekit/transaction/updates.md))
+- 우리 선택지: 애플 구독도 보류로 시작(단순). 스토어 장애로 문의가 생기면 서명 확인 임시 지급을 추가
+
+**T2. 시간 제한 값**
+
+- 원칙: "Ideally, a transaction should only contain database statements." ([GitLab 트랜잭션 지침](https://docs.gitlab.com/ee/development/database/transaction_guidelines.html))
+- 숫자는 8-3
+
+**T3. 만료 직후의 틈**
+
+- 재조회: "Call the purchases.subscriptionsv2.get() method at the RTDN time instead of the expiry time to get a more accurate status of the subscription." ([구글 구독 수명 주기](https://developer.android.com/google/play/billing/lifecycle/subscriptions))
+- 구글은 유예 0일이어도 "Play will wait a minimum of 1 day to ensure sufficient time for payment retries" (같은 문서)
+- 애플 직원: "you could allow a short offline allowance based on the last verified expiration date" ([포럼 840705](https://developer.apple.com/forums/thread/840705))
+- RevenueCat의 기본은 버퍼 없음: "At the planned renewal time, entitlements go empty." 갱신은 "can land minutes or hours after the previous expiryTime", 지연은 "often under ~24 hours". 선택 사항으로 만료가 "less than six hours ago"이면 "treat the customer as renewal pending rather than fully churned" ([RevenueCat 구글 갱신 지연](https://www.revenuecat.com/docs/customers/google-play-renewal-extensions.md))
+- 스토어에 유예를 켜 둔 것만으로는 이 틈이 메워지지 않음: "A configured store grace period doesn't keep entitlements active the moment a billing period ends." ([RevenueCat 유예](https://www.revenuecat.com/docs/subscription-guidance/how-grace-periods-work.md))
+
+**T4. 알림 응답 시점**
+
+- 애플 엔지니어: "It should only be a few seconds at most, or at best under a second. We recommend all of the logic around processing the notification be done asynchronously from receiving the notification" ([포럼 779594](https://developer.apple.com/forums/thread/779594))
+- 애플 엔지니어: "we recommend to respond with 200 even if you believe it is a duplicate" ([포럼 756151](https://developer.apple.com/forums/thread/756151))
+- Stripe: "Quickly returns a successful status code (2xx) before any complex logic that might cause a timeout." ([Stripe 웹훅](https://docs.stripe.com/webhooks))
+- Adyen: "Store the event in a queue or database. Acknowledge the webhook with a response status code 202. Subsequently, process the event asynchronously." ([Adyen](https://www.adyen.com/knowledge-hub/webhooks-accept-2xx))
+- GitHub는 10초, Shopify는 전체 5초, RevenueCat 웹훅은 "respond quickly and defer processing"
+- 처리 뒤에 응답하라는 공식 문서는 못 찾음
+- DB에 먼저 저장해야 하는 이유: 애플 재시도는 1시간 뒤부터. "If your server is down long enough to miss the final retry attempt from the App Store server, that notification is lost." ([WWDC22 10007](https://developer.apple.com/videos/play/wwdc2022/10007/))
+- 구글만 예외: Pub/Sub이 메시지를 7일 보관하고 바로 재시도하므로 "처리 뒤 응답"도 가능. 평균 응답이 1초를 넘으면 전달이 느려짐 ([Pub/Sub 푸시](https://docs.cloud.google.com/pubsub/docs/push))
+
+**T5. 대조 작업**
+
+- 애플: "You can additionally schedule a job to call our subscription status API to check the status of your subscription at its renewal time as a fail-over mechanism." ([WWDC21 10174](https://developer.apple.com/videos/play/wwdc2021/10174/))
+- 애플: "If your server misses notifications due to an outage, you can always get up-to-date transaction information by calling App Store Server API endpoints" ([알림 응답 문서](https://developer.apple.com/documentation/appstoreservernotifications/responding-to-app-store-server-notifications.md))
+- Shopify: "Your app shouldn't rely on receiving data from Shopify webhooks." ([Shopify 웹훅 모범 사례](https://shopify.dev/docs/apps/build/webhooks/best-practices))
+- 구글은 반대로 잦은 조회를 경고: 알림을 쓰면 폴링이 필요 없고 비효율적 사용은 한도 제한으로 이어짐 ([구글 준비 문서](https://developer.android.com/google/play/billing/getting-ready))
+- 주기를 정하는 창: 애플 재시도 누적 약 157시간, 애플 알림 이력 180일, 구글 토큰 만료 후 60일, 구글 무효 구매 30일
+- 정정: 3-5장의 "규모가 작을 때는 전부 재조회가 단순"은 근거 없음. 만료가 가까운 구독만 보는 것이 애플의 권고
+
+**T6. 구글 확인**
+
+- 서버가: "server side APIs provide additional protection against issues like poor network connectivity and malicious activity." ([구글 보안](https://developer.android.com/google/play/billing/security))
+- 지급 직후: "You should acknowledge the purchase immediately after granting entitlement." (같은 문서). "DB 커밋 뒤"라고 쓴 문장은 없음. 지급 기록이 먼저라는 뜻으로 읽은 것
+- 영구 상품은 소비하지 않음: "Google removed the ability to query consumed one-time purchases" ([RevenueCat 알려진 문제](https://www.revenuecat.com/docs/known-store-issues/play-billing-library/restore-consumable-purchases-bc8.md)). RevenueCat은 비소모성으로 표시한 상품을 "will never consume"
+- **ADR-0002 D1과 충돌**: D1은 추가 선반을 소모성으로 정함(같은 상품을 여러 번 사기 위해). 소비하면 스토어 복원이 안 되고 서버 기록만 남음. 비로그인 구매(D9)에서 앱을 지우면 되찾을 길이 없는 약점이 여기서 나옴
+  - 대안: 선반을 비소모성 상품 여러 개로 등록(첫째 칸, 둘째 칸, 셋째 칸). 스토어가 복원해 줌. 상품이 늘고 "몇 번째를 살 차례인지" 로직이 필요
+  - "최대 3칸"이 계정 전체면 이 대안이 가능. 연도 책장마다면 개수가 정해지지 않아 소모성밖에 안 됨
+  - #6에서 선반 범위와 함께 다시 정함
+
+**T7. 유예·보류 설정**
+
+- 애플: 3, 16, 28일. 앱 단위 설정. "모든 갱신"은 무료 도입 기간에도 적용 ([애플 유예 설정](https://developer.apple.com/help/app-store-connect/manage-subscriptions/enable-billing-grace-period-for-auto-renewable-subscriptions))
+- Adapty: "Enable grace period with an appropriate duration (16 or 28 days for most apps)", "Most apps benefit from All Renewals." ([Adapty](https://adapty.io/blog/how-to-handle-apple-billing-grace-period/)). 근거 수치(15~20% 더 회수)는 출처 표시 없음
+- RevenueCat: "For most apps, enabling both grace period (7 or 14 days) and account hold (30 days) is the right choice." ([RevenueCat 구글 가이드](https://www.revenuecat.com/guides/google-play-billing/payment-recovery-grace-period-and-account-hold))
+- 구글 수치로 소개된 것: 보류를 더하면 결제 실패 회수 35% 증가, 비자발적 이탈 8% 감소 ([RevenueCat](https://www.revenuecat.com/blog/growth/google-play-billing-error-churn-how-to-fix))
+- 구글은 유예·보류·일시중지가 모두 기본으로 켜져 있음. 일시중지를 끄라고 권하는 글은 못 찾음
+- 유예를 켜지 말라는 글은 못 찾음
+
+**T8. 월↔연 변경**
+
+- 애플은 사용자가 설정 앱에서 바꿀 수 있고 `DID_CHANGE_RENEWAL_PREF`가 옴. 서버가 처리해야 함 ([애플 알림 유형](https://developer.apple.com/documentation/appstoreservernotifications/notificationtype.md))
+- 심사 지침 3.1.2(b): "Users should have a seamless upgrade/downgrade experience and should not be able to inadvertently subscribe to multiple variations of the same thing." 앱 안에 변경 화면이 있어야 한다는 문장은 없음
+- 구글: "Your app should include a link on a settings or preferences screen that allows users to manage their subscriptions" ([구글 구독](https://developer.android.com/google/play/billing/subscriptions))
+- 구글에서 토큰 잇기를 무시하면 "would then appear to have two active subscriptions when they should have one." ([RevenueCat](https://www.revenuecat.com/guides/google-play-billing/subscription-upgrades-downgrades-and-plan-changes))
+- 미확인: Play 스토어의 구독 관리 화면에서 사용자가 월→연을 직접 바꿀 수 있는지
+- 이중 가입: 애플은 같은 구독 그룹이면 하나만 활성이라 구조적으로 막힘. 구글은 서버가 막아야 함
+
+**T9. 환불 대응**
+
+- 회수: 애플은 `REFUND`, 되돌려지면 `REFUND_REVERSED`. 구글은 "When a purchase is voided, you can claw back unused items as if they were never purchased." ([구글 보안](https://developer.android.com/google/play/billing/security))
+- 사용 정보 전송의 규칙: "If the customer provided consent, respond by calling this API ... If not, don't respond to the CONSUMPTION_REQUEST notification." 12시간 안. 동의는 선택 해제 방식이 아니라 명시 동의 ([애플](https://developer.apple.com/documentation/appstoreserverapi/send-consumption-information.md))
+- 환불 선호는 참고 사항: "Your refund preference is one of a variety of factors that the App Store uses to inform its refund decisions." ([애플](https://developer.apple.com/documentation/appstoreserverapi/refundpreference.md))
+- 대행사 기본값이 다름
+
+| | RevenueCat | Adapty |
+|---|---|---|
+| 기본 동작 | 응답 안 함 | 첫 요청은 거절 선호, 이후는 승인 |
+| 내세우는 효과 | 환불률 3% → 1.9% (자사 앱 하나, 15일) | 4% → 2.3% (자체 수치) |
+
+- 응답이 의무라는 문장은 없음. 응답하라는 근거는 모두 대행사 자료
+- 반복 환불: 구글이 단계적 조치를 예시. "Consider taking less drastic actions for first-time offenders, such as displaying in-app warnings." 횟수 기준은 없음
+- 한국 전자상거래법과 스토어 환불의 관계를 다룬 글은 못 찾음 (전문가 확인)
+
+**T10. 계정 연결 값이 없거나 다른 구매**
+
+- 다르면 거절: "If you configured the billing flow with obfuscatedAccountId or obfuscatedProfileId, check that the purchase mapping matches the expected user account in your system." ([구글 보안](https://developer.android.com/google/play/billing/security)). 애플 쪽에는 같은 요구가 없음
+- 비는 경우는 정상 구매일 수 있음: "customers can also purchase in-app products outside of your app, for example, by redeeming an offer code in the App Store. In that case, the original transaction doesn't include an app account token." ([애플](https://developer.apple.com/documentation/appstoreserverapi/set-app-account-token.md))
+- 애플 엔지니어: "There's no reliable way to distinguish between transaction made inside the app vs outside of the app" ([포럼 757600](https://developer.apple.com/forums/thread/757600))
+- 업계 기본: 거래를 제출한 사용자에게 연결 (RevenueCat의 Transfer)
+- 정정: 5-1장에서 "거절하고 복원에서만 연결"을 안전한 쪽으로 권했지만 이것은 업계 기본이 아닌 보수적 선택. 값이 없는 구매가 얼마나 흔한지 수치는 없음
+
+**T11. 애플에 새 값 써넣기**
+
+- 용도: "set or reset the appAccountToken associated with the transaction you specify in the originalTransactionId parameter." ([애플](https://developer.apple.com/documentation/appstoreserverapi/set-app-account-token.md)). 계정 소유가 바뀔 때의 불일치를 고치는 데 쓸 수 있음 ([WWDC25 249](https://nonstrict.eu/wwdcindex/wwdc2025/249/))
+- 써야 한다는 문서는 없음
+- 조건: 안 쓰면 알림의 값이 옛 계정을 가리킴. 알림을 처리할 때 값이 아니라 원 거래 ID로 현재 주인을 찾아야 함. V21의 `iap_subscriptions`가 원 거래 ID마다 현재 유저를 가짐
+- 복원 때 구독을 옮기는 것(ADR-0002 D8)은 RevenueCat 기본과 같음: "The default behavior is to transfer purchases between identified App User IDs if needed." ([RevenueCat 복원 동작](https://www.revenuecat.com/docs/projects/restore-behavior))
+
+**T12. 익명 구매 뒤 로그인**
+
+- RevenueCat: 로그인하면 익명 ID를 계정 ID에 묶어 합침. 로그아웃하면 새 익명 ID ([RevenueCat 고객 식별](https://www.revenuecat.com/docs/customers/identifying-customers))
+- Adapty: 옮기기 방식은 "limits purchase access to 1 customer ID at a time"이고 "works best for applications that allow purchases with or without authentication." ([Adapty](https://adapty.io/docs/sharing-paid-access-between-user-accounts))
+- 심사 지침 5.1.1(v): "If your app doesn't include significant account-based features, let people use it without a login."
+- 반대 쪽: 구매 전 로그인을 강제하면 단순해짐. RevenueCat의 "원래 주인 유지" 방식은 "only allowed for apps that require every customer to create an account before purchasing"
+- 소모성 상품 전용 규칙은 못 찾음
+
+**T13. 샌드박스 거래**
+
+- 받을 수 있어야 함: 심사팀 회신으로 인용된 문장 "your server needs to be able to handle a production-signed app getting its receipts from Apple's test environment." ([포럼 93773](https://developer.apple.com/forums/thread/93773)). 공식 문서가 아니라 개발자가 옮긴 것
+- RevenueCat 기본값: "Anybody (default)"는 "All non-production purchases ... will grant access to entitlements". 다른 옵션은 허용 목록, 전부 끔. 기본값은 "recommended for early development or internal QA testing." ([RevenueCat 샌드박스 접근](https://www.revenuecat.com/docs/projects/sandbox-access.md))
+- 网易云音乐: "会导致一批没有真实支付的账号兑现线上权益". 대응은 "需要对这部分票据验证完成的权益发放进行限制，行为可追溯", "非审核期间关闭正式环境的沙盒校验" ([云音乐](https://juejin.cn/post/7233948883045941303))
+- 구글은 `testPurchase` 칸으로 구분. 서버가 어떻게 하라는 문장은 없음
+
+**T14. 날짜 표시**
+
+- 애플·구글·대행사 문서에 표시 시간대를 정한 문장 없음
+- 애플 설정 앱과 하루 어긋난다는 질문에 답이 없음 ([포럼 800332](https://developer.apple.com/forums/thread/800332))
+
+**T15. 금액과 장부**
+
+- 애플: "Important: For financial and accounting purposes, use the App Store Connect reporting tools." ([애플 price](https://developer.apple.com/documentation/appstoreserverapi/price.md))
+- RevenueCat: "Rely on Apple's financial reports for accurate payout data, financial reporting, and all accounting use cases." ([RevenueCat 보고서 대조](https://www.revenuecat.com/docs/dashboard-and-metrics/reconciling-with-financial-reports))
+- 구글 쪽의 같은 취지 문장은 공식 문서에서 못 찾음. 주문 조회의 `total`은 "The final amount paid by the customer, taking into account discounts and taxes"
+- 환불 기록: Stripe는 환불을 별도 항목으로 남김 ([Stripe 잔액 거래 유형](https://docs.stripe.com/reports/balance-transaction-types)). "it's more accurate to store immutable transactions and always compute balances from those transactions." ([Modern Treasury](https://www.moderntreasury.com/journal/accounting-for-developers-part-i))
+- 소규모 서비스에 반대 줄이 꼭 필요하다는 근거도, 과하다는 근거도 못 찾음
+
+**T16. 관측과 알람**
+
+- RevenueCat 사후 분석: "We should have been notified as soon as our receipt endpoint had elevated 500s." "The data was there in our monitoring, but it wasn't set up to notify anyone." ([사후 분석](https://www.revenuecat.com/blog/engineering/post-mortem-2020-01-24-app-store-outage))
+- 일치하는 임계값은 없음. 공식 문서와 사고 사례가 함께 가리키는 최소 항목은 검증 오류 급증과 알림 미수신
+
+### 8-3. 시간 제한 참고값
+
+| 항목 | 값 | 누가 쓰는가 |
+|---|---|---|
+| 스토어 API 요청 제한 시간 | 30초 | 애플 공식 서버 라이브러리(Python, Java, Swift) 기본값. `go-iap`도 30초 |
+| 앱 쪽 제한 시간 | 2초, 5초, 15초, 30초 (경우에 따라) | RevenueCat iOS SDK |
+| 앱 쪽 재시도 간격 | 0, 0.75, 3초 | RevenueCat iOS SDK |
+| DB 쿼리 / 락 대기 / 유휴 트랜잭션 | 10초 / 5초 / 1분 | 블로그 예시 (OneUptime) |
+| 위 세 값 | 전부 15초 | GitLab.com |
+| 연결 풀 기본 크기 | 4와 CPU 수 중 큰 값 | `pgx` |
+| 연결 풀 크기 공식 | 코어 수 × 2 + 디스크 수, 이후 조정 | PostgreSQL 위키 |
+| 재시도 | 최대 2회, 간격을 늘리며, 멱등 키와 함께 | Stripe 예시 |
+| 알림 응답 | 몇 초 이내 (애플), 10초 (구글 기본, GitHub, Adyen), 5초 (Shopify) | |
+
+- 앱이 서버 응답을 기다리는 시간의 공식 권장값은 없음
+
+### 8-4. 누가 무엇을 정하나
+
+- 그대로 구현: T4, T5(있어야 함), T6(서버가 지급 직후), T10(다른 값 거절), T15(매출은 정산 보고서), T3(재조회, 유예 중 유지)
+- 정환과 정할 것
+  - T6에서 나온 것: 추가 선반을 소모성으로 둘지 비소모성 여러 개로 바꿀지. 선반 범위(#6)와 함께
+  - T12: 익명 구매를 로그인 계정으로 옮길지. 업계 기본은 옮김
+  - T13: 샌드박스 범위
+  - T9: 환불 요청에 응답할지, 반복 환불 조치
+  - T8: 월↔연 변경 화면
+  - T7: 유예 일수. 권고값에서 시작
+- 범수가 정하고 기록할 것: T1(애플 구독), T2 숫자, T3 버퍼, T5 주기, T10(빈 값), T11, T14, T15(반대 줄), T16
 - 난이도 기준: 상은 틀리면 돈·권한 사고로 이어지고 되돌리기 어려움. 중은 고칠 수 있지만 재작업이 큼. 하는 설정값이라 나중에 바꿀 수 있음
 
 ## 9. 실측으로만 알 수 있는 것 (unknown)

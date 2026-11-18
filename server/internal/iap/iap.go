@@ -62,6 +62,8 @@ type Purchase struct {
 	PurchasedAt           time.Time
 	ExpiresAt             time.Time // 구독만. 없으면 zero
 	RevokedAt             time.Time // 환불·취소된 시각. 애플만 준다
+	GraceUntil            time.Time // 결제 실패 유예가 끝나는 시각. 유예 중이 아니면 zero. Subscription으로 물었을 때만 채워진다
+	AutoRenew             bool      // 자동 갱신이 켜져 있는가. false면 해지 예약. Subscription으로 물었을 때만 믿는다
 	Currency              string    // ISO 4217. 구글 구매 조회에는 없어서 비어 있다
 	PriceMilli            int64     // 금액 x 1000 (ADR-0002 D20). 구글은 0
 	Country               string    // 판매 국가. 스토어가 준 코드 그대로
@@ -76,4 +78,27 @@ type Store interface {
 	Route() Route
 	// Lookup은 스토어에 다시 물어본다. 없으면 ErrNotFound를 감싼 오류를 돌려준다.
 	Lookup(ctx context.Context, ref Ref) (Purchase, error)
+	// Subscription은 구독 한 줄기의 지금 상태를 묻는다. 알림을 받았을 때와 정기 대조에서 쓴다.
+	// originalID는 Purchase.OriginalTransactionID다(애플: 원 거래 ID, 구글: 구매 토큰).
+	// 돌려주는 Purchase는 그 줄기의 가장 최근 거래이고 State, ExpiresAt, GraceUntil, AutoRenew가 지금 상태다.
+	Subscription(ctx context.Context, originalID string) (Purchase, error)
+	// Confirm은 지급을 마쳤다고 스토어에 알린다. 구글은 3일 안에 하지 않으면 자동 환불된다. DB 커밋 뒤에 부른다.
+	// consume이 true면 한 번 사는 상품을 소비 처리한다(같은 상품을 다시 살 수 있게 된다). 구독에는 쓰지 않는다.
+	// 애플은 앱이 거래를 끝내므로 아무 일도 하지 않는다.
+	Confirm(ctx context.Context, ref Ref, productID string, consume bool) error
+}
+
+// Notice는 스토어가 보낸 알림에서 꺼낸 것이다. 알림 내용으로 상태를 판단하지 않는다.
+// "이 거래를 다시 물어보라"는 신호로만 쓰고, 상태는 Lookup·Subscription의 답으로 정한다.
+type Notice struct {
+	Route      Route
+	ID         string    // 알림 ID. 같은 알림이 다시 와도 같다(애플 notificationUUID, 구글 Pub/Sub messageId)
+	Type       string    // 스토어가 준 종류 그대로. 기록용
+	Env        Env       // 구글 알림에는 없어서 빈 값
+	SentAt     time.Time // 스토어가 알림을 만든 시각
+	Test       bool      // 연결 확인용 알림. 처리할 것이 없다
+	Target     *Ref      // 다시 물어볼 거래. 없으면 nil
+	OriginalID string    // 구독 줄기. Subscription에 넘길 값. 구독 알림이 아니면 빈 값
+	OrderID    string    // 구글 환불 알림의 주문 ID
+	Voided     bool      // 구글의 환불·취소 알림
 }

@@ -308,24 +308,28 @@ Future<void> showSavedSheet(BuildContext context, {required String? bookId, requ
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      // 표지 52 → 72(2026-11-18 사용자 '썸네일 좀 더 크게'), 글 묶음은 표지 높이 가운데
-                      Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                        if (sb != null && se != null) ...[
-                          ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 72)),
-                          const SizedBox(width: Space.m + 2),
-                        ],
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                            if (sb != null && se != null) ...[
-                              Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
-                              if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
-                            ] else
-                              Text('책 없이 읽은 시간', style: AppType.sub),
-                            const SizedBox(height: Space.s),
-                            WordText(done, style: AppType.rowStrong),
-                          ]),
-                        ),
-                      ]),
+                      // 표지 52 → 72(2026-11-18 사용자 '썸네일 좀 더 크게'). 제목 · 저자는 표지 위 끝, 'N분 기록했어요'는 표지 아래 끝에 맞춘다
+                      // (2026-11-19 사용자 '11초 위치가 좀 애매': 가운데 묶음 끝에 떠 있었다)
+                      IntrinsicHeight(
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          if (sb != null && se != null) ...[
+                            Align(alignment: Alignment.topCenter, child: ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 72))),
+                            const SizedBox(width: Space.m + 2),
+                          ],
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              if (sb != null && se != null) ...[
+                                Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
+                                if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                              ] else
+                                Text('책 없이 읽은 시간', style: AppType.sub),
+                              const Spacer(),
+                              const SizedBox(height: Space.s),
+                              WordText(done, style: AppType.rowStrong),
+                            ]),
+                          ),
+                        ]),
+                      ),
                       const SizedBox(height: Space.l),
                       Btn(label: '확인', onPress: () => Navigator.pop(ctx)),
                     ]),

@@ -147,8 +147,8 @@ const _sheetMax = 560.0;
 
 /// 선 아이콘(지금 앱 lucide 아이콘, 굵기 1.6)
 class LucideIcon extends StatelessWidget {
-  // 선 굵기 1.8: Lucide는 24칸에 2로 그린다. 작은 크기에서 너무 굵지 않게 조금 덜(2026-11-17 Tabler 때 정한 굵기 그대로, 2026-11-18 Lucide로)
-  const LucideIcon(this.name, {super.key, this.size = 22, this.color = AppColors.ink, this.stroke = 1.8, this.fill});
+  // 선 굵기 1.6: 처음 앱(지금 앱 아이콘)과 같은 굵기(2026-11-19 사용자 '처음 썼던 걸로'. Tabler·lucide-static 때는 1.8)
+  const LucideIcon(this.name, {super.key, this.size = 22, this.color = AppColors.ink, this.stroke = 1.6, this.fill});
   final String name;
   final double size;
   final Color color;
@@ -233,6 +233,7 @@ class Screen extends StatelessWidget {
     this.headerField,
     this.topBar,
     this.pinned,
+    this.fixedHead = false,
   });
   final List<Widget> children;
   final String? title;
@@ -252,8 +253,13 @@ class Screen extends StatelessWidget {
   /// 검색이 주인공인 화면: 제목 대신 뒤로 옆에 검색창
   final Widget? headerField;
 
-  /// 위 줄 바로 아래에 붙어 스크롤해도 움직이지 않는 칸(책 정보의 '책 정보 · 평가 · 내 기록' 전환, 2026-11-18 사용자 '천장 고정')
+  /// 위 줄 아래 칸. 스크롤하면 위 줄은 올라가 사라지고 이 칸만 화면 맨 위에 붙어 남는다
+  /// (책 정보의 '책 정보 · 평가 · 내 기록' 전환, 2026-11-18 사용자 '천장 고정' → 11-19 위 줄 고정 없앰)
   final Widget? pinned;
+
+  /// 위 줄을 화면에 고정(스크롤해도 그대로). 카메라처럼 몸통이 스크롤하지 않는 화면만.
+  /// 다른 화면은 위 줄도 내용·목록과 함께 올라간다(2026-11-19 사용자 '이런 고정들 다 없애버려')
+  final bool fixedHead;
 
   /// 뒤로 없이도 가운데 제목 줄을 둘지(독서 끝처럼 밀어 넣었지만 뒤로를 막은 화면). 기본은 뒤로가 있을 때만
   final bool? topBar;
@@ -271,22 +277,28 @@ class Screen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, TabHeader.paddingH, TabHeader.paddingBottom),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: TabHeader.minHeight - TabHeader.paddingTop - TabHeader.paddingBottom),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
+            // 탭 첫 화면의 검색 중(headerField): 제목 자리에 검색칸, 오른쪽에 right(예: 취소)(2026-11-18 내 책 사용자 그림)
+            child: headerField != null
+                ? Row(children: [
+                    Expanded(child: headerField!),
+                    if (right != null) Padding(padding: const EdgeInsets.only(left: Space.m), child: right!),
+                  ])
+                : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Semantics(header: true, child: WordText(title ?? '', style: AppType.title)),
-                      if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(subtitle!, style: AppType.sub)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Semantics(header: true, child: WordText(title ?? '', style: AppType.title)),
+                            if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(subtitle!, style: AppType.sub)),
+                          ],
+                        ),
+                      ),
+                      // 지금 앱 marginRight −10·marginTop −6: 자리째 위로 당긴다(머리줄 높이도 6 줄어든다)
+                      if (right != null) Transform.translate(offset: const Offset(10, 0), child: PullUp(dy: 6, child: right!)),
                     ],
                   ),
-                ),
-                // 지금 앱 marginRight −10·marginTop −6: 자리째 위로 당긴다(머리줄 높이도 6 줄어든다)
-                if (right != null) Transform.translate(offset: const Offset(10, 0), child: PullUp(dy: 6, child: right!)),
-              ],
-            ),
           ),
         );
     final content = Center(
@@ -315,18 +327,96 @@ class Screen extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _padded([?subLine, ...children])),
       ),
     );
+    // 위 줄(뒤로·가운데 제목·오른쪽 단추)
+    final barW = SizedBox(
+      height: 60,
+      child: Stack(
+        children: [
+          if (title != null && headerField == null)
+            Positioned(
+              left: 64,
+              right: 64,
+              top: 4,
+              bottom: 0,
+              child: Center(child: Text(title!, style: AppType.navTitle, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ),
+          Positioned.fill(
+            top: 4,
+            child: Row(children: [
+              if (left != null)
+                Padding(padding: const EdgeInsets.only(left: Space.page), child: left)
+              else if (back)
+                // 누르는 자리 48(꺾쇠 자리는 그대로: 왼쪽 여백을 2 줄인다, 2026-11-16 QA 영숙 F12)
+                Padding(
+                  padding: EdgeInsets.only(left: 8 - (Space.hit - Space.touch) / 2),
+                  child: Semantics(
+                    container: true,
+                    button: true,
+                    label: '뒤로',
+                    onTap: () => Navigator.maybePop(context),
+                    excludeSemantics: true,
+                    child: Pressable(
+                      onPress: () => Navigator.maybePop(context),
+                      child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: 28))),
+                    ),
+                  ),
+                ),
+              if (headerField != null) Expanded(child: Padding(padding: const EdgeInsets.only(left: 2, right: Space.s), child: headerField)) else const Spacer(),
+              if (right != null) Padding(padding: const EdgeInsets.only(right: 10), child: right) else if (headerField != null) const SizedBox(width: Space.page),
+            ]),
+          ),
+        ],
+      ),
+    );
+    // 붙어 남는 칸은 바탕을 칠해 아래로 지나가는 내용을 가린다
+    final pinnedSliver = pinned == null
+        ? null
+        : PinnedHeaderSliver(child: ColoredBox(color: AppColors.bg, child: Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!))));
+    // 스크롤하는 화면은 위 줄·아래 단추도 내용과 함께 움직인다(2026-11-19 사용자 '상단이랑 하단이 고정, 이런 고정들 다 없애버려':
+    // 감상 쓰기처럼 키보드가 올라오면 고정된 위아래가 쓸 자리를 먹었다). 아래 단추는 내용 끝에 붙는다
+    final scrolled = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        content,
+        if (footer != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.page, Space.xl, Space.page, 0),
+            child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer))),
+          ),
+      ],
+    );
+    // 목록 화면(몸통이 스스로 스크롤): 위 줄은 목록과 함께 올라간다(NestedScrollView가 목록 스크롤을 이어 받는다)
+    final head = bar ? barW : tabHead();
     // 독서 중이면 작은 타이머에 마지막 내용이 가리지 않게 아래를 더 비운다
     final body = scroll
         ? ListenableBuilder(
             listenable: ReadingStore.instance,
-            builder: (context, _) => SingleChildScrollView(
-              padding: EdgeInsets.only(
-                  bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + (footer != null ? 0 : insets.bottom)),
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              child: content,
-            ),
+            builder: (context, _) {
+              final pad = EdgeInsets.only(bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + insets.bottom);
+              if (pinnedSliver == null) {
+                return SingleChildScrollView(
+                  padding: pad,
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [if (bar) barW, scrolled]),
+                );
+              }
+              return CustomScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                slivers: [
+                  if (bar) SliverToBoxAdapter(child: barW),
+                  pinnedSliver,
+                  SliverPadding(padding: pad, sliver: SliverToBoxAdapter(child: scrolled)),
+                ],
+              );
+            },
           )
-        : fixed;
+        : fixedHead
+            ? fixed
+            : NestedScrollView(
+                headerSliverBuilder: (_, _) => [SliverToBoxAdapter(child: head), ?pinnedSliver],
+                body: fixed,
+              );
     // Material: 글자 기본 모양·잉크 효과의 바탕(밀어 넣은 화면에서도 글자 밑에 노란 줄이 생기지 않게).
     // 아래를 키보드 높이만큼 비운다: 밀어 넣은 화면은 Scaffold 밖이라 키보드가 열려도 줄지 않아, 입력칸·아래 고정 버튼이 키보드에 가렸다
     // (2026-11-16 QA 영숙 F1·F13, 현우 F11, 은서 F7. 지금 앱 KeyboardAvoidingView). 탭 화면도 같다: 탭 틀(app_shell)은 몸통을 줄이지 않고
@@ -337,53 +427,10 @@ class Screen extends StatelessWidget {
         padding: EdgeInsets.only(top: insets.top, bottom: keyboard),
         child: Column(
           children: [
-            if (bar)
-              SizedBox(
-                height: 60,
-                child: Stack(
-                  children: [
-                    if (title != null && headerField == null)
-                      Positioned(
-                        left: 64,
-                        right: 64,
-                        top: 4,
-                        bottom: 0,
-                        child: Center(child: Text(title!, style: AppType.navTitle, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ),
-                    Positioned.fill(
-                      top: 4,
-                      child: Row(children: [
-                        if (left != null)
-                          Padding(padding: const EdgeInsets.only(left: Space.page), child: left)
-                        else if (back)
-                          // 누르는 자리 48(꺾쇠 자리는 그대로: 왼쪽 여백을 2 줄인다, 2026-11-16 QA 영숙 F12)
-                          Padding(
-                            padding: EdgeInsets.only(left: 8 - (Space.hit - Space.touch) / 2),
-                            child: Semantics(
-                              container: true,
-                              button: true,
-                              label: '뒤로',
-                              onTap: () => Navigator.maybePop(context),
-                              excludeSemantics: true,
-                              child: Pressable(
-                                onPress: () => Navigator.maybePop(context),
-                                child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: 28))),
-                              ),
-                            ),
-                          ),
-                        if (headerField != null) Expanded(child: Padding(padding: const EdgeInsets.only(left: 2, right: Space.s), child: headerField)) else const Spacer(),
-                        if (right != null) Padding(padding: const EdgeInsets.only(right: 10), child: right) else if (headerField != null) const SizedBox(width: Space.page),
-                      ]),
-                    ),
-                  ],
-                ),
-              )
-            else if (!scroll)
-              tabHead(),
-            if (pinned != null)
-              Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!)),
+            if (!scroll && fixedHead) head,
+            if (!scroll && fixedHead && pinned != null) Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!)),
             Expanded(child: body),
-            if (footer != null)
+            if (footer != null && !scroll)
               // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
               FooterReport(
                 child: Container(
@@ -1379,8 +1426,9 @@ class _SearchFieldState extends State<SearchField> {
   }
 
   @override
+  // 높이 44(2026-11-18 사용자 '검색창 두께 좀 줄이고', 예전 52)
   Widget build(BuildContext context) => Container(
-        constraints: const BoxConstraints(minHeight: 52),
+        constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.only(right: 2),
         decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
         child: Row(children: [
@@ -1411,7 +1459,7 @@ class _SearchFieldState extends State<SearchField> {
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   hintText: widget.placeholder,
                   hintStyle: AppType.input.copyWith(color: AppColors.inkFaint),
                 ),

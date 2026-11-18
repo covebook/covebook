@@ -23,6 +23,7 @@ CREATE TABLE iap_products (
     kind        TEXT NOT NULL CHECK (kind IN ('subscription', 'product')),
     entitlement TEXT,              -- 구독이 주는 권한('plus')
     shelves     INT,               -- 한 번 사는 상품이 주는 선반 칸 수
+    consume     BOOLEAN NOT NULL DEFAULT true,  -- 구글에서 소비 처리할지. true면 같은 상품을 다시 살 수 있고 스토어 복원은 안 된다(D1). 구독에는 뜻이 없다
     active      BOOLEAN NOT NULL DEFAULT true,  -- 새로 팔지 않게 된 상품은 false. 이미 산 것은 그대로 인정한다
     PRIMARY KEY (route, product_id),
     CHECK ((kind = 'subscription' AND entitlement IS NOT NULL AND shelves IS NULL)
@@ -44,6 +45,7 @@ CREATE TABLE iap_purchases (
     state          TEXT   NOT NULL CHECK (state IN ('paid', 'revoked')),
     purchased_at   TIMESTAMPTZ NOT NULL,
     revoked_at     TIMESTAMPTZ,
+    confirmed_at   TIMESTAMPTZ,       -- 스토어에 확인(acknowledge·consume)을 마친 시각. 구글은 3일 안에 해야 한다. 확인이 필요 없으면 넣은 때 채운다
     currency       TEXT CHECK (currency ~ '^[A-Z]{3}$'),
     price_milli    BIGINT,
     country        TEXT,              -- 스토어가 준 코드 그대로(애플 storefront, 구글 regionCode)
@@ -53,6 +55,8 @@ CREATE TABLE iap_purchases (
 );
 CREATE INDEX iap_purchases_user_idx ON iap_purchases (user_id, kind);
 CREATE INDEX iap_purchases_original_idx ON iap_purchases (route, original_id);
+-- 확인을 못 마친 거래를 다시 시도할 때 찾는다
+CREATE INDEX iap_purchases_unconfirmed_idx ON iap_purchases (created_at) WHERE confirmed_at IS NULL AND state = 'paid';
 
 -- 구독 한 줄기의 지금 상태. 갱신될 때마다 거래 줄은 늘고 이 줄은 고쳐진다.
 -- user_id는 "구매 복원"을 누른 계정으로 바뀔 수 있다. 한 번에 한 계정만 가진다(D8).

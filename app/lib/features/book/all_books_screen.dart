@@ -26,6 +26,7 @@ import '../../store/reading_store.dart';
 import '../../ui/book_visual.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
+import '../../ui/tab_icons.dart' show shelfIcon;
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
 import '../bookmark/bookmark_detail_screen.dart' show openBookmark;
@@ -226,23 +227,12 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                       _say(null);
                       _startManage();
                     }),
-                  // 격자·목록 두 아이콘을 늘 같은 색으로 보인다(2026-11-17 사용자 시안). 지금 보기는 화면 읽기에서 '선택됨'.
-                  // 색은 옅은 회색(본문색이면 시안보다 진했다, 2026-11-18 사용자)
-                  Semantics(
-                    selected: _grid,
-                    child: IconBtn(
-                      label: '표지 격자로 보기',
-                      onPress: () => setState(() => _lastGrid = _grid = true),
-                      child: const LucideIcon('LayoutGrid', color: AppColors.inkSoft),
-                    ),
-                  ),
-                  Semantics(
-                    selected: !_grid,
-                    child: IconBtn(
-                      label: '목록으로 보기',
-                      onPress: () => setState(() => _lastGrid = _grid = false),
-                      child: const LucideIcon('ListIcon', color: AppColors.inkSoft),
-                    ),
+                  // 보기 바꾸기 단추 하나: 지금 격자면 목록 아이콘, 목록이면 격자 아이콘(누르면 그 보기로).
+                  // 지금 보기 아이콘까지 두 개 두면 '이미 격자인데 격자 표시가 왜 있냐'(2026-11-19 사용자). 색은 옅은 회색(2026-11-18)
+                  IconBtn(
+                    label: _grid ? '목록으로 보기' : '표지 격자로 보기',
+                    onPress: () => setState(() => _lastGrid = _grid = !_grid),
+                    child: LucideIcon(_grid ? 'ListIcon' : 'LayoutGrid', color: AppColors.inkSoft),
                   ),
                   FilterIcon(active: conditions.isNotEmpty, onPress: () => _openFilter(years, offCount, hiddenCount)),
                 ]),
@@ -315,7 +305,8 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                     book: r.book,
                     width: cellW,
                     sub: r.book.author ?? '',
-                    tail: [?copyOf[r.book.id], if (r.onShelf) '책장'].join(' | '),
+                    tail: copyOf[r.book.id] ?? '',
+                    shelf: r.onShelf,
                     label: [r.book.title, ?r.book.author, subOf(r)].where((t) => t.isNotEmpty).join(', '),
                     state: !_selecting
                         ? _CellState.normal
@@ -372,7 +363,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     }
 
     final search = SearchField(value: _q, onChange: onQuery, autofocus: widget.tab, placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '내 책에서 찾기');
-    final addBtn = IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const LucideIcon('Plus'));
+    final addBtn = IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const LucideIcon('Plus', color: AppColors.inkSoft));
     // 탭 머리줄(고르는 중이 아닐 때): '내 책' 제목 · 검색 · 추가. 검색을 누르면 머리줄 아래 검색 칸(갈피 탭과 같은 방식)
     final tabHead = widget.tab && !_selecting;
 
@@ -389,22 +380,26 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
         title: tabHead ? '내 책' : (_selecting ? _selectedTitle(pickedBooks.length) : null),
         left: _selecting ? TextLink(label: '취소', soft: true, onPress: _stopSelecting) : null,
         // 밀어 넣은 화면: 제목 대신 뒤로 옆에 검색창(권수는 안내 글자에)
-        headerField: _selecting || widget.tab ? null : search,
+        // 검색 중인 탭 화면: '내 책' 제목 자리에 검색칸, 오른쪽 '취소'(2026-11-18 사용자 그림: 머리줄 아래 따로 뜨지 않게)
+        headerField: _selecting ? null : (widget.tab ? (_searching ? search : null) : search),
         right: _selecting
             ? null
             : tabHead
-                ? Row(mainAxisSize: MainAxisSize.min, children: [
-                    IconBtn(
-                      label: _searching ? '내 책 검색 닫기' : '내 책 검색',
-                      onPress: () => setState(() {
-                        if (_searching) _q = '';
-                        _searching = !_searching;
-                      }),
-                      child: LucideIcon(_searching ? 'X' : 'Search'),
-                    ),
-                    const SizedBox(width: 4),
-                    addBtn,
-                  ])
+                ? _searching
+                    ? TextLink(label: '취소', ink: true, onPress: () => setState(() {
+                        _q = '';
+                        _searching = false;
+                      }))
+                    : Row(mainAxisSize: MainAxisSize.min, children: [
+                        // 머리줄 오른쪽 아이콘은 회색(2026-11-18 사용자)
+                        IconBtn(
+                          label: '내 책 검색',
+                          onPress: () => setState(() => _searching = true),
+                          child: const LucideIcon('Search', color: AppColors.inkSoft),
+                        ),
+                        const SizedBox(width: 4),
+                        addBtn,
+                      ])
                 : addBtn,
         footer: !_selecting
             ? null
@@ -422,8 +417,6 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
               Expanded(child: Btn(size: 'l', label: chosen.isNotEmpty ? '진열 ${chosen.length}권' : '진열', disabled: chosen.isEmpty, onPress: () => _placeNow(chosen))),
             ]),
         children: [
-          if (tabHead && _searching)
-            Padding(padding: const EdgeInsets.only(top: Space.tight, bottom: Space.item), child: search),
           Expanded(child: LayoutBuilder(builder: (_, box) => body(box.maxWidth))),
         ],
       ),
@@ -591,12 +584,15 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
   }
 }
 
+/// 책장에 있는 책 표시(표지 오른쪽 아래 흰 동그라미)
+const _shelfBadge = 30.0;
+
 enum _CellState { normal, free, picked, onShelf }
 
 /// 격자 한 칸: 표지 + 제목·저자 한 줄씩. 고르는 중: 고를 수 있는 책은 표지 오른쪽 위 모서리에 원, 고른 책은 테마색 테두리,
 /// 이미 책장에 있는 책은 흐린 표지 + '책장에 있음'
 class _GridCell extends StatelessWidget {
-  const _GridCell({required this.lib, required this.book, required this.width, required this.sub, this.tail = '', required this.label, required this.state, this.onPress, this.onLongPress});
+  const _GridCell({required this.lib, required this.book, required this.width, required this.sub, this.tail = '', this.shelf = false, required this.label, required this.state, this.onPress, this.onLongPress});
   final Library lib;
   final Book book;
   final double width;
@@ -604,6 +600,9 @@ class _GridCell extends StatelessWidget {
   /// 제목 아래 한 줄: 저자(길면 줄인다) · 뒤 표시(소장본 · 책장, 늘 보인다)
   final String sub;
   final String tail;
+
+  /// 책장에 꽂혀 있음: 표지 오른쪽 아래 책장 배지(2026-11-18 사용자 그림)
+  final bool shelf;
   final String label;
   final _CellState state;
   final VoidCallback? onPress;
@@ -639,6 +638,23 @@ class _GridCell extends StatelessWidget {
                     child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: AppColors.accent, width: 2), borderRadius: BorderRadius.circular(5))),
                   ),
                 if (state == _CellState.free || state == _CellState.picked) Positioned(top: r.edge - 7, right: r.edge - 5, child: _PickMark(on: state == _CellState.picked)),
+                if (shelf && state == _CellState.normal)
+                  Positioned(
+                    left: r.edge + r.w - _shelfBadge * 0.7,
+                    top: r.edge + r.h - _shelfBadge * 0.7,
+                    child: ExcludeSemantics(
+                      child: Container(
+                        width: _shelfBadge,
+                        height: _shelfBadge,
+                        decoration: const BoxDecoration(
+                          color: AppColors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Color(0x1F191F28), offset: Offset(0, 1), blurRadius: 4)],
+                        ),
+                        child: Center(child: shelfIcon(AppColors.ink, size: _shelfBadge * 0.6)),
+                      ),
+                    ),
+                  ),
                 if (onShelf)
                   Positioned(
                     left: 0,

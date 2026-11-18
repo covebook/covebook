@@ -107,6 +107,8 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
     return Screen(
       title: '바코드로 찾기',
       scroll: false,
+      // 카메라 화면은 스크롤하지 않으니 위 줄을 그대로 둔다
+      fixedHead: true,
       footer: Btn(label: n == 0 ? '책 뒷면 바코드를 비춰 주세요' : '$n권 추가', disabled: n == 0, busy: _saving, onPress: _addAll),
       children: [
         Padding(

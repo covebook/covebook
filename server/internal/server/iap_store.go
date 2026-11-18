@@ -48,14 +48,15 @@ type iapProduct struct {
 	Kind        iap.Kind
 	Entitlement string
 	Shelves     int
+	Consume     bool // 구글에서 소비 처리할지
 	Active      bool
 }
 
 // iapFindProduct는 상품을 찾는다. 없으면 pgx.ErrNoRows다.
 func iapFindProduct(ctx context.Context, q dbtx, route iap.Route, productID string) (iapProduct, error) {
 	var p iapProduct
-	err := q.QueryRow(ctx, `SELECT kind, coalesce(entitlement,''), coalesce(shelves,0), active
-		FROM iap_products WHERE route=$1 AND product_id=$2`, string(route), productID).Scan(&p.Kind, &p.Entitlement, &p.Shelves, &p.Active)
+	err := q.QueryRow(ctx, `SELECT kind, coalesce(entitlement,''), coalesce(shelves,0), consume, active
+		FROM iap_products WHERE route=$1 AND product_id=$2`, string(route), productID).Scan(&p.Kind, &p.Entitlement, &p.Shelves, &p.Consume, &p.Active)
 	return p, err
 }
 

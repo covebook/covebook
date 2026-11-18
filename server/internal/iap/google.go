@@ -2,9 +2,12 @@ package iap
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/awa/go-iap/playstore"
@@ -16,6 +19,9 @@ import (
 type googleAPI interface {
 	VerifySubscriptionV2(ctx context.Context, packageName, token string) (*androidpublisher.SubscriptionPurchaseV2, error)
 	VerifyProductV2(ctx context.Context, packageName, token string) (*androidpublisher.ProductPurchaseV2, error)
+	AcknowledgeSubscription(ctx context.Context, packageName, subscriptionID, token string, req *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error
+	AcknowledgeProduct(ctx context.Context, packageName, productID, token, developerPayload string) error
+	ConsumeProduct(ctx context.Context, packageName, productID, token string) error
 }
 
 type Google struct {
@@ -92,6 +98,13 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 	if item.OfferDetails != nil {
 		p.PlanID = item.OfferDetails.BasePlanId
 	}
+	if item.AutoRenewingPlan != nil {
+		p.AutoRenew = item.AutoRenewingPlan.AutoRenewEnabled
+	}
+	// 구글은 유예 중에 만료 시각을 유예가 끝나는 때까지 늘려 준다. 그 값이 곧 유예의 끝이다.
+	if s.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD" {
+		p.GraceUntil = expires
+	}
 	if s.ExternalAccountIdentifiers != nil {
 		p.AccountToken = s.ExternalAccountIdentifiers.ObfuscatedExternalAccountId
 	}
@@ -161,4 +174,87 @@ func rfcTime(s string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return t.UTC(), nil
+}
+
+// Subscription은 구매 토큰으로 구독의 지금 상태를 묻는다. 구글은 Lookup과 같은 조회다.
+func (g *Google) Subscription(ctx context.Context, originalID string) (Purchase, error) {
+	return g.Lookup(ctx, Ref{Kind: KindSubscription, ID: originalID})
+}
+
+// Confirm은 구글에 지급을 마쳤다고 알린다. 3일 안에 하지 않으면 구글이 자동으로 환불한다.
+// 이미 확인한 구매에 다시 불러도 되도록 부르는 쪽이 재시도한다. 결제 대기 구매에는 부르지 않는다.
+func (g *Google) Confirm(ctx context.Context, ref Ref, productID string, consume bool) error {
+	var err error
+	switch {
+	case ref.Kind == KindSubscription && !consume:
+		err = g.api.AcknowledgeSubscription(ctx, g.packageName, productID, ref.ID, &androidpublisher.SubscriptionPurchasesAcknowledgeRequest{})
+	case ref.Kind == KindProduct && consume:
+		err = g.api.ConsumeProduct(ctx, g.packageName, productID, ref.ID)
+	case ref.Kind == KindProduct:
+		err = g.api.AcknowledgeProduct(ctx, g.packageName, productID, ref.ID, "")
+	default:
+		return fmt.Errorf("google 확인: 종류 %q, 소비 %v는 맞지 않는 조합", ref.Kind, consume)
+	}
+	if err != nil {
+		return fmt.Errorf("google 확인 %s: %w", productID, err)
+	}
+	return nil
+}
+
+// ParseNotice는 구글 실시간 알림(Pub/Sub 푸시)의 본문을 푼다.
+// 보낸 쪽이 구글인지(푸시 요청의 인증 토큰)는 요청을 받는 쪽에서 먼저 확인한다. 여기서는 우리 앱의 알림인지만 본다.
+// 구글 알림에는 상태가 없고 구매 토큰만 있다.
+func (g *Google) ParseNotice(body []byte) (Notice, error) {
+	var push struct {
+		Message struct {
+			Data      string `json:"data"`
+			MessageID string `json:"messageId"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(body, &push); err != nil || push.Message.MessageID == "" {
+		return Notice{}, errors.New("google 알림: 본문 형식이 다름")
+	}
+	raw, err := base64.StdEncoding.DecodeString(push.Message.Data)
+	if err != nil {
+		return Notice{}, errors.New("google 알림: data를 풀 수 없음")
+	}
+	var d playstore.DeveloperNotificationV2
+	if err = json.Unmarshal(raw, &d); err != nil {
+		return Notice{}, errors.New("google 알림: 내용 형식이 다름")
+	}
+	n := Notice{Route: RouteGoogle, ID: push.Message.MessageID}
+	if ms, e := strconv.ParseInt(d.EventTimeMillis, 10, 64); e == nil {
+		n.SentAt = msTime(ms)
+	}
+	if d.TestNotification != nil {
+		n.Type, n.Test = "test", true
+		return n, nil
+	}
+	if d.PackageName != g.packageName {
+		return Notice{}, fmt.Errorf("google 알림 %s: %w", n.ID, ErrWrongApp)
+	}
+	switch {
+	case d.SubscriptionNotification != nil:
+		s := d.SubscriptionNotification
+		n.Type = "subscription/" + strconv.Itoa(int(s.NotificationType))
+		n.Target = &Ref{Kind: KindSubscription, ID: s.PurchaseToken}
+		n.OriginalID = s.PurchaseToken
+	case d.OneTimeProductNotification != nil:
+		o := d.OneTimeProductNotification
+		n.Type = "product/" + strconv.Itoa(int(o.NotificationType))
+		n.Target = &Ref{Kind: KindProduct, ID: o.PurchaseToken}
+	case d.VoidedPurchaseNotification != nil:
+		v := d.VoidedPurchaseNotification
+		n.Type, n.Voided, n.OrderID = "voided/"+strconv.Itoa(int(v.ProductType)), true, v.OrderID
+		kind := KindProduct
+		if v.ProductType == playstore.VoidedPurchaseProductTypeSubscription {
+			kind, n.OriginalID = KindSubscription, v.PurchaseToken
+		}
+		n.Target = &Ref{Kind: kind, ID: v.PurchaseToken}
+	case d.PendingRefundReviewNotification != nil:
+		n.Type, n.OrderID = "refund-review", d.PendingRefundReviewNotification.OrderID
+	default:
+		n.Type = "unknown" // 모르는 종류도 버리지 않는다. 받는 쪽이 원문을 저장한다
+	}
+	return n, nil
 }
