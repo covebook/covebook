@@ -26,21 +26,21 @@
 ### 1. [치명] 갈피 상세에서 넘긴 뒤 '수정'에서 그냥 나오면, 보이는 갈피가 아닌 다른 갈피가 고쳐지고 지워진다 — 1명
 - 재현: 갈피 A 상세 → 옆으로 넘겨 B → '수정' → 저장 없이 뒤로 → 화면에는 A가 보이는데 '수정'은 B를 연다. ⋯ › 삭제를 하면 B가 지워진다.
 - 원인 추정: `bookmark_detail_screen.dart`가 수정 중 PageView를 뺐다가 다시 붙일 때 `initialPage`(처음 연 갈피)로 돌아가는데, `_index`는 B를 그대로 가리킨다.
-- 증거: [보이는 A](screenshots/persona-qa-2026-11-16/01-bookmark-shown-A.jpg) · [수정이 B를 엶](screenshots/persona-qa-2026-11-16/02-bookmark-edit-opens-B.jpg) · [B가 지워짐](screenshots/persona-qa-2026-11-16/03-bookmark-B-deleted.jpg)
+- 증거: [보이는 A](../screenshots/2026-11-16-persona-qa/01-bookmark-shown-A.jpg) · [수정이 B를 엶](../screenshots/2026-11-16-persona-qa/02-bookmark-edit-opens-B.jpg) · [B가 지워짐](../screenshots/2026-11-16-persona-qa/03-bookmark-B-deleted.jpg)
 
 ### 2. [높음] 키보드가 입력칸·저장 버튼을 덮는다(화면이 키보드만큼 올라가지 않음) — 3명
 - 영숙: 한 줄 감상·갈피 '문장' 칸이 키보드 뒤에 숨는다. 2.0배에서는 '문장' 칸이 처음부터 접힌 아래에 있다.
 - 현우: 감상 쓰기의 '감상 저장'이 키보드 밑에 있다.
 - 은서: 10줄 넘게 쓰면 지금 치는 줄이 키보드 뒤로 간다.
 - 원인 추정: 화면 틀(`kit.dart` `Screen`)이 `viewInsets`를 쓰지 않는다.
-- 증거: [갈피 문장 칸](screenshots/persona-qa-2026-11-16/04-keyboard-covers-field.jpg) · [감상 저장 버튼](screenshots/persona-qa-2026-11-16/05-keyboard-covers-save.jpg)
+- 증거: [갈피 문장 칸](../screenshots/2026-11-16-persona-qa/04-keyboard-covers-field.jpg) · [감상 저장 버튼](../screenshots/2026-11-16-persona-qa/05-keyboard-covers-save.jpg)
 
 ### 3. [높음] '사진만 저장'을 켜도 숨은 인식 글이 함께 저장돼 카드·목록·공유에 나온다 — 1명
 - `new_bookmark_screen.dart` `_save`가 사진만 저장일 때도 `text`를 넣는다.
-- 증거: [저장 뒤 사진 아래 글](screenshots/persona-qa-2026-11-16/06-photo-only-keeps-text.jpg)
+- 증거: [저장 뒤 사진 아래 글](../screenshots/2026-11-16-persona-qa/06-photo-only-keeps-text.jpg)
 
 ### 4. [높음] 공유 카드에서 긴 글(600자+)이 넘쳐 위가 잘리고 제목·'책장 한켠'과 겹친다(두 모양 다) — 1명
-- 증거: [책 페이지](screenshots/persona-qa-2026-11-16/07-share-long-text-page.jpg) · [종이 메모](screenshots/persona-qa-2026-11-16/08-share-long-text-memo.jpg)
+- 증거: [책 페이지](../screenshots/2026-11-16-persona-qa/07-share-long-text-page.jpg) · [종이 메모](../screenshots/2026-11-16-persona-qa/08-share-long-text-memo.jpg)
 
 ### 5. [높음 → 고침] 영어 갈피 줄 끝 글자가 잘리고 마침표가 사라진다 — 1명
 - 원인: 이음표마다 자간 조각이 나뉘었다.
@@ -54,30 +54,30 @@
   - '목표 10분'이 타이머 숫자와 겹친다.
 - 현우: 백업·개인정보 안내가 낱말 가운데서 끊긴다. 내 책 격자에서 긴 저자 이름 때문에 '· 책장'이 잘린다.
 - 은서: 책 정보 › 내 기록의 갈피 목록이 글자 단위로 끊긴다.
-- 증거: [1.5배 책 추가](screenshots/persona-qa-2026-11-16/09-add-title-vertical-1.5x.jpg) · [2.0배](screenshots/persona-qa-2026-11-16/10-add-clipped-2.0x.jpg)
+- 증거: [1.5배 책 추가](../screenshots/2026-11-16-persona-qa/09-add-title-vertical-1.5x.jpg) · [2.0배](../screenshots/2026-11-16-persona-qa/10-add-clipped-2.0x.jpg)
 
 ### 7. [보통] '책장에서 뺐어요' 알림이 사라지지 않고 하단 탭을 막는다(75초 넘게) — 1명
 - `book_sheet.dart:171-175` SnackBar에 action이 있어 4초가 무시되는 것으로 추정한다.
-- 증거: [75초 뒤](screenshots/persona-qa-2026-11-16/11-snackbar-stays.jpg)
+- 증거: [75초 뒤](../screenshots/2026-11-16-persona-qa/11-snackbar-stays.jpg)
 
 ### 8. [보통] 화면 읽기(TalkBack) — 1명
 - 접근성 이름 중복이 40곳 넘는다('독서 끝내기 / 끝내기').
 - 이름 없는 전체 화면 캔버스가 있고, 시트 뒤 바탕이 'Scrim'으로 읽힌다.
 - 아이콘 버튼이 '이미지' 역할이다.
 - 48dp보다 작은 터치 칸: 별점 24dp, 책등 폭 29dp, 머리 아이콘 34dp 등.
-- 증거: [중복 이름](screenshots/persona-qa-2026-11-16/12-talkback-duplicate.jpg)
+- 증거: [중복 이름](../screenshots/2026-11-16-persona-qa/12-talkback-duplicate.jpg)
 
 ### 9. [보통] '읽기 시작'·'이어서 읽기'가 타이머를 시작하지 않는다 / 책 순서 바꾸는 길 안내가 없다 — 1명
 - '읽기 시작'은 읽기 탭 목록에 올리기만 한다. 표지 위 작은 ▶를 따로 눌러야 한다.
 - 순서 바꾸기는 꾸미기에서 끌기만 된다.
 - 책 정보 › '책장 위치로 이동'은 이름과 달리 책을 옮기지 않고 가리키기만 한다.
-- 증거: [읽기 시작 뒤 0:00:00](screenshots/persona-qa-2026-11-16/13-read-start-not-started.jpg)
+- 증거: [읽기 시작 뒤 0:00:00](../screenshots/2026-11-16-persona-qa/13-read-start-not-started.jpg)
 
 ### 10. [보통] 백업에 표지 사진이 없다 / 개인정보 안내가 실제 기능과 다르다 — 1명
 - 인터넷 없이 복원하면 대체 표지가 나오고, 인터넷이 돌아와도 앱을 다시 켜야 돌아온다.
 - 개인정보 시트는 '사진 인식은 연결 안 됨'이라고 하는데 실제로는 기기 안에서 글자를 인식한다.
 - 검색 경로 설명이 시트와 웹 전문에서 반대다. '직접 고른 곳에 저장'이라고 하는데 실제로는 다운로드에 바로 저장한다.
-- 증거: [오프라인 복원 표지](screenshots/persona-qa-2026-11-16/14-restore-offline-cover.jpg)
+- 증거: [오프라인 복원 표지](../screenshots/2026-11-16-persona-qa/14-restore-offline-cover.jpg)
 
 ### 10개 밖
 - 은서 F5·F6: 인식 품질. 한글 줄 끝 공백, 머리글·쪽번호 섞임, 시 연 구분이 사라짐.

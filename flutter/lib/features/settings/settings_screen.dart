@@ -92,7 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 실제 동작과 맞춘 안내(2026-11-16 QA 현우 F3): 글자 인식·바코드는 기기 안, 검색은 책장 한켠 서버 → Google Books → Open Library,
   // 백업은 다운로드/책장한켠에 바로 저장하거나 공유로 보낸다, 계정 삭제는 서버를 쓰는 빌드에서만, 공개되는 것이 있는지.
-  // 웹 전문(노션)에 맞출 문구 초안은 docs/privacy-draft-2026-11-16.md
+  // 웹 전문(노션)에 맞출 문구 초안은 docs/legal/privacy-draft-2026-11-16.md
   void _privacySheet() => showSheet<void>(
         context,
         title: '개인정보 처리 안내',

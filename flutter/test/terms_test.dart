@@ -21,8 +21,8 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  test('문서 초안(docs/terms-draft-2026-11-18.md)과 앱 전문이 같은 조 제목', () {
-    final doc = File('../docs/terms-draft-2026-11-18.md').readAsStringSync();
+  test('문서 초안(docs/legal/terms-draft-2026-11-18.md)과 앱 전문이 같은 조 제목', () {
+    final doc = File('../docs/legal/terms-draft-2026-11-18.md').readAsStringSync();
     for (final (title, paras) in termsArticles) {
       expect(doc.contains('### $title'), isTrue, reason: title);
       for (final p in paras) {
