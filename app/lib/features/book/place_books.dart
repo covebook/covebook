@@ -15,6 +15,7 @@ import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../home/locked_rows.dart' show freeShelfSlots, openableShelfCount;
+import '../../store/entitlement_store.dart';
 
 /// 놓을 수 있는 만큼 놓는다(놓은 책, 자리가 없어 남은 책)
 Future<({List<String> placed, List<String> left})> placeBooks(Iterable<String> ids) async {
@@ -48,7 +49,7 @@ Future<({int placed, int kept, bool full})> placeWithChoice(BuildContext context
 
     // 새 빈 선반에도 한 권도 못 놓았으면(선반보다 큰 책) 더 묻지 않는다(선반이 끝없이 늘지 않게). 무료 칸을 다 열었으면 보관
     if (afterNewShelf && r.placed.isEmpty) return keep(false);
-    final free = openableShelfCount(s.layout!.shelves.length);
+    final free = openableShelfCount(s.layout!.shelves.length, iapOn ? EntitlementStore.instance.shelves : 0);
     if (free == 0 || !context.mounted) return keep(free == 0);
     final open = await _askNoRoom(context, r.left, free);
     if (open != true || !await s.addShelf()) return keep(false);

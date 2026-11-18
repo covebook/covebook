@@ -17,6 +17,8 @@ import '../../services/qa_probe.dart';
 import '../../services/cover_colors.dart';
 import '../../ui/kit.dart' show Btn, PullUp, Space, showSheet;
 import 'locked_rows.dart';
+import '../../store/entitlement_store.dart';
+import '../iap/shelf_purchase_sheet.dart' show showShelfPurchase;
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
 import '../store/store_screen.dart' show openStore;
@@ -1175,12 +1177,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   // '무료로'는 쓰지 않는다(QA: 곧 돈 받겠다는 뜻으로 읽혔다). 남은 칸 수를 알린다
   void _openLocked() {
     final shelves = PlacementStore.instance.layout?.shelves.length ?? _rowSpots.length - _lockedCount;
-    final free = openableShelfCount(shelves);
+    // 결제를 켠 빌드는 구매한 칸만큼 더 열 수 있다. 꺼진 빌드는 지금처럼 무료 칸까지
+    final paid = iapOn ? EntitlementStore.instance.shelves : 0;
+    final free = openableShelfCount(shelves, paid);
+    if (free == 0 && iapOn && purchasableShelfCount(paid) > 0) {
+      // 쓸 수 있는 칸을 다 열었고 살 수 있는 칸이 남았다: 구매 시트. 사고 나면 이어서 선반을 연다
+      showShelfPurchase(context).then((bought) {
+        if (bought && mounted) _openLocked();
+      });
+      return;
+    }
     if (free == 0) {
       showSheet<void>(
         context,
         title: '선반 더 열기',
-        description: '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.',
+        description: iapOn
+            ? '선반 $shelfSlots칸을 모두 열었어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.'
+            : '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.',
         builder: (ctx) => Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx)),

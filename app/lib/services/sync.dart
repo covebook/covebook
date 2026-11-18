@@ -28,6 +28,9 @@ import 'native_login.dart';
 const syncBase = String.fromEnvironment('SYNC_URL');
 
 const _tokenKey = 'sync-token:v1';
+
+/// 서버 토큰이 저장된 자리(결제 서비스가 같은 토큰으로 서버를 부른다)
+const syncTokenKey = _tokenKey;
 const _revKey = 'sync-rev:v1';
 const _epochKey = 'sync-epoch:v1';
 const _filesKey = 'sync-files:v1'; // 이미 올린 파일 id

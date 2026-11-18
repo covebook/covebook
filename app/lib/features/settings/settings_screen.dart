@@ -17,6 +17,8 @@ import '../../services/sync.dart';
 import '../../ui/theme.dart';
 import '../book/import_list_screen.dart' show openImportList;
 import 'backup_screen.dart' show openBackup;
+import '../../store/entitlement_store.dart' show iapOn;
+import '../iap/subscription_screen.dart' show openSubscription;
 import 'terms.dart' show showTermsSheet;
 
 /// 개인정보 처리방침 전문: 우리 서버(server/internal/server/site/privacy.html). 2026-11-18 Notion에서 옮겼다(Google 브랜딩 인증은 우리 도메인이어야 한다)
@@ -144,6 +146,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ListGroup(title: '내 기록', children: [
           // 백업·복원은 뺐다(2026-11-17 사용자: 기록은 계정에 보관, 다른 앱에서 갈아타는 가져오기만)
           ListItem(label: '계정 및 동기화', chevron: true, onPress: () => openBackup(context)),
+          // 구독 관리: 내 정보 첫 화면에서 한 번에 닿는다(해지 경로를 숨기지 않는다, ADR-0003). 결제를 켠 빌드에만 있다
+          if (iapOn && _syncAvailable) ListItem(label: '구독 관리', chevron: true, onPress: () => openSubscription(context)),
           // 다른 앱·엑셀에 정리해 둔 책을 한 번에(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어')
           ListItem(label: '책 목록 가져오기', chevron: true, onPress: () => openImportList(context)),
           // 커뮤니티가 열렸고 서버를 쓰는 빌드일 때만

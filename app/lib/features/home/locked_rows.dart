@@ -18,8 +18,14 @@ int lockedShelfCount(int shelves) => (shelfSlots - shelves).clamp(0, shelfSlots)
 /// 무료로 쓸 수 있는 선반 칸 수(2026-11-15 사용자 결정: 3칸까지 무료, 그 위는 유료 예정·결제는 아직 없음)
 const freeShelfSlots = 3;
 
-/// 지금 바로 더 열 수 있는 선반 칸 수(무료 칸까지)
-int openableShelfCount(int shelves) => (freeShelfSlots - shelves).clamp(0, freeShelfSlots);
+/// 지금 쓸 수 있는 선반 칸 수: 무료 칸 + 구매한 칸(다섯 칸까지). 결제가 꺼진 빌드는 구매한 칸이 0이다
+int allowedShelfSlots([int paid = 0]) => (freeShelfSlots + paid).clamp(freeShelfSlots, shelfSlots);
+
+/// 지금 바로 더 열 수 있는 선반 칸 수(쓸 수 있는 칸까지)
+int openableShelfCount(int shelves, [int paid = 0]) => (allowedShelfSlots(paid) - shelves).clamp(0, shelfSlots);
+
+/// 구매해서 더 열 수 있는 칸 수(다섯 칸에서 지금 쓸 수 있는 칸을 뺀 만큼)
+int purchasableShelfCount([int paid = 0]) => shelfSlots - allowedShelfSlots(paid);
 
 class LockedRow {
   const LockedRow(this.books, this.bodies);

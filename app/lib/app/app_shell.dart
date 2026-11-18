@@ -22,6 +22,7 @@ import '../services/warmup.dart';
 import '../services/ambient.dart';
 import '../services/cover_colors.dart';
 import '../services/sync.dart';
+import '../services/iap.dart';
 import '../store/bookcase_store.dart';
 import '../store/library_model.dart';
 import '../store/mini_timer_store.dart';
@@ -115,6 +116,8 @@ class _AppShellState extends State<AppShell> {
         books.watch();
         // 서버 동기화(서버 주소가 있는 빌드만): 연도 책장 확인 뒤에 시작한다(받는 도중의 서재로 한 해를 남기지 않게)
         SyncService.instance.start();
+        // 결제를 켠 빌드: 스토어가 주는 거래를 듣기 시작한다(끝내지 않은 거래가 여기서 다시 온다)
+        IapService.instance.start();
         watchCommunityOpen();
         // 표지 색·두께·갈피 색 맞추기는 켠 뒤 조금 있다 뒤에서(지금 앱 _layout: 3초 뒤)
         Future<void>.delayed(const Duration(seconds: 3), () => backfillCoverColors().catchError((Object e) {
