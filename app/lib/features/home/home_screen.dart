@@ -19,7 +19,6 @@ import '../../ui/kit.dart' show Btn, PullUp, Space, showSheet;
 import 'locked_rows.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
-import '../store/store_screen.dart' show openStore;
 import 'decorate_panel.dart';
 import 'year_pager.dart';
 import '../../domain/bookcase.dart' show Bookcase;
@@ -56,7 +55,8 @@ import '../../ui/bake_cache.dart';
 import '../../ui/book_key.dart';
 import '../../ui/cover_photo.dart';
 import '../../scene_config/spine_look.dart';
-import '../../scene_config/skin.dart' show skinChoice;
+import '../../scene_config/skin.dart' show SkinChoice, setSkin, skinChoice;
+import '../../store/skin_store.dart' show saveSkin;
 import '../../domain/ribbon_design.dart' show ribbonDesign;
 import '../../services/shelf_widget.dart';
 import 'row_tween.dart';
@@ -119,9 +119,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   ({ShelfMetrics m, List<RowGeom> geo, double contentTop, int lockedFrom})? _geom;
   bool _decorating = false;
 
-  /// 꾸미는 동안은 머리글(제목·연도·버튼)을 빼고 책장을 위로 붙여 넓게 쓴다(되돌리기·완료는 조작부 제목 줄, 지금 앱 bare).
-  /// 꾹 눌러 끌며 꾸미기를 시작했으면 놓은 뒤에 뺀다(끄는 도중 손가락 아래 책장이 밀리지 않게)
-  bool _bare = false;
+  /// 꾸미기 탭(2026-11-19 사용자 시안: 맨 위 '책 배치 | 선반 | 벽지', 머리줄 자리를 같은 높이로 덮어 책장이 밀리지 않는다)
+  DecorateTab _decoTab = DecorateTab.books;
+
+  /// 이번 꾸미기의 되돌리기 차례: 배치 편집(_placeUndo 표시, 되돌리기는 PlacementStore가) · 바꾸기 전 스킨 · 바꾸기 전 책 측면
+  final List<Object> _decoUndo = [];
+  static const _placeUndo = 'place';
+
+  /// 이번 꾸미기에서 스킨·책 측면을 바꿨다: 마칠 때 빛을 새로 굽는다(고르는 동안은 그리는 값만 바꿔 바로 보인다)
+  bool _skinChanged = false;
   String? _editId;
   String? _editMsg;
   ({
@@ -227,7 +233,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
 
   void _grabDown(PointerDownEvent e) {
     _eatTap = false;
-    if (!_decorating || _grab != null || _drag != null || _head != null || _pinching) return;
+    // 선반·벽지 탭에서는 책을 잡지 않는다(어디를 밀어도 스크롤, 책을 누르면 책 배치 탭으로)
+    if (!_decorating || _decoTab != DecorateTab.books || _grab != null || _drag != null || _head != null || _pinching) return;
     final id = _hitBook(e.localPosition);
     if (id == null) return;
     setState(() => _grab = (pointer: e.pointer, down: e.localPosition, id: id));
@@ -280,8 +287,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   /// 책 누르기(화면 읽기의 책 칸도 같다): 꾸미는 중이면 고르기, 아니면 책 정보 시트
   Future<void> _tapBook(String? id) async {
     if (_decorating) {
+      // 선반·벽지 탭에서 책을 누르면 책 배치 탭으로(빈 곳을 누르면 그 탭 그대로)
+      if (id == null && _decoTab != DecorateTab.books) return;
       setState(() {
         _drag = null;
+        _decoTab = DecorateTab.books;
         _editId = id;
         _editMsg = null;
       });
@@ -346,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     await PlacementStore.instance.ensure();
     if (!mounted) return;
     setState(() {
-      _decorating = true;
+      _startDecorate();
       _editId = id;
       _editMsg = null;
     });
@@ -355,8 +365,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     _computePanel();
   }
 
+  /// 꾸미기 시작(꾸미기 단추, 또는 꾹 눌러 끌기)
+  void _startDecorate() {
+    if (_decorating) return;
+    _decorating = true;
+    _decoTab = DecorateTab.books;
+    _decoUndo.clear();
+    _skinChanged = false;
+  }
+
   void _exitDecorate() {
     _clearPreview();
+    // 고른 스킨·책 측면으로 빛을 다시 굽고 시작 사진을 버린다(지난 '선반, 벽지' 화면의 적용하기와 같다)
+    if (_skinChanged) {
+      _skinChanged = false;
+      dropHomeSnapshot();
+      shelfRefresh.value++;
+    }
     setState(() {
       _drag = null;
       _decorating = false;
@@ -404,6 +429,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       return false;
     }
     final ok = await PlacementStore.instance.commit(r.layout!);
+    if (ok && _decorating) _decoUndo.add(_placeUndo);
     if (!mounted) return ok;
     setState(() => _editMsg = ok ? note : editFailText['no-space']);
     _computePanel();
@@ -485,7 +511,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       hi = math.max(hi, c.x);
     }
     setState(() {
-      _decorating = true;
+      _startDecorate();
+      _decoTab = DecorateTab.books;
       _editId = id;
       _editMsg = null;
       _frozen = true; // 끄는 책은 굳힌 책장 그림에서 떠 온다
@@ -880,11 +907,89 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     return '뒤로 $deg° 젖혀 있어요';
   }
 
+  bool get _canUndo => _decoUndo.isNotEmpty || PlacementStore.instance.canUndo;
+
+  /// 되돌리기: 이번 꾸미기에서 마지막에 바꾼 것(배치·스킨·책 측면) 하나. 이번에 바꾼 것이 없으면 지난 배치 편집
   Future<void> _undo() async {
-    await PlacementStore.instance.undo();
+    final last = _decoUndo.isEmpty ? _placeUndo : _decoUndo.removeLast();
+    switch (last) {
+      case SkinChoice prev:
+        _applySkin(prev);
+      case SpineLook prev:
+        _applySpine(prev);
+      default:
+        await PlacementStore.instance.undo();
+    }
     if (!mounted) return;
     setState(() => _editMsg = null);
     _computePanel();
+  }
+
+  /// 선반·벽지 고르기: 책장에 바로 보이고(그리는 값) 바로 저장한다. 빛은 꾸미기를 마칠 때 다시 굽는다
+  void _pickSkin(SkinChoice next) {
+    final prev = skinChoice;
+    if (next == prev || !_applySkin(next)) return;
+    _decoUndo.add(prev);
+  }
+
+  bool _applySkin(SkinChoice c) {
+    if (!setSkin(c)) return false;
+    saveSkin(c);
+    _skinChanged = true;
+    setState(() {});
+    return true;
+  }
+
+  /// 책 측면 고르기(책 배치 탭): 표지 사진을 그 모양으로 다시 준비해 바로 바꿔 그린다(_spineLookChanged)
+  void _pickSpine(SpineLook next) {
+    final prev = spineLook.value;
+    if (next == prev) return;
+    _applySpine(next);
+    _decoUndo.add(prev);
+  }
+
+  void _applySpine(SpineLook v) {
+    spineLook.value = v;
+    saveSpineLook(v);
+    _skinChanged = true;
+    setState(() {});
+  }
+
+  /// 꾸미기 아래 칸: 책 배치는 고른 책 조작부(고르기 전에는 안내와 책 측면), 선반·벽지는 고르기 칸
+  Widget _decoBottom() {
+    if (_decoTab != DecorateTab.books) return SkinSheet(tab: _decoTab, choice: skinChoice, onPick: _pickSkin);
+    final p = _panel;
+    if (p == null) return DecorateHint(msg: _editMsg, spine: spineLook.value, onSpine: _pickSpine);
+    return DecoratePanel(
+      bookKey: _editId,
+      title: p.title,
+      pose: p.pose,
+      lean: p.lean,
+      canLean: p.canLean,
+      msg: _editMsg,
+      angles: _anglesText,
+      spin: p.spin,
+      spinMax: p.spinMax,
+      spinRange: p.spinRange,
+      depth: p.depth,
+      onPose: _editPose,
+      onLean: _editLean,
+      onSpin: _editSpin,
+      onDepth: _editDepth,
+    );
+  }
+
+  /// 탭 바꾸기: 선반·벽지 탭에서는 고른 책을 놓는다(아래 칸이 그 탭 것으로 바뀐다)
+  void _setDecoTab(DecorateTab t) {
+    if (t == _decoTab) return;
+    setState(() {
+      _decoTab = t;
+      if (t != DecorateTab.books) {
+        _editId = null;
+        _panel = null;
+        _editMsg = null;
+      }
+    });
   }
 
   /// 지난 책장이 없는데 옆으로 밀었다: 언제 생기는지 알린다(10초에 한 번만)
@@ -1585,12 +1690,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                 clipper: _BelowTop(pad.top),
                 child: LayoutBuilder(
                   builder: (context, box) {
-                    if (!_decorating) {
-                      _bare = false;
-                    } else if (_drag == null) {
-                      _bare = true;
-                    }
-                    final contentTop = pad.top + (_bare ? 0 : homeHeaderHeight);
+                    // 꾸미는 동안 머리줄 자리는 꾸미기 맨 위 줄(같은 높이)이 덮는다: 책장 자리는 그대로
+                    final contentTop = pad.top + homeHeaderHeight;
                     final bottomInset = navigationShelfReserve + pad.bottom;
                     final m = makeMetrics(box.maxWidth);
                     final n = _rowSpots.length;
@@ -1770,7 +1871,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                 left: 0,
                                 right: 0,
                                 top: pad.top,
-                                child: _bare
+                                child: _decorating
                                     ? const SizedBox.shrink()
                                     : Semantics(container: true, explicitChildNodes: true, sortKey: const OrdinalSortKey(0), child: header(headerOpacity)),
                               ),
@@ -1867,33 +1968,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
               ),
             ),
           ),
-          if (_decorating)
+          if (_decorating) ...[
+            // 맨 위 줄: 머리줄 자리(같은 높이, 흰 바탕으로 덮어 밀린 책장이 비치지 않게)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: pad.top + homeHeaderHeight,
+              child: ColoredBox(
+                color: AppColors.bg,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(TabHeader.paddingH, pad.top, TabHeader.paddingH, 0),
+                  child: Align(child: DecorateBar(tab: _decoTab, onTab: _setDecoTab, canUndo: _canUndo, onUndo: _undo, onDone: _exitDecorate)),
+                ),
+              ),
+            ),
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              child: DecoratePanel(
-                bookKey: _editId,
-                title: _panel?.title,
-                pose: _panel?.pose,
-                lean: _panel?.lean ?? 0,
-                canLean: _panel?.canLean ?? (left: false, right: false),
-                msg: _editMsg,
-                angles: _anglesText,
-                spin: _panel?.spin ?? 0,
-                spinMax: _panel?.spinMax ?? maxSpin,
-                spinRange: _panel?.spinRange,
-                depth: _panel?.depth,
-                canUndo: PlacementStore.instance.canUndo,
-                onPose: _editPose,
-                onLean: _editLean,
-                onSpin: _editSpin,
-                onDepth: _editDepth,
-                onUndo: _undo,
-                onDone: _exitDecorate,
-                onSkin: () => openStore(context),
-              ),
+              child: _decoBottom(),
             ),
+          ],
         ],
       ),
       ),
