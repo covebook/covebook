@@ -51,6 +51,42 @@ func iapFromEnv() map[iap.Route]iap.Store {
 	return stores
 }
 
+// 샌드박스 스위치(IAP_ALLOW_SANDBOX=1): 샌드박스(TestFlight, 심사, 시험 계정) 거래에도 지급한다.
+// 기본은 꺼짐이다. 켜 두면 실제로 결제하지 않은 사람이 운영 권한을 받는다(조사 종합 6-1장, 이슈 #31).
+// 심사와 내부 시험 기간에만 켠다. 끄면 전에 준 샌드박스 권한도 함께 사라진다.
+func iapSandboxAllowed() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("IAP_ALLOW_SANDBOX"))) {
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return false
+}
+
+// iapSubmitLimit은 한 유저가 1분에 낼 수 있는 구매 제출 횟수다. 증거를 추측해 넣어 보는 것을 늦춘다.
+// 정상 사용은 구매·복원 때 몇 번뿐이다. 서버 한 대의 메모리에서만 센다.
+const iapSubmitLimit = 30
+
+type iapHit struct {
+	window time.Time
+	count  int
+}
+
+// iapAllow는 이 유저의 이번 제출을 받아도 되는지 알려 준다.
+func (s *Server) iapAllow(user int64, now time.Time) bool {
+	s.iapMu.Lock()
+	defer s.iapMu.Unlock()
+	if s.iapHits == nil || len(s.iapHits) > 10000 {
+		s.iapHits = map[int64]iapHit{}
+	}
+	h := s.iapHits[user]
+	if now.Sub(h.window) >= time.Minute {
+		h = iapHit{window: now}
+	}
+	h.count++
+	s.iapHits[user] = h
+	return h.count <= iapSubmitLimit
+}
+
 func (s *Server) routeIAP(m *http.ServeMux) {
 	if len(s.IAP) == 0 {
 		return
@@ -65,6 +101,9 @@ var (
 	iapStoreDown        = apiError{503, "iap_store_unavailable", "스토어에서 구매를 확인하고 있어요. 잠시 뒤 다시 확인할게요"}
 	iapRejected         = apiError{422, "iap_purchase_rejected", "이 앱의 구매가 아니에요"}
 	iapRefunded         = apiError{409, "iap_purchase_refunded", "환불된 구매예요"}
+	iapBadProof         = apiError{422, "iap_bad_proof", "구매 정보를 확인할 수 없어요"}
+	iapSandbox          = apiError{422, "iap_sandbox_not_allowed", "시험 환경의 구매는 받지 않아요"}
+	iapTooMany          = apiError{429, "iap_too_many", "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요"}
 	iapOtherAccount     = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요. 구독은 구매 복원으로 이 계정에 옮길 수 있어요"}
 	iapProductNoRestore = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요"}
 )
@@ -106,11 +145,11 @@ func (s *Server) iapMe(w http.ResponseWriter, r *http.Request) error {
 
 // iapStatus는 지금 가진 것을 표에서 계산한다. 따로 저장한 값이 없다(D5).
 func (s *Server) iapStatus(ctx context.Context, user int64) (map[string]any, error) {
-	plus, shelves, err := iapEntitlements(ctx, s.DB, user)
+	plus, shelves, err := iapEntitlements(ctx, s.DB, user, s.IAPSandbox)
 	if err != nil {
 		return nil, err
 	}
-	sub, err := iapCurrentSubscription(ctx, s.DB, user)
+	sub, err := iapCurrentSubscription(ctx, s.DB, user, s.IAPSandbox)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +158,10 @@ func (s *Server) iapStatus(ctx context.Context, user int64) (map[string]any, err
 
 // iapSubmit은 앱이 제출한 구매를 스토어에 확인하고 지급한다.
 //
-// 요청: {"route":"apple|google", "productId":"...", "id":"애플 거래 ID 또는 구글 구매 토큰", "restore":false}
+// 요청: {"route":"apple|google", "productId":"...", "proof":"애플: 스토어가 서명한 거래(JWS). 구글: 구매 토큰", "restore":false}
+//
+// proof는 "내가 이 구매를 한 기기"라는 증거다. 애플 거래 ID(숫자)는 받지 않는다. 추측할 수 있어서
+// 남의 구매를 내거나 restore로 남의 구독을 가져갈 수 있기 때문이다. 서명된 거래는 구매한 기기만 가진다.
 // 응답 200: {"status":"granted|already|inactive", "plus":bool, "shelves":n, "subscription":{...}}
 //
 //	granted  새로 지급했다        already  전에 지급한 거래다        inactive  구독이 만료·보류 상태라 권한이 없다
@@ -136,15 +178,18 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
 		Route     string `json:"route"`
 		ProductID string `json:"productId"`
-		ID        string `json:"id"`
+		Proof     string `json:"proof"`
 		Restore   bool   `json:"restore"`
 	}
 	if err = decode(r, &body); err != nil {
 		return err
 	}
 	store := s.IAP[iap.Route(body.Route)]
-	if store == nil || body.ProductID == "" || body.ID == "" || len(body.ID) > 4096 {
+	if store == nil || body.ProductID == "" || body.Proof == "" || len(body.Proof) > 16384 {
 		return bad
+	}
+	if !s.iapAllow(user, time.Now()) {
+		return iapTooMany
 	}
 	ctx := r.Context()
 	route := store.Route()
@@ -166,10 +211,16 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// 2. 스토어에 다시 묻는다. 트랜잭션 밖이다.
+	// 2. 증거를 확인하고(애플은 서명) 스토어에 다시 묻는다. 트랜잭션 밖이다.
+	ref, err := store.Verify(asked.Kind, body.Proof)
+	if err != nil {
+		if errors.Is(err, iap.ErrWrongApp) {
+			return iapRejected
+		}
+		return iapBadProof
+	}
 	storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
-	ref := iap.Ref{Kind: asked.Kind, ID: body.ID}
 	submitted, err := store.Lookup(storeCtx, ref)
 	if err != nil {
 		return iapStoreError(route, err)
@@ -183,7 +234,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// 3. 이 요청에 지급해도 되는 거래인지 본다. 계정 문제는 주인을 확인한 뒤 트랜잭션 안에서 정한다.
-	expect := iap.Expect{BundleID: store.AppID(), Products: products, AccountTokens: tokens}
+	expect := iap.Expect{BundleID: store.AppID(), Products: products, AccountTokens: tokens, AllowSandbox: s.IAPSandbox}
 	inactive := asked.Kind == iap.KindSubscription && current.State == iap.StateInactive
 	checked := current
 	if inactive {
@@ -193,6 +244,8 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	wrongAccount := errors.Is(verdict, iap.ErrWrongAccount)
 	switch {
 	case verdict == nil || wrongAccount:
+	case errors.Is(verdict, iap.ErrSandbox):
+		return iapSandbox
 	case errors.Is(verdict, iap.ErrRevoked):
 		return iapRefunded
 	case errors.Is(verdict, iap.ErrNotPaid):

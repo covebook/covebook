@@ -7,7 +7,21 @@ import (
 
 func TestCheck(t *testing.T) {
 	want := Expect{BundleID: "app.covebook", Products: map[string]bool{"plus.monthly": true}, AccountTokens: []string{"u-1", "u-old"}}
-	ok := Purchase{BundleID: "app.covebook", ProductID: "plus.monthly", AccountToken: "u-1", State: StatePaid}
+	ok := Purchase{BundleID: "app.covebook", ProductID: "plus.monthly", AccountToken: "u-1", State: StatePaid, Env: EnvProduction}
+	// 샌드박스 거래는 허용했을 때만 통과한다. 환경 값이 비어 있어도 운영으로 치지 않는다
+	sandbox, unknownEnv := ok, ok
+	sandbox.Env, unknownEnv.Env = EnvSandbox, ""
+	if err := Check(sandbox, want); !errors.Is(err, ErrSandbox) {
+		t.Fatalf("샌드박스가 통과: %v", err)
+	}
+	if err := Check(unknownEnv, want); !errors.Is(err, ErrSandbox) {
+		t.Fatalf("환경을 모르는 거래가 통과: %v", err)
+	}
+	allow := want
+	allow.AllowSandbox = true
+	if err := Check(sandbox, allow); err != nil {
+		t.Fatalf("허용했는데 샌드박스가 막힘: %v", err)
+	}
 
 	// 표 하나에 경우를 늘어놓고 같은 코드로 돌린다(Go에서 흔한 모양)
 	cases := []struct {
@@ -16,7 +30,6 @@ func TestCheck(t *testing.T) {
 		err    error
 	}{
 		{"정상", func(*Purchase) {}, nil},
-		{"샌드박스도 받는다", func(p *Purchase) { p.Env = EnvSandbox }, nil},
 		{"다른 앱", func(p *Purchase) { p.BundleID = "com.other" }, ErrWrongApp},
 		{"모르는 상품", func(p *Purchase) { p.ProductID = "plus.lifetime" }, ErrUnknownProduct},
 		{"다른 계정", func(p *Purchase) { p.AccountToken = "u-2" }, ErrWrongAccount},

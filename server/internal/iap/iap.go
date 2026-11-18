@@ -73,12 +73,21 @@ type Purchase struct {
 // ErrNotFound는 스토어에 그 거래가 없다는 뜻이다. 통신 실패와 구분해서 다룬다.
 var ErrNotFound = errors.New("iap: 스토어에 없는 거래")
 
+// ErrBadProof는 앱이 낸 구매 증거가 스토어가 서명한 것이 아니거나 형식이 틀렸다는 뜻이다.
+var ErrBadProof = errors.New("iap: 구매 증거가 올바르지 않음")
+
 // Store는 결제 경로 하나다. 애플·구글 구현과 시험용 가짜가 이 모양을 따른다.
 // 메서드는 필요해질 때 늘린다(구독 상태 조회, 알림 해석, 확인은 이슈 #10~#12).
 type Store interface {
 	Route() Route
 	// AppID는 이 스토어에서 우리 앱을 가리키는 값이다(애플 번들 ID, 구글 패키지 이름). Check의 기준으로 쓴다.
 	AppID() string
+	// Verify는 앱이 낸 구매 증거에서 조회할 대상을 꺼낸다. 증거를 가졌다는 것이 "내가 산 사람"이라는 근거다.
+	//   - 애플: 스토어가 서명한 거래(JWS)여야 한다. 서명을 확인하고 거래 ID를 꺼낸다.
+	//     거래 ID만 받지 않는 이유: 숫자라서 추측할 수 있고, 추측한 번호로 남의 구매를 낼 수 있다.
+	//   - 구글: 구매 토큰 그대로다. 토큰 자체가 추측할 수 없는 비밀 값이다.
+	// 서명이 틀리면 ErrBadProof, 다른 앱의 거래면 ErrWrongApp이다.
+	Verify(kind Kind, proof string) (Ref, error)
 	// Lookup은 스토어에 다시 물어본다. 없으면 ErrNotFound를 감싼 오류를 돌려준다.
 	Lookup(ctx context.Context, ref Ref) (Purchase, error)
 	// Subscription은 구독 한 줄기의 지금 상태를 묻는다. 알림을 받았을 때와 정기 대조에서 쓴다.

@@ -28,6 +28,9 @@ type Server struct {
 	HTTP              *http.Client
 	LLM               *llm.Gateway
 	IAP               map[iap.Route]iap.Store // 결제 경로. 비어 있으면 결제 API가 없다
+	IAPSandbox        bool                    // 샌드박스 거래에도 지급할지 (IAP_ALLOW_SANDBOX)
+	iapMu             sync.Mutex
+	iapHits           map[int64]iapHit
 	ConfigError       error
 	searchMu          sync.Mutex
 	searchCache       map[string]searchEntry
@@ -237,5 +240,5 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) error {
 }
 func New(db *pgxpool.Pool) *Server {
 	gateway, err := llm.New(os.Getenv("LLM_KEYS"), os.Getenv("GEMINI_MODEL"), os.Getenv("OPENAI_MODEL"), nil)
-	return &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
+	return &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), IAPSandbox: iapSandboxAllowed(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
 }

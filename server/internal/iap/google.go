@@ -44,6 +44,14 @@ func (g *Google) AppID() string { return g.packageName }
 
 const googleAcknowledged = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
 
+// Verify는 구매 토큰을 그대로 조회 대상으로 쓴다. 토큰이 비밀 값이라 따로 확인할 서명이 없다.
+func (g *Google) Verify(kind Kind, proof string) (Ref, error) {
+	if proof == "" {
+		return Ref{}, fmt.Errorf("google: %w", ErrBadProof)
+	}
+	return Ref{Kind: kind, ID: proof}, nil
+}
+
 // Lookup은 구매 토큰으로 묻는다. 구독과 한 번 사는 상품은 조회 주소가 달라 ref.Kind로 가른다.
 func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
 	switch ref.Kind {

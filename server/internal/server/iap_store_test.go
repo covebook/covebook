@@ -135,10 +135,14 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("처음 들어갔다고 답한 횟수 %d (1이어야 함)", count)
 	}
-	if _, shelves, err := iapEntitlements(ctx, db, user); err != nil || shelves != 2 {
+	if _, shelves, err := iapEntitlements(ctx, db, user, true); err != nil || shelves != 2 {
 		t.Fatalf("선반 %d %v", shelves, err)
 	}
 
+	// 이 거래는 샌드박스다. 샌드박스를 받지 않는 서버에서는 세지 않는다
+	if _, shelves, err := iapEntitlements(ctx, db, user, false); err != nil || shelves != 0 {
+		t.Fatalf("샌드박스 거래가 세어짐: %d %v", shelves, err)
+	}
 	// 두 번째 거래는 더해진다
 	p2 := p
 	p2.TransactionID = iapTestID(t, "tx2")
@@ -146,7 +150,7 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, p2); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	if _, shelves, _ := iapEntitlements(ctx, db, user); shelves != 4 {
+	if _, shelves, _ := iapEntitlements(ctx, db, user, true); shelves != 4 {
 		t.Fatalf("선반 %d (4여야 함)", shelves)
 	}
 
@@ -157,7 +161,7 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	if ok, _ := iapRevokePurchase(ctx, db, iap.RouteApple, p.TransactionID, time.Now()); ok {
 		t.Fatal("이미 환불된 거래가 다시 바뀜")
 	}
-	if _, shelves, _ := iapEntitlements(ctx, db, user); shelves != 2 {
+	if _, shelves, _ := iapEntitlements(ctx, db, user, true); shelves != 2 {
 		t.Fatalf("환불 뒤 선반 %d (2여야 함)", shelves)
 	}
 
@@ -224,7 +228,7 @@ func TestIAPSubscriptionAndPlus(t *testing.T) {
 	}
 	plus := func(u int64) bool {
 		t.Helper()
-		ok, _, err := iapEntitlements(ctx, db, u)
+		ok, _, err := iapEntitlements(ctx, db, u, true)
 		if err != nil {
 			t.Fatal(err)
 		}

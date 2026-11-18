@@ -3,6 +3,7 @@ package iap
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // Fake는 시험용 Store다. 스토어에 "있는" 거래를 미리 넣어 두고 쓴다.
@@ -17,6 +18,14 @@ type Fake struct {
 
 func (f *Fake) Route() Route  { return f.R }
 func (f *Fake) AppID() string { return f.App }
+
+// Verify는 증거를 그대로 조회 대상으로 쓴다. "forged"로 시작하면 서명이 틀린 것으로 본다.
+func (f *Fake) Verify(kind Kind, proof string) (Ref, error) {
+	if proof == "" || strings.HasPrefix(proof, "forged") {
+		return Ref{}, fmt.Errorf("fake: %w", ErrBadProof)
+	}
+	return Ref{Kind: kind, ID: proof}, nil
+}
 
 func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
 	if f.Err != nil {

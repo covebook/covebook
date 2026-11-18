@@ -17,6 +17,7 @@ import (
 
 // 구매 검증 API 시험. 실제 PostgreSQL과 가짜 스토어(iap.Fake)를 쓴다.
 type iapEnv struct {
+	srv    *Server
 	t      *testing.T
 	ctx    context.Context
 	db     *pgxpool.Pool
@@ -40,7 +41,7 @@ func newIAPEnv(t *testing.T) *iapEnv {
 	}
 	srv := New(db)
 	srv.IAP = map[iap.Route]iap.Store{iap.RouteApple: e.apple, iap.RouteGoogle: e.google}
-	e.h = srv.Handler()
+	e.srv, e.h = srv, srv.Handler()
 	return e
 }
 
@@ -73,7 +74,7 @@ func (e *iapEnv) call(method, path, token string, body any) (int, map[string]any
 
 func (e *iapEnv) submit(token, route, product, id string, restore bool) (int, map[string]any) {
 	e.t.Helper()
-	return e.call("POST", "/iap/purchases", token, map[string]any{"route": route, "productId": product, "id": id, "restore": restore})
+	return e.call("POST", "/iap/purchases", token, map[string]any{"route": route, "productId": product, "proof": id, "restore": restore})
 }
 
 func (e *iapEnv) accountToken(token string) string {
@@ -160,7 +161,7 @@ func TestIAPShelfPurchase(t *testing.T) {
 	if code, body := e.submit(token, "google", e.shelf, id, false); code != 503 || errCode(body) != "iap_store_unavailable" {
 		t.Fatalf("스토어 장애: %d %v", code, body)
 	}
-	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user); shelves != 0 {
+	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); shelves != 0 {
 		t.Fatal("스토어 장애인데 지급됨")
 	}
 	e.google.Err = nil
@@ -245,7 +246,8 @@ func TestIAPRejections(t *testing.T) {
 		t.Fatalf("종류가 다름: %d", code)
 	}
 	// 틀린 요청
-	for _, b := range []map[string]any{{"route": "toss", "productId": e.shelf, "id": "x"}, {"route": "google", "productId": e.shelf}, {"route": "google", "id": "x"}} {
+	for _, b := range []map[string]any{{"route": "toss", "productId": e.shelf, "proof": "x"}, {"route": "google", "productId": e.shelf}, {"route": "google", "proof": "x"},
+		{"route": "google", "productId": e.shelf, "id": "x"}} { // 옛 모양(id)은 받지 않는다
 		if code, _ := e.call("POST", "/iap/purchases", token, b); code != 400 {
 			t.Errorf("틀린 요청 %v: %d", b, code)
 		}
@@ -253,7 +255,7 @@ func TestIAPRejections(t *testing.T) {
 	if code, _ := e.submit("", "google", e.shelf, "x", false); code != 401 {
 		t.Fatalf("로그인 없이 %d", code)
 	}
-	if plus, shelves, _ := iapEntitlements(e.ctx, e.db, user); plus || shelves != 0 {
+	if plus, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); plus || shelves != 0 {
 		t.Fatalf("거절뿐인데 지급됨: %v %d", plus, shelves)
 	}
 }
@@ -395,7 +397,71 @@ func TestIAPConcurrentSubmit(t *testing.T) {
 			granted++
 		}
 	}
-	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user); granted != 1 || shelves != 2 {
+	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); granted != 1 || shelves != 2 {
 		t.Fatalf("granted %d번, 선반 %d칸 (1번, 2칸이어야 함)", granted, shelves)
+	}
+}
+
+// 구매 증거가 스토어가 서명한 것이 아니면 스토어에 묻지도 않고 거절한다.
+// 애플 거래 ID는 추측할 수 있어서, 번호만으로 남의 구매를 내거나 복원으로 남의 구독을 가져가는 것을 막는다.
+func TestIAPForgedProof(t *testing.T) {
+	e := newIAPEnv(t)
+	owner, _ := e.user()
+	thief, thiefID := e.user()
+	e.accountToken(thief)
+	orig := iapTestID(t, "orig")
+	// 스토어에는 owner의 구독이 있다. 가짜 스토어는 forged로 시작하는 증거를 서명 실패로 본다
+	forged := "forged-" + iapTestID(t, "txn")
+	e.apple.Purchases[forged] = e.subscription(orig, forged, e.accountToken(owner), time.Now().Add(time.Hour))
+	for _, restore := range []bool{false, true} {
+		if code, body := e.submit(thief, "apple", e.plus, forged, restore); code != 422 || errCode(body) != "iap_bad_proof" {
+			t.Fatalf("위조 증거(restore=%v): %d %v", restore, code, body)
+		}
+	}
+	if plus, _, _ := iapEntitlements(e.ctx, e.db, thiefID, true); plus {
+		t.Fatal("위조 증거로 구독을 가져감")
+	}
+}
+
+// 샌드박스 거래는 스위치를 켰을 때만 지급한다. 끄면 전에 준 것도 사라진다.
+func TestIAPSandboxSwitch(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	id := iapTestID(t, "tok")
+	p := e.shelfPurchase(id, e.accountToken(token))
+	p.Env = iap.EnvSandbox
+	e.google.Purchases[id] = p
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 422 || errCode(body) != "iap_sandbox_not_allowed" {
+		t.Fatalf("스위치 꺼짐: %d %v", code, body)
+	}
+	e.srv.IAPSandbox = true
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 || body["shelves"] != float64(2) {
+		t.Fatalf("스위치 켜짐: %d %v", code, body)
+	}
+	e.srv.IAPSandbox = false
+	if _, body := e.call("GET", "/iap/me", token, nil); body["shelves"] != float64(0) {
+		t.Fatalf("스위치를 껐는데 샌드박스 선반이 남음: %v", body)
+	}
+}
+
+// 한 유저가 짧은 시간에 너무 많이 내면 막는다(증거를 추측해 넣어 보는 것을 늦춘다).
+func TestIAPSubmitLimit(t *testing.T) {
+	e := newIAPEnv(t)
+	token, id := e.user()
+	other, _ := e.user()
+	last := 0
+	for range iapSubmitLimit + 1 {
+		last, _ = e.submit(token, "google", e.shelf, "없는 토큰", false)
+	}
+	if last != 429 {
+		t.Fatalf("한도를 넘겼는데 %d", last)
+	}
+	// 다른 유저는 영향받지 않는다
+	if code, _ := e.submit(other, "google", e.shelf, "없는 토큰", false); code != 404 {
+		t.Fatalf("다른 유저: %d", code)
+	}
+	// 1분이 지나면 다시 받는다
+	if !e.srv.iapAllow(id, time.Now().Add(2*time.Minute)) {
+		t.Fatal("1분 뒤에도 막힘")
 	}
 }

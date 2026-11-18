@@ -146,13 +146,15 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 // iapEntitlements는 유저가 지금 가진 것을 계산한다. 따로 저장한 값이 없고 매번 표에서 센다(D5).
 //   - plus: 결제된 구독이 있고, 만료 전이거나 유예 기간 안이다(D11). 만료 판단은 DB 서버 시계다(D23).
 //   - shelves: 환불되지 않은 선반 거래가 준 칸 수의 합.
-func iapEntitlements(ctx context.Context, q dbtx, user int64) (plus bool, shelves int, err error) {
+//
+// allowSandbox가 false면 샌드박스(시험) 거래는 세지 않는다. 스위치를 끄면 전에 준 샌드박스 권한도 함께 사라진다.
+func iapEntitlements(ctx context.Context, q dbtx, user int64, allowSandbox bool) (plus bool, shelves int, err error) {
 	err = q.QueryRow(ctx, `SELECT
 		EXISTS(SELECT 1 FROM iap_subscriptions s JOIN iap_products p ON p.route=s.route AND p.product_id=s.product_id
-			WHERE s.user_id=$1 AND s.state='paid' AND p.entitlement='plus'
+			WHERE s.user_id=$1 AND s.state='paid' AND p.entitlement='plus' AND ($2 OR s.env='production')
 			AND (s.expires_at > now() OR s.grace_until > now())),
 		coalesce((SELECT sum(p.shelves) FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-			WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid'), 0)::int`, user).Scan(&plus, &shelves)
+			WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND ($2 OR b.env='production')), 0)::int`, user, allowSandbox).Scan(&plus, &shelves)
 	return
 }
 
@@ -256,14 +258,14 @@ func iapMarkConfirmed(ctx context.Context, q dbtx, route iap.Route, key string) 
 }
 
 // iapCurrentSubscription은 구독 관리 화면에 보일 구독 하나를 고른다. 지금 유효한 것이 먼저, 그다음 만료가 늦은 것. 없으면 nil이다.
-func iapCurrentSubscription(ctx context.Context, q dbtx, user int64) (map[string]any, error) {
+func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbox bool) (map[string]any, error) {
 	var route, product, plan, state string
 	var expires time.Time
 	var grace *time.Time
 	var autoRenew, active bool
 	err := q.QueryRow(ctx, `SELECT route, product_id, plan_id, state, expires_at, grace_until, auto_renew,
 			state='paid' AND (expires_at > now() OR grace_until > now()) AS active
-		FROM iap_subscriptions WHERE user_id=$1 ORDER BY active DESC, expires_at DESC LIMIT 1`, user).
+		FROM iap_subscriptions WHERE user_id=$1 AND ($2 OR env='production') ORDER BY active DESC, expires_at DESC LIMIT 1`, user, allowSandbox).
 		Scan(&route, &product, &plan, &state, &expires, &grace, &autoRenew, &active)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

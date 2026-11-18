@@ -247,3 +247,13 @@ func TestGoogleParseNotice(t *testing.T) {
 		}
 	}
 }
+
+func TestGoogleVerify(t *testing.T) {
+	g := &Google{packageName: "app.covebook"}
+	if ref, err := g.Verify(KindProduct, "tok"); err != nil || ref != (Ref{Kind: KindProduct, ID: "tok"}) {
+		t.Fatalf("%+v %v", ref, err)
+	}
+	if _, err := g.Verify(KindProduct, ""); !errors.Is(err, ErrBadProof) {
+		t.Fatalf("빈 토큰: %v", err)
+	}
+}
