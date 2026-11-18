@@ -174,7 +174,25 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, map[string]any{"userId": user, "kakao": kakao, "google": google, "apple": apple, "nickname": nick})
+	// 로그인마다 확인된 이메일(계정 화면에서 어느 계정인지 보여 준다)
+	emails := map[string]string{}
+	rows, err := s.DB.Query(r.Context(), "SELECT provider,email FROM auth_identities WHERE user_id=$1 AND email IS NOT NULL ORDER BY created_at", user)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var p, e string
+		if err = rows.Scan(&p, &e); err != nil {
+			rows.Close()
+			return err
+		}
+		emails[p] = e
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	writeJSON(w, 200, map[string]any{"userId": user, "kakao": kakao, "google": google, "apple": apple, "nickname": nick, "emails": emails})
 	return nil
 }
 func (s *Server) Handler() http.Handler {
@@ -188,6 +206,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /auth/apple/start", wrap(s.appleStart))
 	m.HandleFunc("POST /auth/apple/callback", wrap(s.appleCallback))
 	m.HandleFunc("POST /auth/apple/claim", wrap(s.appleClaim))
+	m.HandleFunc("POST /auth/{provider}/native", wrap(s.nativeLogin))
 	m.HandleFunc("GET /me", wrap(s.me))
 	m.HandleFunc("DELETE /me", wrap(s.deleteAccount))
 	m.HandleFunc("GET /auth/kakao/unlink", wrap(s.kakaoUnlink))

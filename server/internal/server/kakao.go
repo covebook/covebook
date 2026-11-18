@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -72,37 +73,44 @@ func (s *Server) kakaoStart(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, 200, map[string]any{"url": "https://kauth.kakao.com/oauth/authorize?" + v.Encode()})
 	return nil
 }
-func (s *Server) exchange(code string) (string, string, error) {
+func (s *Server) exchange(code string) (kakaoUser, error) {
 	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {kakaoLoginKey()}, "redirect_uri": {callbackURL()}, "code": {code}}
 	if v := os.Getenv("KAKAO_CLIENT_SECRET"); v != "" {
 		form.Set("client_secret", v)
 	}
 	res, e := s.HTTP.PostForm("https://kauth.kakao.com/oauth/token", form)
 	if e != nil {
-		return "", "", e
+		return kakaoUser{}, e
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return "", "", fmt.Errorf("kakao token status %d", res.StatusCode)
+		return kakaoUser{}, fmt.Errorf("kakao token status %d", res.StatusCode)
 	}
 	var tok struct {
 		Access string `json:"access_token"`
 	}
 	if e = json.NewDecoder(res.Body).Decode(&tok); e != nil || tok.Access == "" {
-		return "", "", fmt.Errorf("invalid kakao token")
+		return kakaoUser{}, fmt.Errorf("invalid kakao token")
 	}
+	return s.kakaoMe(tok.Access)
+}
+
+type kakaoUser struct{ Subject, Nickname, Email string }
+
+// 카카오 사용자 정보(회원번호·닉네임, 확인된 이메일이 있으면 이메일)
+func (s *Server) kakaoMe(access string) (kakaoUser, error) {
 	req, e := http.NewRequest("GET", "https://kapi.kakao.com/v2/user/me", nil)
 	if e != nil {
-		return "", "", e
+		return kakaoUser{}, e
 	}
-	req.Header.Set("Authorization", "Bearer "+tok.Access)
-	res, e = s.HTTP.Do(req)
+	req.Header.Set("Authorization", "Bearer "+access)
+	res, e := s.HTTP.Do(req)
 	if e != nil {
-		return "", "", e
+		return kakaoUser{}, e
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return "", "", fmt.Errorf("kakao me status %d", res.StatusCode)
+		return kakaoUser{}, fmt.Errorf("kakao me status %d", res.StatusCode)
 	}
 	var who struct {
 		ID      json.Number `json:"id"`
@@ -110,19 +118,65 @@ func (s *Server) exchange(code string) (string, string, error) {
 			Profile struct {
 				Nickname string `json:"nickname"`
 			} `json:"profile"`
+			Email    string `json:"email"`
+			Valid    bool   `json:"is_email_valid"`
+			Verified bool   `json:"is_email_verified"`
 		} `json:"kakao_account"`
 		Properties struct {
 			Nickname string `json:"nickname"`
 		} `json:"properties"`
 	}
-	if e = json.NewDecoder(res.Body).Decode(&who); e != nil || who.ID == "" {
-		return "", "", fmt.Errorf("invalid kakao identity")
+	if e = json.NewDecoder(io.LimitReader(res.Body, 65536)).Decode(&who); e != nil || who.ID == "" {
+		return kakaoUser{}, fmt.Errorf("invalid kakao identity")
 	}
-	nick := who.Account.Profile.Nickname
-	if nick == "" {
-		nick = who.Properties.Nickname
+	u := kakaoUser{Subject: string(who.ID), Nickname: who.Account.Profile.Nickname}
+	if u.Nickname == "" {
+		u.Nickname = who.Properties.Nickname
 	}
-	return string(who.ID), nick, nil
+	if who.Account.Valid && who.Account.Verified {
+		u.Email = cleanEmail(who.Account.Email)
+	}
+	return u, nil
+}
+
+// 앱 안 카카오 로그인(SDK)의 액세스 토큰: 우리 앱(KAKAO_APP_ID)에 발급된 토큰인지 먼저 보고 사용자 정보를 받는다
+func (s *Server) kakaoNative(access string) (kakaoUser, error) {
+	if access == "" || len(access) > 4096 {
+		return kakaoUser{}, fmt.Errorf("invalid kakao token")
+	}
+	req, e := http.NewRequest("GET", "https://kapi.kakao.com/v1/user/access_token_info", nil)
+	if e != nil {
+		return kakaoUser{}, e
+	}
+	req.Header.Set("Authorization", "Bearer "+access)
+	res, e := s.HTTP.Do(req)
+	if e != nil {
+		return kakaoUser{}, e
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return kakaoUser{}, fmt.Errorf("kakao token info status %d", res.StatusCode)
+	}
+	var info struct {
+		ID    json.Number `json:"id"`
+		AppID json.Number `json:"app_id"`
+	}
+	if e = json.NewDecoder(io.LimitReader(res.Body, 65536)).Decode(&info); e != nil || info.ID == "" || string(info.AppID) != os.Getenv("KAKAO_APP_ID") {
+		return kakaoUser{}, fmt.Errorf("kakao token for another app")
+	}
+	u, e := s.kakaoMe(access)
+	if e != nil || u.Subject != string(info.ID) {
+		return kakaoUser{}, fmt.Errorf("invalid kakao identity")
+	}
+	return u, nil
+}
+
+func cleanEmail(v string) string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if len(v) > 254 || !strings.Contains(v, "@") {
+		return ""
+	}
+	return v
 }
 func (s *Server) kakaoCallback(w http.ResponseWriter, r *http.Request) error {
 	state := r.URL.Query().Get("state")
@@ -150,7 +204,7 @@ func (s *Server) kakaoCallback(w http.ResponseWriter, r *http.Request) error {
 		http.Redirect(w, r, redirectParam(ret, "error", "denied"), 302)
 		return nil
 	}
-	subject, nick, e := s.exchange(code)
+	who, e := s.exchange(code)
 	if e != nil {
 		_, e = s.DB.Exec(ctx, "DELETE FROM kakao_logins WHERE state_hash=$1", hash(state))
 		if e != nil {
@@ -164,17 +218,9 @@ func (s *Server) kakaoCallback(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(ctx)
-	if _, e = tx.Exec(ctx, "INSERT INTO auth_identities(provider,subject,user_id) VALUES('kakao',$1,$2) ON CONFLICT DO NOTHING", subject, user); e != nil {
+	result, e := linkIdentity(ctx, tx, "kakao", who.Subject, who.Email, who.Nickname, user)
+	if e != nil {
 		return e
-	}
-	var result int64
-	if e = tx.QueryRow(ctx, "SELECT user_id FROM auth_identities WHERE provider='kakao' AND subject=$1", subject).Scan(&result); e != nil {
-		return e
-	}
-	if nick != "" {
-		if _, e = tx.Exec(ctx, "UPDATE users SET nickname=$1 WHERE id=$2", nick, result); e != nil {
-			return e
-		}
 	}
 	ticket, e := random(24)
 	if e != nil {

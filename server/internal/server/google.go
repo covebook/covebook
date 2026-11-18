@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 )
@@ -29,7 +28,7 @@ func lifecycleError() error {
 }
 
 func (s *Server) providers(w http.ResponseWriter, r *http.Request) error {
-	writeJSON(w, 200, map[string]bool{"google": googleEnabled(), "apple": s.appleEnabled(), "kakao": kakaoEnabled(), "accountDeletion": true})
+	writeJSON(w, 200, map[string]bool{"google": googleEnabled(), "apple": s.appleEnabled(), "kakao": kakaoEnabled(), "accountDeletion": true, "native": true})
 	return nil
 }
 
@@ -76,12 +75,10 @@ func (s *Server) googleStart(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	sum := sha256.Sum256([]byte(verifier))
-	values := url.Values{"response_type": {"code"}, "client_id": {os.Getenv("GOOGLE_CLIENT_ID")}, "redirect_uri": {googleCallbackURL()}, "scope": {"openid profile"}, "state": {state}, "nonce": {nonce}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"}}
+	values := url.Values{"response_type": {"code"}, "client_id": {os.Getenv("GOOGLE_CLIENT_ID")}, "redirect_uri": {googleCallbackURL()}, "scope": {"openid profile email"}, "state": {state}, "nonce": {nonce}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"}}
 	writeJSON(w, 200, map[string]string{"url": "https://accounts.google.com/o/oauth2/v2/auth?" + values.Encode()})
 	return nil
 }
-
-type googleIdentity struct{ Subject, Nickname string }
 
 func (s *Server) googleExchange(ctx context.Context, code, verifier, nonceHash string) (googleIdentity, error) {
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, s.HTTP)
@@ -94,28 +91,15 @@ func (s *Server) googleExchange(ctx context.Context, code, verifier, nonceHash s
 	if !ok || raw == "" || len(raw) > 16000 {
 		return googleIdentity{}, fmt.Errorf("google_id_token_missing")
 	}
-	s.googleOnce.Do(func() {
-		keyCtx := oidc.ClientContext(context.Background(), s.HTTP)
-		keys := oidc.NewRemoteKeySet(keyCtx, "https://www.googleapis.com/oauth2/v3/certs")
-		s.googleVerifier = oidc.NewVerifier("https://accounts.google.com", keys, &oidc.Config{ClientID: os.Getenv("GOOGLE_CLIENT_ID"), SupportedSigningAlgs: []string{"RS256"}})
-	})
-	id, err := s.googleVerifier.Verify(ctx, raw)
+	id, err := s.googleIDVerifier().Verify(ctx, raw)
 	if err != nil {
 		return googleIdentity{}, fmt.Errorf("google_id_token_invalid")
 	}
-	var claims struct {
-		Nonce string `json:"nonce"`
-		Name  string `json:"name"`
-		Azp   string `json:"azp"`
-	}
+	var claims googleClaims
 	if err = id.Claims(&claims); err != nil || id.Subject == "" || len(id.Subject) > 255 || id.IssuedAt.IsZero() || id.IssuedAt.After(time.Now().Add(time.Minute)) || claims.Nonce == "" || subtle.ConstantTimeCompare([]byte(hash(claims.Nonce)), []byte(nonceHash)) != 1 || (len(id.Audience) > 1 && claims.Azp == "") || (claims.Azp != "" && claims.Azp != os.Getenv("GOOGLE_CLIENT_ID")) {
 		return googleIdentity{}, fmt.Errorf("google_id_token_invalid")
 	}
-	name := []rune(claims.Name)
-	if len(name) > 200 {
-		name = name[:200]
-	}
-	return googleIdentity{Subject: id.Subject, Nickname: string(name)}, nil
+	return claims.identity(id.Subject), nil
 }
 
 func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) error {
@@ -149,17 +133,9 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	defer tx.Rollback(r.Context())
-	if _, err = tx.Exec(r.Context(), "INSERT INTO auth_identities(provider,subject,user_id) VALUES('google',$1,$2) ON CONFLICT DO NOTHING", identity.Subject, source); err != nil {
+	result, err := linkIdentity(r.Context(), tx, "google", identity.Subject, identity.Email, identity.Nickname, source)
+	if err != nil {
 		return err
-	}
-	var result int64
-	if err = tx.QueryRow(r.Context(), "SELECT user_id FROM auth_identities WHERE provider='google' AND subject=$1", identity.Subject).Scan(&result); err != nil {
-		return err
-	}
-	if identity.Nickname != "" {
-		if _, err = tx.Exec(r.Context(), "UPDATE users SET nickname=$1 WHERE id=$2", identity.Nickname, result); err != nil {
-			return err
-		}
 	}
 	ticket, err := random(32)
 	if err != nil {

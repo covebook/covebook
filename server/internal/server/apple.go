@@ -106,14 +106,11 @@ func (s *Server) appleCallback(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	defer tx.Rollback(r.Context())
-	if _, err = tx.Exec(r.Context(), "INSERT INTO auth_identities(provider,subject,user_id) VALUES('apple',$1,$2) ON CONFLICT DO NOTHING", identity.Subject, source); err != nil {
+	result, err := linkIdentity(r.Context(), tx, "apple", identity.Subject, identity.Email, "", source)
+	if err != nil {
 		return err
 	}
-	var result int64
-	if err = tx.QueryRow(r.Context(), "SELECT user_id FROM auth_identities WHERE provider='apple' AND subject=$1", identity.Subject).Scan(&result); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(r.Context(), "INSERT INTO apple_tokens(user_id,subject,sealed_refresh) VALUES($1,$2,$3) ON CONFLICT(subject) DO UPDATE SET sealed_refresh=EXCLUDED.sealed_refresh", result, identity.Subject, identity.SealedRefresh); err != nil {
+	if _, err = tx.Exec(r.Context(), "INSERT INTO apple_tokens(user_id,subject,sealed_refresh) VALUES($1,$2,$3) ON CONFLICT(subject) DO UPDATE SET sealed_refresh=EXCLUDED.sealed_refresh,client_id=NULL", result, identity.Subject, identity.SealedRefresh); err != nil {
 		return err
 	}
 	ticket, err := random(32)
@@ -176,15 +173,15 @@ func (s *Server) appleClaim(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) revokeApple(ctx context.Context, tx pgx.Tx, user int64) error {
-	rows, err := tx.Query(ctx, "SELECT subject,sealed_refresh FROM apple_tokens WHERE user_id=$1 FOR UPDATE", user)
+	rows, err := tx.Query(ctx, "SELECT subject,sealed_refresh,COALESCE(client_id,'') FROM apple_tokens WHERE user_id=$1 FOR UPDATE", user)
 	if err != nil {
 		return err
 	}
-	type token struct{ subject, sealed string }
+	type token struct{ subject, sealed, client string }
 	var tokens []token
 	for rows.Next() {
 		var t token
-		if err = rows.Scan(&t.subject, &t.sealed); err != nil {
+		if err = rows.Scan(&t.subject, &t.sealed, &t.client); err != nil {
 			rows.Close()
 			return err
 		}
@@ -198,11 +195,20 @@ func (s *Server) revokeApple(ctx context.Context, tx pgx.Tx, user int64) error {
 	if len(tokens) == 0 {
 		return nil
 	}
-	client, err := s.appleClient()
+	web, err := s.appleClient()
+	if err != nil {
+		return err
+	}
+	// 앱 안 로그인으로 받은 토큰은 번들 ID 클라이언트로 끊는다
+	native, err := appleauth.NativeFromEnv(s.HTTP)
 	if err != nil {
 		return err
 	}
 	for _, t := range tokens {
+		client := web
+		if t.client == native.ID {
+			client = native
+		}
 		if err = client.Revoke(ctx, t.subject, t.sealed); err != nil {
 			return err
 		}
