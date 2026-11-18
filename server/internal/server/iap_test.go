@@ -360,6 +360,16 @@ func TestIAPInactiveSubscription(t *testing.T) {
 	if sub, _ := body["subscription"].(map[string]any); sub == nil || sub["active"] != false || sub["state"] != "inactive" {
 		t.Fatalf("구독 정보: %v", body["subscription"])
 	}
+	// 만료 시각은 지났는데 스토어 상태를 아직 못 받아 "결제됨"으로 남은 줄: 권한은 없고 /iap/me는 정상 응답해야 한다
+	// (유예 끝이 NULL일 때 `만료 지남 OR NULL`이 NULL이 되어 500이 나던 버그의 회귀 시험)
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_subscriptions SET state='paid', expires_at=now()-interval '1 minute', grace_until=NULL WHERE original_id=$1", orig); err != nil {
+		t.Fatal(err)
+	}
+	if code, me := e.call("GET", "/iap/me", token, nil); code != 200 || me["plus"] != false {
+		t.Fatalf("만료 직후의 /iap/me: %d %v", code, me)
+	} else if sub, _ := me["subscription"].(map[string]any); sub == nil || sub["active"] != false || sub["state"] != "paid" {
+		t.Fatalf("만료 직후의 구독 정보: %v", me["subscription"])
+	}
 	// 유예 중이면 만료 시각이 지나도 권한이 있다
 	p.State, p.GraceUntil = iap.StatePaid, time.Now().Add(time.Hour)
 	e.apple.Purchases[txn] = p

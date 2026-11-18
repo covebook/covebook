@@ -257,6 +257,7 @@ func iapMarkConfirmed(ctx context.Context, q dbtx, route iap.Route, key string) 
 	return err
 }
 
+// 주의: 유예 끝(grace_until)이 NULL이면 `만료 지남 OR NULL`은 NULL이다. coalesce로 false로 만들지 않으면 참·거짓으로 읽다가 실패한다.
 // iapCurrentSubscription은 구독 관리 화면에 보일 구독 하나를 고른다. 지금 유효한 것이 먼저, 그다음 만료가 늦은 것. 없으면 nil이다.
 func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbox bool) (map[string]any, error) {
 	var route, product, plan, state string
@@ -264,7 +265,7 @@ func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbo
 	var grace *time.Time
 	var autoRenew, active bool
 	err := q.QueryRow(ctx, `SELECT route, product_id, plan_id, state, expires_at, grace_until, auto_renew,
-			state='paid' AND (expires_at > now() OR grace_until > now()) AS active
+			coalesce(state='paid' AND (expires_at > now() OR grace_until > now()), false) AS active
 		FROM iap_subscriptions WHERE user_id=$1 AND ($2 OR env='production') ORDER BY active DESC, expires_at DESC LIMIT 1`, user, allowSandbox).
 		Scan(&route, &product, &plan, &state, &expires, &grace, &autoRenew, &active)
 	if errors.Is(err, pgx.ErrNoRows) {
