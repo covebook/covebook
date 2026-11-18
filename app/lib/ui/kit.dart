@@ -147,8 +147,8 @@ const _sheetMax = 560.0;
 
 /// 선 아이콘(지금 앱 lucide 아이콘, 굵기 1.6)
 class LucideIcon extends StatelessWidget {
-  // 선 굵기 1.8: Lucide는 24칸에 2로 그린다. 작은 크기에서 너무 굵지 않게 조금 덜(2026-11-17 Tabler 때 정한 굵기 그대로, 2026-11-18 Lucide로)
-  const LucideIcon(this.name, {super.key, this.size = 22, this.color = AppColors.ink, this.stroke = 1.8, this.fill});
+  // 선 굵기 1.6: 처음 앱(지금 앱 아이콘)과 같은 굵기(2026-11-19 사용자 '처음 썼던 걸로'. Tabler·lucide-static 때는 1.8)
+  const LucideIcon(this.name, {super.key, this.size = 22, this.color = AppColors.ink, this.stroke = 1.6, this.fill});
   final String name;
   final double size;
   final Color color;
