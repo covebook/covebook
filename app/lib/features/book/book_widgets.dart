@@ -4,16 +4,11 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../domain/library.dart' show ReadStatus;
 import '../../services/photos.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 
-/// 읽기 상태 차례(읽고 싶은 · 읽는 중 · 읽은 책 · 보류). 책 추가 칩 · 내 책 탭 · 책 정보 상태 시트가 같은 차례
-const bookStatuses = [ReadStatus.want, ReadStatus.reading, ReadStatus.read, ReadStatus.paused];
 
-/// 표지가 없을 때 대체 표지 바탕(AppColors.surface와 같은 회색. RealCover는 색을 '#rrggbb' 글자로 받는다)
-const coverPlaceholder = '#F2F4F6';
 
 /// 칸에 적은 숫자(쪽수 · 판형 mm): 숫자만 읽어 반올림. 0 이하이거나 못 읽으면 null
 int? numOf(String v) {

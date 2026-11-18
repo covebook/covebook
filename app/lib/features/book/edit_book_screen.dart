@@ -126,7 +126,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
           Padding(
             padding: const EdgeInsets.only(top: Space.m),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              RealCover(uri: _f['coverUri'], title: _f['title']!, color: coverPlaceholder, width: 96),
+              RealCover(uri: _f['coverUri'], title: _f['title']!, width: 96),
               const SizedBox(width: Space.l),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

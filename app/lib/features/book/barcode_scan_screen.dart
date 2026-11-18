@@ -15,7 +15,6 @@ import '../../store/settings_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'book_match.dart';
-import 'book_widgets.dart';
 import 'bulk_add.dart';
 
 Future<void> openBarcodeScan(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -201,7 +200,7 @@ class _ScanRow extends StatelessWidget {
                     : publisherLine(b);
     final selectable = b != null && s.ownedId == null && !s.busy;
     return BookRow(
-      cover: RealCover(uri: b?.coverUrl, title: b?.title ?? s.code, color: coverPlaceholder, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
+      cover: RealCover(uri: b?.coverUrl, title: b?.title ?? s.code, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
       title: b?.title ?? 'ISBN ${s.code}',
       meta: b != null && b.authors.isNotEmpty ? b.authors.join(', ') : null,
       third: status,

@@ -99,7 +99,7 @@ String _wa(String word) {
 String deleteNote(DeleteSummary n) {
   final parts = [if (n.marks > 0) '갈피 ${n.marks}개', if (n.essays > 0) '감상 ${n.essays}편', if (n.rounds > 0) '독서 회차 ${n.rounds}회'];
   final gone = parts.length <= 1 ? parts.join() : '${parts.sublist(0, parts.length - 1).join(', ')}${_wa(parts[parts.length - 2])} ${parts.last}';
-  final kept = n.ms >= 60000 ? formatDuration(n.ms) : formatDurationPrecise(n.ms);
+  final kept = formatDurationShort(n.ms);
   return [
     if (gone.isNotEmpty) '$gone도 지워져요.',
     if (n.sessions > 0) '독서 시간 ${withJosa(kept, '은', '는')} 책 없이 읽은 시간으로 통계에 남아요.',

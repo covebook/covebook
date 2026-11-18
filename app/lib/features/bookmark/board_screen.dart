@@ -24,7 +24,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../stats/stats_widgets.dart' show LinkedCover;
 import 'board_card.dart';
-import 'bookmark_detail_screen.dart' show PageDots, markInk, openBookmark;
+import 'bookmark_detail_screen.dart' show markInk, openBookmark;
 import 'mark_text.dart' show isPhotoMark;
 import 'new_bookmark_screen.dart' show openNewBookmark;
 

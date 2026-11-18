@@ -11,7 +11,6 @@ import '../../store/finish_reading.dart';
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../ui/alert.dart';
-import '../stats/chart_data.dart' show formatDurationShort;
 import '../stats/stats_widgets.dart' show bookTitle;
 
 /// 버튼에 넣을 책 이름(길면 줄인다)

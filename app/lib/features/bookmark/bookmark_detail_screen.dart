@@ -64,32 +64,6 @@ const _shareW = 380.0;
 Future<void> openBookmark(BuildContext context, String id) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/bookmark'), builder: (_) => BookmarkDetailScreen(id: id)));
 
-/// 넘김 점(지금 앱 PageDots): 지금 칸은 크고 진하게, 나머지는 같은 색을 옅게. 많으면 지금 칸 둘레 max개만
-class PageDots extends StatelessWidget {
-  const PageDots({super.key, required this.count, required this.index, required this.color, this.max = 7, this.gap = 8});
-  final int count, index, max;
-  final Color color;
-  final double gap;
-
-  @override
-  Widget build(BuildContext context) {
-    final from = count <= max ? 0 : math.max(0, math.min(count - max, index - max ~/ 2));
-    final to = count <= max ? count : from + max;
-    return ExcludeSemantics(
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        for (var i = from; i < to; i++) ...[
-          if (i > from) SizedBox(width: gap),
-          Container(
-            width: i == index ? 10 : 7,
-            height: i == index ? 10 : 7,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: i == index ? 1 : 0.32)),
-          ),
-        ],
-      ]),
-    );
-  }
-}
-
 class BookmarkDetailScreen extends StatefulWidget {
   const BookmarkDetailScreen({super.key, required this.id});
   final String id;

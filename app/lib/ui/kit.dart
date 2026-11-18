@@ -827,7 +827,15 @@ class BookRow extends StatelessWidget {
     this.selected,
     this.dense = false,
     this.alignTop = false,
+    this.onLongPress,
+    this.checked,
   });
+
+  /// 꾹 누르기(내 책 목록: 고르기 시작)
+  final VoidCallback? onLongPress;
+
+  /// 여러 권 고르기 줄: 화면 읽기 '선택됨/선택 안 됨'(selected 대신)
+  final bool? checked;
 
   /// 줄이 많은 목록(읽기 탭 '내 읽기 목록')은 위아래 4(2026-11-18 사용자 '간격 촘촘하게' 시안)
   final bool dense;
@@ -862,26 +870,31 @@ class BookRow extends StatelessWidget {
     final row = Padding(
       padding: EdgeInsets.symmetric(vertical: dense ? Space.xs : Space.m),
       child: Row(crossAxisAlignment: alignTop ? CrossAxisAlignment.start : CrossAxisAlignment.center, children: [
-        SizedBox(width: coverWidth(size), child: cover),
+        SizedBox(width: coverWidth(size), child: label != null ? ExcludeSemantics(child: cover) : cover),
         const SizedBox(width: Space.l),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          child: ExcludeSemantics(
+            excluding: label != null,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Text(title, maxLines: titleLines ?? (size == BookRowSize.small ? 1 : 2), overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
             if (meta != null && meta!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
             if (third != null && third!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(third!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.caption)),
-          ]),
+            ]),
+          ),
         ),
         if (trailing != null) ...[const SizedBox(width: Space.m), trailing!],
       ]),
     );
+    final tapped = onPress == null ? row : Pressable(onPress: onPress, child: row);
     return Semantics(
       container: true,
       button: onPress != null,
       selected: selected,
+      checked: checked,
       label: label,
       onTap: onPress,
-      excludeSemantics: label != null,
-      child: onPress == null ? row : Pressable(onPress: onPress, child: row),
+      onLongPress: onLongPress,
+      child: onLongPress == null ? tapped : GestureDetector(onLongPress: onLongPress, child: tapped),
     );
   }
 }
@@ -906,7 +919,10 @@ class NoBookCover extends StatelessWidget {
 /// 실제 표지(도서 이미지·내가 찍은 사진). 없거나 못 읽으면 책 색 대체 표지(제목, 명조).
 /// 원격 그림은 표지 캐시로 읽는다(오프라인에서도 한 번 본 표지는 보인다)
 class RealCover extends StatefulWidget {
-  const RealCover({super.key, this.uri, required this.title, required this.color, required this.width, this.ratio = 0.68});
+  const RealCover({super.key, this.uri, required this.title, this.color = placeholder, required this.width, this.ratio = 0.68});
+
+  /// 책 색이 없을 때 대체 표지 바탕(AppColors.surface와 같은 값, 색 글자로 받는다)
+  static const placeholder = '#F2F4F6';
   final String? uri;
   final String title;
   final String color;
@@ -980,7 +996,7 @@ class _RealCoverState extends State<RealCover> {
           width: w,
           height: h,
           padding: const EdgeInsets.all(pad),
-          decoration: BoxDecoration(color: _hexColor(widget.color), borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: hexColor(widget.color), borderRadius: BorderRadius.circular(3)),
           alignment: Alignment.center,
           child: WordText(widget.title, maxLines: 4, textAlign: TextAlign.center, style: style.copyWith(fontSize: _titleSize(context, style, w - pad * 2))),
         ),
@@ -995,7 +1011,6 @@ class _RealCoverState extends State<RealCover> {
   }
 }
 
-Color _hexColor(String hex) => Color(0xFF000000 | int.parse(hex.replaceAll('#', ''), radix: 16));
 
 /// 목록 한 줄: 이름(+ 아래 설명) · 오른쪽 값 · 화살표(다른 화면으로 넘어가는 줄에만)
 class ListItem extends StatelessWidget {
@@ -2325,7 +2340,8 @@ class Stars extends StatelessWidget {
       ]);
 }
 
-const _week = ['일', '월', '화', '수', '목', '금', '토'];
+/// 요일 이름(일요일부터). 앱의 요일 글자는 이것 하나(달력 · 통계 · 읽기 탭 날짜)
+const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 String _p2(int n) => n.toString().padLeft(2, '0');
 String dayKey(int y, int m, int d) => '$y-${_p2(m)}-${_p2(d)}';
 String todayKey([DateTime? now]) {
@@ -2429,7 +2445,7 @@ class _DateBodyState extends State<_DateBody> {
         // 날짜 칸 높이 48(누르는 자리, 2026-11-16 QA 영숙 F12)
         Widget cell(Widget child) => SizedBox(width: cw, height: Space.hit, child: Center(child: child));
         return Wrap(children: [
-          for (final w in _week) cell(ExcludeSemantics(child: Text(w, style: AppType.caption))),
+          for (final w in weekdays) cell(ExcludeSemantics(child: Text(w, style: AppType.caption))),
           for (final (i, d) in cells.indexed)
             if (d == null)
               cell(const SizedBox.shrink())
@@ -2443,7 +2459,7 @@ class _DateBodyState extends State<_DateBody> {
                   button: true,
                   enabled: !off,
                   selected: on,
-                  label: '$_m월 $d일 ${_week[i % 7]}요일${k == today ? ', 오늘' : ''}',
+                  label: '$_m월 $d일 ${weekdays[i % 7]}요일${k == today ? ', 오늘' : ''}',
                   onTap: off ? null : () => Navigator.pop(context, k),
                   excludeSemantics: true,
                   child: Pressable(
@@ -2657,4 +2673,30 @@ class _WheelState extends State<_Wheel> {
           ),
         ),
       );
+}
+
+/// 넘김 점(지금 앱 PageDots): 지금 칸은 크고 진하게, 나머지는 같은 색을 옅게. 많으면 지금 칸 둘레 max개만
+class PageDots extends StatelessWidget {
+  const PageDots({super.key, required this.count, required this.index, required this.color, this.max = 7, this.gap = 8});
+  final int count, index, max;
+  final Color color;
+  final double gap;
+
+  @override
+  Widget build(BuildContext context) {
+    final from = count <= max ? 0 : math.max(0, math.min(count - max, index - max ~/ 2));
+    final to = count <= max ? count : from + max;
+    return ExcludeSemantics(
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        for (var i = from; i < to; i++) ...[
+          if (i > from) SizedBox(width: gap),
+          Container(
+            width: i == index ? 10 : 7,
+            height: i == index ? 10 : 7,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: i == index ? 1 : 0.32)),
+          ),
+        ],
+      ]),
+    );
+  }
 }

@@ -12,7 +12,7 @@ import '../../domain/bookmark_board.dart' show boardMaxLines, boardPhotoRatio;
 import '../../domain/color.dart' show paperColors;
 import '../../domain/library.dart' show Bookmark;
 import '../../ui/theme.dart';
-import 'bookmark_card.dart' show cardPaper, hexColor;
+import 'bookmark_card.dart' show cardPaper;
 import 'bookmark_paper.dart';
 import 'bookmark_tape.dart';
 import 'mark_text.dart' show isPhotoMark, pageLabel;

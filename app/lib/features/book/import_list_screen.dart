@@ -18,10 +18,10 @@ import '../../store/library_model.dart';
 import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../bookmark/book_picker.dart' show statusLabel;
 import 'add_book_screen.dart' show openAddBook;
 import 'book_match.dart';
 import 'book_widgets.dart';
+import 'labels.dart' show statusLabel;
 import 'bulk_add.dart';
 
 Future<void> openImportList(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -340,7 +340,7 @@ class _LineRow extends StatelessWidget {
         : [?publisherLine(b), if (l.row.status != null) statusLabel[l.row.status]!].join(metaSep);
     final selectable = b != null && l.ownedId == null && !l.added;
     return BookRow(
-      cover: RealCover(uri: b?.coverUrl, title: b?.title ?? l.row.title, color: coverPlaceholder, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
+      cover: RealCover(uri: b?.coverUrl, title: b?.title ?? l.row.title, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
       title: b?.title ?? (l.row.label.isEmpty ? '(제목 없음)' : l.row.label),
       meta: b != null && b.authors.isNotEmpty ? b.authors.join(', ') : null,
       third: sub,

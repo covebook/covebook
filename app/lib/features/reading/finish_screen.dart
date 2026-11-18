@@ -20,7 +20,7 @@ import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart';
-import '../stats/chart_data.dart' show formatDurationShort, timeRange;
+import '../stats/chart_data.dart' show timeRange;
 import '../stats/stats_widgets.dart' show LinkedCover, bookAuthor, bookTitle;
 
 int? _page(String? v) {

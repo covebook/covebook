@@ -149,6 +149,9 @@ abstract final class TabBarStyle {
 }
 
 /// 눌린 표시(아이콘·글자 버튼)
+/// '#RRGGBB'(또는 'RRGGBB') → 불투명 색. 앱의 색 글자 바꾸기는 이것 하나(2026-11-19 공통 규칙: 같은 함수가 여섯 벌 있었다)
+Color hexColor(String hex) => Color(0xFF000000 | int.parse(hex.replaceAll('#', '').substring(0, 6), radix: 16));
+
 const pressOpacity = 0.55;
 
 /// 꺼진 단추·글자 단추·아이콘의 투명도(하나로, 2026-11-19 공통 규칙: 0.45 · 0.4 · 0.3이 섞여 있었다)

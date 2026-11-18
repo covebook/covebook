@@ -2,6 +2,9 @@
 // multi: 여러 권 고르기(읽기 탭 '책 추가'). 줄을 누르면 체크만 되고 '완료'로 한꺼번에 넘긴다
 library;
 
+// 읽기 상태 이름은 features/book/labels.dart(책장 홈 파일들이 이 파일에서 가져다 써서 다시 내보낸다)
+export '../book/labels.dart' show statusLabel;
+import '../book/labels.dart' show statusLabel;
 import 'package:flutter/material.dart';
 
 import '../book/add_book_screen.dart' show openAddBook;
@@ -12,7 +15,6 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../stats/stats_widgets.dart';
 
-const statusLabel = {ReadStatus.want: '읽기 전', ReadStatus.reading: '읽는 중', ReadStatus.read: '완독', ReadStatus.paused: '보류'};
 
 /// 여러 권 고르기: fixed = 이미 목록에 있어 고를 수 없는 것(체크된 채 흐리게), none = '책 없이 읽기' 줄의 값
 class MultiPick {

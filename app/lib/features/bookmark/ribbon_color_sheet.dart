@@ -11,7 +11,6 @@ import '../../services/cover_colors.dart' show coverPalette;
 import '../../store/library_model.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import 'bookmark_card.dart' show hexColor;
 
 Future<void> showRibbonColorSheet(BuildContext context, String bookId) => showSheet<void>(
       context,

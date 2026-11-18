@@ -41,7 +41,6 @@ class BookmarkCardData {
   return (size: 19, lh: 33);
 }
 
-Color hexColor(String hex) => Color(0xFF000000 | int.parse(hex.substring(1), radix: 16));
 
 // 연 안 줄바꿈(빈 줄이 아닌 줄바꿈)이 있는 글
 final _verse = RegExp(r'[^\n]\n[^\n]');
@@ -334,7 +333,7 @@ class BookmarkCard extends StatelessWidget {
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: AppColors.line, width: hair)),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(3),
-            child: RealCover(uri: data.coverUri, title: data.title, color: data.bookColor ?? data.color ?? '#F2F4F6', width: _coverW, ratio: _coverRatio),
+            child: RealCover(uri: data.coverUri, title: data.title, color: data.bookColor ?? data.color ?? RealCover.placeholder, width: _coverW, ratio: _coverRatio),
           ),
         ),
         const SizedBox(width: 12),

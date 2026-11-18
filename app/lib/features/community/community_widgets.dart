@@ -12,7 +12,6 @@ import '../settings/backup_screen.dart' show openBackup;
 import 'community_screens.dart' show openCommunityProfile;
 
 const _palette = ['#7F95A8', '#8E9A78', '#B98270', '#6E879E', '#A0906F', '#9A7F8F', '#6F8F86', '#A8826A'];
-Color _hex(String h) => Color(0xFF000000 | int.parse(h.substring(1), radix: 16));
 
 /// 공개 프로필 동그라미: 프로필 사진 기능이 없어서 닉네임 첫 글자를 차분한 색 동그라미에 쓴다(사진을 지어내지 않는다). 색은 사용자 번호로 고정
 class Avatar extends StatelessWidget {
@@ -29,7 +28,7 @@ class Avatar extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(color: _hex(_palette[id.abs() % _palette.length]), shape: BoxShape.circle),
+        decoration: BoxDecoration(color: hexColor(_palette[id.abs() % _palette.length]), shape: BoxShape.circle),
         alignment: Alignment.center,
         child: Text(initial, style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: (size * 0.42).roundToDouble(), height: 1.2, color: AppColors.onAccent)),
       ),

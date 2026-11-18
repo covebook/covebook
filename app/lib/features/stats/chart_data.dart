@@ -2,6 +2,7 @@
 // 지금 앱 features/stats/chart-data.ts를 옮긴 것(값이 같은지는 test/chart_data_matches_app_test.dart)
 library;
 
+import '../../ui/kit.dart' show weekdays;
 import 'dart:math' as math;
 
 import '../../domain/library.dart';
@@ -65,7 +66,6 @@ String hourLabel(int h) {
 }
 
 /// 요일 이름(일요일 시작). 앱 안 요일 글자는 모두 이것('일요일'은 뒤에 '요일'을 붙인다)
-const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
 /// 요일별 읽은 시간(일~토, 시작한 날 기준)
 List<num> weekdayBars(List<Session> sessions) {
@@ -238,8 +238,6 @@ String timeLabel(DateTime t) {
   return '${c.noon} ${c.text}';
 }
 
-/// 지난 시간: 1분이 안 되면 초까지('45초'), 그 밖은 분까지('3분'). 독서 끝 · 책 바꾸기 · 통계가 같이 쓴다(같은 식이 세 곳에 있었다)
-String formatDurationShort(num ms) => ms < 60000 ? formatDurationPrecise(ms) : formatDuration(ms);
 
 /// '오후 9:10-10:00'(오전·오후가 같으면 한 번만). 이음표는 띄우지 않은 짧은 '-'(2026-11-18 사용자 시안: 긴 줄 '–' 대신)
 String timeRange(String startIso, String endIso) {

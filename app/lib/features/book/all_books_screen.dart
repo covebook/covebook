@@ -27,13 +27,11 @@ import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/tab_icons.dart' show shelfIcon;
 import '../../ui/theme.dart';
-import '../bookmark/book_picker.dart' show statusLabel;
 import '../bookmark/bookmark_detail_screen.dart' show openBookmark;
 import 'add_book_screen.dart' show openAddBook;
 import 'all_books.dart';
 import 'book_screen.dart' show openBook;
-import 'book_widgets.dart' show bookStatuses;
-import 'labels.dart' show dateShort;
+import 'labels.dart' show bookStatuses, dateShort, statusLabel;
 import 'place_books.dart';
 
 const _cellMin = 96.0; // 격자 칸 최소 폭: 휴대폰은 3칸, 넓은 화면은 칸을 늘린다

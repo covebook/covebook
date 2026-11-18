@@ -18,7 +18,6 @@ import '../../ui/theme.dart';
 import '../../app/app_nav.dart';
 import '../book/book_screen.dart';
 import '../bookmark/book_picker.dart';
-import '../stats/chart_data.dart' show weekdays;
 import '../stats/stats_screen.dart';
 import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';

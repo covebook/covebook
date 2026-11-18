@@ -19,7 +19,6 @@ import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../bookmark/book_picker.dart' show statusLabel;
 import '../home/home_screen.dart' show showBookOnShelf;
 import 'all_books_screen.dart' show openAllBooks;
 import 'barcode_scan_screen.dart' show openBarcodeScan;
@@ -27,6 +26,7 @@ import 'binding_editor.dart';
 import 'book_match.dart';
 import 'book_screen.dart' show BookScreen;
 import 'book_widgets.dart';
+import 'labels.dart' show bookStatuses, statusLabel;
 import 'bulk_add.dart';
 import 'import_list_screen.dart' show openImportList;
 import 'place_books.dart';
@@ -418,7 +418,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: Space.s, bottom: Space.l),
       child: Column(children: [
-        _shadowed(RealCover(uri: d.coverUri, title: d.title.isEmpty ? '표지' : d.title, color: coverPlaceholder, width: 120)),
+        _shadowed(RealCover(uri: d.coverUri, title: d.title.isEmpty ? '표지' : d.title, width: 120)),
         Padding(
           padding: const EdgeInsets.only(top: Space.l),
           child: CoverPhotoButton(
@@ -657,7 +657,7 @@ class _ResultRow extends StatelessWidget {
       size: size,
       cover: Opacity(
         opacity: multi && owned ? disabledOpacity : 1,
-        child: _shadowed(RealCover(uri: c.coverUrl, title: c.title, color: coverPlaceholder, width: BookRow.coverWidth(size), ratio: 0.72)),
+        child: _shadowed(RealCover(uri: c.coverUrl, title: c.title, width: BookRow.coverWidth(size), ratio: 0.72)),
       ),
       title: c.title,
       meta: c.authors.isEmpty ? null : c.authors.join(', '),

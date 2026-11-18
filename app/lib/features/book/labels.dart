@@ -1,6 +1,8 @@
 // 책·기록 글자(지금 앱 features/book/labels.ts)
 library;
 
+import '../../domain/library.dart' show ReadStatus;
+
 /// 날짜 쓰는 법은 두 가지(2026-11-17 사용자 '그렇게 통일해'): 목록·카드는 [dateShort] '11월 15일'(올해가 아니면 '2025년 11월 15일'),
 /// 상세·날짜 칸은 [dateLong] '2026년 11월 15일'. 시각이 든 값(UTC ISO)은 기기 현지 날짜로 읽는다
 DateTime? _day(String? d) {
@@ -33,3 +35,7 @@ String ymd(String? d) {
   String two(int v) => v.toString().padLeft(2, '0');
   return '${l.year}.${two(l.month)}.${two(l.day)}';
 }
+
+/// 읽기 상태 이름과 고르는 차례(책 추가 · 내 책 · 책 정보 · 책장 시트가 같이 쓴다. 2026-11-19: 같은 목록이 세 벌, 이름은 갈피 책 고르기 파일에 있었다)
+const statusLabel = {ReadStatus.want: '읽기 전', ReadStatus.reading: '읽는 중', ReadStatus.read: '완독', ReadStatus.paused: '보류'};
+const bookStatuses = [ReadStatus.want, ReadStatus.reading, ReadStatus.read, ReadStatus.paused];

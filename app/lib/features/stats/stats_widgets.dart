@@ -8,89 +8,17 @@ import 'package:flutter/material.dart';
 
 import '../../domain/cover_url.dart';
 import '../../domain/library.dart';
-import '../../services/cover_cache.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'chart_data.dart';
+
+// 표지 부품은 lib/ui/book_cover.dart(책장 시트 등이 이 파일에서 가져다 써서 다시 내보낸다)
+export '../../ui/book_cover.dart';
+import '../../ui/book_cover.dart';
 import '../book/labels.dart' show dateShort;
 
 final _small = AppType.micro;
 
-Color _hex(String hex) => Color(0xFF000000 | int.parse(hex.replaceAll('#', ''), radix: 16));
-
-/// 표지 그림(기기에 받아 둔 것). 없거나 못 받으면 책 색 바탕
-class CoverImage extends StatefulWidget {
-  const CoverImage({super.key, required this.uris, required this.color, required this.width, required this.height, this.radius = 2.5});
-  final List<String?> uris;
-  final Color color;
-  final double width;
-  final double height;
-  final double radius;
-
-  @override
-  State<CoverImage> createState() => _CoverImageState();
-}
-
-class _CoverImageState extends State<CoverImage> {
-  RawImage? _img;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    for (final u in {...widget.uris.whereType<String>()}) {
-      final img = coverInMemory(u) ?? await loadCover(u);
-      if (img != null) {
-        if (mounted) setState(() => _img = RawImage(image: img, fit: BoxFit.cover, width: widget.width, height: widget.height));
-        return;
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => ClipRRect(
-        borderRadius: BorderRadius.circular(widget.radius),
-        child: Container(width: widget.width, height: widget.height, color: widget.color, child: _img),
-      );
-}
-
-/// 서재 책의 제목(없는 책이면 null). 읽기 · 통계 · 독서 끝이 같이 쓴다(같은 식이 열 곳 넘게 있었다, 2026-11-19)
-String? bookTitle(Library lib, String? id) {
-  final b = id == null ? null : lib.books[id];
-  return b == null ? null : lib.editions[b.editionId]?.title;
-}
-
-/// 서재 책의 저자('지은이1, 지은이2', 없으면 빈 글)
-String bookAuthor(Library lib, String? id) {
-  final b = id == null ? null : lib.books[id];
-  final e = b == null ? null : lib.editions[b.editionId];
-  return e != null && e.authors.isNotEmpty ? e.authors.join(', ') : '';
-}
-
-/// 서재 책의 표지: 실제 표지가 있으면 그것, 없으면 책 색 대체 표지(제목)
-class LinkedCover extends StatelessWidget {
-  const LinkedCover({super.key, required this.lib, required this.id, required this.width});
-  final Library lib;
-  final String id;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    final b = lib.books[id];
-    final e = b == null ? null : lib.editions[b.editionId];
-    final color = (b?.bindingId != null ? lib.bindings[b!.bindingId]?.spineColor : null) ?? '#F2F4F6';
-    if (e?.coverUri != null) {
-      return Semantics(
-        label: '${e!.title} 표지',
-        child: CoverImage(uris: [coverAtSize(e.coverUri, 'M'), e.coverUri], color: AppColors.surface, width: width, height: width / 0.68, radius: 3),
-      );
-    }
-    return RealCover(title: e?.title ?? '', color: color, width: width);
-  }
-}
 
 // ---------- 달력 ----------
 const _maxLayers = 4, _stepX = 4.0, _stepY = 2.0, _coverH = 46.0, _coverRatio = 1.42, _numH = 24.0;
@@ -219,7 +147,7 @@ class _Paper extends StatelessWidget {
         border: Border.all(color: const Color(0x24191F28), width: 0.5),
         boxShadow: const [BoxShadow(color: Color(0x1F000000), offset: Offset(0, 1), blurRadius: 2)],
       ),
-      child: CoverImage(uris: [coverAtSize(e?.coverUri, 'M'), e?.coverUri], color: color != null ? _hex(color) : AppColors.input, width: w, height: h),
+      child: CoverImage(uris: [coverAtSize(e?.coverUri, 'M'), e?.coverUri], color: color != null ? hexColor(color) : AppColors.input, width: w, height: h),
     );
   }
 }
