@@ -1,4 +1,5 @@
-// 계정 및 동기화(설정 → 내 기록): 연결된 계정 · 동기화 상태와 '지금 동기화' · 계정 관리(다른 계정 연결·로그아웃·서버 계정 삭제).
+// 계정 및 동기화(설정 → 내 기록): 연결된 계정과 바로 아래 로그아웃 · 다른 계정 연결 · 동기화 상태와 '지금 동기화' · 맨 아래 회원탈퇴.
+// 2026-11-18 사용자: 안쪽 '계정 관리' 화면을 없애고 로그아웃은 연결된 계정 밑에, 회원탈퇴는 맨 밑에.
 // 백업 파일 저장·공유·복원은 2026-11-17에 뺐다(사용자: 기록은 계정에, 가져오기만). 화면 모양은 2026-11-17 사용자 시안
 library;
 
@@ -15,9 +16,6 @@ import '../../ui/theme.dart';
 Future<void> openBackup(BuildContext context) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/backup'), builder: (_) => const BackupScreen()));
 
-Future<void> _openManage(BuildContext context) => Navigator.of(context, rootNavigator: true)
-    .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/backup/manage'), builder: (_) => const BackupScreen(manage: true)));
-
 /// 마지막 동기화 시각: 오늘·어제는 그 말로, 그 밖은 날짜. 오전·오후 h:mm
 String syncTimeLabel(DateTime t, DateTime now) {
   final d = DateTime(t.year, t.month, t.day), today = DateTime(now.year, now.month, now.day);
@@ -28,10 +26,7 @@ String syncTimeLabel(DateTime t, DateTime now) {
 }
 
 class BackupScreen extends StatefulWidget {
-  const BackupScreen({super.key, this.manage = false});
-
-  /// 계정 관리(다른 계정 연결·로그아웃·서버 계정 삭제) 화면
-  final bool manage;
+  const BackupScreen({super.key});
 
   @override
   State<BackupScreen> createState() => _BackupScreenState();
@@ -85,13 +80,13 @@ class _BackupScreenState extends State<BackupScreen> {
 
   void _removeAccount() => appAlert(
         context,
-        '서버 계정을 삭제할까요?',
+        '회원탈퇴할까요?',
         _sync.loginRequired
             ? '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
             : '연결된 로그인과 서버의 독서 기록·사진 삭제를 요청해요. 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
         [
           const AlertButton('취소', style: AlertStyle.cancel),
-          AlertButton('서버 계정 삭제', style: AlertStyle.destructive, onPress: () async {
+          AlertButton('회원탈퇴', style: AlertStyle.destructive, onPress: () async {
             setState(() => _loggingIn = true);
             try {
               final nav = Navigator.of(context, rootNavigator: true);
@@ -184,6 +179,15 @@ class _BackupScreenState extends State<BackupScreen> {
       if (last != null) '마지막 동기화  ${syncTimeLabel(last, DateTime.now())}',
       if (s.lastError != null && s.state == SyncState.error) s.lastError!,
     ];
+    final canLink = on && !s.paused;
+    // 다른 계정 연결: 로그인 화면과 같은 순서(카카오 · Google · Apple), 세 단추 같은 크기
+    final brands = <Widget>[
+      if (canLink && !s.account.kakao && s.providers.kakao) BrandButton.kakao(onPress: _loggingIn ? null : () => _login('kakao')),
+      if (canLink && !s.account.google && s.providers.google) BrandButton.google(onPress: _loggingIn ? null : () => _login('google')),
+      if (canLink && !s.account.apple && s.providers.apple) BrandButton.apple(onPress: _loggingIn ? null : () => _login('apple')),
+    ];
+    final out = on && s.loginRequired && s.loggedIn && !s.deletionPending;
+    final del = on && (s.deletionPending || (s.providers.accountDeletion && !s.paused));
     return [
       if (on) ...[
         Semantics(header: true, child: Text('연결된 계정', style: AppType.caption)),
@@ -208,6 +212,18 @@ class _BackupScreenState extends State<BackupScreen> {
                 ]),
               ),
             ),
+        // 로그아웃은 연결된 계정 바로 밑(2026-11-18 사용자)
+        // 무엇이 지워지는지는 누르면 뜨는 확인창이 알린다(줄은 이름만, 시안)
+        if (out) ListItem(label: '로그아웃', onPress: _loggingIn ? null : _logout),
+        if (brands.isNotEmpty) ...[
+          const SizedBox(height: Space.l),
+          Semantics(header: true, child: Text(linked.isEmpty ? '계정 연결' : '다른 계정도 연결', style: AppType.caption)),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.xs, bottom: Space.m),
+            child: WordText(linked.isEmpty ? '연결하면 기기를 바꿔도 기록을 이어 봐요' : '어느 계정으로 들어와도 같은 기록을 봐요', style: AppType.sub),
+          ),
+          for (final (i, b) in brands.indexed) Padding(padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s), child: b),
+        ],
         const SectionBand(inset: true),
       ],
       Semantics(header: true, child: Text('동기화', style: AppType.section)),
@@ -224,47 +240,18 @@ class _BackupScreenState extends State<BackupScreen> {
         const SizedBox(height: Space.l + 4),
         Btn(label: '새 계정으로 동기화', disabled: _loggingIn, onPress: _resume),
       ],
-      if (on) ...[
+      // 회원탈퇴는 맨 밑에 따로(2026-11-18 사용자). 누르면 무엇이 지워지는지 확인창에서 한 번 더 알린다
+      if (del) ...[
         const SectionBand(inset: true),
-        ListItem(label: '계정 관리', chevron: true, onPress: () => _openManage(context)),
+        ListItem(label: s.deletionPending ? '회원탈퇴 다시 요청' : '회원탈퇴', danger: true, onPress: _loggingIn ? null : _removeAccount),
       ],
-    ];
-  }
-
-  // ── 계정 관리: 다른 계정 연결 · 로그아웃 · 서버 계정 삭제 ──
-  List<Widget> _manage() {
-    final s = _sync;
-    final canLink = s.available && !s.paused;
-    // 로그인 화면과 같은 순서(카카오 · Google · Apple), 세 단추 같은 크기
-    final brands = <Widget>[
-      if (canLink && !s.account.kakao && s.providers.kakao) BrandButton.kakao(onPress: _loggingIn ? null : () => _login('kakao')),
-      if (canLink && !s.account.google && s.providers.google) BrandButton.google(onPress: _loggingIn ? null : () => _login('google')),
-      if (canLink && !s.account.apple && s.providers.apple) BrandButton.apple(onPress: _loggingIn ? null : () => _login('apple')),
-    ];
-    final linked = s.account.kakao || s.account.apple || s.account.google;
-    final out = s.loginRequired && s.loggedIn && !s.deletionPending;
-    final del = s.deletionPending || (s.providers.accountDeletion && !s.paused);
-    return [
-      if (brands.isNotEmpty) ...[
-        Semantics(header: true, child: Text(linked ? '다른 계정도 연결' : '계정 연결', style: AppType.section)),
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xs, bottom: Space.l),
-          child: WordText(linked ? '어느 계정으로 들어와도 같은 기록을 봐요' : '연결하면 기기를 바꿔도 기록을 이어 봐요', style: AppType.sub),
-        ),
-        for (final (i, b) in brands.indexed) Padding(padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s), child: b),
-        if (out || del) const SectionBand(inset: true),
-      ],
-      // 지우는 줄은 로그인 단추 사이가 아니라 아래에 따로(누르려던 단추 바로 옆에 빨간 삭제가 있었다)
-      if (out) ListItem(label: '로그아웃', sub: '이 폰의 기록을 지우고 로그인 화면으로', onPress: _loggingIn ? null : _logout),
-      if (del) ListItem(label: s.deletionPending ? '계정 삭제 다시 요청' : '서버 계정 삭제', danger: true, onPress: _loggingIn ? null : _removeAccount),
-      if (brands.isEmpty && !out && !del) Text('바꿀 수 있는 것이 없어요', style: AppType.sub),
     ];
   }
 
   @override
   Widget build(BuildContext context) => Screen(
         // 2026-11-17 사용자: 백업·복원·파일 내보내기를 없애고 '계정 및 동기화'로(기록은 계정에 보관된다. 다른 앱에서 갈아타는 가져오기만 둔다)
-        title: widget.manage ? '계정 관리' : '계정 및 동기화',
-        children: widget.manage ? _manage() : _main(),
+        title: '계정 및 동기화',
+        children: _main(),
       );
 }

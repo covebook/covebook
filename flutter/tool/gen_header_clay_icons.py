@@ -28,3 +28,23 @@ for name, (cx, cy) in centers.items():
         path = os.path.join(out, d, f'{name}.png') if d else os.path.join(out, f'{name}.png')
         im.resize((px, px), Image.LANCZOS).save(path)
 print('bg', bg, 'shade', [round(v) for v in c], 'min', lo)
+
+# 지난 책장 공유 아이콘(tool/header_art/share-art.png: 검은 바탕 위 흰 입체)도 점토 아이콘과 같은 모양으로(2026-11-18 사용자: 다른 아이콘처럼 그림자 더).
+# 흰 바탕 위 점토처럼 밝기를 만든 뒤(면은 그림 밝기, 몸 밖은 아래로 지는 부드러운 그림자) 위와 같은 규칙(바탕과의 어둡기 차이 = 투명도, 색 = 그늘 색)으로 바꾼다
+from PIL import ImageFilter
+art = Image.open(os.path.join(root, 'header_art', 'share-art.png')).convert('L')
+NS = 444
+La = np.asarray(art.resize((NS, NS), Image.LANCZOS)).astype(np.float32)
+m = np.clip((La - 90) / 70, 0, 1)
+face = 150 + (np.clip(La, 150, 255) - 150) * 0.9
+sh = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(16))).astype(np.float32) / 255
+sh = np.roll(np.roll(sh, 20, axis=0), 8, axis=1)
+gray = m * face + (1 - m) * (bg - 120 * sh)
+a2 = np.clip((bg - gray) / (bg - c.mean()), 0, 1)
+rgba = np.zeros((NS, NS, 4), np.uint8)
+rgba[..., 0], rgba[..., 1], rgba[..., 2] = c[0], c[1], c[2]
+rgba[..., 3] = (a2 * 255).astype(np.uint8)
+im = Image.fromarray(rgba, 'RGBA')
+for d, px in (('', 37), ('2.0x', 74), ('3.0x', 111)):
+    im.resize((px, px), Image.LANCZOS).save(os.path.join(out, d, 'share.png') if d else os.path.join(out, 'share.png'))
+print('share ok')

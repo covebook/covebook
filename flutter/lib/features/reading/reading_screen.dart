@@ -58,6 +58,10 @@ class _ShowWhenOpenedState extends State<ShowWhenOpened> {
   Widget build(BuildContext context) => widget.child;
 }
 const _goals = [15, 30, 60];
+
+/// 조작부 책 표지 폭과 가운데 재생 단추 지름(2026-11-18 시안 대조: 화면 폭의 11.4% · 18.4%)
+const _coverW = 47.0;
+const _roundD = 76.0;
 const _tabular = [FontFeature.tabularFigures()];
 const _shade = [Shadow(color: NightColors.shade, offset: Offset(0, 1), blurRadius: 6)];
 
@@ -497,7 +501,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           decoration: const BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.vertical(top: Radius.circular(Shape.sheet))),
           clipBehavior: Clip.antiAlias,
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(Space.page, Space.m, Space.page, insets.bottom + Space.m),
+            // 2026-11-18 사용자 '위랑 간격이랑 세로 길이가 안 맞다': 시안을 화면 폭 비율로 재서 위 여백 12 → 24, 표지 52 → 47,
+            // 표지–시간 −8, 시간–단추 −4, 가운데 단추 84 → 76(조작부 315 → 약 306, 시안 306)
+            padding: EdgeInsets.fromLTRB(Space.page, Space.l + Space.s, Space.page, insets.bottom + Space.m),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               // 1) 연결된 책(실제 표지·제목). 누르면 바꾸기, 책 없이 시작해도 된다
               Row(children: [
@@ -516,13 +522,13 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                             IgnorePointer(
                               child: DecoratedBox(
                                 decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), boxShadow: [cssShadow(const Color(0x22000000), 0, 2, 6)]),
-                                child: ClipRRect(borderRadius: BorderRadius.circular(6), child: LinkedCover(key: ValueKey(bookId), lib: lib, id: bookId, width: 52)),
+                                child: ClipRRect(borderRadius: BorderRadius.circular(6), child: LinkedCover(key: ValueKey(bookId), lib: lib, id: bookId, width: _coverW)),
                               ),
                             )
                           else
                             Container(
-                              width: 52,
-                              height: 66,
+                              width: _coverW,
+                              height: _coverW * 1.4,
                               decoration: BoxDecoration(
                                 color: AppColors.surface,
                                 borderRadius: BorderRadius.circular(4),
@@ -569,7 +575,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                     excludeFromSemantics: true,
                     onTap: _goalSheet,
                     child: Padding(
-                      padding: EdgeInsets.only(top: Space.l, bottom: Space.l + math.max(0.0, _captionLine(context) - 21)),
+                      padding: EdgeInsets.only(top: Space.s, bottom: Space.l + math.max(0.0, _captionLine(context) - 21)),
                       child: Column(children: [
                         _Elapsed(
                           running: ticking,
@@ -601,7 +607,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
               // 3) [분위기 | 재생·일시정지 | 목표]
               Padding(
-                padding: const EdgeInsets.only(top: Space.xs),
+                padding: EdgeInsets.zero,
                 child: Row(children: [
                   Expanded(
                     child: _Side(
@@ -913,10 +919,10 @@ class _RoundState extends State<_Round> {
           child: Transform.scale(
             scale: _down ? 0.96 : 1,
             child: Container(
-              width: 84,
-              height: 84,
+              width: _roundD,
+              height: _roundD,
               decoration: BoxDecoration(shape: BoxShape.circle, color: _down ? AppColors.accentPressed : AppColors.accent),
-              child: Center(child: widget.playing ? const PauseIcon(width: 9, height: 32, gap: 10, color: AppColors.onAccent) : const PlayIcon(size: 38, color: AppColors.onAccent)),
+              child: Center(child: widget.playing ? const PauseIcon(width: 8, height: 29, gap: 9, color: AppColors.onAccent) : const PlayIcon(size: 34, color: AppColors.onAccent)),
             ),
           ),
         ),

@@ -670,7 +670,7 @@ class _RoundView extends StatelessWidget {
     String day(String? x) => x != null && isDay(x) ? dateLong(x) : '—';
     Widget col(String label, String v) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: AppType.caption),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(v, style: AppType.label.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
         ]);
     return Semantics(
@@ -684,7 +684,8 @@ class _RoundView extends StatelessWidget {
             Expanded(child: Text('${r.index}회차${r.index > 1 ? ' · 재독' : ''}', style: AppType.labelStrong)),
             Text(r.finishedAt != null ? '완독' : r.paused ? '보류' : '읽는 중', style: AppType.caption),
           ]),
-          const SizedBox(height: Space.m),
+          // 글자 크기는 시안과 같고 줄 사이가 넓어 밀려 보였다(2026-11-18 사용자): 12 → 8, 이름–값 4 → 2
+          const SizedBox(height: Space.s),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(child: col('시작일', day(r.startedAt))),
             const SizedBox(width: Space.m),

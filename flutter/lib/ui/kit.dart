@@ -1876,6 +1876,9 @@ class FilterToggleRow extends StatelessWidget {
 
 /// 필터 시트의 고르는 칸(갈피 유형·내 책 정렬, 2026-11-17 사용자 시안): 테두리 상자, 고르면 진한 테두리와 오른쪽 위 모서리에 체크.
 /// 체크는 둥근 모서리 위에 걸치게(가운데가 모서리 곡선 위, 2026-11-17 사용자 '조금만 오른쪽으로, 모서리에')
+/// 고르는 칸 모서리 체크 지름(바깥 흰 테 2 포함). 시안: 칸 높이의 약 0.45
+const _choiceBadge = 24.0;
+
 class ChoiceBox extends StatelessWidget {
   const ChoiceBox({super.key, required this.label, required this.on, required this.onPress});
   final String label;
@@ -1900,19 +1903,20 @@ class ChoiceBox extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.bg,
                 borderRadius: BorderRadius.circular(Shape.button),
-                border: Border.all(color: on ? AppColors.inkSoft : AppColors.line, width: on ? 1.5 : 1),
+                // 고른 칸은 테마색 테두리·테마색 체크(2026-11-18 사용자 '테마색 어디 갔고 체크표시 왜 이렇게 작아': 회색이었고 체크 20)
+                border: Border.all(color: on ? AppColors.accent : AppColors.line, width: on ? 1.5 : 1),
               ),
               child: Text(label, maxLines: 1, textAlign: TextAlign.center, style: AppType.label),
             ),
             if (on)
               Positioned(
-                top: -8,
-                right: -8,
+                top: -_choiceBadge / 2 + 2,
+                right: -_choiceBadge / 2 + 2,
                 child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle, border: Border.all(color: AppColors.bg, width: 2)),
-                  child: const Center(child: LucideIcon('Check', size: 12, color: AppColors.bg, stroke: 3)),
+                  width: _choiceBadge,
+                  height: _choiceBadge,
+                  decoration: BoxDecoration(color: AppColors.accent, shape: BoxShape.circle, border: Border.all(color: AppColors.bg, width: 2)),
+                  child: const Center(child: LucideIcon('Check', size: 14, color: AppColors.bg, stroke: 3)),
                 ),
               ),
           ]),
