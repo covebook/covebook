@@ -5,6 +5,8 @@
 // 꾹 누른 채 끌면 자리를 옮긴다(2026-11-17 사용자 '타이머를 꾹 누르고 옮길 수 있게'). 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다
 library;
 
+import 'dart:async';
+import '../../store/finish_reading.dart' show resumeReading;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -196,7 +198,7 @@ class _MiniTimerState extends State<MiniTimer> {
             button: true,
             label: running ? '독서 일시정지' : '독서 다시 시작',
             child: Pressable(
-              onPress: () => running ? _reading.pause() : _reading.resume(),
+              onPress: () => running ? _reading.pause() : unawaited(resumeReading()),
               child: SizedBox(
                 width: 52,
                 height: miniTimerSize,

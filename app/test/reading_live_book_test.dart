@@ -1,5 +1,6 @@
 // 타이머를 켜면 책 정보가 바로 바뀐다(2026-11-19 사용자 '타이머 읽었는데 바로 기록이 안 돼'):
-// 회차가 바로 열리고 읽기 전이면 읽는 중, 내 기록 맨 위에 '지금 읽는 중' 줄, 아래 단추는 '이어서 읽기'
+// 재는 중인 책은 '읽는 중'으로 보이고 내 기록 맨 위에 '지금 읽는 중' 줄, 아래 단추는 '이어서 읽기'.
+// 회차 · 상태는 기록을 저장할 때 생긴다(시작만 하고 버리면 남지 않게, 타이머 점검 B3·B4)
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/domain/reading.dart';
 import 'package:chaekjang/features/book/book_screen.dart';
@@ -19,7 +20,7 @@ Library lib() => Library(
 Finder plainHas(String s) => find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().replaceAll('⁠', '').contains(s));
 
 void main() {
-  test('시작하면 회차를 바로 열고 읽기 전이면 읽는 중(저장할 때 같은 회차에 붙는다)', () {
+  test('기록을 저장하면 회차가 생기고 읽기 전이면 읽는 중', () {
     final r = sessionRound(lib(), 'bk1', '2026-11-19', t1);
     expect(r.lib.books['bk1']!.status, ReadStatus.reading);
     expect(r.lib.rounds.length, 1);
@@ -43,9 +44,19 @@ void main() {
     expect(find.text('이어서 읽기'), findsWidgets);
     await t.tap(find.text('내 기록'));
     await t.pump(const Duration(milliseconds: 300));
-    expect(plainHas('지금 읽는 중'), findsOneWidget);
+    expect(plainHas('지금 읽는 중 | '), findsOneWidget);
+    expect(plainHas('기록을 저장하면 1회차가 생겨요'), findsOneWidget);
+    expect(find.text('읽는 중'), findsWidgets);
     expect(find.text('타이머로 읽으면 여기에 쌓여요'), findsNothing);
     ReadingStore.instance.active = null;
     await t.pumpWidget(const SizedBox());
+  });
+
+  test('읽기 전으로 되돌린 책(회차가 남음)도 기록을 저장하면 읽는 중(점검 B5)', () {
+    final r = sessionRound(lib(), 'bk1', '2026-11-19', t1);
+    final back = r.lib.copy(books: {...r.lib.books, 'bk1': r.lib.books['bk1']!.copyWith(status: ReadStatus.want, updatedAt: t1)});
+    final s = addSessionTo(back, const SessionInput(myBookId: 'bk1', startedAt: '2026-11-19T01:00:00.000Z', endedAt: '2026-11-19T01:10:00.000Z', durationMs: 600000), t1);
+    expect(s.lib.books['bk1']!.status, ReadStatus.reading);
+    expect(s.lib.rounds.length, 1);
   });
 }

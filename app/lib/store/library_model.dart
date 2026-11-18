@@ -128,15 +128,6 @@ class LibraryModel extends ChangeNotifier {
     return r.id;
   }
 
-  /// 그 책으로 타이머를 시작했을 때: 회차를 바로 열고(있으면 그대로) 읽기 전이면 읽는 중으로. 기록을 저장하면 같은 회차에 붙는다
-  /// (2026-11-19 사용자 '타이머 읽었는데 바로 기록이 안 돼': 회차·상태가 저장할 때에야 생겨 책 정보가 '읽기 시작' 그대로였다)
-  Future<void> markReadingStarted(String bookId) async {
-    await load();
-    if (lib.books[bookId] == null) return;
-    final r = sessionRound(lib, bookId, today(), nowIso());
-    await commitLib(r.lib);
-  }
-
   /// 책 고치기(별점·한 줄 감상·현재 쪽·갈피 색). null을 주면 비운다
   Future<void> updateBook(String id, {Object? rating = _keep, Object? note = _keep, Object? currentPage = _keep, Object? ribbonColor = _keep}) {
     final b = lib.books[id];

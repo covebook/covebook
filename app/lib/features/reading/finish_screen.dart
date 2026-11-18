@@ -133,6 +133,8 @@ class _FinishScreenState extends State<FinishScreen> {
   static String _digits(String v) => v.replaceAll(RegExp(r'[^\d]'), '');
 
   Future<void> _save(FinishDraft pending, int? sp, int? ep) async {
+    // 적던 메모를 늦게 넣는 타이머가 저장 뒤에 초안을 되살리지 않게(점검 B10)
+    _notes?.cancel();
     // 저장 뒤 화면이 닫히는 동안 다시 눌러도 두 번 저장하지 않는다
     if (_saving || _saved != null) return;
     setState(() => _saving = true);

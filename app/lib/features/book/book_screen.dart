@@ -342,13 +342,8 @@ class _BookScreenState extends State<BookScreen> {
             size: 'l',
             // 그 책으로 바로 독서를 시작하고 읽기 화면을 연다(2026-11-16 QA 영숙 F2: 읽기 탭 목록에 올리기만 하고 시계가 가지 않았다)
             // 완독한 책의 '다시 읽기'는 새 회차를 먼저 묻는다(지난 회차에 이어 붙지 않게)
-            onPress: () {
-              if (widget.onRead != null) return widget.onRead!(id);
-              if (b.status != ReadStatus.read || last?.finishedAt == null) return unawaited(startReadingBook(context, id));
-              _askReread(last!, () async {
-                if (mounted) unawaited(startReadingBook(context, id));
-              });
-            },
+            // 완독한 책의 '다시 읽기' 확인은 읽기 시작 한 곳(confirmReread)이 묻는다. 재는 중이면 묻지 않고 장면으로(점검 B7)
+            onPress: () => widget.onRead != null ? widget.onRead!(id) : unawaited(startReadingBook(context, id)),
           ),
         ),
       ]),
@@ -530,11 +525,13 @@ class _BookScreenState extends State<BookScreen> {
     final pct = pc != null && pc > 0 ? ((cur / pc).clamp(0.0, 1.0) * 100).round() : null;
     void pick() => _pickStatus(b, last);
     void toggle() => _togglePage(b);
+    // 지금 이 책을 재는 중이면 '읽기 전'이어도 '읽는 중'으로 보인다(기록을 저장하면 그대로 읽는 중이 된다. 시작만 하고 버리면 원래대로)
+    final shown = ReadingStore.instance.active?.myBookId == b.id && b.status == ReadStatus.want ? ReadStatus.reading : b.status;
     return [
       Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         Semantics(
           button: true,
-          label: '읽기 상태 ${statusLabel[b.status]}, 바꾸기',
+          label: '읽기 상태 ${statusLabel[shown]}, 바꾸기',
           onTap: pick,
           excludeSemantics: true,
           child: Pressable(
@@ -542,7 +539,7 @@ class _BookScreenState extends State<BookScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: Space.hit),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(statusLabel[b.status]!, style: AppType.rowStrong.copyWith(color: AppColors.accent)),
+                Text(statusLabel[shown]!, style: AppType.rowStrong.copyWith(color: AppColors.accent)),
                 const SizedBox(width: Space.xs),
                 const LucideIcon('ChevronDown', size: 20, color: AppColors.accent, stroke: 2),
               ]),
@@ -696,7 +693,8 @@ class _BookScreenState extends State<BookScreen> {
                   : _RoundView(round: r),
           ])
         else
-          Text('읽기 시작하면 회차가 생겨요. 날짜는 나중에 고칠 수 있어요.', style: AppType.sub),
+          // 재는 중이면 저장할 때 1회차가 생긴다고 알려 준다(시작만 하고 버리면 회차를 남기지 않는다)
+          Text(ReadingStore.instance.active?.myBookId == id ? '지금 읽는 중이에요. 기록을 저장하면 1회차가 생겨요.' : '읽기 시작하면 회차가 생겨요. 날짜는 나중에 고칠 수 있어요.', style: AppType.sub),
       ];
 
   /// 남긴 갈피: 제목 옆 작은 회색 개수(감상과 같은 모양). 없으면 다른 빈 구역과 같은 왼쪽 한 줄(2026-11-19 공통 규칙: 가운데 · 위아래 40이었다)

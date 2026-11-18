@@ -5,6 +5,8 @@
 // '내 읽기 목록' 오른쪽 +는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
@@ -149,7 +151,8 @@ class _ReadListState extends State<ReadList> {
     final isActive = active != null && active.myBookId == id;
     final playing = isActive && _reading.running;
     final title = _titleOf(lib, id), author = bookAuthor(lib, id);
-    final ms = t.of(id);
+    // 재는 책은 적어도 지금 잰 시간(자정을 넘겨 재는 중이면 오늘 몫이 0이라 00:00에 멈춰 보였다, 점검 B2)
+    final ms = isActive ? math.max(t.of(id), _reading.elapsed) : t.of(id);
     // 화면 읽기 이름과 '더 보기' 동작은 줄 하나에(BookRow 안 이름은 뺀다)
     return Semantics(
       key: ValueKey(id ?? '~none'),
@@ -200,7 +203,7 @@ class _ReadListState extends State<ReadList> {
     final active = t.active;
     final running = _reading.running;
     final fActive = active != null && active.myBookId == featured;
-    final fMs = t.of(featured);
+    final fMs = active != null && active.myBookId == featured ? math.max(t.of(featured), _reading.elapsed) : t.of(featured);
     final fRead = featured != null && lib.sessions.values.any((x) => x.myBookId == featured);
     final fLabel = fActive ? (running ? '읽기 화면으로' : '이어서 읽기') : (fRead ? '이어서 읽기' : '읽기 시작');
     final title = _titleOf(lib, featured), author = bookAuthor(lib, featured);

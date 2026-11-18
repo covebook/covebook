@@ -48,8 +48,10 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
   Future<void>? _loading;
 
   /// 통화 등으로 소리가 끊긴 동안(읽는 중이었을 때): 끝나면 넣을지 묻는다(앱 틀이 창을 띄운다)
-  ({num start, num end})? spanGap;
+  /// counted: 끊긴 동안 타이머가 실제로 잰 시간(그동안 멈춰 뒀으면 그만큼 적다). 빼기는 이것만 뺀다
+  ({num start, num end, num counted})? spanGap;
   num? _spanStart;
+  num _spanElapsed0 = 0;
   StreamSubscription<AudioInterruptionEvent>? _interruptions;
 
   bool get running => active?.runningSince != null;
@@ -226,13 +228,18 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     if (e.type == AudioInterruptionType.duck) return;
     final t = _now();
     if (e.begin) {
-      if (running) _spanStart = t;
+      if (running) {
+        _spanStart = t;
+        _spanElapsed0 = elapsed;
+      }
       return;
     }
     final start = _spanStart;
     _spanStart = null;
-    if (start == null || active == null || t - start < _askSpanMs) return;
-    spanGap = (start: start, end: t);
+    // 끊긴 동안 실제로 잰 시간만(통화 중 일시정지했으면 그동안은 원래 안 셌다, 2026-11-19 타이머 점검 B9: 두 번 뺐다)
+    final counted = elapsed - _spanElapsed0;
+    if (start == null || active == null || counted < _askSpanMs) return;
+    spanGap = (start: start, end: t, counted: counted);
     notifyListeners();
   }
 
@@ -242,7 +249,7 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     spanGap = null;
     final a = active;
     if (g != null && a != null && !include) {
-      active = excludeSpan(a, g.end - g.start, _now());
+      active = excludeSpan(a, g.counted, _now());
       _save();
     }
     notifyListeners();
@@ -323,7 +330,8 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     final p = pending;
     try {
       await _persist(active, null);
-      if (identical(pending, p)) {
+      // 같은 기록(같은 id)이면 메모만 바뀌었어도 지운다(저장 중 메모 타이머가 초안을 새로 만들면 남았다, 점검 B10)
+      if (identical(pending, p) || (p != null && pending?.id == p.id)) {
         pending = null;
         pendingRestored = false;
         error = null;

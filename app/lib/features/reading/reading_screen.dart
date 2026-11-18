@@ -4,6 +4,7 @@
 // 장면은 옆으로 밀어 바꾼다(접었을 때 아래 점이 지금 장면). 소리만 듣기(soundOnly)는 타이머 없이 소리만: 독서 시간으로 기록하지 않는다
 library;
 
+import '../../store/finish_reading.dart' show resumeReading;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -149,6 +150,12 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
 
   void _finish() {
     if (_reading.active == null) return;
+    // 1초도 안 됐으면 저장할 것이 없다: 초안을 남기지 않고 닫는다(0초 초안이 다음 '읽기 시작'을 계속 막았다, 점검 B11)
+    if (_reading.elapsed < 1000) {
+      unawaited(_reading.discardActive());
+      _leave();
+      return;
+    }
     _reading.finish();
     openFinish(context, replace: true);
   }
@@ -181,7 +188,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     } else if (_reading.active == null) {
       _start();
     } else {
-      _reading.running ? _reading.pause() : _reading.resume();
+      _reading.running ? _reading.pause() : unawaited(resumeReading());
     }
   }
 

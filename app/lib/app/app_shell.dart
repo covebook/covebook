@@ -3,6 +3,7 @@
 // 하단바는 화면 양옆·아래에서 띄운 흰 알약(옅은 그림자), 글자 없이 아이콘만: 고르지 않은 탭은 속이 빈 회색, 고른 탭은 검정으로 속이 찬 모양
 library;
 
+import '../store/finish_reading.dart' show resumeReading;
 import 'dart:async';
 import 'dart:io';
 
@@ -43,6 +44,9 @@ const _coverLimit = Duration(seconds: 15);
 
 /// 꾸미기 중 탭 바 숨기기(홈이 켠다)
 final tabBarHidden = ValueNotifier<bool>(false);
+
+/// 이보다 오래 꺼져 있었던 독서는 꺼진 시간을 넣을지 묻지 않고 뺀다
+const longGapMs = 3 * 60 * 60 * 1000;
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -160,7 +164,7 @@ class _AppShellState extends State<AppShell> {
     final g = ReadingStore.instance.spanGap;
     if (g == null || _spanAsking || !mounted) return;
     _spanAsking = true;
-    final span = formatDuration(g.end - g.start);
+    final span = formatDuration(g.counted);
     appAlert(context, '소리가 멈췄던 동안도 넣을까요?', '통화 등으로 소리가 $span 동안 멈췄어요. 그동안도 읽은 시간에 넣을까요?', [
       AlertButton('빼기', onPress: () => ReadingStore.instance.answerSpan(include: false)),
       AlertButton('넣기', onPress: () => ReadingStore.instance.answerSpan(include: true)),
@@ -206,17 +210,21 @@ class _AppShellState extends State<AppShell> {
     if (it == null && reading.stale && reading.active != null) {
       final a = reading.active!;
       final title = bookTitle(LibraryModel.instance.lib, a.myBookId);
-      final days = ((DateTime.now().millisecondsSinceEpoch - a.lastBeat) / 86400000).floor();
-      final when = days >= 1 ? '$days일 전' : '오늘';
+      // 달력 날짜로(12~24시간 전 어제를 '오늘'로 적었다, 점검 B12)
+      final d0 = DateTime.fromMillisecondsSinceEpoch(a.lastBeat.toInt()), n = DateTime.now();
+      final days = DateTime(n.year, n.month, n.day).difference(DateTime(d0.year, d0.month, d0.day)).inDays;
+      final when = days <= 0 ? '오늘' : days == 1 ? '어제' : '$days일 전';
       appAlert(
         context,
         '멈춰 둔 독서가 있어요',
         '$when ${title == null ? '' : '${withJosa('「$title」', '을', '를')} '}${formatDuration(a.accumulatedMs)} 읽다가 멈춰 뒀어요.',
         [
-          AlertButton('이어 읽기', onPress: () {
+          AlertButton('이어 읽기', onPress: () async {
             reading.clearStale();
-            reading.resume();
-            openReadingScene(context);
+            await resumeReading();
+            // 이어 읽으면 소리도 함께(복구 창 이어 읽기와 같게, 점검 B14)
+            Ambient.instance.resumeIfWanted();
+            if (context.mounted) openReadingScene(context);
           }),
           AlertButton('여기서 끝내고 기록하기', onPress: () {
             reading.clearStale();
@@ -236,6 +244,12 @@ class _AppShellState extends State<AppShell> {
     // 1분 미만 꺼졌던 것은 묻지 않고 넣는다(읽던 중일 가능성이 크다)
     if (it.gapMs < askGapMs) {
       _askContinue(true, '지난 독서가 중간에 멈췄어요', '앱이 잠깐(1분 미만) 꺼져 있었어요. 그 시간도 읽은 시간에 넣었어요.');
+      return;
+    }
+    // 오래(3시간 넘게) 꺼져 있었으면 그 시간은 묻지 않고 뺀다(2026-11-19 타이머 점검 B8: 사흘 꺼져 있다 '넣기'면 72시간 기록이 됐다)
+    if (it.gapMs >= longGapMs) {
+      _askContinue(false, '지난 독서가 중간에 멈췄어요',
+          '앱이 ${formatDuration(it.gapMs)} 꺼져 있어서 그 시간은 뺐어요. 마지막으로 확인된 $hm까지 ${withJosa(formatDuration(it.countedMs), '을', '를')} 읽었어요.');
       return;
     }
     // 꺼져 있던 시간을 넣을지 먼저 묻는다(사용자 결정 2026-11-15 '물어보기'). 넣거나 빼도 안내창이 떠 있던 동안은 읽은 시간에 들어간다
