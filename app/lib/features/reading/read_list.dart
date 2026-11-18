@@ -266,10 +266,11 @@ class _ReadListState extends State<ReadList> {
                 if (ms > 0 || isActive)
                   Text(isActive && ms < 60000 ? hms(ms) : formatDuration(ms), style: AppType.rowStrong.copyWith(fontFeatures: _tabular))
                 else
+                  // 회색(위 +와 같은 색, 2026-11-19 사용자 '읽기 회색으로 하는 게 낫지 않나'): 줄마다 책 제목이 먼저 보인다
                   Row(mainAxisSize: MainAxisSize.min, children: [
-                    const PlayIcon(size: 14, color: AppColors.accent),
+                    const PlayIcon(size: 14, color: AppColors.inkSoft),
                     const SizedBox(width: 6),
-                    Text('읽기', style: AppType.rowStrong.copyWith(color: AppColors.accent)),
+                    Text('읽기', style: AppType.rowStrong.copyWith(color: AppColors.inkSoft)),
                   ]),
               ]),
             ),

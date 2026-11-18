@@ -574,6 +574,17 @@ class _FindStepState extends State<_FindStep> {
     );
   }
 
+  // 목록 머리(많이 찾는 책 · 검색 결과): 제목 아래 출처, 오른쪽 '여러 권 고르기'(글자가 커도 제목·출처가 세로로 서지 않게 각자 줄바꿈)
+  Widget _section(String title, String? source) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Semantics(header: true, child: WordText(title, style: AppType.heading)),
+            if (source != null) ...[const SizedBox(height: 2), WordText(source, style: AppType.sub)],
+          ]),
+        ),
+        if (_multiLink != null) ...[const SizedBox(width: Space.s), TextLink(label: _multiLink!, soft: true, onPress: () => setState(() => _m.multi = true))],
+      ]);
+
   @override
   Widget build(BuildContext context) {
     final items = _m.items;
@@ -643,17 +654,7 @@ class _FindStepState extends State<_FindStep> {
             Padding(
               padding: const EdgeInsets.only(top: Space.xl),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                // 제목 아래 출처, 오른쪽 '여러 권 고르기'(글자가 커도 제목·출처가 세로로 서지 않게 각자 줄바꿈)
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Semantics(header: true, child: WordText('많이 찾는 책', style: AppType.heading)),
-                      const SizedBox(height: 2),
-                      WordText('YES24 베스트셀러', style: AppType.sub),
-                    ]),
-                  ),
-                  if (_multiLink != null) ...[const SizedBox(width: Space.s), TextLink(label: _multiLink!, soft: true, onPress: () => setState(() => _m.multi = true))],
-                ]),
+                _section('많이 찾는 책', 'YES24 베스트셀러'),
                 const SizedBox(height: Space.s),
                 for (final c in _m.popular) _row(c, lib),
               ]),
@@ -662,15 +663,9 @@ class _FindStepState extends State<_FindStep> {
             Padding(
               padding: const EdgeInsets.only(top: Space.xl),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                // 결과 머리: 구역 이름처럼 작게(출처 표시는 YES24 약관)
-                _HeadLine(
-                  title: Text.rich(TextSpan(text: '검색 결과 ${items.length}권', style: AppType.sub, children: [
-                    if (_m.provider != null) TextSpan(text: ' | ${_m.provider} 제공', style: AppType.caption),
-                  ])),
-                  titleText: ('검색 결과 ${items.length}권${_m.provider != null ? ' | ${_m.provider} 제공' : ''}', AppType.sub),
-                  link: _multiLink,
-                  onLink: () => setState(() => _m.multi = true),
-                ),
+                // 결과 머리는 '많이 찾는 책'과 같은 모양: 제목 아래 출처(YES24 약관), 오른쪽 '여러 권 고르기'
+                // (2026-11-19 사용자: 한 줄에 '|'로 붙여 쓰지 말 것)
+                _section('검색 결과 ${items.length}권', _m.provider == null ? null : '${_m.provider} 제공'),
                 const SizedBox(height: Space.s),
                 for (final c in items) _row(c, lib),
                 if (!_m.multi) _ManualLink(onPress: () => widget.onManual(q)),
@@ -684,48 +679,6 @@ class _FindStepState extends State<_FindStep> {
 
 /// 글자를 키운 화면(1.3배부터)
 bool _big(BuildContext context) => MediaQuery.textScalerOf(context).scale(10) >= 13;
-
-/// 지금 글자 배율로 한 줄에 놓을 때의 글 폭
-double _textWidth(BuildContext context, String text, TextStyle style) {
-  final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: MediaQuery.textScalerOf(context), maxLines: 1)..layout();
-  final w = tp.width;
-  tp.dispose();
-  return w;
-}
-
-/// 구역 머리 한 줄: 제목 · 작은 글(출처) · 오른쪽 글자 단추. 한 줄에 다 안 들어가면 제목을 위에 두고 나머지를 아래 줄에(넘치면 또 줄바꿈)
-class _HeadLine extends StatelessWidget {
-  const _HeadLine({required this.title, required this.titleText, this.link, this.onLink});
-  final Widget title;
-  final (String, TextStyle) titleText;
-  final String? link;
-  final VoidCallback? onLink;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
-        // 글자 단추(TextLink)는 굵은 sub 글자 + 양옆 8
-        final linkW = link == null ? 0.0 : _textWidth(context, link!, AppType.sub.copyWith(fontFamily: AppFonts.uiBold)) + 16 + Space.s;
-        final titleW = _textWidth(context, titleText.$1, titleText.$2);
-        final linkWidget = link == null ? null : TextLink(label: link!, soft: true, onPress: onLink!);
-        if (titleW + linkW <= box.maxWidth) {
-          return Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-            Expanded(child: title),
-            if (linkWidget != null) ...[const SizedBox(width: Space.s), linkWidget],
-          ]);
-        }
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          title,
-          if (linkWidget != null)
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: Space.s,
-              // TextLink는 가운데 맞춤이라 줄 폭을 다 차지한다: 글자 폭만큼만
-              children: [IntrinsicWidth(child: linkWidget)],
-            ),
-        ]);
-      });
-}
 
 /// 검색 결과·인기 책 한 줄: 표지·제목·저자·출판사 · 연도(판 구분, 2026-11-15 QA 지민 F12·정우 F7), 오른쪽 '추가'.
 /// 이미 서재에 있는 책은 '내 서재에 있음'. 여러 권 고르기에서는 '추가' 대신 동그라미 체크(서재에 있는 책은 고를 수 없음).
