@@ -26,9 +26,12 @@ import '../bookmark/photo_plate.dart' show BookmarkPhoto;
 import '../bookmark/ribbon_color_sheet.dart';
 import '../community/book_reviews.dart';
 import '../home/home_screen.dart' show showBookOnShelf;
+import '../../domain/reading.dart' show clock;
+import '../../store/reading_store.dart';
+import '../reading/reading_screen.dart' show ElapsedTicker;
 import '../reading/start_book.dart' show startReadingBook;
 import '../record/essay_screens.dart' show EssayRow, openNewEssay;
-import '../stats/chart_data.dart' show timeRange;
+import '../stats/chart_data.dart' show timeLabel, timeRange;
 import '../stats/session_edit_screen.dart' show openSessionEdit;
 import '../stats/stats_screen.dart';
 import 'all_books.dart' show deleteNote, deleteSummary;
@@ -84,12 +87,15 @@ class _BookScreenState extends State<BookScreen> {
   void initState() {
     super.initState();
     _model.addListener(_changed);
+    // 이 책을 재는 중이면 '지금 읽는 중' 줄과 단추가 바로 바뀌게
+    ReadingStore.instance.addListener(_changed);
     _model.load();
   }
 
   @override
   void dispose() {
     _model.removeListener(_changed);
+    ReadingStore.instance.removeListener(_changed);
     // 화면을 떠나도 적던 한 줄 감상은 남긴다
     if (_noteTimer?.isActive ?? false) {
       _noteTimer!.cancel();
@@ -319,7 +325,9 @@ class _BookScreenState extends State<BookScreen> {
 
   /// 아래 두 단추: 갈피 남기기 · 읽기 시작(이어서 읽기 · 다시 읽기). 하나가 두 줄이 되면 높이를 맞춘다
   Widget _footer(MyBook b, Round? last) {
-    final readLabel = b.status == ReadStatus.reading || b.status == ReadStatus.paused
+    // 이 책을 지금 재는 중이면 늘 '이어서 읽기'(장면으로 돌아간다)
+    final live = ReadingStore.instance.active?.myBookId == b.id;
+    final readLabel = live || b.status == ReadStatus.reading || b.status == ReadStatus.paused
         ? '이어서 읽기'
         : b.status == ReadStatus.read
             ? '다시 읽기'
@@ -605,6 +613,9 @@ class _BookScreenState extends State<BookScreen> {
     final recent = lib.sessions.values.where((x) => x.myBookId == id).toList()..sort((a, c) => c.startedAt.compareTo(a.startedAt));
     final readMs = bookReadMs(lib, id);
     final done = completions(lib, id);
+    // 지금 재는 독서(저장 전): 맨 위에 '지금 읽는 중 · 시작 시각부터' + 흐르는 시간. 누르면 읽기 장면으로(2026-11-19 사용자 '타이머 읽었는데 바로 기록이 안 돼')
+    final act = ReadingStore.instance.active;
+    final live = act != null && act.myBookId == id ? act : null;
     return [
       SectionHead(
         title: '독서 기록',
@@ -619,7 +630,27 @@ class _BookScreenState extends State<BookScreen> {
           padding: const EdgeInsets.only(top: Space.xs),
           child: Text([if (recent.isNotEmpty) '${recent.length}회', '총 ${formatDuration(readMs)}', if (done > 0) '완독 $done회'].join(', '), style: AppType.sub),
         ),
-      if (recent.isEmpty)
+      if (live != null)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.m),
+          child: Semantics(
+            button: true,
+            label: '지금 읽는 중, ${timeLabel(DateTime.parse(live.startedAt))}부터, 읽기 화면으로',
+            excludeSemantics: true,
+            onTap: () => startReadingBook(context, id),
+            child: Pressable(
+              onPress: () => startReadingBook(context, id),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: Space.dense),
+                child: Row(children: [
+                  Expanded(child: MetaText(['지금 읽는 중', '${timeLabel(DateTime.parse(live.startedAt))}부터'].join(metaSep), style: AppType.sub)),
+                  ElapsedTicker(running: live.runningSince != null, builder: (ms) => Text(clock(ms), style: AppType.row.tnum)),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      if (recent.isEmpty && live == null)
         Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('타이머로 읽으면 여기에 쌓여요', style: AppType.sub))
       else
         // 같은 날짜는 묶고(날짜 한 줄 아래 시간대는 연하게, 읽은 시간은 오른쪽에 진하게), 구분선 없이 날짜 사이 여백으로(2026-11-17 시안). 최근 5개

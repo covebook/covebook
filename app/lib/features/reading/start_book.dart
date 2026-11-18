@@ -20,6 +20,7 @@ import 'switch_book.dart';
 void startNewReading(String? bookId) {
   final lib = LibraryModel.instance.lib;
   ReadingStore.instance.start(bookId, bookId == null ? null : lib.books[bookId]?.currentPage);
+  if (bookId != null) LibraryModel.instance.markReadingStarted(bookId);
   Ambient.instance.play(SettingsStore.instance.scene);
 }
 

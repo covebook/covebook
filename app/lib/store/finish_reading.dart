@@ -35,6 +35,7 @@ Future<String?> saveAndStartOther(String? nextBookId) async {
   }
   final page = nextBookId == null ? null : LibraryModel.instance.lib.books[nextBookId]?.currentPage;
   rs.start(nextBookId, page);
+  if (nextBookId != null) await LibraryModel.instance.markReadingStarted(nextBookId);
   return draft.id;
 }
 
