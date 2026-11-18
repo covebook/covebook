@@ -271,22 +271,28 @@ class Screen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, TabHeader.paddingH, TabHeader.paddingBottom),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: TabHeader.minHeight - TabHeader.paddingTop - TabHeader.paddingBottom),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
+            // 탭 첫 화면의 검색 중(headerField): 제목 자리에 검색칸, 오른쪽에 right(예: 취소)(2026-11-18 내 책 사용자 그림)
+            child: headerField != null
+                ? Row(children: [
+                    Expanded(child: headerField!),
+                    if (right != null) Padding(padding: const EdgeInsets.only(left: Space.m), child: right!),
+                  ])
+                : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Semantics(header: true, child: WordText(title ?? '', style: AppType.title)),
-                      if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(subtitle!, style: AppType.sub)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Semantics(header: true, child: WordText(title ?? '', style: AppType.title)),
+                            if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(subtitle!, style: AppType.sub)),
+                          ],
+                        ),
+                      ),
+                      // 지금 앱 marginRight −10·marginTop −6: 자리째 위로 당긴다(머리줄 높이도 6 줄어든다)
+                      if (right != null) Transform.translate(offset: const Offset(10, 0), child: PullUp(dy: 6, child: right!)),
                     ],
                   ),
-                ),
-                // 지금 앱 marginRight −10·marginTop −6: 자리째 위로 당긴다(머리줄 높이도 6 줄어든다)
-                if (right != null) Transform.translate(offset: const Offset(10, 0), child: PullUp(dy: 6, child: right!)),
-              ],
-            ),
           ),
         );
     final content = Center(
@@ -1379,8 +1385,9 @@ class _SearchFieldState extends State<SearchField> {
   }
 
   @override
+  // 높이 44(2026-11-18 사용자 '검색창 두께 좀 줄이고', 예전 52)
   Widget build(BuildContext context) => Container(
-        constraints: const BoxConstraints(minHeight: 52),
+        constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.only(right: 2),
         decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
         child: Row(children: [
@@ -1411,7 +1418,7 @@ class _SearchFieldState extends State<SearchField> {
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   hintText: widget.placeholder,
                   hintStyle: AppType.input.copyWith(color: AppColors.inkFaint),
                 ),
