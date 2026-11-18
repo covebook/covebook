@@ -198,6 +198,9 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) Handler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /healthz", wrap(s.health))
+	m.HandleFunc("GET /{$}", page("index.html", "text/html; charset=utf-8"))
+	m.HandleFunc("GET /privacy", page("privacy.html", "text/html; charset=utf-8"))
+	m.HandleFunc("GET /icon.png", page("icon.png", "image/png"))
 	m.HandleFunc("POST /auth/device", wrap(s.device))
 	m.HandleFunc("GET /auth/providers", wrap(s.providers))
 	m.HandleFunc("POST /auth/google/start", wrap(s.googleStart))
