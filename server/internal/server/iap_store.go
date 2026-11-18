@@ -157,9 +157,16 @@ func iapEntitlements(ctx context.Context, q dbtx, user int64) (plus bool, shelve
 }
 
 // iapRecordNotification은 받은 알림을 남긴다. 처음 받은 알림이면 true, 이미 받은 알림이면 false다(D6).
-func iapRecordNotification(ctx context.Context, q dbtx, route iap.Route, id, kind, payload string) (bool, error) {
-	tag, err := q.Exec(ctx, `INSERT INTO iap_notifications(route,notification_id,kind,payload) VALUES($1,$2,$3,$4)
-		ON CONFLICT (route,notification_id) DO NOTHING`, string(route), id, kind, payload)
+// 원문과 함께 "다시 물어볼 대상"을 적어 둔다. 처리는 뒤에서 한다.
+func iapRecordNotification(ctx context.Context, q dbtx, n iap.Notice, payload string) (bool, error) {
+	var kind, target *string
+	if n.Target != nil {
+		k, t := string(n.Target.Kind), n.Target.ID
+		kind, target = &k, &t
+	}
+	tag, err := q.Exec(ctx, `INSERT INTO iap_notifications(route,notification_id,kind,payload,target_kind,target_id,original_id,order_id)
+		VALUES($1,$2,$3,$4,$5,$6,nullif($7,''),nullif($8,''))
+		ON CONFLICT (route,notification_id) DO NOTHING`, string(n.Route), n.ID, n.Type, payload, kind, target, n.OriginalID, n.OrderID)
 	if err != nil {
 		return false, err
 	}
@@ -168,7 +175,7 @@ func iapRecordNotification(ctx context.Context, q dbtx, route iap.Route, id, kin
 
 // iapFinishNotification은 알림 처리 결과를 남긴다. result는 processed, ignored, failed 중 하나다.
 func iapFinishNotification(ctx context.Context, q dbtx, route iap.Route, id, result, errText string) error {
-	_, err := q.Exec(ctx, `UPDATE iap_notifications SET result=$3, error=nullif($4,''), processed_at=now()
+	_, err := q.Exec(ctx, `UPDATE iap_notifications SET result=$3, error=nullif($4,''), processed_at=now(), attempts=attempts+1
 		WHERE route=$1 AND notification_id=$2`, string(route), id, result, errText)
 	return err
 }

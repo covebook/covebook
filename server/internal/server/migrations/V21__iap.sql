@@ -86,9 +86,15 @@ CREATE TABLE iap_notifications (
     notification_id TEXT NOT NULL,   -- 애플: notificationUUID. 구글: Pub/Sub messageId
     kind            TEXT NOT NULL,   -- 스토어가 준 종류 값 그대로
     payload         TEXT NOT NULL,
+    -- 알림에서 꺼낸 "다시 물어볼 대상". 처리할 때 원문을 다시 풀지 않게 받을 때 적어 둔다. 상태는 여기에 없다(스토어에 다시 묻는다)
+    target_kind     TEXT CHECK (target_kind IN ('subscription', 'product')),
+    target_id       TEXT,            -- 애플: 거래 ID. 구글: 구매 토큰
+    original_id     TEXT,            -- 구독 줄기. 구독 알림이 아니면 NULL
+    order_id        TEXT,            -- 구글 환불 알림의 주문 ID
     result          TEXT NOT NULL DEFAULT 'received' CHECK (result IN ('received', 'processed', 'ignored', 'failed')),
     error           TEXT,
     received_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    attempts        INT NOT NULL DEFAULT 0,  -- 처리를 시도한 횟수
     processed_at    TIMESTAMPTZ,
     UNIQUE (route, notification_id)
 );
