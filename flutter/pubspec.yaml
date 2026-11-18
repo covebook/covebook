@@ -39,6 +39,8 @@ flutter:
   # 굽기 입력(지금 앱의 빛 모델이 뽑은 줄 하나, tool/gen_shaders.sh)
   assets:
     - assets/header/
+    # 로그인 화면 맨 위 책장 그림(우리 앱이 그린 책장 사진에서 tool/make_login_shelf.py로 자른다. 파일만 바꾸면 그림이 바뀐다)
+    - assets/login/
     # 시작 화면 그림(지금 앱 assets/loading/quiet-start.png 그대로)
     - assets/loading/
     # 분위기 장면 영상·미리보기, 환경음(지금 앱 assets/scenes·sounds 그대로, 출처는 각 provenance.json)

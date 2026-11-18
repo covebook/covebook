@@ -87,6 +87,9 @@ abstract final class AppType {
   /// 머리줄 왼쪽 큰 제목(책 추가 · 꾸미기 · 책 정보 제목) 23
   static TextStyle get pageTitle => _text(AppFonts.uiTitle, 23, 30, AppColors.ink);
   static TextStyle get title => _text(AppFonts.uiTitle, 26, 34, AppColors.ink);
+
+  /// 앱 이름처럼 화면에 하나뿐인 큰 이름(로그인 '책장 한켠', 2026-11-18 시안)
+  static TextStyle get hero => _text(AppFonts.uiTitle, 32, 40, AppColors.ink);
   static TextStyle get navTitle => _text(AppFonts.uiBold, 18, 25, AppColors.ink);
   static TextStyle get heading => _text(AppFonts.uiBold, 21, 29, AppColors.ink);
   static TextStyle get section => _text(AppFonts.uiBold, 19, 27, AppColors.ink);

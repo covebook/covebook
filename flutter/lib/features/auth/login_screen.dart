@@ -14,6 +14,9 @@ import '../../ui/theme.dart';
 import '../settings/settings_screen.dart' show privacyUrl;
 import '../settings/terms.dart' show showTermsSheet;
 
+/// 로그인 화면 맨 위 책장 그림(우리 앱이 그린 책장 사진, tool/make_login_shelf.py). 이 파일만 바꾸면 그림이 바뀐다
+const loginShelfAsset = 'assets/login/shelf.webp';
+
 /// 로그인했을 때만 child(앱)를 보여 준다. required를 주지 않으면 서버가 있는 빌드에서만 막는다
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key, required this.child, this.required});
@@ -74,10 +77,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final p = _sync.providers;
     final off = _busy != null;
     final buttons = <Widget>[
-      // 카카오 · Google · Apple 순(2026-11-17 사용자 시안)
+      // 카카오 · Apple · Google 순(2026-11-18 사용자 시안)
       if (p.kakao) BrandButton.kakao(onPress: off ? null : () => _login('kakao')),
-      if (p.google) BrandButton.google(onPress: off ? null : () => _login('google')),
       if (p.apple) BrandButton.apple(onPress: off ? null : () => _login('apple')),
+      if (p.google) BrandButton.google(onPress: off ? null : () => _login('google')),
     ];
     Widget bottom;
     if (_ready == null) {
@@ -96,55 +99,59 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     return Scaffold(
       backgroundColor: AppColors.bg,
+      // 2026-11-18 사용자 시안: 맨 위에 책장 그림을 화면 폭 가득, 아래 큰 '책장 한켠'과 두 줄 소개, 카카오 · Apple · Google 단추, 바닥 글자 단추
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Space.page),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        // 시작 화면과 같은 책·선반(quiet-start.png에서 잘라 둔 그림)
-                        ExcludeSemantics(child: Image.asset('assets/loading/login-shelf.png', width: 210, gaplessPlayback: true)),
-                        const SizedBox(height: Space.l),
-                        Semantics(
-                          header: true,
-                          child: Text('책장 한켠', textAlign: TextAlign.center, style: AppType.title.copyWith(color: AppColors.accent)),
-                        ),
-                        const SizedBox(height: Space.s),
-                        WordText('읽은 책을 책장에 진열하고,\n읽은 시간과 문장을 남겨요', textAlign: TextAlign.center, style: AppType.sub),
-                      ]),
-                    ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const SizedBox(height: Space.l),
+              // 책장 그림(우리 앱이 그린 책장을 찍어 자른 것): 화면이 낮으면 줄어든다. 바꾸려면 assets/login/shelf.webp만 바꾼다
+              Flexible(
+                flex: 5,
+                child: ExcludeSemantics(child: Image.asset(loginShelfAsset, fit: BoxFit.contain, alignment: Alignment.topCenter, gaplessPlayback: true)),
+              ),
+              Expanded(
+                flex: 2,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Space.page),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Semantics(header: true, child: Text('책장 한켠', textAlign: TextAlign.center, style: AppType.hero)),
+                      const SizedBox(height: Space.m),
+                      WordText('읽은 책을 책장에 진열하고,\n읽은 시간과 문장을 남겨요', textAlign: TextAlign.center, style: AppType.row.copyWith(color: AppColors.inkSoft)),
+                    ]),
                   ),
                 ),
-                if (off)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Space.m),
-                    child: WordText('로그인하는 중…', textAlign: TextAlign.center, style: AppType.caption),
-                  ),
-                bottom,
-                // 단추 아래 긴 설명은 뺐다(2026-11-17 사용자 '구구절절 설명 지워'): 처리방침 글자 단추만
-                const SizedBox(height: Space.xl),
-                // 이용약관 · 개인정보 처리방침 두 글자 단추(2026-11-18 약관 추가)
-                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  TextButton(
-                    style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft, minimumSize: const Size(Space.hit, Space.hit)),
-                    onPressed: () => showTermsSheet(context),
-                    child: Text('이용약관', style: AppType.caption.copyWith(fontFamily: AppFonts.uiMedium)),
-                  ),
-                  ExcludeSemantics(child: Text('·', style: AppType.caption)),
-                  TextButton(
-                    style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft, minimumSize: const Size(Space.hit, Space.hit)),
-                    onPressed: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication),
-                    child: Text('개인정보 처리방침', style: AppType.caption.copyWith(fontFamily: AppFonts.uiMedium)),
-                  ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.page + Space.s),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  if (off)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: Space.m),
+                      child: WordText('로그인하는 중…', textAlign: TextAlign.center, style: AppType.caption),
+                    ),
+                  bottom,
+                  const SizedBox(height: Space.l),
+                  // 이용약관 · 개인정보 처리방침 두 글자 단추(2026-11-18 약관 추가)
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft, minimumSize: const Size(Space.hit, Space.hit)),
+                      onPressed: () => showTermsSheet(context),
+                      child: Text('이용약관', style: AppType.caption.copyWith(fontFamily: AppFonts.uiMedium)),
+                    ),
+                    ExcludeSemantics(child: Text('·', style: AppType.caption)),
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft, minimumSize: const Size(Space.hit, Space.hit)),
+                      onPressed: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication),
+                      child: Text('개인정보 처리방침', style: AppType.caption.copyWith(fontFamily: AppFonts.uiMedium)),
+                    ),
+                  ]),
+                  const SizedBox(height: Space.s),
                 ]),
-                const SizedBox(height: Space.s),
-              ]),
-            ),
+              ),
+            ]),
           ),
         ),
       ),
