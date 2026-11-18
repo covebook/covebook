@@ -131,10 +131,9 @@ class _LoginScreenState extends State<LoginScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 단추마다 위아래 투명한 누르는 자리(hitPad)가 있어 보이는 사이는 Space.s(8) 그대로
           for (final (i, b) in buttons.indexed)
             Padding(
-              padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s - BrandButton.hitPad * 2),
+              padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s),
               child: b,
             ),
         ],
