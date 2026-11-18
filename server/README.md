@@ -26,6 +26,10 @@ Docker 이미지: `docker build -t chaekjang-go server`. 운영에서는 사진�
 
 커뮤니티 API는 `COMMUNITY_ENABLED=1`일 때만 등록된다(운영자 `/admin/reports` 포함). 비우면 `/healthz`의 `community`가 false이고 앱은 커뮤니티 화면을 숨긴다. 표의 글은 지우지 않으므로 값을 켜고 재배포하면 앱 업데이트 없이 그대로 열린다. 계정 삭제는 스위치와 상관없이 커뮤니티 데이터까지 지운다.
 
+## 결제 스위치
+
+결제 API(`/iap/me`, `/iap/purchases`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다.
+
 ## 검증과 남은 작업
 
 `go test ./...`로 일반 시험을 실행하고, **전용 테스트 DB**를 준비한 뒤 `TEST_DATABASE_URL=postgres://... go test ./...`로 PostgreSQL 통합 시험을 실행한다. Flyway V7 DB를 V8로 올리는 시험은 빈 DB를 하나 더 만들어 `TEST_EMPTY_DATABASE_URL`로 넘긴다. 이 시험은 계정과 데이터를 생성하므로 실제 데이터베이스를 지정하지 않는다.

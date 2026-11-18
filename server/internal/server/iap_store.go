@@ -68,11 +68,11 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 		return false, errors.New("iap: 결제가 끝나지 않은 거래는 원장에 넣지 않는다")
 	}
 	tag, err := q.Exec(ctx, `INSERT INTO iap_purchases
-		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country)
-		VALUES($1,$2,$3,$4,nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''))
+		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country,confirmed_at)
+		VALUES($1,$2,$3,$4,nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''),CASE WHEN $13 THEN now() END)
 		ON CONFLICT (route,transaction_id) DO NOTHING`,
 		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, p.AccountToken, p.ProductID, string(kind), string(p.Env),
-		p.PurchasedAt, p.Currency, p.PriceMilli, p.Country)
+		p.PurchasedAt, p.Currency, p.PriceMilli, p.Country, p.Acknowledged)
 	if err != nil {
 		return false, err
 	}
@@ -171,4 +171,103 @@ func iapFinishNotification(ctx context.Context, q dbtx, route iap.Route, id, res
 	_, err := q.Exec(ctx, `UPDATE iap_notifications SET result=$3, error=nullif($4,''), processed_at=now()
 		WHERE route=$1 AND notification_id=$2`, string(route), id, result, errText)
 	return err
+}
+
+// iapUserTokens는 유저가 가진 계정 연결 값 전부를 돌려준다(소문자). 없으면 빈 목록이다.
+func iapUserTokens(ctx context.Context, q dbtx, user int64) ([]string, error) {
+	rows, err := q.Query(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1", user)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var t string
+		if err = rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// iapProductSet은 그 경로에서 우리가 아는 상품 ID 전부다. 더 팔지 않는 상품도 들어 있다(이미 산 것은 인정한다).
+func iapProductSet(ctx context.Context, q dbtx, route iap.Route) (map[string]bool, error) {
+	rows, err := q.Query(ctx, "SELECT product_id FROM iap_products WHERE route=$1", string(route))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
+// iapOwner는 줄의 주인이다. found가 false면 그런 줄이 없다. 줄은 있는데 user가 0이면 주인이 계정을 지운 것이다.
+type iapOwner struct {
+	found bool
+	user  int64
+}
+
+// iapPurchaseOwner는 원장에 있는 거래의 주인을 찾는다.
+func iapPurchaseOwner(ctx context.Context, q dbtx, route iap.Route, key string) (iapOwner, error) {
+	var user *int64
+	err := q.QueryRow(ctx, "SELECT user_id FROM iap_purchases WHERE route=$1 AND transaction_id=$2", string(route), key).Scan(&user)
+	return iapOwnerOf(user, err)
+}
+
+// iapSubscriptionOwner는 구독 줄기의 지금 주인을 찾고 그 줄을 잠근다. 트랜잭션 안에서만 부른다.
+func iapSubscriptionOwner(ctx context.Context, tx pgx.Tx, route iap.Route, originalID string) (iapOwner, error) {
+	var user *int64
+	err := tx.QueryRow(ctx, "SELECT user_id FROM iap_subscriptions WHERE route=$1 AND original_id=$2 FOR UPDATE", string(route), originalID).Scan(&user)
+	return iapOwnerOf(user, err)
+}
+
+func iapOwnerOf(user *int64, err error) (iapOwner, error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return iapOwner{}, nil
+	}
+	if err != nil {
+		return iapOwner{}, err
+	}
+	if user == nil {
+		return iapOwner{found: true}, nil
+	}
+	return iapOwner{found: true, user: *user}, nil
+}
+
+// iapMarkConfirmed는 스토어 확인을 마쳤다고 남긴다.
+func iapMarkConfirmed(ctx context.Context, q dbtx, route iap.Route, key string) error {
+	_, err := q.Exec(ctx, "UPDATE iap_purchases SET confirmed_at=now(), updated_at=now() WHERE route=$1 AND transaction_id=$2 AND confirmed_at IS NULL", string(route), key)
+	return err
+}
+
+// iapCurrentSubscription은 구독 관리 화면에 보일 구독 하나를 고른다. 지금 유효한 것이 먼저, 그다음 만료가 늦은 것. 없으면 nil이다.
+func iapCurrentSubscription(ctx context.Context, q dbtx, user int64) (map[string]any, error) {
+	var route, product, plan, state string
+	var expires time.Time
+	var grace *time.Time
+	var autoRenew, active bool
+	err := q.QueryRow(ctx, `SELECT route, product_id, plan_id, state, expires_at, grace_until, auto_renew,
+			state='paid' AND (expires_at > now() OR grace_until > now()) AS active
+		FROM iap_subscriptions WHERE user_id=$1 ORDER BY active DESC, expires_at DESC LIMIT 1`, user).
+		Scan(&route, &product, &plan, &state, &expires, &grace, &autoRenew, &active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{"route": route, "productId": product, "planId": plan, "state": state, "active": active,
+		"expiresAt": expires.UTC().Format(time.RFC3339), "autoRenew": autoRenew}
+	if grace != nil {
+		out["graceUntil"] = grace.UTC().Format(time.RFC3339)
+	}
+	return out, nil
 }

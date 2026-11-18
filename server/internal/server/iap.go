@@ -1,0 +1,306 @@
+package server
+
+import (
+	"context"
+	"errors"
+	"log"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+)
+
+// 인앱결제 API. 결정 기록: docs/adr/0002-iap-design.md, 근거: docs/reports/2026-11-19-iap-pitfalls.md
+//
+// 원칙
+//   - 앱이 보낸 값은 "무엇을 물어볼지"에만 쓴다. 지급 근거는 스토어에 다시 물어 받은 답이다.
+//   - 스토어를 부르는 동안에는 DB 트랜잭션을 열지 않는다. 트랜잭션은 "주인 확인 → 원장에 넣기 → 커밋"만 한다.
+//   - 스토어 조회가 실패하면 지급하지 않고 503을 준다. 앱이 거래를 끝내지 않으면 스토어가 다시 전달한다(D18).
+//   - 같은 거래가 다시 와도 성공으로 답한다. 오류를 주면 앱이 거래를 끝내지 못해 계속 다시 보낸다.
+//   - 스토어 확인(구글 acknowledge·consume)은 커밋 뒤에 한다. 실패해도 지급은 유지하고 나중에 다시 시도한다(D10).
+
+// iapStoreTimeout은 요청 하나가 스토어 조회를 기다리는 시간이다. 값은 이슈 #23에서 다시 정한다.
+// 참고: 애플 공식 서버 라이브러리의 기본 제한 시간은 30초, RevenueCat SDK는 경우에 따라 2~30초.
+const iapStoreTimeout = 15 * time.Second
+
+// 결제 스위치(IAP_ENABLED=1): 꺼져 있으면 API가 아예 없다. 스토어 키가 없거나 틀려도 꺼진다(서버는 뜬다).
+func iapEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("IAP_ENABLED"))) {
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return false
+}
+
+// iapFromEnv는 스위치가 켜져 있을 때 환경변수로 스토어를 만든다. 실패하면 결제를 끈 채로 둔다.
+func iapFromEnv() map[iap.Route]iap.Store {
+	if !iapEnabled() {
+		return nil
+	}
+	stores, err := iap.FromEnv(os.Getenv)
+	if err != nil {
+		log.Printf("iap disabled: %v", err)
+		return nil
+	}
+	if len(stores) == 0 {
+		log.Printf("iap disabled: IAP_ENABLED is set but no store keys are configured")
+	}
+	return stores
+}
+
+func (s *Server) routeIAP(m *http.ServeMux) {
+	if len(s.IAP) == 0 {
+		return
+	}
+	m.HandleFunc("GET /iap/me", wrap(s.iapMe))
+	m.HandleFunc("POST /iap/purchases", wrap(s.iapSubmit))
+}
+
+var (
+	iapUnknownProduct   = apiError{422, "iap_unknown_product", "판매하지 않는 상품이에요"}
+	iapNotFound         = apiError{404, "iap_purchase_not_found", "스토어에서 이 구매를 찾을 수 없어요"}
+	iapStoreDown        = apiError{503, "iap_store_unavailable", "스토어에서 구매를 확인하고 있어요. 잠시 뒤 다시 확인할게요"}
+	iapRejected         = apiError{422, "iap_purchase_rejected", "이 앱의 구매가 아니에요"}
+	iapRefunded         = apiError{409, "iap_purchase_refunded", "환불된 구매예요"}
+	iapOtherAccount     = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요. 구독은 구매 복원으로 이 계정에 옮길 수 있어요"}
+	iapProductNoRestore = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요"}
+)
+
+// iapMe는 결제에 필요한 내 정보를 준다: 스토어에 넘길 계정 연결 값, 지금 가진 것, 구독 상태.
+// 앱은 결제를 시작하기 전에 이것을 불러 계정 연결 값을 받는다.
+func (s *Server) iapMe(w http.ResponseWriter, r *http.Request) error {
+	user, err := s.user(r)
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	token, err := iapAccountToken(ctx, tx, user)
+	if err != nil {
+		return err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	out, err := s.iapStatus(ctx, user)
+	if err != nil {
+		return err
+	}
+	out["accountToken"] = token
+	routes := make([]string, 0, len(s.IAP))
+	for route := range s.IAP {
+		routes = append(routes, string(route))
+	}
+	sort.Strings(routes)
+	out["routes"] = routes
+	writeJSON(w, 200, out)
+	return nil
+}
+
+// iapStatus는 지금 가진 것을 표에서 계산한다. 따로 저장한 값이 없다(D5).
+func (s *Server) iapStatus(ctx context.Context, user int64) (map[string]any, error) {
+	plus, shelves, err := iapEntitlements(ctx, s.DB, user)
+	if err != nil {
+		return nil, err
+	}
+	sub, err := iapCurrentSubscription(ctx, s.DB, user)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"plus": plus, "shelves": shelves, "subscription": sub}, nil
+}
+
+// iapSubmit은 앱이 제출한 구매를 스토어에 확인하고 지급한다.
+//
+// 요청: {"route":"apple|google", "productId":"...", "id":"애플 거래 ID 또는 구글 구매 토큰", "restore":false}
+// 응답 200: {"status":"granted|already|inactive", "plus":bool, "shelves":n, "subscription":{...}}
+//
+//	granted  새로 지급했다        already  전에 지급한 거래다        inactive  구독이 만료·보류 상태라 권한이 없다
+//
+// 응답 202: {"status":"pending"}  결제가 아직 끝나지 않았다(구글 결제 대기). 지급하지 않았다
+//
+// 앱이 거래를 끝내도 되는 때: 200, 그리고 다시 보내도 결과가 같은 409·422.
+// 끝내면 안 되는 때: 202, 503, 5xx. 스토어가 다시 전달하면 다시 제출한다.
+func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
+	user, err := s.user(r)
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Route     string `json:"route"`
+		ProductID string `json:"productId"`
+		ID        string `json:"id"`
+		Restore   bool   `json:"restore"`
+	}
+	if err = decode(r, &body); err != nil {
+		return err
+	}
+	store := s.IAP[iap.Route(body.Route)]
+	if store == nil || body.ProductID == "" || body.ID == "" || len(body.ID) > 4096 {
+		return bad
+	}
+	ctx := r.Context()
+	route := store.Route()
+
+	// 1. 우리 표로 상품 종류를 정한다. 구글은 종류에 따라 조회 주소가 다르다.
+	products, err := iapProductSet(ctx, s.DB, route)
+	if err != nil {
+		return err
+	}
+	if !products[body.ProductID] {
+		return iapUnknownProduct
+	}
+	asked, err := iapFindProduct(ctx, s.DB, route, body.ProductID)
+	if err != nil {
+		return err
+	}
+	tokens, err := iapUserTokens(ctx, s.DB, user)
+	if err != nil {
+		return err
+	}
+
+	// 2. 스토어에 다시 묻는다. 트랜잭션 밖이다.
+	storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+	defer cancel()
+	ref := iap.Ref{Kind: asked.Kind, ID: body.ID}
+	submitted, err := store.Lookup(storeCtx, ref)
+	if err != nil {
+		return iapStoreError(route, err)
+	}
+	// 구독은 그 거래가 아니라 구독 줄기의 지금 상태로 판단한다(갱신·유예·해지 예약이 여기에 있다).
+	current := submitted
+	if asked.Kind == iap.KindSubscription {
+		if current, err = store.Subscription(storeCtx, submitted.OriginalTransactionID); err != nil {
+			return iapStoreError(route, err)
+		}
+	}
+
+	// 3. 이 요청에 지급해도 되는 거래인지 본다. 계정 문제는 주인을 확인한 뒤 트랜잭션 안에서 정한다.
+	expect := iap.Expect{BundleID: store.AppID(), Products: products, AccountTokens: tokens}
+	inactive := asked.Kind == iap.KindSubscription && current.State == iap.StateInactive
+	checked := current
+	if inactive {
+		checked.State = iap.StatePaid // 만료·보류된 구독도 기록은 한다. 상태만 빼고 나머지를 본다
+	}
+	verdict := iap.Check(checked, expect)
+	wrongAccount := errors.Is(verdict, iap.ErrWrongAccount)
+	switch {
+	case verdict == nil || wrongAccount:
+	case errors.Is(verdict, iap.ErrRevoked):
+		return iapRefunded
+	case errors.Is(verdict, iap.ErrNotPaid):
+		writeJSON(w, 202, map[string]any{"status": "pending"})
+		return nil
+	default: // 다른 앱, 모르는 상품
+		log.Printf("iap rejected: route=%s user=%d reason=%v", route, user, verdict)
+		return iapRejected
+	}
+	// 스토어가 알려 준 상품이 물어본 상품과 종류가 다르면 받지 않는다.
+	bought, err := iapFindProduct(ctx, s.DB, route, current.ProductID)
+	if err != nil {
+		return err
+	}
+	if bought.Kind != asked.Kind {
+		return iapRejected
+	}
+
+	// 4. 짧은 트랜잭션: 주인 확인 → 원장 → 커밋.
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var locked int64
+	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+		return err
+	}
+	status := "granted"
+	key := iapTransactionKey(asked.Kind, submitted)
+	if asked.Kind == iap.KindSubscription {
+		owner, e := iapSubscriptionOwner(ctx, tx, route, current.OriginalTransactionID)
+		if e != nil {
+			return e
+		}
+		mine := owner.found && owner.user == user
+		taken := owner.found && owner.user != 0 && owner.user != user
+		// 다른 계정의 구독은 "구매 복원"일 때만 이 계정으로 옮긴다. 한 번에 한 계정만 가진다(D8).
+		if !mine && (taken || wrongAccount) && !body.Restore {
+			return iapOtherAccount
+		}
+		if mine {
+			status = "already"
+		}
+		if !mine && taken {
+			log.Printf("iap subscription moved: route=%s from=%d to=%d", route, owner.user, user)
+		}
+		if _, err = iapUpsertSubscription(ctx, tx, user, iapSubscription{
+			Route: route, OriginalID: current.OriginalTransactionID, ProductID: current.ProductID, PlanID: current.PlanID, Env: current.Env,
+			State: current.State, ExpiresAt: current.ExpiresAt, GraceUntil: current.GraceUntil, AutoRenew: current.AutoRenew, LatestTxnID: current.TransactionID,
+		}); err != nil {
+			return err
+		}
+		// 제출된 거래 자체도 원장에 남긴다. 이미 있으면 그대로 둔다.
+		if submitted.State == iap.StatePaid {
+			if _, err = iapRecordPurchase(ctx, tx, user, asked.Kind, submitted); err != nil {
+				return err
+			}
+		}
+		if inactive {
+			status = "inactive"
+		}
+	} else {
+		owner, e := iapPurchaseOwner(ctx, tx, route, key)
+		if e != nil {
+			return e
+		}
+		mine := owner.found && owner.user == user
+		// 한 번 사는 상품은 다른 계정으로 옮기지 않는다(D8).
+		if !mine && (owner.found || wrongAccount) {
+			return iapProductNoRestore
+		}
+		inserted, e := iapRecordPurchase(ctx, tx, user, asked.Kind, submitted)
+		if e != nil {
+			return e
+		}
+		if !inserted {
+			status = "already"
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	// 5. 커밋 뒤 스토어 확인. 실패해도 지급은 유지한다. 확인 안 된 줄은 다시 시도한다(이슈 #26, #27).
+	if !submitted.Acknowledged && submitted.State == iap.StatePaid {
+		consume := asked.Kind == iap.KindProduct && bought.Consume
+		if e := store.Confirm(storeCtx, ref, submitted.ProductID, consume); e != nil {
+			log.Printf("iap confirm failed (will retry): route=%s product=%s err=%v", route, submitted.ProductID, e)
+		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
+			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
+		}
+	}
+
+	out, err := s.iapStatus(ctx, user)
+	if err != nil {
+		return err
+	}
+	out["status"] = status
+	writeJSON(w, 200, out)
+	return nil
+}
+
+// iapStoreError는 스토어 조회 실패를 가른다. "그런 거래 없음"은 거절이고, 나머지는 결과를 모르는 것이라 다시 시도하게 한다.
+func iapStoreError(route iap.Route, err error) error {
+	if errors.Is(err, iap.ErrNotFound) {
+		return iapNotFound
+	}
+	log.Printf("iap store lookup failed: route=%s err=%v", route, err)
+	return iapStoreDown
+}
