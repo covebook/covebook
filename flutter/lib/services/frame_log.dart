@@ -7,6 +7,7 @@ import 'dart:ui' show FramePhase;
 import 'package:flutter/scheduler.dart';
 
 import '../store/mini_timer_store.dart';
+import 'qa_probe.dart';
 
 const _on = bool.fromEnvironment('QA_FRAMES');
 
@@ -20,6 +21,7 @@ void startFrameLog() {
       final b = t.buildDuration.inMilliseconds, r = t.rasterDuration.inMilliseconds;
       if (b > worstBuild) worstBuild = b;
       if (r > worstRaster) worstRaster = r;
+      if (t.totalSpan.inMilliseconds <= 20) qaProbeTotals.clear();
       if (t.totalSpan.inMilliseconds > 20) {
         slow++;
         // 기다림: vsync 늦음(vsync) · build 끝나고 raster 시작까지(queue)
@@ -27,6 +29,9 @@ void startFrameLog() {
         final q = (t.timestampInMicroseconds(FramePhase.rasterStart) - t.timestampInMicroseconds(FramePhase.buildFinish)) ~/ 1000;
         // ignore: avoid_print
         print('[flframe] ${MiniTimerPlace.instance.path} build ${b}ms raster ${r}ms vsync ${vs}ms queue ${q}ms total ${t.totalSpan.inMilliseconds}ms');
+        final probe = qaProbeTake();
+        // ignore: avoid_print
+        if (probe.isNotEmpty) print('[flprobe] $probe');
       }
     }
     final now = DateTime.now();

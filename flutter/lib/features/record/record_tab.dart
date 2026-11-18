@@ -8,6 +8,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../services/qa_probe.dart';
 import '../../app/app_nav.dart';
 import '../../domain/library.dart';
 import '../../store/library_model.dart';
@@ -334,7 +335,7 @@ class _RecordTabState extends State<RecordTab> {
     final marks = section == RecordSection.marks;
     final searching = _searching.contains(section);
     final what = marks ? '갈피' : '감상';
-    return Screen(
+    return qaProbe('records', Screen(
       title: '기록',
       back: false,
       scroll: false,
@@ -379,7 +380,7 @@ class _RecordTabState extends State<RecordTab> {
         ),
         ...marks ? _marksBody(context) : _essaysBody(context),
       ],
-    );
+    ));
   }
 
   double get _bottomPad => TabBarStyle.contentPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0);
@@ -453,7 +454,7 @@ class _RecordTabState extends State<RecordTab> {
                     final b = _lib.books[m.myBookId]!;
                     final e = _lib.editions[b.editionId];
                     if (e == null) return const SizedBox.shrink();
-                    return BookmarkCard(
+                    return qaProbe('markcard', BookmarkCard(
                       key: ValueKey(m.id),
                       compact: true,
                       width: cardW,
@@ -474,7 +475,7 @@ class _RecordTabState extends State<RecordTab> {
                         photoUri: m.photoUri,
                         photoRatio: m.photoRatio,
                       ),
-                    );
+                    ));
                   },
                 ),
         ),

@@ -12,6 +12,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../services/qa_probe.dart';
 import '../../domain/ocr_text.dart';
 import '../../services/photos.dart' show PhotoFail, PhotoOk, deniedMessage;
 import '../../services/text_recognition.dart';
@@ -228,7 +229,9 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
       ]);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => qaProbe('newmark', _qaBuild(context));
+
+  Widget _qaBuild(BuildContext context) {
     final lib = _model.lib;
     final b = _bookId == null ? null : lib.books[_bookId];
     final e = b == null ? null : lib.editions[b.editionId];

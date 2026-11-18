@@ -8,6 +8,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../services/qa_probe.dart';
 import '../../domain/color.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
@@ -90,26 +91,44 @@ class WordWrap extends StatelessWidget {
       );
 
   // 줄 수를 넘으면 보이는 마지막 줄 끝에서 자르고 '…'. 마지막 줄이 줄바꿈으로 끝나면 Flutter 말줄임이 붙지 않아
-  // 시가 거기서 끝난 것처럼 보였다(QA 은서 F13)
+  // 시가 거기서 끝난 것처럼 보였다(QA 은서 F13).
+  // 2026-11-18 속도: 예전에는 한 글자씩 빼며 최대 24번 다시 배치해 기록 탭 첫 진입에 카드들 합쳐 약 106ms(에뮬레이터)가 들었다.
+  // 이제 마지막 줄에서 '…' 폭만큼 앞 자리를 바로 찾고(배치 2번) 모자랄 때만 한 글자씩 뺀다. 같은 글·폭·글자 배율이면 결과를 기억한다
   String _fit(BuildContext context, String t, double w) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final key = '${style.hashCode}|${scaler.scale(100)}|$maxLines|${w.toStringAsFixed(1)}|$t';
+    final hit = _fitMemo[key];
+    if (hit != null) return hit;
     final tp = _painter(context, t, lines: maxLines)..layout(maxWidth: w);
+    String out;
     try {
-      if (!tp.didExceedMaxLines) return t;
-      final lines = tp.computeLineMetrics();
-      final last = lines[math.min(maxLines!, lines.length) - 1];
-      final start = tp.getPositionForOffset(Offset(0, last.baseline - last.ascent / 2));
-      var cut = t.substring(0, tp.getLineBoundary(start).end).trimRight();
-      for (var k = 0; k < 24 && cut.isNotEmpty; k++) {
-        final probe = _painter(context, '$cut…', lines: maxLines)..layout(maxWidth: w);
-        final over = probe.didExceedMaxLines;
-        probe.dispose();
-        if (!over) break;
-        cut = String.fromCharCodes(cut.runes.toList()..removeLast()).trimRight();
+      if (!tp.didExceedMaxLines) {
+        out = t;
+      } else {
+        final lines = tp.computeLineMetrics();
+        final last = lines[math.min(maxLines!, lines.length) - 1];
+        final ell = _painter(context, '…')..layout();
+        final room = ell.width;
+        ell.dispose();
+        final y = last.baseline - last.ascent / 2;
+        final end = tp.getLineBoundary(tp.getPositionForOffset(Offset(0, y))).end;
+        final at = tp.getPositionForOffset(Offset(math.max(0, w - room - 1), y)).offset;
+        var cut = t.substring(0, math.min(at, end)).trimRight();
+        for (var k = 0; k < 24 && cut.isNotEmpty; k++) {
+          final probe = _painter(context, '$cut…', lines: maxLines)..layout(maxWidth: w);
+          final over = probe.didExceedMaxLines;
+          probe.dispose();
+          if (!over) break;
+          cut = String.fromCharCodes(cut.runes.toList()..removeLast()).trimRight();
+        }
+        out = '$cut…';
       }
-      return '$cut…';
     } finally {
       tp.dispose();
     }
+    if (_fitMemo.length > 300) _fitMemo.remove(_fitMemo.keys.first);
+    _fitMemo[key] = out;
+    return out;
   }
 
   // 시: 인쇄 줄마다 따로 놓고, 폭이 모자라 접힌 뒷부분만 hang만큼(줄 앞 공백이 있으면 그만큼 더) 들여 쓴다
@@ -148,11 +167,14 @@ class WordWrap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = keepAll(text);
-    if (maxLines != null) return LayoutBuilder(builder: (context, c) => _line(c.maxWidth.isFinite ? _fit(context, t, c.maxWidth) : t, label: text));
+    if (maxLines != null) return LayoutBuilder(builder: (context, c) => _line(c.maxWidth.isFinite ? qaTime('fit', () => _fit(context, t, c.maxWidth)) : t, label: text));
     if (hang != null && _verse.hasMatch(text)) return LayoutBuilder(builder: (context, c) => c.maxWidth.isFinite ? _hanging(context, c.maxWidth) : _line(t, label: text));
     return _line(t, label: text);
   }
 }
+
+/// 말줄임 결과 기억(글·폭·글자 배율·줄 수가 같으면 다시 재지 않는다)
+final _fitMemo = <String, String>{};
 
 TextStyle _t(String family, double size, double lh, Color color, {double spacing = 0}) =>
     TextStyle(fontFamily: family, fontSize: size, height: lh / size, color: color, letterSpacing: spacing, leadingDistribution: TextLeadingDistribution.even);

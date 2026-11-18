@@ -253,7 +253,8 @@ class Screen extends StatelessWidget {
         : fixed;
     // Material: 글자 기본 모양·잉크 효과의 바탕(밀어 넣은 화면에서도 글자 밑에 노란 줄이 생기지 않게).
     // 아래를 키보드 높이만큼 비운다: 밀어 넣은 화면은 Scaffold 밖이라 키보드가 열려도 줄지 않아, 입력칸·아래 고정 버튼이 키보드에 가렸다
-    // (2026-11-16 QA 영숙 F1·F13, 현우 F11, 은서 F7. 지금 앱 KeyboardAvoidingView). 탭 화면은 Scaffold가 이미 줄이고 키보드 높이를 0으로 넘겨 두 번 비키지 않는다
+    // (2026-11-16 QA 영숙 F1·F13, 현우 F11, 은서 F7. 지금 앱 KeyboardAvoidingView). 탭 화면도 같다: 탭 틀(app_shell)은 몸통을 줄이지 않고
+    // 보이는 탭에만 키보드 높이를 넘긴다(숨은 탭이 키보드 프레임마다 다시 배치되지 않게, 2026-11-18)
     return Material(
       color: AppColors.bg,
       child: Padding(

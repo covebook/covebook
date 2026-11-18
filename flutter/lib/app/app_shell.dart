@@ -18,6 +18,7 @@ import '../features/home/home_screen.dart';
 import '../domain/reading.dart' show askGapMs, withJosa;
 import '../features/reading/finish_screen.dart';
 import '../features/reading/reading_screen.dart';
+import '../services/warmup.dart';
 import '../services/ambient.dart';
 import '../services/cover_colors.dart';
 import '../services/sync.dart';
@@ -98,6 +99,8 @@ class _AppShellState extends State<AppShell> {
     AppNav.instance.addListener(_nav);
     final reading = ReadingStore.instance;
     // 서재는 첫 화면이 뜬 뒤 미리 읽어 둔다(복구 창·다른 탭이 책을 바로 찾게)
+    // 책장이 뜬 뒤 쉬는 동안 나중에 처음 쓰는 큰 글꼴을 미리 읽는다(기록 탭 첫 진입 멈춤, services/warmup.dart)
+    warmFontsLater();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       LibraryModel.instance.load();
       // 해가 바뀌었으면 그해 책장을 남긴다(다른 저장보다 먼저: 새해에 먼저 고치면 마지막으로 손댄 해가 올해가 되어 지난해가 안 남는다).
@@ -259,13 +262,27 @@ class _AppShellState extends State<AppShell> {
       if (!AppNav.instance.tabsBlocked) _select(i);
     }
 
+    // 키보드가 오르내리는 동안 숨은 탭(특히 책장)이 매 프레임 다시 배치되지 않게(2026-11-18 측정: 키보드 프레임마다 책장 배치 43ms).
+    // 예전에는 Scaffold가 몸통을 키보드만큼 줄여 IndexedStack의 모든 탭이 매 프레임 다시 배치됐다. 이제 몸통 크기는 그대로 두고
+    // 보이는 탭(이 화면이 맨 위일 때만)에만 키보드 높이를 넘겨 그 탭의 화면 틀(Screen)이 스스로 비킨다. 숨은 탭과 다른 화면에 덮인 탭은
+    // 키보드 높이 0을 받아(같은 값이라 알림도 없다) 다시 만들거나 배치하지 않는다
+    final mq = MediaQuery.of(context);
+    final noKeyboard = mq.removeViewInsets(removeBottom: true);
+    final front = ModalRoute.isCurrentOf(context) ?? true;
     final shell = Scaffold(
       backgroundColor: AppColors.bg,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           IndexedStack(
             index: _index,
-            children: [for (var i = 0; i < _tabs.length; i++) _opened.contains(i) ? _tabs[i].build(context) : const SizedBox.shrink()],
+            children: [
+              for (var i = 0; i < _tabs.length; i++)
+                MediaQuery(
+                  data: i == _index && front ? mq : noKeyboard,
+                  child: _opened.contains(i) ? _tabs[i].build(context) : const SizedBox.shrink(),
+                ),
+            ],
           ),
           ValueListenableBuilder<bool>(
             valueListenable: tabBarHidden,

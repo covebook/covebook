@@ -9,9 +9,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding, Ticker;
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show OrdinalSortKey;
 
+import '../../services/qa_probe.dart';
 import '../../services/cover_colors.dart';
 import '../../ui/kit.dart' show Btn, PullUp, Space, showSheet;
 import 'locked_rows.dart';
@@ -702,6 +704,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
 
   /// 책장 그림(입력이 같으면 다시 쓰고, 바뀌면 다시 그린다)
   ui.Image? _shelfImage;
+
+  /// 책장 그림이 마지막으로 바뀐 때: 연달아 바뀌는 동안(손잡이로 젖히기·앞뒤 막대처럼 매 프레임 바뀔 때)은 굳히지 않고 그대로 그리다가
+  /// 멈추면 굳힌다(매 프레임 굳히면 그대로 그리는 것보다 무겁다)
+  DateTime _shelfChangedAt = DateTime(0);
+  Timer? _settleFreeze;
+
+  /// 끄는 동안 굳힌 그림 위에 덧놓는 바뀐 줄 띠 그림(위 끝 · 어떤 줄 · 무엇으로 그렸는지)
+  ui.Image? _overlay;
+  double _overlayTop = 0;
+  String? _overlayKey;
   Object? _shelfKey;
   bool _frozen = false;
   Timer? _freezeTimer;
@@ -842,7 +854,57 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     _freezeTimer ??= Timer(const Duration(seconds: 6), () {
       if (mounted && !_frozen) setState(() => _frozen = true);
     });
-    // 미리 보는 동안은 그대로 그린다(굳힌 그림은 끄는 책을 떠 오는 데 쓰고, 미리 보기가 끝나면 다시 굳힌다)
+    // 끄는 동안(미리 보기): 들기 전 굳힌 그림 위에, 바뀐 줄과 그 아래 줄(겹치는 띠를 같은 순서로 덮으려고)만 그 띠 크기 그림으로 굳혀 덧놓는다.
+    // 놓을 자리가 바뀔 때만 다시 굳히고 프레임마다는 그림 두 장만 옮긴다.
+    // 2026-11-18 측정(에뮬레이터, 책 끌 때 프레임마다 GPU): 책장 전체를 셰이더로 다시 그리기 400~500ms → 바뀐 두 줄만 다시 그리기 160~350ms.
+    // 미리 보기마다 책장 전체를 새로 굳히기는 0.9~2.7초로 더 무거웠다. 끄는 책은 들기 전 굳힌 그림에서 떠 온다
+    final frozen = _shelfImage;
+    if (_shown != null && frozen != null && _previewRows.isNotEmpty && ShelfPainter.ready) {
+      final only = {for (final i in _previewRows.keys) ...[i, i + 1]};
+      // 책들이 새 자리로 미끄러지는 동안(약 0.25초)은 그 두 줄만 그대로 그리고, 멈추면 굳힌다
+      if (_tweening) {
+        return Stack(fit: StackFit.expand, children: [
+          RawImage(image: frozen, width: size.width, height: size.height, scale: dpr, filterQuality: FilterQuality.none, fit: BoxFit.fill),
+          CustomPaint(painter: painter.onlyRows(only)),
+        ]);
+      }
+      final band = painter.bandOf(only, size);
+      // 바뀌었는지: 어느 줄 · 미리 보기(_shown은 미리 보기가 바뀔 때만 새로 만든다) · 줄 빛 그림
+      final okey = '${(only.toList()..sort()).join(',')}|${identityHashCode(_shown)}|${identityHashCode(painter.atlases)}|${painter.look}';
+      final changed = _overlay == null || _overlayKey != okey;
+      if (changed && band.$2 > band.$1) {
+        final rec = ui.PictureRecorder();
+        final canvas = Canvas(rec)
+          ..scale(dpr)
+          ..translate(0, -band.$1);
+        painter.onlyRows(only).paint(canvas, size);
+        final pic = rec.endRecording();
+        final old = _overlay;
+        _overlay = pic.toImageSync(w, ((band.$2 - band.$1) * dpr).ceil());
+        _overlayTop = band.$1;
+        _overlayKey = okey;
+        pic.dispose();
+        if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      }
+      final ov = _overlay;
+      return Stack(fit: StackFit.expand, children: [
+        RawImage(image: frozen, width: size.width, height: size.height, scale: dpr, filterQuality: FilterQuality.none, fit: BoxFit.fill),
+        if (ov != null)
+          Positioned(
+            left: 0,
+            top: _overlayTop,
+            width: size.width,
+            height: ov.height / dpr,
+            child: RawImage(image: ov, width: size.width, height: ov.height / dpr, scale: dpr, filterQuality: FilterQuality.none, fit: BoxFit.fill),
+          ),
+      ]);
+    }
+    if (_overlay != null) {
+      final o = _overlay!;
+      _overlay = null;
+      _overlayKey = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) => o.dispose());
+    }
     if (_shown != null || _tweening || !_frozen || !ShelfPainter.ready || h > 8192 || w > 8192) return CustomPaint(painter: painter);
     final key = (
       _runs.length,
@@ -861,6 +923,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       h,
     );
     if (_shelfImage == null || _shelfKey != key) {
+      final now = DateTime.now();
+      final rapid = _shelfImage != null && now.difference(_shelfChangedAt) < const Duration(milliseconds: 250);
+      _shelfChangedAt = now;
+      if (rapid) {
+        _settleFreeze?.cancel();
+        _settleFreeze = Timer(const Duration(milliseconds: 300), () {
+          if (mounted) setState(() {});
+        });
+        return CustomPaint(painter: painter);
+      }
       final rec = ui.PictureRecorder();
       final canvas = Canvas(rec)..scale(dpr);
       painter.paint(canvas, size);
@@ -1166,6 +1238,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void dispose() {
     _scroll.dispose();
     _shelfImage?.dispose();
+    _overlay?.dispose();
+    _settleFreeze?.cancel();
     _snap?.dispose();
     _freezeTimer?.cancel();
     _widgetTimer?.cancel();
@@ -1186,7 +1260,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => qaProbe('home', _qaBuild(context));
+
+  Widget _qaBuild(BuildContext context) {
     final r = _runs.isEmpty ? null : _runs.last;
     final pad = MediaQuery.paddingOf(context);
     final scale = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
@@ -1906,7 +1982,42 @@ class ShelfPainter extends CustomPainter {
     this.viewport,
     this.frostedFrom = 1 << 30,
     this.look = '',
+    this.only,
   });
+
+  /// 이 차례 줄만 그린다(null이면 모두). 끄는 동안 굳힌 그림 위에 바뀐 줄만 덧그릴 때
+  final Set<int>? only;
+
+  /// 그 줄들이 그리는 세로 띠(그리는 면 px, paint와 같은 줄 자리 계산)
+  (double, double) bandOf(Set<int> which, Size size) {
+    final m = makeMetrics(size.width);
+    final geo = computeRows(rows.length, m.scale, viewportHeight: (viewport ?? size.height) - contentTop, bottomInset: bottomInset, real: math.min(rows.length, frostedFrom));
+    var lo = double.infinity, hi = double.negativeInfinity;
+    for (final i in which) {
+      if (i < 0 || i >= geo.length) continue;
+      final r = geo[i];
+      lo = math.min(lo, contentTop + math.max(0.0, r.top - headDu * m.scale));
+      hi = math.max(hi, contentTop + r.top + r.height + shelfCastExtent * m.scale);
+    }
+    if (lo > hi) return (0, 0);
+    return (lo.floorToDouble(), math.min(size.height, hi.ceilToDouble()));
+  }
+
+  ShelfPainter onlyRows(Set<int> rows) => ShelfPainter(
+        rows: this.rows,
+        atlases: atlases,
+        rowSpots: rowSpots,
+        spaces: spaces,
+        keys: keys,
+        photos: photos,
+        bookKeys: bookKeys,
+        contentTop: contentTop,
+        bottomInset: bottomInset,
+        viewport: viewport,
+        frostedFrom: frostedFrom,
+        look: look,
+        only: rows,
+      );
 
   /// 스킨·책 측면(그릴 때 셰이더 값으로 읽는다): 바뀌면 굽기를 기다리지 않고 지난 그림 위에 새 색으로 바로 다시 그린다
   /// (2026-11-15 QA: 선반·벽지 적용하기 뒤 2~4초 옛 모습이었다. 새로 구운 빛은 끝나는 대로 바뀐다)
@@ -1964,6 +2075,7 @@ class ShelfPainter extends CustomPainter {
     Affine pxOf(RowGeom r) => Affine(m.scale, m.originX + sideMargin * m.scale, contentY + r.baseline);
     for (var i = 0; i < rowSpots.length && i < atlases.length && i < geo.length; i++) {
       final r = geo[i];
+      if (only != null && !only!.contains(i)) continue;
       final px = pxOf(r);
       // 줄 캔버스(지금 앱 RowCanvas): 칸 위로 맨 윗줄 벽 끝까지, 아래로 판 밑 벽까지. 윗선반 판 윤곽 안은 비운다(그 판이 보인다)
       final y0 = math.max(0.0, r.top - headDu * m.scale);
@@ -2003,5 +2115,6 @@ class ShelfPainter extends CustomPainter {
       old.bottomInset != bottomInset ||
       old.viewport != viewport ||
       old.frostedFrom != frostedFrom ||
-      old.look != look;
+      old.look != look ||
+      !setEquals(old.only, only);
 }

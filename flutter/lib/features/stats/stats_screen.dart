@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../services/qa_probe.dart';
 import '../../domain/library.dart' hide today;
 import '../../domain/library.dart' as lib_d show today;
 import '../../store/library_model.dart';
@@ -94,7 +95,9 @@ class _StatsScreenState extends State<StatsScreen> {
       });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => qaProbe('stats', _qaBuild(context));
+
+  Widget _qaBuild(BuildContext context) {
     final lib = _lib;
     if (lib == null) return Screen(back: !widget.tab, title: widget.tab ? '통계' : '내 기록', children: const [Loading()]);
     final now = DateTime.now();
