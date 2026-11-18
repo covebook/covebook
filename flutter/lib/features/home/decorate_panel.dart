@@ -18,6 +18,9 @@ import '../../ui/theme.dart';
 
 const _thumb = 26.0, _track = 4.0;
 
+/// 막대 양 끝 안쪽 여백 = 손잡이 반지름 + 2: 끝까지 가도 손잡이가 막대 밖 숫자('193mm')를 덮지 않는다(2026-11-18 사용자)
+const _inset = _thumb / 2 + 2;
+
 class DecoratePanel extends StatelessWidget {
   const DecoratePanel({
     super.key,
@@ -471,7 +474,7 @@ class _SpinSliderState extends State<_SpinSlider> {
     return Row(children: [
       Expanded(
         child: LayoutBuilder(builder: (context, box) {
-          final w = math.max(1.0, box.maxWidth - 4);
+          final w = math.max(1.0, box.maxWidth - _inset * 2);
           double xOf(double d) => (math.max(-widget.max, math.min(widget.max, d)) / widget.max + 1) / 2 * w;
           double toDeg(double x) {
             final d = math.max(-1.0, math.min(1.0, x / w * 2 - 1)) * widget.max;
@@ -491,7 +494,7 @@ class _SpinSliderState extends State<_SpinSlider> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onHorizontalDragStart: (e) {
-                final x = e.localPosition.dx - 4;
+                final x = e.localPosition.dx - _inset;
                 final v = (x - pos).abs() <= 22 ? shown : toDeg(x);
                 _grab = (x0: x, v0: v);
                 setState(() => _live = v);
@@ -499,7 +502,7 @@ class _SpinSliderState extends State<_SpinSlider> {
               onHorizontalDragUpdate: (e) {
                 final g = _grab;
                 if (g == null) return;
-                final x = e.localPosition.dx - 4;
+                final x = e.localPosition.dx - _inset;
                 setState(() => _live = (x - g.x0).abs() < 1 ? g.v0 : _snap(g.v0 + (x - g.x0) / w * 2 * widget.max));
               },
               onHorizontalDragEnd: (_) {
@@ -508,9 +511,9 @@ class _SpinSliderState extends State<_SpinSlider> {
                 setState(() => _live = null);
                 widget.onChange(v);
               },
-              onTapUp: (e) => widget.onChange(toDeg(e.localPosition.dx - 4)),
+              onTapUp: (e) => widget.onChange(toDeg(e.localPosition.dx - _inset)),
               child: Padding(
-                padding: const EdgeInsets.only(left: 4),
+                padding: const EdgeInsets.symmetric(horizontal: _inset),
                 child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: band, fill: (math.min(zero, pos), math.max(zero, pos)), thumb: pos, tick: zero))),
               ),
             ),
@@ -548,7 +551,7 @@ class _DepthSliderState extends State<_DepthSlider> {
     return Row(children: [
       Expanded(
         child: LayoutBuilder(builder: (context, box) {
-          final w = math.max(1.0, box.maxWidth - 4);
+          final w = math.max(1.0, box.maxWidth - _inset * 2);
           double xOf(double z) => (1 - (z + shelfFront) / full) * w;
           double toZ(double dx) => (math.max(widget.lo, math.min(widget.hi, _start - dx / w * full)) * 2).roundToDouble() / 2;
           final pos = xOf(shown), back = xOf(widget.hi), wall = xOf(widget.back);
@@ -564,14 +567,14 @@ class _DepthSliderState extends State<_DepthSlider> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onHorizontalDragStart: (_) => _start = widget.value,
-              onHorizontalDragUpdate: (e) => setState(() => _live = toZ(e.localPosition.dx - 4 - xOf(_start))),
+              onHorizontalDragUpdate: (e) => setState(() => _live = toZ(e.localPosition.dx - _inset - xOf(_start))),
               onHorizontalDragEnd: (_) {
                 final v = _live;
                 setState(() => _live = null);
                 if (v != null) widget.onChange(v);
               },
               child: Padding(
-                padding: const EdgeInsets.only(left: 4),
+                padding: const EdgeInsets.symmetric(horizontal: _inset),
                 child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: (back, xOf(widget.lo)), fill: (wall, math.max(wall, pos)), thumb: pos))),
               ),
             ),

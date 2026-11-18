@@ -31,7 +31,7 @@ import '../../ui/scene.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show statusLabel;
 import 'book_sheet.dart';
-import 'home_screen.dart' show GlowPainter, ShelfPainter, homeHeaderHeight, navigationShelfReserve;
+import 'home_screen.dart' show GlowPainter, ShelfPainter, headerArtSize, homeHeaderHeight, navigationShelfReserve;
 
 const _yearSize = 34.0; // 시안: 숫자 높이 약 24dp
 
@@ -251,7 +251,7 @@ class _YearShelfState extends State<YearShelf> {
                     behavior: HitTestBehavior.opaque,
                     onTap: _shooting ? null : _share,
                     // 사용자가 준 입체 공유 아이콘(2026-11-17, tool/gen_header_art_icons.py)
-                    child: const SizedBox(width: 48, height: 48, child: Center(child: Image(image: AssetImage('assets/header/share.png'), width: 31, height: 31))),
+                    child: const SizedBox(width: 48, height: 48, child: Center(child: Image(image: AssetImage('assets/header/share.png'), width: headerArtSize, height: headerArtSize))),
                   ),
                 ),
               ),

@@ -1458,29 +1458,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                       current: shelfPage,
                     ),
             ),
-          // 화면 위 끝 덮개(지금 앱 HeaderVeil): 올라간 거리만큼(28dp까지) 진해지는 벽색 그라데이션
-          Positioned(
-            left: 0,
-            right: 0,
-            top: pad.top,
-            height: _veilH,
-            child: IgnorePointer(
-              child: AnimatedBuilder(
-                animation: _scroll,
-                builder: (context, _) {
-                  final o = _scroll.hasClients ? (_scroll.offset / _veilH).clamp(0.0, 1.0) : 0.0;
-                  return Opacity(
-                    opacity: o,
-                    child: const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [AppColors.bg, Color(0xD9FFFFFF), Color(0x00FFFFFF)], stops: [0, 0.35, 1]),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
+          // 화면 위 끝 덮개(HeaderVeil)는 뺐다: 내리면 위가 뿌옇게 덮였다(2026-11-18 사용자 '상단 블러는 없애'). 하단바 쪽 덮개만 남긴다
           // 하단바 쪽 덮개: 책장이 하단바 뒤로 들어갈 때 벽 색으로 서서히 덮는다(지금 앱 TabBarFade)
           Positioned(
             left: 0,
@@ -1537,8 +1515,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   }
 }
 
-/// 화면 위 끝 덮개 높이(지금 앱 HEADER_FADE)
-const _veilH = 28.0;
 
 /// top 아래만 보이게 자른다(상태 표시줄 밑부터)
 class _BelowTop extends CustomClipper<Rect> {
@@ -1722,8 +1698,12 @@ double get homeHeaderHeight => TabHeader.paddingTop + rnPx(34) - 2 + rnPx(23) + 
 const navigationShelfReserve = 78.0;
 
 /// 머리줄 오른쪽 아이콘: 칸 34, 그림 31, 맨 끝 칸 가운데가 화면 끝에서 24.3(시안에서 떠낸 그림)
-const _headerCell = 34.0;
-const _headerArt = 31.0;
+/// 책장 머리 아이콘 그림 크기(지난 책장 공유 아이콘도 같이 쓴다)
+const headerArtSize = 37.0;
+
+// 2026-11-18 사용자: 점토 아이콘으로 바꾸고 크게(그림 31 → 37, 칸 34 → 40). 공유 아이콘도 같은 크기(headerArtSize)
+const _headerCell = 40.0;
+const _headerArt = headerArtSize;
 const _headerLastCenter = 24.3;
 
 class _Header extends StatelessWidget {

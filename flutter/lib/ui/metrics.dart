@@ -25,11 +25,11 @@ ShelfMetrics makeMetrics(double windowWidth) {
   return ShelfMetrics(scale, (windowWidth - width) / 2 + scenePad * scale);
 }
 
-/// 줄 간격에 잡아 두는 갈피 높이(가장 긴 장)
-const ribbonOut = 15.0;
+/// 줄 간격에 잡아 두는 갈피 높이(가장 긴 장, ribbon_design의 가장 긴 out과 같다. 2026-11-18 15 → 13)
+const ribbonOut = 13.0;
 
-/// 가장 큰 책 + 갈피 머리 위 여유(DU)
-const rowClearance = 10.0;
+/// 가장 큰 책 + 갈피 머리 위 여유(DU, 2026-11-18 10 → 8)
+const rowClearance = 8.0;
 
 /// 3D 줄 간격(판 윗면 → 윗선반 아랫면, DU): 어떤 책을 꽂아도 모든 줄이 같다
 final rowSpace = bookMaxH + ribbonOut + rowClearance;

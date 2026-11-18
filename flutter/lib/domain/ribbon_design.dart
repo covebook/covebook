@@ -44,9 +44,10 @@ double Function() _rng(int seed) {
 
 /// 갈피 장 모양(장마다 폭·나온 길이, 두 장이면 책마다 길쭉한 장이 왼쪽·오른쪽)
 List<({double x, double width, double out})> ribbonDesign(String id, int count) {
-  if (count < 2) return const [(x: 0, width: 9.2, out: 14)];
+  // 갈피 길이(2026-11-18 줄 간격을 낮추며 함께 짧게: 14 → 12, 두 장 15/11.5 → 13/10)
+  if (count < 2) return const [(x: 0, width: 9.2, out: 12)];
   final h = _seedOf(id);
-  const a = (width: 8.4, out: 15.0), b = (width: 7.2, out: 11.5);
+  const a = (width: 8.4, out: 13.0), b = (width: 7.2, out: 10.0);
   final (l, r) = h % 2 == 1 ? (a, b) : (b, a);
   final total = l.width + _gap + r.width;
   return [

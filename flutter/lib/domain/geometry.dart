@@ -86,8 +86,8 @@ double frontWidth(Book b) {
   return (bookHeight(b) * b.coverAspectRatio).roundToDouble();
 }
 
-/// 책 크기 범위(mm). 줄 간격은 가장 큰 책으로 정한다(지금 앱 BOOK_SIZE_MM)
-const bookSizeMm = (minH: 170.0, maxH: 225.0, minW: 100.0, maxW: 170.0);
+/// 책 크기 범위(mm). 줄 간격은 가장 큰 책으로 정한다(지금 앱 BOOK_SIZE_MM 225 → 2026-11-18 사용자 '선반 사이 간격 조금 낮추고 책 최대 크기도'로 210)
+const bookSizeMm = (minH: 170.0, maxH: 210.0, minW: 100.0, maxW: 170.0);
 final bookMaxH = mm(bookSizeMm.maxH);
 
 /// 책 두께 범위(DU): 하한은 책등 제목이 들어가는 값, 상한은 가장 두꺼운 책 세 권을 쌓아도 줄 간격 안(지금 앱 BOOK_MIN_T·BOOK_MAX_T)
