@@ -7,10 +7,6 @@ web-build/
 .env.*
 !.env.example
 
-# prebuild 산출물
-app/android/
-app/ios/
-
 # 서명·비밀
 *.jks
 *.keystore
