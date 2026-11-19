@@ -20,19 +20,46 @@ type dbtx interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// iapAccountToken은 유저의 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
+// iapPaidShelfMax는 연도 책장 하나에서 돈을 내고 여는 칸의 최대 수다. 책장 6칸 중 3칸은 무료다(D1).
+// 이 수를 넘게 산 거래도 원장에는 남기고, 칸 수만 여기서 자른다. 넘은 거래는 운영자가 환불한다.
+const iapPaidShelfMax = 3
+
+// iapAccountToken은 유저의 구독용 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
 // 여러 개면 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
+// 추가 선반에는 이 값을 쓰지 않는다. 연도 책장마다 따로 받는다(iapShelfToken).
 func iapAccountToken(ctx context.Context, tx pgx.Tx, user int64) (string, error) {
 	var locked int64
 	if err := tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
 		return "", err
 	}
 	var token string
-	err := tx.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 ORDER BY created_at, token LIMIT 1", user).Scan(&token)
+	err := tx.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 AND year IS NULL ORDER BY created_at, token LIMIT 1", user).Scan(&token)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, "INSERT INTO iap_account_tokens(user_id) VALUES($1) RETURNING token::text", user).Scan(&token)
 	}
 	return token, err
+}
+
+// iapShelfToken은 그 연도 책장의 추가 선반을 살 때 스토어에 넘길 계정 연결 값을 돌려준다. 없으면 만든다(D1).
+// 연도 하나에 값 하나다. 두 요청이 동시에 와도 유일 색인 때문에 같은 값을 받는다.
+func iapShelfToken(ctx context.Context, q dbtx, user int64, year int) (string, error) {
+	if _, err := q.Exec(ctx, `INSERT INTO iap_account_tokens(user_id, year) VALUES($1,$2)
+		ON CONFLICT (user_id, year) WHERE year IS NOT NULL DO NOTHING`, user, year); err != nil {
+		return "", err
+	}
+	var token string
+	err := q.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 AND year=$2", user, year).Scan(&token)
+	return token, err
+}
+
+// iapTokenYear는 계정 연결 값이 어느 연도 책장의 것인지 알려 준다. 구독용 값이거나, 없거나, UUID 모양이 아니면 0이다.
+func iapTokenYear(ctx context.Context, q dbtx, token string) (int, error) {
+	var year *int
+	err := q.QueryRow(ctx, "SELECT year FROM iap_account_tokens WHERE token::text=lower($1)", token).Scan(&year)
+	if errors.Is(err, pgx.ErrNoRows) || year == nil {
+		return 0, nil
+	}
+	return *year, err
 }
 
 // iapOwnsToken은 그 계정 연결 값이 이 유저의 것인지 알려 준다. UUID 모양이 아니면 false다.
@@ -63,13 +90,15 @@ func iapFindProduct(ctx context.Context, q dbtx, route iap.Route, productID stri
 // iapRecordPurchase는 거래를 원장에 넣는다. 처음 들어갔으면 true, 이미 있던 거래면 false다.
 // "먼저 조회하고 없으면 넣기"를 하지 않는다. 유일 키에 맡기고 들어간 줄 수로 판단한다(D6).
 // 결제가 끝난 거래만 받는다.
+// 선반 거래는 계정 연결 값으로 연도 책장을 찾아 함께 적는다. 연도용 값이 아니면 연도는 NULL이고 어느 책장에도 칸을 주지 않는다.
 func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase) (bool, error) {
 	if p.State != iap.StatePaid {
 		return false, errors.New("iap: 결제가 끝나지 않은 거래는 원장에 넣지 않는다")
 	}
 	tag, err := q.Exec(ctx, `INSERT INTO iap_purchases
-		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country)
-		VALUES($1,$2,$3,$4,nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''))
+		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country,shelf_year)
+		VALUES($1,$2,$3,$4,nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''),
+			CASE WHEN $7='product' THEN (SELECT year FROM iap_account_tokens WHERE token=nullif($5,'')::uuid) END)
 		ON CONFLICT (route,transaction_id) DO NOTHING`,
 		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, p.AccountToken, p.ProductID, string(kind), string(p.Env),
 		p.PurchasedAt, p.Currency, p.PriceMilli, p.Country)
@@ -145,14 +174,33 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 
 // iapEntitlements는 유저가 지금 가진 것을 계산한다. 따로 저장한 값이 없고 매번 표에서 센다(D5).
 //   - plus: 결제된 구독이 있고, 만료 전이거나 유예 기간 안이다(D11). 만료 판단은 DB 서버 시계다(D23).
-//   - shelves: 환불되지 않은 선반 거래가 준 칸 수의 합.
-func iapEntitlements(ctx context.Context, q dbtx, user int64) (plus bool, shelves int, err error) {
+//   - shelves: 연도 책장마다, 환불되지 않은 선반 거래가 준 칸 수의 합. iapPaidShelfMax에서 자른다(D1).
+//     산 칸이 없는 연도는 들어 있지 않다. 연도를 모르는 거래는 어느 책장에도 세지 않는다.
+func iapEntitlements(ctx context.Context, q dbtx, user int64) (plus bool, shelves map[int]int, err error) {
 	err = q.QueryRow(ctx, `SELECT
 		EXISTS(SELECT 1 FROM iap_subscriptions s JOIN iap_products p ON p.route=s.route AND p.product_id=s.product_id
 			WHERE s.user_id=$1 AND s.state='paid' AND p.entitlement='plus'
-			AND (s.expires_at > now() OR s.grace_until > now())),
-		coalesce((SELECT sum(p.shelves) FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-			WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid'), 0)::int`, user).Scan(&plus, &shelves)
+			AND (s.expires_at > now() OR s.grace_until > now()))`, user).Scan(&plus)
+	if err != nil {
+		return
+	}
+	rows, err := q.Query(ctx, `SELECT b.shelf_year, least(sum(p.shelves), $2)::int
+		FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
+		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND b.shelf_year IS NOT NULL
+		GROUP BY b.shelf_year`, user, iapPaidShelfMax)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	shelves = map[int]int{}
+	for rows.Next() {
+		var year, n int
+		if err = rows.Scan(&year, &n); err != nil {
+			return
+		}
+		shelves[year] = n
+	}
+	err = rows.Err()
 	return
 }
 
