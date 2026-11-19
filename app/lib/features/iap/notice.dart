@@ -33,7 +33,8 @@ class IapSnapshot {
   static IapSnapshot of(EntitlementStore e) {
     final sub = e.subscription, g = sub?.graceUntil;
     final inGrace = sub != null && sub.active && g != null && g.isAfter(sub.expiresAt);
-    return IapSnapshot(plus: e.plus, shelves: e.shelves, grace: inGrace ? g.toUtc().toIso8601String() : '');
+    // 모든 해의 합: 해가 바뀌어 올해 칸이 0이 돼도 환불로 보지 않는다
+    return IapSnapshot(plus: e.plus, shelves: e.shelvesTotal, grace: inGrace ? g.toUtc().toIso8601String() : '');
   }
 
   static IapSnapshot? parse(String? raw) {
@@ -102,19 +103,21 @@ class IapNotice {
     final store = route.isEmpty ? '결제한 스토어' : storeName(route);
     final grace = _date('graceUntil'), expires = _date('expiresAt');
     final shelves = (params['shelves'] as num?)?.toInt() ?? 0;
+    final year = (params['year'] as num?)?.toInt();
+    final bookcase = year == null ? '' : '$year년 책장의 ';
     final revoked = _date('revokedAt');
     final when = revoked == null ? '' : '환불일은 ${iapDate(revoked)}입니다. ';
     return switch (kind) {
       'payment_failed' => ('$name 결제가 이뤄지지 않았습니다', '${grace == null ? '' : '${iapDate(grace)}까지는 계속 이용할 수 있습니다. '}$store 계정의 결제 수단을 확인해 주세요. 그때까지 결제되지 않으면 구독이 끝납니다.'),
       'expired' => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
       'subscription_refunded' => ('$name 결제가 환불 처리됐습니다', '$when구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
-      'shelf_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when해당 선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+      'shelf_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when${bookcase.isEmpty ? '해당 ' : bookcase}선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
       'renewal_upcoming' => expires == null
           ? null
           : ('$name가 ${iapDate(expires)}에 갱신됩니다', '${_price == null ? '' : '결제 예정 금액은 $_price입니다. '}계속 이용하려면 할 일이 없습니다. 갱신을 원하지 않으면 ${iapDate(expires.subtract(const Duration(days: 1)))}까지 내 정보 › 구독 관리에서 해지할 수 있습니다.'),
       'cancel_scheduled' => ('$name의 자동 갱신이 꺼졌습니다', '${expires == null ? '' : '${iapDate(expires)}까지 이용할 수 있습니다. '}이후에는 결제되지 않습니다.'),
       'purchase_done' => params['kind'] == 'product'
-          ? ('추가 선반 결제가 완료됐습니다', shelves > 0 ? '선반 $shelves칸을 더 열 수 있습니다.' : '선반을 더 열 수 있습니다.')
+          ? ('추가 선반 결제가 완료됐습니다', shelves > 0 ? '$bookcase선반 $shelves칸을 더 열 수 있습니다.' : '$bookcase선반을 더 열 수 있습니다.')
           : ('$name 결제가 완료됐습니다', '${expires == null ? '' : '다음 결제일은 ${iapDate(expires)}입니다. '}해지는 내 정보의 구독 관리에서 할 수 있습니다.'),
       _ => null,
     };

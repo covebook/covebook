@@ -160,12 +160,18 @@ class IapService extends ChangeNotifier {
   }
 
   /// plan: 구독은 고른 요금제를 넘긴다(구글은 요금제마다 스토어 상품 줄이 다르다)
-  Future<void> buy(IapProduct product, {IapPlan? plan}) async {
+  /// year: 선반은 칸을 열 연도 책장(없으면 지금 책장). 서버가 연도마다 따로 준 계정 연결 값을 스토어에 넘긴다(ADR-0002 D1·D7)
+  Future<void> buy(IapProduct product, {IapPlan? plan, int? year}) async {
     final d = plan?.details ?? details[product.productId];
-    final account = EntitlementStore.instance.accountToken;
-    if (busy || d == null || account.isEmpty) return;
+    final shelf = product.kind != 'subscription';
+    if (busy || d == null || (!shelf && EntitlementStore.instance.accountToken.isEmpty)) return;
     _busy(true);
     try {
+      final account = shelf ? await shelfToken(year ?? liveShelfYear()) : EntitlementStore.instance.accountToken;
+      if (account == null || account.isEmpty) {
+        _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+        return;
+      }
       // 계정 연결 값을 스토어에 넘긴다(애플 appAccountToken, 구글 obfuscatedAccountId). 서버가 이 값으로 누구의 구매인지 본다
       final param = PurchaseParam(productDetails: d, applicationUserName: account);
       if (product.kind == 'subscription') {
@@ -176,6 +182,18 @@ class IapService extends ChangeNotifier {
       }
     } catch (_) {
       _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+    }
+  }
+
+  /// 선반을 살 때 스토어에 넘길 그 해 책장의 계정 연결 값. 서버가 이 값으로 어느 해 책장의 칸인지 찾는다. 받지 못하면 null
+  Future<String?> shelfToken(int year) async {
+    final token = await KvStore.get(syncTokenKey);
+    if (token == null) return null;
+    try {
+      final res = await api('POST', '/iap/shelf-token', token, {'year': year});
+      return res is Map && res['token'] is String ? res['token'] as String : null;
+    } catch (_) {
+      return null;
     }
   }
 

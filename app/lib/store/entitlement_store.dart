@@ -1,4 +1,4 @@
-// 결제로 가진 것(구독 권한, 구매한 선반 칸 수)과 구독 상태. 기준은 서버(/iap/me)이고 여기는 사본이다(ADR-0002 D3).
+// 결제로 가진 것(구독 권한, 연도 책장마다 구매한 선반 칸 수)과 구독 상태. 기준은 서버(/iap/me)이고 여기는 사본이다(ADR-0002 D3).
 // 서버에 닿지 못해도 지난번 값을 보여 주려고 기기에 남겨 둔다. 날짜는 스토어가 준 값을 그대로 쓰고 앱에서 더하지 않는다.
 // 결제 화면은 빌드 플래그로 꺼 둔다(--dart-define=IAP=true일 때만 켜짐, AGENTS.md)
 library;
@@ -13,6 +13,12 @@ import '../db/kv_store.dart';
 const iapOn = bool.fromEnvironment('IAP');
 
 const _cacheKey = 'iap-status:v1';
+
+/// 연도 책장 하나에 돈을 내고 여는 칸의 최대(책장 6칸 = 무료 3 + 유료 3, ADR-0002 D1)
+const paidShelfMax = 3;
+
+/// 홈에 보이는 책장(지금 쓰는 책장)의 연도. 해가 바뀌면 지난 책장은 연도 책장으로 남고 새 책장이 된다(store/bookcase_store)
+int liveShelfYear([DateTime? now]) => (now ?? DateTime.now()).year;
 
 /// 상태 변화 알림이 지난번에 본 상태를 남기는 자리(features/iap/notice.dart). 계정을 바꾸면 같이 지운다
 const iapSeenKey = 'iap-seen:v1';
@@ -101,8 +107,17 @@ class EntitlementStore extends ChangeNotifier {
   /// 구독 권한(유료 꾸미기)
   bool plus = false;
 
-  /// 구매한 선반 칸 수
-  int shelves = 0;
+  /// 연도 책장마다 구매한 선반 칸 수(서버 /iap/me의 shelvesByYear). 산 칸이 있는 해만 들어 있다
+  Map<int, int> shelvesByYear = const {};
+
+  /// 그 해 책장에서 구매한 선반 칸 수
+  int shelvesFor(int year) => shelvesByYear[year] ?? 0;
+
+  /// 지금 쓰는 책장(올해)에서 구매한 선반 칸 수
+  int get shelves => shelvesFor(liveShelfYear());
+
+  /// 모든 연도 책장에서 구매한 칸의 합(환불이면 줄어든다. 해가 바뀌어도 줄지 않는다)
+  int get shelvesTotal => shelvesByYear.values.fold(0, (a, b) => a + b);
   IapSubscription? subscription;
 
   /// 스토어에 넘기는 계정 연결 값(서버가 유저마다 발급한 UUID)
@@ -137,7 +152,17 @@ class EntitlementStore extends ChangeNotifier {
   /// 서버 응답(/iap/me, /iap/purchases)을 반영한다. 응답에 없는 칸은 그대로 둔다
   void apply(Map<String, dynamic> j, {bool save = true}) {
     if (j['plus'] is bool) plus = j['plus'] as bool;
-    if (j['shelves'] is num) shelves = (j['shelves'] as num).toInt();
+    if (j['shelvesByYear'] is Map) {
+      shelvesByYear = {
+        for (final e in (j['shelvesByYear'] as Map).entries)
+          if (int.tryParse('${e.key}') case final y?)
+            if (e.value is num && (e.value as num) > 0) y: (e.value as num).toInt(),
+      };
+    } else if (j['shelves'] is num) {
+      // 연도를 모르는 옛 응답: 지금 책장의 칸으로 본다
+      final n = (j['shelves'] as num).toInt();
+      shelvesByYear = n > 0 ? {liveShelfYear(): n} : const {};
+    }
     if (j.containsKey('subscription')) subscription = IapSubscription.from(j['subscription']);
     if (j['accountToken'] is String) accountToken = j['accountToken'] as String;
     if (j['products'] is List) products = [for (final p in j['products'] as List) ?IapProduct.from(p)];
@@ -150,7 +175,7 @@ class EntitlementStore extends ChangeNotifier {
         _cacheKey,
         jsonEncode({
           'plus': plus,
-          'shelves': shelves,
+          'shelvesByYear': {for (final e in shelvesByYear.entries) '${e.key}': e.value},
           if (j.containsKey('subscription')) 'subscription': j['subscription'],
           if (seller.isNotEmpty) 'seller': seller,
         }),
@@ -168,7 +193,7 @@ class EntitlementStore extends ChangeNotifier {
   /// 로그아웃·계정 전환 때 비운다
   Future<void> clear() async {
     plus = false;
-    shelves = 0;
+    shelvesByYear = const {};
     subscription = null;
     accountToken = '';
     unreadNotices = 0;

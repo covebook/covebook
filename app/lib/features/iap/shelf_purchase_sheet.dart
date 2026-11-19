@@ -11,25 +11,31 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'subscription_screen.dart' show storeName;
 
-/// 이 기기의 스토어에서 살 수 있는 선반 상품(칸 수가 적은 것부터). 가격을 받지 못한 상품은 뺀다
-List<IapProduct> shelfProducts() {
+/// 그 해 책장에서 살 수 있는 선반 상품(칸 수가 적은 것부터). 이미 산 칸과 합쳐 유료 칸 최대(3칸)를 넘는 상품은 뺀다.
+/// 그래서 3칸 묶음은 그 해에 산 칸이 없을 때만 보인다(ADR-0002 D1)
+List<IapProduct> shelfOffers(Iterable<IapProduct> products, {required int paid}) => [
+      for (final p in products)
+        if (p.kind == 'product' && p.shelves > 0 && paid + p.shelves <= paidShelfMax) p,
+    ]..sort((a, b) => a.shelves.compareTo(b.shelves));
+
+/// 이 기기의 스토어에서 그 해 책장에 살 수 있는 선반 상품. 가격을 받지 못한 상품은 뺀다
+List<IapProduct> shelfProducts(int year) {
   final iap = IapService.instance;
-  final list = [
-    for (final p in EntitlementStore.instance.products)
-      if (p.kind == 'product' && p.route == iapRoute && p.shelves > 0 && iap.details.containsKey(p.productId)) p,
-  ]..sort((a, b) => a.shelves.compareTo(b.shelves));
-  return list;
+  final e = EntitlementStore.instance;
+  return shelfOffers([for (final p in e.products) if (p.route == iapRoute && iap.details.containsKey(p.productId)) p], paid: e.shelvesFor(year));
 }
 
-/// 선반 구매 시트를 연다. 구매가 끝나 칸이 늘었으면 true
-Future<bool> showShelfPurchase(BuildContext context) async {
-  final before = EntitlementStore.instance.shelves;
-  await showSheet<void>(context, title: '선반 더 열기', builder: (ctx) => const _ShelfPurchase());
-  return EntitlementStore.instance.shelves > before;
+/// 선반 구매 시트를 연다(year: 칸을 열 연도 책장, 없으면 지금 책장). 구매가 끝나 칸이 늘었으면 true
+Future<bool> showShelfPurchase(BuildContext context, {int? year}) async {
+  final y = year ?? liveShelfYear();
+  final before = EntitlementStore.instance.shelvesFor(y);
+  await showSheet<void>(context, title: '선반 더 열기', builder: (ctx) => _ShelfPurchase(year: y));
+  return EntitlementStore.instance.shelvesFor(y) > before;
 }
 
 class _ShelfPurchase extends StatefulWidget {
-  const _ShelfPurchase();
+  const _ShelfPurchase({required this.year});
+  final int year;
 
   @override
   State<_ShelfPurchase> createState() => _ShelfPurchaseState();
@@ -47,7 +53,7 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
   void initState() {
     super.initState();
     // late 초기화는 처음 읽을 때 계산된다(구매가 끝난 뒤의 값이 들어가 시트가 닫히지 않았다). 여기서 바로 적는다
-    _before = _e.shelves;
+    _before = _e.shelvesFor(widget.year);
     _iap.addListener(_changed);
     _e.addListener(_changed);
     if (_iap.details.isEmpty) _iap.refresh();
@@ -63,7 +69,7 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
   void _changed() {
     if (!mounted) return;
     // 구매가 끝나 칸이 늘었으면 닫는다
-    if (_e.shelves > _before) {
+    if (_e.shelvesFor(widget.year) > _before) {
       Navigator.of(context).maybePop();
       return;
     }
@@ -72,7 +78,8 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
 
   @override
   Widget build(BuildContext context) {
-    final products = shelfProducts();
+    final year = widget.year;
+    final products = shelfProducts(year);
     final store = storeName(iapRoute);
     if (products.isEmpty && _iap.loading) return const Padding(padding: EdgeInsets.symmetric(vertical: Space.item), child: Loading());
     if (products.isEmpty) {
@@ -96,17 +103,18 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
             child: Choice(label: '추가 선반 ${o.shelves}칸', sub: _iap.details[o.productId]!.price, selected: identical(o, p), onPress: _iap.busy ? () {} : () => setState(() => _picked = o)),
           ),
       // 상품과 가격을 버튼 바로 위에, 같은 크기의 글자로
-      if (p != null) MetaText('추가 선반 ${p.shelves}칸$metaSep$price', style: AppType.rowStrong),
+      if (p != null) MetaText('$year년 책장$metaSep추가 선반 ${p.shelves}칸$metaSep$price', style: AppType.rowStrong),
       const SizedBox(height: Space.s),
-      line('한 번 결제하면 계속 쓸 수 있습니다.'),
-      line('구매한 선반은 계정에 기록됩니다. 로그인해 두면 기기를 바꿔도 유지됩니다.'),
+      line(p == null ? '$year년 책장에 선반을 엽니다. 다른 해의 책장에는 열리지 않습니다.' : '$year년 책장에 선반 ${p.shelves}칸을 엽니다. 다른 해의 책장에는 열리지 않습니다.'),
+      line('한 번 결제하면 이 책장에서 계속 쓸 수 있습니다.'),
+      line('구매한 선반은 로그인한 계정에 기록되어 기기를 바꿔도 유지됩니다.'),
       line('환불은 $store의 환불 절차를 따릅니다.'),
       if (failed != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(failed, style: AppType.sub.copyWith(color: AppColors.danger))),
       if (_iap.lastResult == IapResult.pending && _iap.lastMessage != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(_iap.lastMessage!, style: AppType.body)),
       Padding(
         padding: const EdgeInsets.only(top: Space.s),
         child: Btn(label: _iap.busy ? '결제 확인 중' : '구매하기', size: 'l', busy: _iap.busy, disabled: _iap.busy || p == null, onPress: () {
-          if (p != null) _iap.buy(p);
+          if (p != null) _iap.buy(p, year: year);
         }),
       ),
     ]);

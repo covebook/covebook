@@ -18,11 +18,14 @@ Future<void> openPurchaseHistory(BuildContext context) => Navigator.of(context, 
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/me/purchases'), builder: (_) => const PurchaseHistoryScreen()));
 
 class IapHistoryItem {
-  const IapHistoryItem({required this.route, required this.productId, required this.kind, required this.state, required this.purchasedAt, this.revokedAt, this.shelves = 0, this.currency, this.priceMilli});
+  const IapHistoryItem({required this.route, required this.productId, required this.kind, required this.state, required this.purchasedAt, this.revokedAt, this.shelves = 0, this.year, this.currency, this.priceMilli});
   final String route, productId, kind, state;
   final DateTime purchasedAt;
   final DateTime? revokedAt;
   final int shelves;
+
+  /// 추가 선반을 연 연도 책장(서버가 주지 않으면 null)
+  final int? year;
   final String? currency;
 
   /// 통화 1단위 = 1000인 정수(서버 D20)
@@ -40,13 +43,14 @@ class IapHistoryItem {
       purchasedAt: at,
       revokedAt: DateTime.tryParse('${j['revokedAt']}'),
       shelves: (j['shelves'] as num?)?.toInt() ?? 0,
+      year: (j['year'] as num?)?.toInt(),
       currency: j['currency'] as String?,
       priceMilli: (j['priceMilli'] as num?)?.toInt(),
     );
   }
 
   bool get refunded => state == 'revoked';
-  String get name => kind == 'subscription' ? '책장 한켠 플러스' : '추가 선반 $shelves칸';
+  String get name => kind == 'subscription' ? '책장 한켠 플러스' : year == null ? '추가 선반 $shelves칸' : '$year년 책장 추가 선반 $shelves칸';
   String get stateLabel => refunded ? '환불됨' : '결제 완료';
 
   /// 금액: 서버가 가진 값을 통화 코드와 함께 그대로(환율·세금 계산을 하지 않는다). 없으면 null
