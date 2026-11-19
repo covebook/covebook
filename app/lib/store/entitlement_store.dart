@@ -106,6 +106,9 @@ class EntitlementStore extends ChangeNotifier {
   /// 서버가 받는 결제 경로(apple, google)
   List<String> routes = const [];
 
+  /// 사업자 정보(서버 설정에서 온다. 공개 저장소라 앱에 적지 않는다). 키: name, owner, address, phone, email, bizNo, saleNo
+  Map<String, String> seller = const {};
+
   /// 서버에서 한 번이라도 받았는지
   bool loaded = false;
 
@@ -127,6 +130,7 @@ class EntitlementStore extends ChangeNotifier {
     if (j.containsKey('subscription')) subscription = IapSubscription.from(j['subscription']);
     if (j['accountToken'] is String) accountToken = j['accountToken'] as String;
     if (j['products'] is List) products = [for (final p in j['products'] as List) ?IapProduct.from(p)];
+    if (j['seller'] is Map) seller = {for (final e in (j['seller'] as Map).entries) if ('${e.value}'.trim().isNotEmpty) '${e.key}': '${e.value}'.trim()};
     if (j['routes'] is List) routes = [for (final r in j['routes'] as List) '$r'];
     loaded = true;
     if (save) {
@@ -136,6 +140,7 @@ class EntitlementStore extends ChangeNotifier {
           'plus': plus,
           'shelves': shelves,
           if (j.containsKey('subscription')) 'subscription': j['subscription'],
+          if (seller.isNotEmpty) 'seller': seller,
         }),
       ).catchError((_) {});
     }

@@ -18,6 +18,7 @@ import '../../services/cover_colors.dart';
 import '../../ui/kit.dart' show Btn, PullUp, Space, showSheet;
 import 'locked_rows.dart';
 import '../../store/entitlement_store.dart';
+import '../book/place_books.dart' show lockedShelfIds;
 import '../iap/shelf_purchase_sheet.dart' show showShelfPurchase;
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
@@ -409,6 +410,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     final withinX = centerDU > -sideMargin && centerDU < shelfUsableWidth + sideMargin;
     if (!withinX || index < 0 || index >= shelves.length) return (key: 'outside', shelfId: null, run: () => const EditResult.fail('outside'));
     final shelfId = shelves[index].id;
+    // 환불로 잠긴 선반에는 다른 선반의 책을 새로 꽂지 못한다(그 선반 안에서 자리를 바꾸거나 밖으로 빼는 것은 된다, D13)
+    if (shelfId != d.shelfId && lockedShelfIds().contains(shelfId)) return (key: 'locked:$shelfId', shelfId: null, run: () => const EditResult.fail('shelf-locked'));
     if (shelfId == d.shelfId) {
       final t = findSwapTarget(l, s.books, d.id, centerDU);
       return (key: 'same:${t.kind}:${t.itemKey}:${t.index}:${t.x}:${t.dx}', shelfId: shelfId, run: () => applySwapTarget(l, s.books, d.id, t));

@@ -19,6 +19,9 @@ dependencies:
   image_cropper: ^13.0.0
   image_picker: ^1.2.4
   in_app_purchase: ^3.3.1
+  # 구독 주기(월·연)를 읽으려고 스토어별 타입을 직접 쓴다
+  in_app_purchase_android: ^0.5.5
+  in_app_purchase_storekit: ^0.4.17
   just_audio: ^0.10.6
   just_audio_background: ^0.0.1-beta.17
   kakao_flutter_sdk_user: ^2.1.0

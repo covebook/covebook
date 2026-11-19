@@ -4,8 +4,12 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:chaekjang/features/home/locked_rows.dart';
+import 'package:chaekjang/features/iap/plan_screen.dart';
+import 'package:chaekjang/features/iap/purchase_history_screen.dart';
+import 'package:chaekjang/features/iap/seller_sheet.dart';
 import 'package:chaekjang/features/iap/shelf_purchase_sheet.dart';
 import 'package:chaekjang/features/iap/subscription_screen.dart';
+import 'package:chaekjang/features/iap/withdraw_notice.dart';
 import 'package:chaekjang/services/iap.dart';
 import 'package:chaekjang/store/entitlement_store.dart';
 import 'package:chaekjang/ui/kit.dart';
@@ -61,9 +65,11 @@ void _reset() {
     ..shelves = 0
     ..subscription = null
     ..products = const []
+    ..seller = const {}
     ..accountToken = '';
   IapService.instance
     ..details = const {}
+    ..plans = const []
     ..busy = false
     ..lastResult = null
     ..lastMessage = null;
@@ -193,6 +199,7 @@ void main() {
     expect(find.text('구독하고 있지 않아요.'), findsOneWidget);
     expect(find.textContaining('에서 해지하기'), findsNothing);
     expect(find.text('구매 복원'), findsOneWidget);
+    expect(find.text('요금제 보기'), findsOneWidget);
     await _shot(t, '4-subscription-none');
   });
 
@@ -225,5 +232,147 @@ void main() {
     await t.pumpAndSettle();
     expect(find.textContaining('지금은 선반을 구매할 수 없어요'), findsOneWidget);
     expect(find.text('구매하기'), findsNothing);
+  });
+
+  test('결제 주기: 월·연만 읽는다', () {
+    expect(iapPeriodOf('P1M'), 'month');
+    expect(iapPeriodOf('P1Y'), 'year');
+    expect(iapPeriodOf('P1W'), '');
+    expect(iapPlanOf(_detail('plus', '플러스', '스토어 가격')), isNull); // 스토어별 타입이 아니면 요금제로 보지 않는다
+  });
+
+  test('환불로 잠긴 선반: 쓸 수 있는 칸 아래의 선반', () {
+    // 두 칸을 샀다가 환불돼 구매한 칸이 0이 됐다: 넷째, 다섯째 선반이 잠긴다
+    expect([for (var i = 0; i < 5; i++) shelfLockedAt(i, 0)], [false, false, false, true, true]);
+    expect([for (var i = 0; i < 5; i++) shelfLockedAt(i, 1)], [false, false, false, false, true]);
+    expect(shelfLockedAt(4, 2), isFalse);
+  });
+
+  void plans() {
+    EntitlementStore.instance.apply({
+      'accountToken': 'a-token',
+      'products': [
+        {'route': iapRoute, 'productId': 'plus', 'kind': 'subscription'},
+      ],
+    }, save: false);
+    IapService.instance.plans = [
+      IapPlan(details: _detail('plus', '플러스', '월 스토어 가격'), period: 'month'),
+      IapPlan(details: _detail('plus', '플러스', '연 스토어 가격'), period: 'year'),
+    ];
+  }
+
+  testWidgets('구독 결제 화면: 요금제를 미리 골라 두지 않고, 고르기 전에는 결제할 수 없다', (t) async {
+    plans();
+    await _pump(t, const PlanScreen());
+    expect(find.bySemanticsLabel('월간, 월 스토어 가격 / 매월'), findsOneWidget);
+    expect(find.bySemanticsLabel('연간, 연 스토어 가격 / 매년'), findsOneWidget);
+    // 아무것도 골라져 있지 않다
+    expect(t.widgetList<Choice>(find.byType(Choice)).every((c) => !c.selected), isTrue);
+    expect(find.textContaining('자동으로 결제됩니다'), findsNothing);
+    expect(t.widget<Btn>(find.widgetWithText(Btn, '구독하기')).disabled, isTrue);
+    await _shot(t, '6-plans-none-picked');
+  });
+
+  testWidgets('구독 결제 화면: 고르면 가격·주기·갱신·해지 조건이 버튼 위에 나온다', (t) async {
+    plans();
+    await _pump(t, const PlanScreen());
+    await t.tap(find.bySemanticsLabel('연간, 연 스토어 가격 / 매년'));
+    await t.pumpAndSettle();
+    final head = find.bySemanticsLabel('책장 한켠 플러스 연간, 연 스토어 가격 / 매년');
+    expect(head, findsOneWidget);
+    for (final text in ['매년 자동으로 결제됩니다.', '24시간 전까지 해지하지 않으면', '구독 관리에서 할 수 있습니다', '이미 결제한 기간이 끝날 때까지', '환불 절차를 따릅니다']) {
+      expect(find.textContaining(text), findsOneWidget, reason: text);
+    }
+    final button = find.widgetWithText(Btn, '구독하기');
+    expect(t.widget<Btn>(button).disabled, isFalse);
+    // 조건이 버튼보다 위에 있다
+    expect(t.getTopLeft(head).dy, lessThan(t.getTopLeft(button).dy));
+    expect(t.getTopLeft(find.textContaining('환불 절차를 따릅니다')).dy, lessThan(t.getTopLeft(button).dy));
+    expect(find.textContaining('·'), findsNothing);
+    await _shot(t, '7-plans-picked');
+  });
+
+  testWidgets('구독 결제 화면: 이미 구독 중이면 구독 버튼이 없다', (t) async {
+    plans();
+    EntitlementStore.instance.apply({
+      'plus': true,
+      'subscription': {'route': iapRoute == 'apple' ? 'google' : 'apple', 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true, 'expiresAt': '2027-01-18T03:00:00Z'},
+    }, save: false);
+    await _pump(t, const PlanScreen());
+    expect(find.text('구독하기'), findsNothing);
+    expect(find.textContaining('에서 구독하고 있는 계정이에요'), findsOneWidget);
+    expect(find.text('구독 관리'), findsOneWidget);
+    await _shot(t, '8-plans-already');
+  });
+
+  testWidgets('구독 결제 화면: 스토어에서 요금제를 못 받았으면 구독할 수 없다고 알린다', (t) async {
+    await _pump(t, const PlanScreen());
+    expect(find.textContaining('지금은 구독할 수 없어요'), findsOneWidget);
+    expect(find.text('구독하기'), findsNothing);
+  });
+
+  test('구매 내역 한 줄: 서버 값 그대로, 금액은 있을 때만', () {
+    final a = IapHistoryItem.from({'route': 'apple', 'productId': 'shelf', 'kind': 'product', 'state': 'paid', 'purchasedAt': '2026-11-19T03:00:00Z', 'shelves': 1, 'currency': 'USD', 'priceMilli': 1234500})!;
+    expect((a.name, a.stateLabel, a.price), ('추가 선반 1칸', '결제 완료', '1,234.5 USD'));
+    final b = IapHistoryItem.from({'route': 'google', 'productId': 'plus', 'kind': 'subscription', 'state': 'revoked', 'purchasedAt': '2026-11-19T03:00:00Z', 'revokedAt': '2026-11-20T03:00:00Z'})!;
+    expect((b.name, b.stateLabel, b.price), ('책장 한켠 플러스', '환불됨', null));
+    expect(b.line, contains('환불일'));
+    expect(IapHistoryItem.from({'purchasedAt': '날짜가 아님'}), isNull);
+  });
+
+  testWidgets('구매 내역: 결제일·상품·상태를 보여 주고 복사할 수 있다', (t) async {
+    await _pump(
+      t,
+      PurchaseHistoryScreen(items: [
+        IapHistoryItem(route: iapRoute, productId: 'plus', kind: 'subscription', state: 'paid', purchasedAt: DateTime.utc(2026, 12, 18, 3)),
+        IapHistoryItem(route: iapRoute, productId: 'plus', kind: 'subscription', state: 'paid', purchasedAt: DateTime.utc(2026, 11, 18, 3)),
+        IapHistoryItem(route: iapRoute, productId: 'shelf', kind: 'product', state: 'revoked', purchasedAt: DateTime.utc(2026, 11, 10, 3), revokedAt: DateTime.utc(2026, 11, 12, 3), shelves: 1),
+      ]),
+    );
+    expect(find.text('책장 한켠 플러스'), findsNWidgets(2));
+    expect(find.text('추가 선반 1칸'), findsOneWidget);
+    expect(find.text('환불됨'), findsOneWidget);
+    expect(find.text('환불일 2026년 11월 12일'), findsOneWidget);
+    expect(find.text('내역 복사'), findsOneWidget);
+    expect(find.textContaining('·'), findsNothing);
+    await _shot(t, '9-purchase-history');
+  });
+
+  testWidgets('구매 내역: 없으면 없다고 알린다', (t) async {
+    await _pump(t, const PurchaseHistoryScreen(items: []));
+    expect(find.text('구매한 것이 없어요.'), findsOneWidget);
+    expect(find.text('내역 복사'), findsNothing);
+  });
+
+  testWidgets('사업자 정보: 서버가 준 항목만 정해진 순서로', (t) async {
+    expect(hasSellerInfo, isFalse);
+    // 시험용 가짜 값(실제 사업자 정보는 저장소에 적지 않는다)
+    EntitlementStore.instance.apply({
+      'seller': {'name': '시험 상호', 'owner': '홍길동', 'address': '시험시 시험구 시험로 1', 'phone': '000-0000-0000', 'email': 'test@example.com', 'bizNo': '000-00-00000', 'saleNo': '제0000-시험-0000호', 'memo': ''},
+    }, save: false);
+    expect(hasSellerInfo, isTrue);
+    await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showSellerSheet(ctx))))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    for (final label in ['상호', '대표자', '주소', '전화번호', '전자우편', '사업자등록번호', '통신판매업 신고번호']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+    expect(find.text('시험 상호'), findsOneWidget);
+    await _shot(t, '10-seller');
+  });
+
+  testWidgets('탈퇴 안내: 구독이 해지되지 않는다고 알리고, 탈퇴를 막지 않는다', (t) async {
+    final sub = IapSubscription(route: iapRoute, productId: 'plus', state: 'paid', active: true, autoRenew: true, expiresAt: DateTime.utc(2027, 1, 18));
+    var continued = 0;
+    await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showWithdrawNotice(ctx, sub, onContinue: () => continued++))))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('구독은 자동으로 해지되지 않습니다'), findsOneWidget);
+    expect(find.textContaining('에서 해지하기'), findsOneWidget);
+    await _shot(t, '11-withdraw-notice');
+    await t.tap(find.text('탈퇴 계속'));
+    await t.pumpAndSettle();
+    expect(continued, 1);
+    expect(find.text('탈퇴 계속'), findsNothing);
   });
 }

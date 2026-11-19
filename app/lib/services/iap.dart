@@ -12,6 +12,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
+import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart';
+import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
 
 import '../db/kv_store.dart';
 import '../store/entitlement_store.dart';
@@ -30,6 +34,60 @@ bool iapShouldFinish({required int status, String code = ''}) {
 
 /// 이 기기의 결제 경로(서버의 route 값)
 String get iapRoute => Platform.isIOS ? 'apple' : 'google';
+
+/// 구독 요금제 하나(스토어가 준 가격과 결제 주기). 구글은 구독 상품 하나에 요금제가 여럿이라 상품 ID만으로는 구분되지 않는다
+class IapPlan {
+  const IapPlan({required this.details, required this.period, this.planId = ''});
+  final ProductDetails details;
+
+  /// 결제 주기: month, year. 스토어가 다른 주기를 주면 빈 값(화면에 내지 않는다)
+  final String period;
+
+  /// 구글 요금제(base plan) ID. 애플은 빈 값
+  final String planId;
+
+  String get price => details.price;
+
+  /// 화면에 보일 주기(고지 문구 T1의 {주기})
+  String get periodLabel => period == 'year' ? '매년' : '매월';
+  String get name => period == 'year' ? '연간' : '월간';
+}
+
+/// 구글이 주는 결제 주기(ISO 8601: P1M, P1Y)를 month, year로. 그 밖은 빈 값
+String iapPeriodOf(String iso) => switch (iso) { 'P1M' => 'month', 'P1Y' || 'P12M' => 'year', _ => '' };
+
+/// 스토어 상품에서 요금제를 읽는다. 구독이 아니거나 월·연이 아니면 null
+IapPlan? iapPlanOf(ProductDetails d) {
+  if (d is GooglePlayProductDetails) {
+    final i = d.subscriptionIndex;
+    final offers = d.productDetails.subscriptionOfferDetails;
+    if (i == null || offers == null) return null;
+    final offer = offers[i];
+    // 할인·체험이 붙은 제안은 뺀다(기본 요금제만 판다). 가격이 달라지는 조건을 화면에 다 적을 수 없으면 팔지 않는다
+    if (offer.offerId != null || offer.pricingPhases.length != 1) return null;
+    final period = iapPeriodOf(offer.pricingPhases.last.billingPeriod);
+    return period.isEmpty ? null : IapPlan(details: d, period: period, planId: offer.basePlanId);
+  }
+  if (d is AppStoreProduct2Details) {
+    final p = d.sk2Product.subscription?.subscriptionPeriod;
+    if (p == null || p.value != 1) return null;
+    return switch (p.unit) {
+      SK2SubscriptionPeriodUnit.month => IapPlan(details: d, period: 'month'),
+      SK2SubscriptionPeriodUnit.year => IapPlan(details: d, period: 'year'),
+      _ => null,
+    };
+  }
+  if (d is AppStoreProductDetails) {
+    final p = d.skProduct.subscriptionPeriod;
+    if (p == null || p.numberOfUnits != 1) return null;
+    return switch (p.unit) {
+      SKSubscriptionPeriodUnit.month => IapPlan(details: d, period: 'month'),
+      SKSubscriptionPeriodUnit.year => IapPlan(details: d, period: 'year'),
+      _ => null,
+    };
+  }
+  return null;
+}
 
 enum IapResult { granted, already, inactive, pending, rejected, retryLater }
 
@@ -51,6 +109,9 @@ class IapService extends ChangeNotifier {
 
   /// 스토어가 알려 준 상품(가격 문자열 포함). 키는 상품 ID
   Map<String, ProductDetails> details = const {};
+
+  /// 살 수 있는 구독 요금제(월간 먼저)
+  List<IapPlan> plans = const [];
 
   /// 앱을 켤 때 한 번: 스토어가 주는 거래를 듣기 시작하고 서버에서 내 상태를 받는다.
   /// 끝내지 않은 거래는 여기서 다시 와서 서버에 다시 낸다.
@@ -75,13 +136,17 @@ class IapService extends ChangeNotifier {
     final ids = {for (final p in EntitlementStore.instance.products) if (p.route == iapRoute) p.productId};
     if (ids.isEmpty || !await _store.isAvailable()) return;
     final res = await _store.queryProductDetails(ids);
-    details = {for (final d in res.productDetails) d.id: d};
+    // 구글은 구독 하나에 요금제마다 한 줄씩 온다(상품 ID가 같다). 상품 ID로는 첫 줄만 남기고, 요금제는 따로 모은다
+    details = {for (final d in res.productDetails.reversed) d.id: d};
+    final subs = {for (final p in EntitlementStore.instance.products) if (p.kind == 'subscription') p.productId};
+    plans = [for (final d in res.productDetails) if (subs.contains(d.id)) ?iapPlanOf(d)]..sort((a, b) => a.period.compareTo(b.period));
     notifyListeners();
   }
 
   /// 구매를 시작한다. 결과는 purchaseStream으로 온다
-  Future<void> buy(IapProduct product) async {
-    final d = details[product.productId];
+  /// plan: 구독은 고른 요금제를 넘긴다(구글은 요금제마다 스토어 상품 줄이 다르다)
+  Future<void> buy(IapProduct product, {IapPlan? plan}) async {
+    final d = plan?.details ?? details[product.productId];
     final account = EntitlementStore.instance.accountToken;
     if (busy || d == null || account.isEmpty) return;
     _busy(true);

@@ -18,6 +18,8 @@ import '../../ui/theme.dart';
 import '../book/import_list_screen.dart' show openImportList;
 import 'backup_screen.dart' show openBackup;
 import '../../store/entitlement_store.dart' show iapOn;
+import '../iap/purchase_history_screen.dart' show openPurchaseHistory;
+import '../iap/seller_sheet.dart' show hasSellerInfo, showSellerSheet;
 import '../iap/subscription_screen.dart' show openSubscription;
 import 'terms.dart' show showTermsSheet;
 
@@ -148,6 +150,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListItem(label: '계정 및 동기화', chevron: true, onPress: () => openBackup(context)),
           // 구독 관리: 내 정보 첫 화면에서 한 번에 닿는다(해지 경로를 숨기지 않는다, ADR-0003). 결제를 켠 빌드에만 있다
           if (iapOn && _syncAvailable) ListItem(label: '구독 관리', chevron: true, onPress: () => openSubscription(context)),
+          // 구매 내역: 자기 결제 기록을 앱에서 본다(ADR-0003 L17)
+          if (iapOn && _syncAvailable) ListItem(label: '구매 내역', chevron: true, onPress: () => openPurchaseHistory(context)),
           // 다른 앱·엑셀에 정리해 둔 책을 한 번에(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어')
           ListItem(label: '책 목록 가져오기', chevron: true, onPress: () => openImportList(context)),
           // 커뮤니티가 열렸고 서버를 쓰는 빌드일 때만
@@ -159,6 +163,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // 이용약관(2026-11-18: 외부 표지 제공 중단 안내 포함)
           ListItem(label: '이용약관', chevron: true, onPress: () => showTermsSheet(context)),
           ListItem(label: '개인정보 처리방침', chevron: true, onPress: _privacySheet),
+          // 사업자 정보: 설정에서 한 번에 닿는다(ADR-0003 L14). 서버가 값을 준 빌드에만 있다
+          if (iapOn && hasSellerInfo) ListItem(label: '사업자 정보', chevron: true, onPress: () => showSellerSheet(context)),
           ListItem(label: '앱 정보', value: _version),
         ]),
         const BrandFooter(center: true),

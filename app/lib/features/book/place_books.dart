@@ -14,7 +14,7 @@ import '../../store/placement_store.dart';
 import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../home/locked_rows.dart' show freeShelfSlots, openableShelfCount;
+import '../home/locked_rows.dart' show allowedShelfSlots, freeShelfSlots, openableShelfCount;
 import '../../store/entitlement_store.dart';
 
 /// 놓을 수 있는 만큼 놓는다(놓은 책, 자리가 없어 남은 책)
@@ -24,7 +24,7 @@ Future<({List<String> placed, List<String> left})> placeBooks(Iterable<String> i
   final placed = <String>[], left = <String>[];
   for (final id in ids) {
     if (placementOf(s.layout!, id) != null) continue;
-    (await s.placeOnShelf(id) ? placed : left).add(id);
+    (await s.placeOnShelf(id, locked: lockedShelfIds()) ? placed : left).add(id);
   }
   return (placed: placed, left: left);
 }
@@ -106,4 +106,11 @@ Future<bool?> _askNoRoom(BuildContext context, List<String> ids, int free) {
       SubAction(label: '보관만 하기', onPress: () => Navigator.pop(ctx, false)),
     ]),
   );
+}
+
+/// 환불로 잠긴 선반(ADR-0002 D13). 결제가 꺼진 빌드, 서버에서 구매한 칸 수를 아직 못 받은 때는 잠그지 않는다
+Set<String> lockedShelfIds() {
+  final e = EntitlementStore.instance;
+  if (!iapOn || !e.loaded) return const {};
+  return PlacementStore.instance.shelvesBeyond(allowedShelfSlots(e.shelves));
 }

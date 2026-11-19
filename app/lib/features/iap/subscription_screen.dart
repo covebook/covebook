@@ -11,6 +11,7 @@ import '../../store/entitlement_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../settings/terms.dart' show showTermsSheet;
+import 'plan_screen.dart' show openPlans;
 
 Future<void> openSubscription(BuildContext context) => Navigator.of(context, rootNavigator: true)
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/me/subscription'), builder: (_) => const SubscriptionScreen()));
@@ -31,6 +32,21 @@ String iapDate(DateTime t) {
   final d = t.toLocal();
   return '${d.year}년 ${d.month}월 ${d.day}일';
 }
+
+/// 환불 안내 시트(구독 관리, 결제 화면이 같이 쓴다)
+Future<void> showRefundSheet(BuildContext context, String route) => showSheet<void>(
+      context,
+      title: '환불 안내',
+      builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+        WordText('환불은 ${storeName(route)}의 환불 절차를 따릅니다. 결제와 환불은 ${storeName(route)}가 처리해서, 앱에서 바로 환불해 드릴 수 없어요.', style: AppType.body),
+        const SizedBox(height: Space.item),
+        WordText('환불이 처리되면 구독이 종료되고, 구매한 선반은 잠겨요. 꽂아 둔 책과 기록은 그대로 있어요.', style: AppType.body),
+        Padding(
+          padding: const EdgeInsets.only(top: Space.item),
+          child: Btn(label: '${storeName(route)}에서 환불 신청하기', kind: 'secondary', onPress: () => launchUrl(storeRefundUrl(route), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
+        ),
+      ]),
+    );
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -70,20 +86,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final m = _iap.lastMessage;
     if (m != null) ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(m), duration: const Duration(seconds: 3), persist: false));
   }
-
-  void _refundSheet(String route) => showSheet<void>(
-        context,
-        title: '환불 안내',
-        builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          WordText('환불은 ${storeName(route)}의 환불 절차를 따릅니다. 결제와 환불은 ${storeName(route)}가 처리해서, 앱에서 바로 환불해 드릴 수 없어요.', style: AppType.body),
-          const SizedBox(height: Space.item),
-          WordText('환불이 처리되면 구독이 종료되고, 구매한 선반은 잠겨요. 꽂아 둔 책과 기록은 그대로 있어요.', style: AppType.body),
-          Padding(
-            padding: const EdgeInsets.only(top: Space.item),
-            child: Btn(label: '${storeName(route)}에서 환불 신청하기', kind: 'secondary', onPress: () => _open(storeRefundUrl(route))),
-          ),
-        ]),
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -130,11 +132,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           Btn(label: '$store에서 해지하기', kind: 'secondary', size: 'l', onPress: () => _open(storeManageUrl(route, sub.productId))),
           const SizedBox(height: Space.s),
         ],
+        // 구독하지 않은 계정: 요금제 화면으로 가는 길 하나(구독을 권하는 문장은 두지 않는다)
+        if (sub == null || !sub.active) ...[
+          Btn(label: '요금제 보기', kind: 'secondary', size: 'l', onPress: () => openPlans(context)),
+          const SizedBox(height: Space.s),
+        ],
         Btn(label: '구매 복원', kind: 'secondary', size: 'l', busy: _iap.busy, onPress: _restore),
         const SizedBox(height: Space.section),
         const SectionBand(inset: true),
         ListGroup(children: [
-          ListItem(label: '환불 안내', chevron: true, onPress: () => _refundSheet(route)),
+          ListItem(label: '환불 안내', chevron: true, onPress: () => showRefundSheet(context, route)),
           ListItem(label: '이용약관', chevron: true, onPress: () => showTermsSheet(context)),
         ]),
       ],

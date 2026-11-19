@@ -8,11 +8,13 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../services/sync.dart';
+import '../../store/entitlement_store.dart';
 import '../../store/reading_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/brand_button.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import '../iap/withdraw_notice.dart' show showWithdrawNotice;
 
 Future<void> openBackup(BuildContext context) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/backup'), builder: (_) => const BackupScreen()));
@@ -61,7 +63,15 @@ class _BackupScreenState extends State<BackupScreen> {
     if (mounted) setState(() {});
   }
 
-  void _removeAccount() => appAlert(
+  /// 구독 중인 계정이 탈퇴하려 할 때(고지 문구 T12): 탈퇴해도 스토어 구독은 해지되지 않는다고 먼저 알린다.
+  /// 탈퇴를 막지 않는다. '탈퇴 계속'을 누르면 원래 확인창으로 간다
+  void _removeAccount() {
+    final sub = iapOn ? EntitlementStore.instance.subscription : null;
+    if (sub == null || !sub.active) return _confirmRemove();
+    showWithdrawNotice(context, sub, onContinue: _confirmRemove);
+  }
+
+  void _confirmRemove() => appAlert(
         context,
         '회원탈퇴할까요?',
         _sync.loginRequired
