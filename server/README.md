@@ -30,7 +30,7 @@ Docker 이미지: `docker build -t chaekjang-go server`. 운영에서는 사진�
 
 스토어 알림은 `/iap/notifications/apple`, `/iap/notifications/google`로 받는다. 받으면 원문을 저장하고 바로 200을 주며, 처리와 정기 대조(1분마다: 밀린 알림, 스토어 확인 재시도, 만료가 다가온 구독 재확인)는 뒤에서 돈다. 구글 알림은 `IAP_GOOGLE_PUSH_AUDIENCE`, `IAP_GOOGLE_PUSH_EMAIL`이 있어야 받는다. 6시간마다 애플 알림 이력과 구글 무효 구매 목록을 받아 빠진 알림과 환불을 메운다. 대조가 돌 때 한 일과 밀린 일(대기·실패 알림, 확인 못 한 구매, 가장 오래된 대기 알림의 나이)을 `iap sweep:` 한 줄로 남기고, 같은 숫자를 `GET /admin/iap/stats`(`X-Admin-Token`)로 볼 수 있다.
 
-알림함(결제 고지, ADR-0003 L8)은 `GET /iap/notices`(최신순 100건), `POST /iap/notices/read`(`{"ids":[...]}` 또는 `{"all":true}`)이고, `/iap/me`의 `unreadNotices`가 안 읽은 수다. 고지는 상태가 바뀐 순간(결제 완료, 결제 실패 유예 시작, 만료, 해지 접수, 환불)에 한 번 쓰이고 문구가 아니라 문구 번호와 값만 저장한다. `GET /admin/iap/stats`의 `notices30Days`가 최근 30일에 쓴 고지 수다.
+알림함(결제 고지, ADR-0003 L8)은 `GET /iap/notices`(최신순 100건), `POST /iap/notices/read`(`{"ids":[...]}` 또는 `{"all":true}`)이고, `/iap/me`의 `unreadNotices`가 안 읽은 수다. 고지는 상태가 바뀐 순간(결제 완료, 결제 실패 유예 시작, 만료, 해지 접수, 환불)에 한 번 쓰이고 문구가 아니라 문구 번호와 값만 저장한다. `GET /admin/iap/stats`의 `notices30Days`가 최근 30일에 쓴 고지 수다. 계정을 지워도 고지 줄은 남고 `user_id`만 비워진다(알렸다는 증빙, ADR-0003 L11). 보관 기간(처리방침 초안 5년)이 지난 줄을 지우는 작업은 아직 없다.
 
 결제 API(`/iap/me`, `/iap/purchases`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다. `GET /iap/purchases`는 내 구매 내역이다. 앱에 보여 줄 사업자 정보는 `IAP_SELLER_JSON`(JSON 객체, 칸: `name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`)에 넣으면 `/iap/me`의 `seller`로 나간다. 값은 저장소에 적지 않는다.
 

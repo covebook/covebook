@@ -4,10 +4,12 @@
 --  * params에는 화면이 문구를 채울 값만 둔다. 금액은 두지 않는다(스토어가 정한다, ADR-0002 D22).
 --  * (user_id, dedupe_key)가 유일해서 같은 일을 두 번 알리지 않는다. 같은 스토어 알림을 다시 처리해도 한 줄이다.
 --  * 상태를 바꾸는 같은 트랜잭션(또는 같은 SQL 문)에서 쓴다. 상태만 바뀌고 고지가 빠지는 일이 없게.
---  * 계정을 지우면 함께 지운다(거래 기록은 iap_purchases에 따로 남는다).
+--  * 계정을 지워도 줄은 남기고 user_id만 비운다(알렸다는 증빙, ADR-0003 L11). 구매 표와 같다.
+--    유일 키에서 NULL은 서로 다른 값으로 치므로 주인 없는 줄끼리 부딪히지 않는다. 주인 없는 줄에는 새 고지를 쓰지 않는다.
+--    보관 기간(처리방침 초안 5년)이 지난 줄을 지우는 작업은 아직 없다.
 CREATE TABLE iap_notices (
     id               BIGSERIAL PRIMARY KEY,
-    user_id          BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id          BIGINT REFERENCES users(id) ON DELETE SET NULL,
     kind             TEXT   NOT NULL,   -- purchase_done, payment_failed, expired, cancel_scheduled, subscription_refunded, shelf_refunded
     template         TEXT   NOT NULL,   -- 고지 문구 번호: T3, T7, T8, T9, T10
     template_version INT    NOT NULL DEFAULT 1,

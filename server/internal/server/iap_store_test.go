@@ -308,7 +308,7 @@ func TestIAPNotificationOnce(t *testing.T) {
 	}
 }
 
-// 계정을 지워도 거래와 구독 줄은 남고 유저 연결만 끊긴다(거래 기록 보존). 계정 연결 값은 지워진다.
+// 계정을 지워도 거래, 구독, 고지 줄은 남고 유저 연결만 끊긴다(거래 기록 보존, 알렸다는 증빙). 계정 연결 값은 지워진다.
 func TestIAPSurvivesAccountDeletion(t *testing.T) {
 	ctx, db := iapTestDB(t)
 	user := iapTestUser(t, ctx, db)
@@ -333,6 +333,10 @@ func TestIAPSurvivesAccountDeletion(t *testing.T) {
 	if _, err = iapRecordPurchase(ctx, tx, user, iap.KindSubscription, p); err != nil {
 		t.Fatal(err)
 	}
+	notice := "purchase_done:apple:" + p.TransactionID
+	if err = iapWriteNotice(ctx, tx, user, noticePurchaseDone, iap.EnvProduction, notice, map[string]any{"route": "apple"}); err != nil {
+		t.Fatal(err)
+	}
 	if err = tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -351,5 +355,13 @@ func TestIAPSurvivesAccountDeletion(t *testing.T) {
 	}
 	if purchases != 1 || subs != 1 || tokens != 0 || owner != nil {
 		t.Fatalf("거래 %d, 구독 %d, 연결 값 %d, 유저 %v", purchases, subs, tokens, owner)
+	}
+	var notices int
+	var noticeOwner *int64
+	if err = db.QueryRow(ctx, "SELECT count(*)::int, max(user_id) FROM iap_notices WHERE dedupe_key=$1", notice).Scan(&notices, &noticeOwner); err != nil {
+		t.Fatal(err)
+	}
+	if notices != 1 || noticeOwner != nil {
+		t.Fatalf("고지 %d줄, 유저 %v: 탈퇴해도 고지는 남고 주인만 비어야 한다", notices, noticeOwner)
 	}
 }
