@@ -510,4 +510,23 @@ void main() {
     expect(find.text('구매하기'), findsNothing);
     expect(bought, isTrue);
   });
+
+  test('구독 관리의 결제 금액: 구글은 요금제 ID로 찾고, 가려낼 수 없으면 보이지 않는다', () {
+    final iap = IapService.instance;
+    IapSubscription sub(String plan) => IapSubscription(route: 'google', productId: 'plus', planId: plan, state: 'paid', active: true, autoRenew: true, expiresAt: DateTime.utc(2027, 1, 18));
+    iap.plans = [
+      IapPlan(details: _detail('plus', '플러스', '월 가격'), period: 'month', planId: 'monthly'),
+      IapPlan(details: _detail('plus', '플러스', '연 가격'), period: 'year', planId: 'yearly'),
+    ];
+    iap.details = {'plus': _detail('plus', '플러스', '월 가격')};
+    expect(iapPriceOf(iap, sub('yearly')), '연 가격');
+    expect(iapPriceOf(iap, sub('monthly')), '월 가격');
+    expect(iapPriceOf(iap, sub('없는 요금제')), isNull);
+    expect(iapPriceOf(iap, sub('')), isNull); // 요금제를 모르는데 후보가 둘이면 고르지 않는다
+    // 애플: 상품 ID가 곧 요금제
+    iap.plans = [IapPlan(details: _detail('plus', '플러스', '월 가격'), period: 'month')];
+    expect(iapPriceOf(iap, sub('')), '월 가격');
+    iap.plans = const [];
+    expect(iapPriceOf(iap, sub('')), '월 가격');
+  });
 }

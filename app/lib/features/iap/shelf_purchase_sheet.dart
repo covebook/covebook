@@ -86,7 +86,8 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
     final price = p == null ? null : _iap.details[p.productId]!.price;
     final failed = _iap.lastResult == IapResult.retryLater || _iap.lastResult == IapResult.rejected ? _iap.lastMessage : null;
     // 가운데 점을 쓰지 않는다(앱 규칙, 2026-11-18): 줄마다 문장 하나
-    Widget line(String t) => Padding(padding: const EdgeInsets.only(bottom: 6), child: WordText(t, style: AppType.sub));
+    // 결제 조건은 본문과 같은 크기로 적는다(작은 글씨로 숨기지 않는다, 고지 문구 T1)
+    Widget line(String t) => Padding(padding: const EdgeInsets.only(bottom: 6), child: WordText(t, style: AppType.body));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       if (products.length > 1)
         for (final o in products)

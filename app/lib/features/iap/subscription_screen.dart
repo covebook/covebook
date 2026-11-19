@@ -27,6 +27,14 @@ Uri storeManageUrl(String route, String productId) => route == 'apple'
 /// 스토어의 환불 신청 주소
 Uri storeRefundUrl(String route) => route == 'apple' ? Uri.parse('https://reportaproblem.apple.com') : Uri.parse('https://play.google.com/store/account/orderhistory');
 
+/// 구독 중인 요금제의 스토어 가격. 요금제를 가려낼 수 없으면 null(틀린 금액을 보이느니 보이지 않는다)
+String? iapPriceOf(IapService iap, IapSubscription sub) {
+  final plans = [for (final p in iap.plans) if (p.details.id == sub.productId) p];
+  if (plans.isEmpty) return sub.planId.isEmpty ? iap.details[sub.productId]?.price : null;
+  if (sub.planId.isEmpty) return plans.length == 1 ? plans.first.price : null;
+  return plans.where((p) => p.planId == sub.planId).firstOrNull?.price;
+}
+
 /// 날짜 표시: 기기 시간대의 날짜만. 스토어가 준 시각을 그대로 옮긴다
 String iapDate(DateTime t) {
   final d = t.toLocal();
@@ -92,7 +100,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final sub = _e.subscription;
     final route = sub?.route ?? iapRoute;
     final store = storeName(route);
-    final price = sub == null ? null : _iap.details[sub.productId]?.price;
+    // 구글은 구독 상품 하나에 요금제가 여럿이다. 상품 ID로 찾으면 다른 요금제의 가격이 나올 수 있어 요금제 ID로 찾는다
+    final price = sub == null ? null : iapPriceOf(_iap, sub);
     final grace = sub?.graceUntil;
     final inGrace = sub != null && sub.active && grace != null && grace.isAfter(sub.expiresAt);
     return Screen(

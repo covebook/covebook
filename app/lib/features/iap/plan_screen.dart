@@ -71,7 +71,8 @@ class _PlanScreenState extends State<PlanScreen> {
   Widget build(BuildContext context) {
     final sub = _e.subscription;
     final store = storeName(iapRoute);
-    Widget line(String t) => Padding(padding: const EdgeInsets.only(bottom: 6), child: WordText(t, style: AppType.sub));
+    // 결제 조건은 본문과 같은 크기로 적는다(작은 글씨로 숨기지 않는다, 고지 문구 T1)
+    Widget line(String t) => Padding(padding: const EdgeInsets.only(bottom: 6), child: WordText(t, style: AppType.body));
     final links = ListGroup(children: [
       ListItem(label: '이용약관', chevron: true, onPress: () => showTermsSheet(context)),
       ListItem(label: '환불 안내', chevron: true, onPress: () => showRefundSheet(context, iapRoute)),
