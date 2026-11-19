@@ -183,9 +183,9 @@ class IapService extends ChangeNotifier {
           _reservation = t?.reservation;
         } on ApiError catch (e) {
           if (e.code == 'iap_shelf_full') {
-            // 다른 기기에서 이미 다 열었다: 결제창을 띄우지 않고 칸 수를 다시 받는다
-            _done(IapResult.rejected, '이 책장의 선반은 모두 열었어요.');
-            unawaited(refresh());
+            // 다른 기기에서 그사이 칸을 샀다(다 열었거나, 고른 상품이 남은 칸보다 많다). 결제창을 띄우지 않고 칸 수를 다시 받는다
+            await refresh();
+            _done(IapResult.rejected, EntitlementStore.instance.shelvesFor(y) >= paidShelfMax ? '이 책장의 선반은 모두 열었어요.' : '이 책장에 남은 칸이 바뀌었어요. 다시 골라 주세요.');
             return;
           }
           if (e.code == 'iap_shelf_busy') {
