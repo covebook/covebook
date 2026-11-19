@@ -40,7 +40,7 @@ func TestIAPPurchaseHistory(t *testing.T) {
 
 	// 어제 산 구글 선반(금액 없음)과 방금 산 애플 구독(금액 있음. 시험용 통화와 값)
 	shelfID, orig, txn := iapTestID(t, "tok"), iapTestID(t, "orig"), iapTestID(t, "txn")
-	shelf := e.shelfPurchase(shelfID, account)
+	shelf := e.shelfPurchase(shelfID, e.shelfToken(token, 2026))
 	shelf.PurchasedAt = time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
 	e.google.Purchases[shelfID] = shelf
 	sub := e.subscription(orig, txn, account, time.Now().Add(time.Hour))
@@ -62,10 +62,13 @@ func TestIAPPurchaseHistory(t *testing.T) {
 		first["currency"] != "XTS" || first["priceMilli"] != float64(1234) {
 		t.Fatalf("구독 줄: %v", first)
 	}
+	if _, has := first["year"]; has {
+		t.Fatalf("구독 줄에 연도가 있음: %v", first)
+	}
 	if _, has := first["shelves"]; has {
 		t.Fatalf("구독 줄에 선반 칸이 있음: %v", first)
 	}
-	if second["route"] != "google" || second["kind"] != "product" || second["shelves"] != float64(2) || second["purchasedAt"] != shelf.PurchasedAt.Format(time.RFC3339) {
+	if second["route"] != "google" || second["kind"] != "product" || second["shelves"] != float64(2) || second["year"] != float64(2026) || second["purchasedAt"] != shelf.PurchasedAt.Format(time.RFC3339) {
 		t.Fatalf("선반 줄: %v", second)
 	}
 	for _, k := range []string{"currency", "priceMilli", "revokedAt"} {
@@ -92,7 +95,7 @@ func TestIAPPurchaseHistoryHidesSandbox(t *testing.T) {
 	e.srv.IAPSandbox = true
 	token, _ := e.user()
 	id := iapTestID(t, "tok")
-	p := e.shelfPurchase(id, e.accountToken(token))
+	p := e.shelfPurchase(id, e.shelfToken(token, 2026))
 	p.Env = iap.EnvSandbox
 	e.google.Purchases[id] = p
 	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 {
@@ -192,8 +195,8 @@ func TestIAPVoidedList(t *testing.T) {
 	token, _ := e.user()
 	account := e.accountToken(token)
 	shelfID, kept := iapTestID(t, "tok"), iapTestID(t, "kept")
-	e.google.Purchases[shelfID] = e.shelfPurchase(shelfID, account)
-	e.google.Purchases[kept] = e.shelfPurchase(kept, account)
+	e.google.Purchases[shelfID] = e.shelfPurchase(shelfID, e.shelfToken(token, 2026))
+	e.google.Purchases[kept] = e.shelfPurchase(kept, e.shelfToken(token, 2027))
 	for _, id := range []string{shelfID, kept} {
 		if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 {
 			t.Fatalf("선반 제출 %d %v", code, body)
@@ -208,7 +211,7 @@ func TestIAPVoidedList(t *testing.T) {
 		t.Fatalf("구독 제출 %d %v", code, body)
 	}
 	e.sweep()
-	if me := e.me(token); me["shelves"] != float64(4) || me["plus"] != true {
+	if me := e.me(token); shelvesIn(me, 2026) != 2 || shelvesIn(me, 2027) != 2 || me["plus"] != true {
 		t.Fatalf("환불 전: %v", me)
 	}
 
@@ -222,7 +225,7 @@ func TestIAPVoidedList(t *testing.T) {
 	if res := e.sweep(); res.Voided != 2 {
 		t.Fatalf("반영한 환불: %+v", res)
 	}
-	if me := e.me(token); me["shelves"] != float64(2) || me["plus"] != false {
+	if me := e.me(token); shelvesIn(me, 2026) != 0 || shelvesIn(me, 2027) != 2 || me["plus"] != false {
 		t.Fatalf("환불 뒤: %v", me)
 	}
 	var state string
@@ -266,7 +269,7 @@ func TestIAPAdminStats(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("운영자 조회 %d %v", code, body)
 	}
-	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days"} {
+	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days", "shelfOverCap", "shelfNoYear"} {
 		if _, ok := body[k].(float64); !ok {
 			t.Fatalf("%s 없음: %v", k, body)
 		}
@@ -279,4 +282,22 @@ func TestIAPAdminStats(t *testing.T) {
 		t.Fatalf("밀린 일: %+v %v", b, err)
 	}
 	e.srv.iapLogSweep(e.ctx, iapSweepResult{}) // 로그 한 줄이 패닉 없이 나가는지
+
+	// 한 책장에서 3칸을 넘게 산 거래와 연도를 모르는 선반 거래가 숫자에 잡힌다(차이로 본다)
+	token, _ := e.user()
+	year := e.shelfToken(token, 2026)
+	for _, c := range []struct {
+		account string
+		code    int
+	}{{year, 200}, {year, 200}, {"", 422}} { // 2칸 + 2칸(넘음), 연도 모름
+		id := iapTestID(t, "tok")
+		e.google.Purchases[id] = e.shelfPurchase(id, c.account)
+		if code, body := e.submit(token, "google", e.shelf, id, false); code != c.code {
+			t.Fatalf("선반 제출 %d %v", code, body)
+		}
+	}
+	after, err := iapBacklogNow(e.ctx, e.db)
+	if err != nil || after.ShelfOverCap != b.ShelfOverCap+1 || after.ShelfNoYear != b.ShelfNoYear+1 {
+		t.Fatalf("넘은 거래 %d→%d, 연도 모름 %d→%d %v", b.ShelfOverCap, after.ShelfOverCap, b.ShelfNoYear, after.ShelfNoYear, err)
+	}
 }

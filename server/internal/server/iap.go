@@ -101,6 +101,7 @@ func (s *Server) routeIAP(m *http.ServeMux) {
 	}
 	m.HandleFunc("GET /iap/me", wrap(s.iapMe))
 	m.HandleFunc("POST /iap/purchases", wrap(s.iapSubmit))
+	m.HandleFunc("POST /iap/shelf-token", wrap(s.iapShelfTokenFor))
 	m.HandleFunc("GET /iap/purchases", wrap(s.iapPurchases))
 	m.HandleFunc("GET /iap/notices", wrap(s.iapNotices))
 	m.HandleFunc("POST /iap/notices/read", wrap(s.iapNoticesRead))
@@ -118,6 +119,8 @@ var (
 	iapTooMany          = apiError{429, "iap_too_many", "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요"}
 	iapOtherAccount     = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요. 구독은 구매 복원으로 이 계정에 옮길 수 있어요"}
 	iapProductNoRestore = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요"}
+	iapShelfFull        = apiError{409, "iap_shelf_full", "이 책장의 추가 선반을 모두 열었어요"}
+	iapShelfYearMissing = apiError{422, "iap_shelf_year_missing", "어느 해 책장의 선반인지 알 수 없어요. 문의해 주시면 확인해 드릴게요"}
 )
 
 // iapMe는 결제에 필요한 내 정보를 준다: 스토어에 넘길 계정 연결 값, 지금 가진 것, 구독 상태, 파는 상품.
@@ -185,16 +188,65 @@ func (s *Server) iapStatus(ctx context.Context, user int64) (map[string]any, err
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"plus": plus, "shelves": shelves, "subscription": sub}, nil
+	// 연도 책장마다 산 칸 수. 키는 연도 문자열("2026"), 산 칸이 없는 해는 없다. 칸 수는 iapPaidShelfMax를 넘지 않는다
+	return map[string]any{"plus": plus, "shelvesByYear": shelves, "paidShelfMax": iapPaidShelfMax, "subscription": sub}, nil
 }
+
+// iapShelfTokenFor는 그 연도 책장의 추가 선반을 살 때 스토어에 넘길 계정 연결 값을 준다(D1).
+// 앱은 선반 결제를 시작하기 직전에 이것을 부르고, 받은 값을 애플 appAccountToken·구글 obfuscatedAccountId로 넘긴다.
+// 서버는 거래에 돌아온 이 값으로 어느 해 책장의 칸인지 찾는다.
+//
+// 요청: {"year":2026}
+// 응답 200: {"token":"uuid", "year":2026, "shelves":n}  shelves는 그 해에 이미 산 칸 수
+// 응답 409 iap_shelf_full: 그 해 책장의 유료 칸을 모두 열었다. 결제를 시작하지 않는다
+func (s *Server) iapShelfTokenFor(w http.ResponseWriter, r *http.Request) error {
+	user, err := s.user(r)
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Year int `json:"year"`
+	}
+	if err = decode(r, &body); err != nil {
+		return err
+	}
+	if !iapValidYear(body.Year) {
+		return bad
+	}
+	if !s.iapAllow(user, time.Now()) {
+		return iapTooMany
+	}
+	ctx := r.Context()
+	paid, err := iapShelfPaid(ctx, s.DB, user, body.Year, s.IAPSandbox)
+	if err != nil {
+		return err
+	}
+	if paid >= iapPaidShelfMax {
+		return iapShelfFull
+	}
+	token, err := iapShelfToken(ctx, s.DB, user, body.Year)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, map[string]any{"token": token, "year": body.Year, "shelves": paid})
+	return nil
+}
+
+// iapValidYear는 연도 책장 표(bookcases)와 같은 범위다.
+func iapValidYear(year int) bool { return year >= 2000 && year <= 9999 }
 
 // iapSubmit은 앱이 제출한 구매를 스토어에 확인하고 지급한다.
 //
-// 요청: {"route":"apple|google", "productId":"...", "proof":"애플: 스토어가 서명한 거래(JWS). 구글: 구매 토큰", "restore":false}
+// 요청: {"route":"apple|google", "productId":"...", "proof":"애플: 스토어가 서명한 거래(JWS). 구글: 구매 토큰", "restore":false, "year":2026}
+//
+// year는 추가 선반에만 쓴다. 어느 해 책장의 칸인지는 거래에 돌아온 계정 연결 값(POST /iap/shelf-token)으로 정하고,
+// 그 값이 연도를 모를 때만(앱 밖에서 산 구매 등) year를 쓴다. 둘 다 없으면 거래는 기록하고 422 iap_shelf_year_missing이다.
 //
 // proof는 "내가 이 구매를 한 기기"라는 증거다. 애플 거래 ID(숫자)는 받지 않는다. 추측할 수 있어서
 // 남의 구매를 내거나 restore로 남의 구독을 가져갈 수 있기 때문이다. 서명된 거래는 구매한 기기만 가진다.
-// 응답 200: {"status":"granted|already|inactive", "plus":bool, "shelves":n, "subscription":{...}}
+// 응답 200: {"status":"granted|already|inactive", "plus":bool, "shelvesByYear":{"2026":n}, "subscription":{...}}
+//
+//	추가 선반이면 "year"(칸이 열린 책장)도 준다. 그 해에 3칸을 넘게 샀으면 "overCap":true(넘은 칸은 환불 대상)
 //
 //	granted  새로 지급했다        already  전에 지급한 거래다        inactive  구독이 만료·보류 상태라 권한이 없다
 //
@@ -212,12 +264,13 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		ProductID string `json:"productId"`
 		Proof     string `json:"proof"`
 		Restore   bool   `json:"restore"`
+		Year      int    `json:"year"`
 	}
 	if err = decode(r, &body); err != nil {
 		return err
 	}
 	store := s.IAP[iap.Route(body.Route)]
-	if store == nil || body.ProductID == "" || body.Proof == "" || len(body.Proof) > 16384 {
+	if store == nil || body.ProductID == "" || body.Proof == "" || len(body.Proof) > 16384 || (body.Year != 0 && !iapValidYear(body.Year)) {
 		return bad
 	}
 	if !s.iapAllow(user, time.Now()) {
@@ -308,6 +361,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	}
 	status := "granted"
 	key := iapTransactionKey(asked.Kind, submitted)
+	shelfYear, overCap := 0, false // 추가 선반만
 	if asked.Kind == iap.KindSubscription {
 		// 같은 구독 줄기를 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다)
 		if err = iapLockLine(ctx, tx, route, current.OriginalTransactionID); err != nil {
@@ -346,7 +400,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 		// 새로 지급한 구독이면 결제 완료를 알린다(T3). 전에 지급한 것, 구매 복원, 만료된 구독은 알리지 않는다
 		if !mine && !body.Restore && !inactive && current.State == iap.StatePaid {
-			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, current, 0); err != nil {
+			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, current, iapShelfGrant{}); err != nil {
 				return err
 			}
 		}
@@ -379,9 +433,26 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 		if !inserted {
 			status = "already"
-		} else if !body.Restore {
-			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, submitted, bought.Shelves); err != nil {
-				return err
+		}
+		// 어느 해 책장의 칸인지(D1). 넣을 때 계정 연결 값으로 이미 적었다. 값이 연도를 몰랐으면 앱이 보낸 연도로 채운다
+		filled := false
+		if shelfYear, filled, e = iapSetShelfYear(ctx, tx, route, key, body.Year); e != nil {
+			return e
+		}
+		if shelfYear > 0 {
+			paid, e := iapShelfPaid(ctx, tx, user, shelfYear, s.IAPSandbox)
+			if e != nil {
+				return e
+			}
+			// 두 기기에서 동시에 사면 3칸을 넘을 수 있다. 칸은 3칸까지만 열고, 넘은 거래는 운영자가 환불한다
+			if overCap = paid > iapPaidShelfMax; overCap {
+				log.Printf("iap shelf over cap: route=%s user=%d year=%d paid=%d", route, user, shelfYear, paid)
+			}
+			// 결제 완료 고지(T3)는 칸을 준 때 쓴다: 새로 넣으면서 연도를 안 때, 또는 연도를 몰랐던 거래에 이번에 연도를 채운 때
+			if (inserted || filled) && !body.Restore {
+				if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, submitted, iapShelfGrant{Shelves: bought.Shelves, Year: shelfYear, OverCap: overCap}); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -402,11 +473,22 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if asked.Kind == iap.KindProduct && shelfYear == 0 {
+		log.Printf("iap shelf year missing: route=%s user=%d product=%s", route, user, submitted.ProductID)
+		return iapShelfYearMissing
+	}
+
 	out, err := s.iapStatus(ctx, user)
 	if err != nil {
 		return err
 	}
 	out["status"] = status
+	if shelfYear > 0 {
+		out["year"] = shelfYear
+		if overCap {
+			out["overCap"] = true // 이 해 책장에 3칸을 넘게 샀다. 넘은 칸은 환불 대상
+		}
+	}
 	writeJSON(w, 200, out)
 	return nil
 }

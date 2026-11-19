@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ type iapEnv struct {
 	h      http.Handler
 	apple  *iap.Fake
 	google *iap.Fake
-	shelf  string // 선반 상품 ID (칸 2개)
+	shelf  string // 선반 상품 ID (칸 2개. 시험에서 3칸 넘김을 보려고 1칸·3칸이 아니라 2칸으로 둔다)
 	plus   string // 구독 상품 ID
 }
 
@@ -93,6 +94,28 @@ func (e *iapEnv) accountToken(token string) string {
 	return body["accountToken"].(string)
 }
 
+// shelfToken은 그 해 책장의 선반을 살 때 스토어에 넘길 값을 받는다.
+func (e *iapEnv) shelfToken(token string, year int) string {
+	e.t.Helper()
+	code, body := e.call("POST", "/iap/shelf-token", token, map[string]any{"year": year})
+	if code != 200 {
+		e.t.Fatalf("/iap/shelf-token %d %v", code, body)
+	}
+	return body["token"].(string)
+}
+
+func (e *iapEnv) submitYear(token, route, product, id string, year int) (int, map[string]any) {
+	e.t.Helper()
+	return e.call("POST", "/iap/purchases", token, map[string]any{"route": route, "productId": product, "proof": id, "year": year})
+}
+
+// shelvesIn은 응답의 shelvesByYear에서 그 해 칸 수를 꺼낸다. 없으면 0이다.
+func shelvesIn(body map[string]any, year int) float64 {
+	m, _ := body["shelvesByYear"].(map[string]any)
+	n, _ := m[strconv.Itoa(year)].(float64)
+	return n
+}
+
 func errCode(body map[string]any) string {
 	if m, ok := body["error"].(map[string]any); ok {
 		return m["code"].(string)
@@ -144,7 +167,7 @@ func TestIAPMe(t *testing.T) {
 		t.Fatal("다른 유저와 값이 같음")
 	}
 	_, body := e.call("GET", "/iap/me", token, nil)
-	if body["plus"] != false || body["shelves"] != float64(0) || body["subscription"] != nil {
+	if byYear, _ := body["shelvesByYear"].(map[string]any); body["plus"] != false || byYear == nil || len(byYear) != 0 || body["subscription"] != nil || body["paidShelfMax"] != float64(3) {
 		t.Fatalf("산 것이 없는 상태: %v", body)
 	}
 	if routes, _ := body["routes"].([]any); len(routes) != 2 || routes[0] != "apple" {
@@ -178,7 +201,7 @@ func TestIAPMe(t *testing.T) {
 func TestIAPShelfPurchase(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
-	account := e.accountToken(token)
+	account := e.shelfToken(token, 2026)
 	id := iapTestID(t, "tok")
 
 	// 스토어에 없는 구매
@@ -191,14 +214,14 @@ func TestIAPShelfPurchase(t *testing.T) {
 	if code, body := e.submit(token, "google", e.shelf, id, false); code != 503 || errCode(body) != "iap_store_unavailable" {
 		t.Fatalf("스토어 장애: %d %v", code, body)
 	}
-	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); shelves != 0 {
+	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); len(shelves) != 0 {
 		t.Fatal("스토어 장애인데 지급됨")
 	}
 	e.google.Err = nil
 
 	// 정상 지급. 커밋 뒤 스토어 확인이 불리고 기록된다
 	code, body := e.submit(token, "google", e.shelf, id, false)
-	if code != 200 || body["status"] != "granted" || body["shelves"] != float64(2) {
+	if code != 200 || body["status"] != "granted" || shelvesIn(body, 2026) != 2 {
 		t.Fatalf("지급: %d %v", code, body)
 	}
 	if len(e.google.Confirmed) != 1 || e.google.Confirmed[0] != id {
@@ -209,7 +232,7 @@ func TestIAPShelfPurchase(t *testing.T) {
 		t.Fatalf("확인 시각이 안 남음: %v %v", confirmed, err)
 	}
 	// 같은 구매를 다시 내면 성공으로 답하고 더 주지 않는다
-	if code, body = e.submit(token, "google", e.shelf, id, false); code != 200 || body["status"] != "already" || body["shelves"] != float64(2) {
+	if code, body = e.submit(token, "google", e.shelf, id, false); code != 200 || body["status"] != "already" || shelvesIn(body, 2026) != 2 {
 		t.Fatalf("다시 제출: %d %v", code, body)
 	}
 	// 다른 유저가 같은 구매를 내면 거절. 한 번 사는 상품은 복원으로도 옮기지 않는다
@@ -232,10 +255,10 @@ func TestIAPShelfPurchase(t *testing.T) {
 	if code, body = e.submit(thief, "google", e.shelf, odd, false); code != 409 || errCode(body) != "iap_other_account" {
 		t.Fatalf("UUID가 아닌 값: %d %v", code, body)
 	}
-	// 계정 연결 값이 빈 구매(앱 밖 구매)는 낸 사람에게 준다
+	// 계정 연결 값이 빈 구매(앱 밖 구매)는 낸 사람에게, 앱이 보낸 연도 책장에 준다
 	id3 := iapTestID(t, "tok3")
 	e.google.Purchases[id3] = e.shelfPurchase(id3, "")
-	if code, body = e.submit(thief, "google", e.shelf, id3, false); code != 200 || body["shelves"] != float64(2) {
+	if code, body = e.submitYear(thief, "google", e.shelf, id3, 2026); code != 200 || shelvesIn(body, 2026) != 2 {
 		t.Fatalf("빈 값: %d %v", code, body)
 	}
 }
@@ -243,7 +266,7 @@ func TestIAPShelfPurchase(t *testing.T) {
 func TestIAPRejections(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
-	account := e.accountToken(token)
+	account := e.shelfToken(token, 2026)
 	put := func(change func(*iap.Purchase)) string {
 		id := iapTestID(t, "tok")
 		p := e.shelfPurchase(id, account)
@@ -291,8 +314,8 @@ func TestIAPRejections(t *testing.T) {
 	if code, _ := e.submit("", "google", e.shelf, "x", false); code != 401 {
 		t.Fatalf("로그인 없이 %d", code)
 	}
-	if plus, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); plus || shelves != 0 {
-		t.Fatalf("거절뿐인데 지급됨: %v %d", plus, shelves)
+	if plus, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); plus || len(shelves) != 0 {
+		t.Fatalf("거절뿐인데 지급됨: %v %v", plus, shelves)
 	}
 }
 
@@ -300,10 +323,10 @@ func TestIAPConfirmRetry(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
 	id := iapTestID(t, "tok")
-	e.google.Purchases[id] = e.shelfPurchase(id, e.accountToken(token))
+	e.google.Purchases[id] = e.shelfPurchase(id, e.shelfToken(token, 2026))
 	// 스토어 확인이 실패해도 지급은 된다. 확인 시각은 비어 있다
 	e.google.ConfirmErr = errors.New("503")
-	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 || body["shelves"] != float64(2) {
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 || shelvesIn(body, 2026) != 2 {
 		t.Fatalf("확인 실패 시 지급: %d %v", code, body)
 	}
 	var confirmed *time.Time
@@ -325,7 +348,7 @@ func TestIAPConfirmRetry(t *testing.T) {
 	p.Acknowledged = true
 	e.google.Purchases[id2] = p
 	before := len(e.google.Confirmed)
-	if code, _ := e.submit(token, "google", e.shelf, id2, false); code != 200 || len(e.google.Confirmed) != before {
+	if code, _ := e.submitYear(token, "google", e.shelf, id2, 2026); code != 200 || len(e.google.Confirmed) != before {
 		t.Fatalf("이미 확인된 구매: %d %v", code, e.google.Confirmed)
 	}
 }
@@ -419,7 +442,7 @@ func TestIAPConcurrentSubmit(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
 	id := iapTestID(t, "tok")
-	p := e.shelfPurchase(id, e.accountToken(token))
+	p := e.shelfPurchase(id, e.shelfToken(token, 2026))
 	p.Acknowledged = true // 가짜 스토어의 확인 기록은 동시 쓰기에 안전하지 않아 여기서는 부르지 않게 한다
 	e.google.Purchases[id] = p
 	statuses := make(chan string, 12)
@@ -443,8 +466,8 @@ func TestIAPConcurrentSubmit(t *testing.T) {
 			granted++
 		}
 	}
-	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); granted != 1 || shelves != 2 {
-		t.Fatalf("granted %d번, 선반 %d칸 (1번, 2칸이어야 함)", granted, shelves)
+	if _, shelves, _ := iapEntitlements(e.ctx, e.db, user, false); granted != 1 || shelves[2026] != 2 {
+		t.Fatalf("granted %d번, 선반 %v (1번, 2026년 2칸이어야 함)", granted, shelves)
 	}
 }
 
@@ -474,18 +497,18 @@ func TestIAPSandboxSwitch(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
 	id := iapTestID(t, "tok")
-	p := e.shelfPurchase(id, e.accountToken(token))
+	p := e.shelfPurchase(id, e.shelfToken(token, 2026))
 	p.Env = iap.EnvSandbox
 	e.google.Purchases[id] = p
 	if code, body := e.submit(token, "google", e.shelf, id, false); code != 422 || errCode(body) != "iap_sandbox_not_allowed" {
 		t.Fatalf("스위치 꺼짐: %d %v", code, body)
 	}
 	e.srv.IAPSandbox = true
-	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 || body["shelves"] != float64(2) {
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 || shelvesIn(body, 2026) != 2 {
 		t.Fatalf("스위치 켜짐: %d %v", code, body)
 	}
 	e.srv.IAPSandbox = false
-	if _, body := e.call("GET", "/iap/me", token, nil); body["shelves"] != float64(0) {
+	if _, body := e.call("GET", "/iap/me", token, nil); shelvesIn(body, 2026) != 0 {
 		t.Fatalf("스위치를 껐는데 샌드박스 선반이 남음: %v", body)
 	}
 }
@@ -509,5 +532,85 @@ func TestIAPSubmitLimit(t *testing.T) {
 	// 1분이 지나면 다시 받는다
 	if !e.srv.iapAllow(id, time.Now().Add(2*time.Minute)) {
 		t.Fatal("1분 뒤에도 막힘")
+	}
+}
+
+// 추가 선반은 연도 책장마다 따로 열고, 한 책장에서 돈을 내고 여는 칸은 3칸까지다(D1).
+func TestIAPShelfYears(t *testing.T) {
+	e := newIAPEnv(t)
+	token, user := e.user()
+
+	// 연도 토큰: 로그인 필요, 책장 표와 같은 연도 범위, 같은 해에는 같은 값
+	if code, _ := e.call("POST", "/iap/shelf-token", "", map[string]any{"year": 2026}); code != 401 {
+		t.Fatalf("로그인 없이 %d", code)
+	}
+	for _, y := range []any{1999, 10000, 0, "2026"} {
+		if code, _ := e.call("POST", "/iap/shelf-token", token, map[string]any{"year": y}); code != 400 {
+			t.Errorf("연도 %v: %d", y, code)
+		}
+	}
+	y2026 := e.shelfToken(token, 2026)
+	if len(y2026) != 36 || e.shelfToken(token, 2026) != y2026 || e.shelfToken(token, 2027) == y2026 || e.accountToken(token) == y2026 {
+		t.Fatal("연도 토큰이 해마다 하나가 아님")
+	}
+
+	buy := func(accountToken string, year int) (int, map[string]any) {
+		t.Helper()
+		id := iapTestID(t, "tok")
+		e.google.Purchases[id] = e.shelfPurchase(id, accountToken)
+		return e.submitYear(token, "google", e.shelf, id, year)
+	}
+	// 2026년 책장에 2칸
+	code, body := buy(y2026, 0)
+	if code != 200 || body["year"] != float64(2026) || shelvesIn(body, 2026) != 2 || body["overCap"] != nil {
+		t.Fatalf("2026년 첫 구매: %d %v", code, body)
+	}
+	if _, body = e.call("POST", "/iap/shelf-token", token, map[string]any{"year": 2026}); body["shelves"] != float64(2) {
+		t.Fatalf("연도 토큰의 산 칸 수: %v", body)
+	}
+	// 앱이 다른 연도를 보내도 연도 토큰이 정한다
+	code, body = buy(y2026, 2030)
+	if code != 200 || body["year"] != float64(2026) || shelvesIn(body, 2030) != 0 {
+		t.Fatalf("연도 토큰과 다른 연도: %d %v", code, body)
+	}
+	// 2칸 + 2칸 = 4칸이지만 3칸까지만 연다. 넘은 거래는 기록하고 알린다
+	if shelvesIn(body, 2026) != 3 || body["overCap"] != true {
+		t.Fatalf("3칸 넘김: %v", body)
+	}
+	if paid, _ := iapShelfPaid(e.ctx, e.db, user, 2026, false); paid != 4 {
+		t.Fatalf("원장의 2026년 칸 합 %d (4여야 함)", paid)
+	}
+	// 다 연 해에는 결제를 시작하지 않게 연도 토큰을 주지 않는다
+	if code, body = e.call("POST", "/iap/shelf-token", token, map[string]any{"year": 2026}); code != 409 || errCode(body) != "iap_shelf_full" {
+		t.Fatalf("다 연 해: %d %v", code, body)
+	}
+	// 다른 해 책장은 따로
+	code, body = buy(e.shelfToken(token, 2027), 0)
+	if code != 200 || shelvesIn(body, 2027) != 2 || shelvesIn(body, 2026) != 3 {
+		t.Fatalf("2027년: %d %v", code, body)
+	}
+
+	// 연도를 모르는 선반 거래(구독용 값, 빈 값에 연도도 안 보냄): 기록은 하고 칸은 주지 않는다
+	for _, account := range []string{e.accountToken(token), ""} {
+		id := iapTestID(t, "noyear")
+		e.google.Purchases[id] = e.shelfPurchase(id, account)
+		if code, body = e.submit(token, "google", e.shelf, id, false); code != 422 || errCode(body) != "iap_shelf_year_missing" {
+			t.Fatalf("연도 모름(%q): %d %v", account, code, body)
+		}
+		var year *int
+		if err := e.db.QueryRow(e.ctx, "SELECT shelf_year FROM iap_purchases WHERE route='google' AND transaction_id=$1", id).Scan(&year); err != nil || year != nil {
+			t.Fatalf("연도 모르는 거래가 기록되지 않음: %v %v", year, err)
+		}
+		// 같은 거래를 연도와 함께 다시 내면 그 해에 준다
+		if code, body = e.submitYear(token, "google", e.shelf, id, 2028); code != 200 || body["status"] != "already" || body["year"] != float64(2028) {
+			t.Fatalf("연도와 다시 제출(%q): %d %v", account, code, body)
+		}
+	}
+	if code, body = e.call("GET", "/iap/me", token, nil); shelvesIn(body, 2028) != 3 || shelvesIn(body, 2026) != 3 || shelvesIn(body, 2027) != 2 {
+		t.Fatalf("/iap/me: %v", body)
+	}
+	// 틀린 연도는 받지 않는다
+	if code, _ = e.submitYear(token, "google", e.shelf, "x", 1999); code != 400 {
+		t.Fatalf("틀린 연도: %d", code)
 	}
 }
