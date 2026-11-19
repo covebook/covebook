@@ -16,14 +16,15 @@ import (
 // iapPurchases는 내 구매 내역을 최신순으로 준다(ADR-0003 L17). 원장의 줄 그대로이고 환불된 줄도 보인다.
 // 금액은 스토어가 알려 준 거래에만 있다(구글 구매 조회에는 금액이 없다).
 //
-// 응답: {"purchases":[{"route","productId","kind","state":"paid|revoked","purchasedAt","revokedAt","shelves","currency","priceMilli"}]}
+// 응답: {"purchases":[{"route","productId","kind","state":"paid|revoked","purchasedAt","revokedAt","shelves","year","currency","priceMilli"}]}
+// 추가 선반은 shelves(상품이 주는 칸 수)와 year(칸이 열린 연도 책장)를 준다. 연도를 모르는 거래는 year가 없다.
 func (s *Server) iapPurchases(w http.ResponseWriter, r *http.Request) error {
 	user, err := s.user(r)
 	if err != nil {
 		return err
 	}
 	ctx := r.Context()
-	rows, err := s.DB.Query(ctx, `SELECT b.route, b.product_id, b.kind, b.state, b.purchased_at, b.revoked_at, coalesce(p.shelves,0), coalesce(b.currency,''), b.price_milli
+	rows, err := s.DB.Query(ctx, `SELECT b.route, b.product_id, b.kind, b.state, b.purchased_at, b.revoked_at, coalesce(p.shelves,0), coalesce(b.currency,''), b.price_milli, b.shelf_year
 		FROM iap_purchases b LEFT JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
 		WHERE b.user_id=$1 AND ($2 OR b.env='production')
 		ORDER BY b.purchased_at DESC, b.id DESC LIMIT 200`, user, s.IAPSandbox)
@@ -38,7 +39,8 @@ func (s *Server) iapPurchases(w http.ResponseWriter, r *http.Request) error {
 		var revoked *time.Time
 		var shelves int
 		var price *int64
-		if err = rows.Scan(&route, &product, &kind, &state, &purchased, &revoked, &shelves, &currency, &price); err != nil {
+		var year *int
+		if err = rows.Scan(&route, &product, &kind, &state, &purchased, &revoked, &shelves, &currency, &price, &year); err != nil {
 			return err
 		}
 		item := map[string]any{"route": route, "productId": product, "kind": kind, "state": state, "purchasedAt": purchased.UTC().Format(time.RFC3339)}
@@ -47,6 +49,9 @@ func (s *Server) iapPurchases(w http.ResponseWriter, r *http.Request) error {
 		}
 		if kind == string(iap.KindProduct) && shelves > 0 {
 			item["shelves"] = shelves
+			if year != nil {
+				item["year"] = *year
+			}
 		}
 		if currency != "" && price != nil {
 			item["currency"], item["priceMilli"] = currency, *price
@@ -220,6 +225,8 @@ type iapBacklog struct {
 	OldestPendingSecs int64 `json:"oldestPendingSeconds"`   // 가장 오래 기다린 알림의 나이
 	Subscriptions     int   `json:"activeSubscriptions"`    // 지금 유효한 구독 줄기(운영 환경)
 	RevokedPurchases  int   `json:"revokedPurchases30Days"` // 최근 30일에 환불된 거래
+	ShelfOverCap      int   `json:"shelfOverCap"`           // 한 연도 책장에서 3칸을 넘게 산 거래(운영 환경, 환불 안 됨). 운영자가 환불할 대상(D1)
+	ShelfNoYear       int   `json:"shelfNoYear"`            // 어느 해 책장인지 모르는 선반 거래(운영 환경, 환불 안 됨). 칸을 주지 않았다. 문의를 받거나 환불할 대상
 }
 
 func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
@@ -230,8 +237,13 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 		coalesce((SELECT extract(epoch FROM now() - min(received_at)) FROM iap_notifications
 			WHERE result IN ('received','failed') AND received_at > now() - interval '8 days'), 0)::bigint,
 		(SELECT count(*) FROM iap_subscriptions WHERE state='paid' AND env='production' AND coalesce(grace_until, expires_at) > now()),
-		(SELECT count(*) FROM iap_purchases WHERE state='revoked' AND revoked_at > now() - interval '30 days')`).
-		Scan(&b.PendingNotices, &b.FailedNotices, &b.Unconfirmed, &b.OldestPendingSecs, &b.Subscriptions, &b.RevokedPurchases)
+		(SELECT count(*) FROM iap_purchases WHERE state='revoked' AND revoked_at > now() - interval '30 days'),
+		(SELECT count(*) FROM (
+			SELECT sum(p.shelves) OVER (PARTITION BY b.user_id, b.shelf_year ORDER BY b.purchased_at, b.id) AS upto
+			FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
+			WHERE b.kind='product' AND b.state='paid' AND b.env='production' AND b.shelf_year IS NOT NULL) t WHERE upto > $1),
+		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND shelf_year IS NULL)`, iapPaidShelfMax).
+		Scan(&b.PendingNotices, &b.FailedNotices, &b.Unconfirmed, &b.OldestPendingSecs, &b.Subscriptions, &b.RevokedPurchases, &b.ShelfOverCap, &b.ShelfNoYear)
 	return
 }
 
@@ -253,9 +265,9 @@ func (s *Server) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	if skip {
 		return
 	}
-	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_pending=%ds",
+	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_pending=%ds shelf_over_cap=%d shelf_no_year=%d",
 		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided,
-		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestPendingSecs)
+		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestPendingSecs, b.ShelfOverCap, b.ShelfNoYear)
 }
 
 // iapAdminStats는 밀린 일의 숫자를 준다. 운영자 토큰이 없으면 없는 경로처럼 답한다(community.go의 adminOK와 같은 방식).
