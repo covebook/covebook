@@ -182,16 +182,18 @@ func (s *Server) iapSweepLocked(ctx context.Context) error {
 		return err // 다른 곳에서 돌고 있으면 이번에는 건너뛴다
 	}
 	defer conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", iapSweepLockKey)
-	_, err = s.iapSweep(ctx)
+	res, err := s.iapSweep(ctx)
+	s.iapLogSweep(ctx, res)
 	return err
 }
 
 // iapSweepResult는 한 번 돌면서 한 일이다. 숫자가 계속 크면 알림이 안 오고 있다는 신호다(이슈 #39).
 type iapSweepResult struct {
 	Notices, NoticesFailed, Confirmed, Refreshed int
+	Backfilled, Voided                           int // 스토어의 목록으로 메운 알림, 반영한 환불
 }
 
-// iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 알림 처리, 만료가 다가온 구독 재확인.
+// iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
 // 순서: 기한이 있는 것(구글 확인 3일)을 가장 먼저 한다. 한 단계가 실패해도 다음 단계는 돈다.
 func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	var res iapSweepResult
@@ -230,7 +232,10 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		res.Confirmed++
 	}
 
-	// 2. 밀린 알림
+	// 2. 스토어의 목록으로 빠진 알림과 환불을 메운다(6시간에 한 번). 넣은 알림은 바로 아래에서 처리된다
+	s.iapCatchUp(ctx, &res)
+
+	// 3. 밀린 알림
 	notices, err := iapPendingNotifications(ctx, s.DB, 100)
 	keep(err)
 	for _, n := range notices {
@@ -244,7 +249,7 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		keep(iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note))
 	}
 
-	// 3. 만료가 다가왔거나 지난 구독
+	// 4. 만료가 다가왔거나 지난 구독
 	due, err := iapDueSubscriptions(ctx, s.DB, 200)
 	keep(err)
 	for _, d := range due {

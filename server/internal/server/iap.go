@@ -101,6 +101,8 @@ func (s *Server) routeIAP(m *http.ServeMux) {
 	}
 	m.HandleFunc("GET /iap/me", wrap(s.iapMe))
 	m.HandleFunc("POST /iap/purchases", wrap(s.iapSubmit))
+	m.HandleFunc("GET /iap/purchases", wrap(s.iapPurchases))
+	m.HandleFunc("GET /admin/iap/stats", wrap(s.iapAdminStats))
 }
 
 var (
@@ -159,6 +161,10 @@ func (s *Server) iapMe(w http.ResponseWriter, r *http.Request) error {
 	}
 	sort.Strings(routes)
 	out["routes"] = routes
+	// 사업자 정보(ADR-0003 L14). 설정돼 있을 때만 준다
+	if seller := iapSeller(); seller != nil {
+		out["seller"] = seller
+	}
 	writeJSON(w, 200, out)
 	return nil
 }

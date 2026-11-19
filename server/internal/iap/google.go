@@ -23,6 +23,7 @@ type googleAPI interface {
 	AcknowledgeSubscription(ctx context.Context, packageName, subscriptionID, token string, req *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error
 	AcknowledgeProduct(ctx context.Context, packageName, productID, token, developerPayload string) error
 	ConsumeProduct(ctx context.Context, packageName, productID, token string) error
+	VoidedPurchases(ctx context.Context, packageName string, startTime, endTime, maxResult int64, token string, startIndex int64, productType playstore.VoidedPurchaseType) (*androidpublisher.VoidedPurchasesListResponse, error)
 }
 
 type Google struct {

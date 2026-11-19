@@ -15,11 +15,12 @@ import (
 )
 
 // appleAPI는 go-iap 클라이언트에서 우리가 쓰는 메서드만 고른 것이다.
-// 시험에서는 이 둘만 가진 가짜를 끼운다.
+// 시험에서는 이것만 가진 가짜를 끼운다.
 type appleAPI interface {
 	GetTransactionInfo(ctx context.Context, transactionID string) (*api.TransactionInfoResponse, error)
 	ParseSignedTransaction(signed string) (*api.JWSTransaction, error)
 	GetALLSubscriptionStatuses(ctx context.Context, originalTransactionID string, query *url.Values) (*api.StatusResponse, error)
+	GetAllNotificationHistory(ctx context.Context, body api.NotificationHistoryRequest, duration time.Duration) ([]api.NotificationHistoryResponseItem, error)
 }
 
 // AppleConfig는 App Store Server API 키다. 값은 환경변수에서 읽고 저장소에 적지 않는다.
