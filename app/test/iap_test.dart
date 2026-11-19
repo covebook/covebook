@@ -455,6 +455,7 @@ void main() {
           'params': params,
         })!;
     final list = [
+      n(6, 'renewal_upcoming', '2027-02-15T01:00:00Z', read: true, params: {'route': iapRoute, 'productId': 'plus', 'expiresAt': '2027-03-01T00:00:00Z', 'period': 'year'}),
       n(5, 'payment_failed', '2027-01-18T03:00:00Z', params: {'route': iapRoute, 'productId': 'plus', 'graceUntil': '2027-02-03T03:00:00Z'}),
       n(4, 'cancel_scheduled', '2027-01-10T03:00:00Z', read: true, params: {'route': iapRoute, 'expiresAt': '2027-01-18T03:00:00Z'}),
       n(3, 'shelf_refunded', '2027-01-05T03:00:00Z', read: true, params: {'route': iapRoute}),
@@ -466,20 +467,20 @@ void main() {
       expect(IapNotice.from({'id': 1}), isNull);
       expect(IapNotice.from('깨짐'), isNull);
       expect(n(9, 'future_kind', '2027-01-01T00:00:00Z').text, isNull);
-      expect(list.first.unread, isTrue);
-      expect(list[1].unread, isFalse);
-      expect(list[1].text!.$1, contains('자동 갱신이 꺼졌습니다'));
-      expect(list[1].text!.$2, contains('2027년 1월 18일까지 이용할 수 있습니다'));
-      expect(list[4].text!.$2, '선반 1칸을 더 열 수 있습니다.');
+      expect(list[1].unread, isTrue);
+      expect(list[2].unread, isFalse);
+      expect(list[2].text!.$1, contains('자동 갱신이 꺼졌습니다'));
+      expect(list[2].text!.$2, contains('2027년 1월 18일까지 이용할 수 있습니다'));
+      expect(list[5].text!.$2, '선반 1칸을 더 열 수 있습니다.');
       // 고지에 금액은 넣지 않는다(서버가 주지 않고, 금액은 결제한 스토어가 정한다)
       for (final x in list) {
-        expect(x.text!.$2.contains('원'), isFalse, reason: x.kind);
+        expect(x.text!.$2.contains(RegExp(r'\d\s*원')), isFalse, reason: x.kind);
       }
     });
 
     test('앱을 열 때 띄우는 것은 안 읽은 중요한 고지 하나(가장 새것)', () {
       expect(iapNoticeToShow(list)!.id, 5);
-      expect(iapNoticeToShow(list.skip(1).toList()), isNull); // 다 읽었으면 없다
+      expect(iapNoticeToShow([list[0], ...list.skip(2)]), isNull); // 다 읽었으면 없다
       // 해지 접수·결제 완료는 알림함에만 둔다
       expect(iapNoticeToShow([n(7, 'cancel_scheduled', '2027-01-20T00:00:00Z'), n(8, 'purchase_done', '2027-01-21T00:00:00Z')]), isNull);
       final two = [n(10, 'expired', '2027-01-01T00:00:00Z'), n(11, 'shelf_refunded', '2027-01-02T00:00:00Z')];

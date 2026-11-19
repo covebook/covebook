@@ -6,9 +6,10 @@ import 'dart:ui' as ui;
 
 import 'package:chaekjang/features/home/home_screen.dart' show headerIconsPreview;
 import 'package:chaekjang/features/settings/settings_screen.dart';
-import 'package:chaekjang/features/settings/terms.dart' show paidArticles, termsArticles;
+import 'package:chaekjang/features/settings/terms.dart' show paidArticles, showTermsSheet, termsArticles;
 import 'package:chaekjang/services/sync.dart' show SyncService;
 import 'package:chaekjang/store/entitlement_store.dart';
+import 'package:chaekjang/ui/kit.dart' show Btn;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -92,5 +93,17 @@ void main() {
     expect(titles[10], '제11조 (서비스의 변경과 중단)');
     expect(titles.last, '제14조 (문의)');
     expect(termsArticles[3].$2.last, contains('결제 기록은 관계 법령에 따라'));
+  }, skip: !iapOn);
+
+  testWidgets('결제를 켠 빌드의 약관 시트: 유료 서비스 조', (t) async {
+    await _pump(t, Builder(builder: (c) => Scaffold(body: Center(child: Btn(label: '열기', onPress: () => showTermsSheet(c))))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('제7조 (유료 서비스)'), 300, scrollable: find.byType(Scrollable).last);
+    // 제7조 제목을 시트 맨 위로
+    Scrollable.ensureVisible(t.element(find.text('제7조 (유료 서비스)')));
+    await t.pumpAndSettle();
+    expect(find.text('제8조 (구독의 자동 갱신과 해지)'), findsOneWidget);
+    await _shot(t, '25-terms-paid');
   }, skip: !iapOn);
 }
