@@ -297,7 +297,7 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		res.Refreshed++
 	}
 
-	// 5. 곧 갱신될 연 구독에 갱신 예정 고지(T4). 4에서 만료일을 새로 받은 뒤에 본다. 6시간에 한 번
+	// 6. 곧 갱신될 연 구독에 갱신 예정 고지(T4). 5에서 만료일을 새로 받은 뒤에 본다. 6시간에 한 번
 	if now := time.Now().UTC(); s.iapRenewalDue(now) {
 		n, e := iapNoteRenewals(ctx, s.DB, now, iapRenewalNoticeDays())
 		keep(e)
