@@ -98,6 +98,9 @@ class IapService extends ChangeNotifier {
   // 스토어 플러그인은 실제로 쓸 때 처음 만든다(결제가 꺼진 빌드와 시험에서는 만들지 않는다)
   InAppPurchase get _store => InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _sub;
+
+  /// 이번 실행에서 선반을 사려고 연 책장의 연도. 구매 제출에 같이 보낸다(서버는 계정 연결 값의 연도를 먼저 본다)
+  int? _shelfYear;
   bool _restoring = false;
 
   /// 결제·복원이 진행 중인지(버튼을 잠근다. 연타와 결제 중 계정 전환을 막는다)
@@ -167,7 +170,20 @@ class IapService extends ChangeNotifier {
     if (busy || d == null || (!shelf && EntitlementStore.instance.accountToken.isEmpty)) return;
     _busy(true);
     try {
-      final account = shelf ? await shelfToken(year ?? liveShelfYear()) : EntitlementStore.instance.accountToken;
+      String? account = EntitlementStore.instance.accountToken;
+      if (shelf) {
+        final y = year ?? liveShelfYear();
+        try {
+          account = await shelfToken(y);
+        } on ApiError catch (e) {
+          if (e.code != 'iap_shelf_full') rethrow;
+          // 다른 기기에서 이미 다 열었다: 결제창을 띄우지 않고 칸 수를 다시 받는다
+          _done(IapResult.rejected, '이 책장의 선반은 모두 열었어요.');
+          unawaited(refresh());
+          return;
+        }
+        _shelfYear = y;
+      }
       if (account == null || account.isEmpty) {
         _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
         return;
@@ -185,13 +201,17 @@ class IapService extends ChangeNotifier {
     }
   }
 
-  /// 선반을 살 때 스토어에 넘길 그 해 책장의 계정 연결 값. 서버가 이 값으로 어느 해 책장의 칸인지 찾는다. 받지 못하면 null
+  /// 선반을 살 때 스토어에 넘길 그 해 책장의 계정 연결 값. 서버가 이 값으로 어느 해 책장의 칸인지 찾는다. 받지 못하면 null.
+  /// 그 해 칸을 다 열었으면 서버가 409 iap_shelf_full을 준다(ApiError로 던진다)
   Future<String?> shelfToken(int year) async {
     final token = await KvStore.get(syncTokenKey);
     if (token == null) return null;
     try {
       final res = await api('POST', '/iap/shelf-token', token, {'year': year});
       return res is Map && res['token'] is String ? res['token'] as String : null;
+    } on ApiError catch (e) {
+      if (e.code == 'iap_shelf_full') rethrow;
+      return null;
     } catch (_) {
       return null;
     }
@@ -251,7 +271,7 @@ class IapService extends ChangeNotifier {
     final proof = d.verificationData.serverVerificationData;
     if (token == null || proof.isEmpty) return (IapResult.retryLater, false, '구매를 확인하지 못했어요. 앱을 다시 켜면 이어서 확인해요.');
     try {
-      final res = await api('POST', '/iap/purchases', token, {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore});
+      final res = await api('POST', '/iap/purchases', token, {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, 'year': _shelfYear ?? liveShelfYear()});
       if (res is! Map<String, dynamic>) {
         // 202: 결제가 아직 끝나지 않았다
         return (IapResult.pending, false, '결제를 확인하고 있어요. 끝나면 자동으로 반영돼요.');
