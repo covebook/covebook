@@ -372,7 +372,15 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	}
 	note, granted, user := "상태 갱신", false, owner.user
 	if owner.found {
+		// 고치기 전의 값을 읽어 두고, 고친 뒤 달라진 것(유예 시작, 만료, 해지 접수, 환불)을 고지로 남긴다
+		before, e := iapSubBeforeOf(ctx, tx, route, sub.OriginalID)
+		if e != nil {
+			return "", e
+		}
 		if _, err = iapRefreshSubscription(ctx, tx, sub); err != nil {
+			return "", err
+		}
+		if err = iapNoteSubscriptionChange(ctx, tx, user, before, sub, time.Now()); err != nil {
 			return "", err
 		}
 	} else {
@@ -392,6 +400,12 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 		}
 		if _, err = iapUpsertSubscription(ctx, tx, user, sub); err != nil {
 			return "", err
+		}
+		// 알림만으로 새로 지급한 구독도 결제 완료를 알린다(T3). 뒤에 앱이 같은 거래를 제출하면 "전에 지급한 것"이라 다시 알리지 않는다
+		if cur.State == iap.StatePaid {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, 0); err != nil {
+				return "", err
+			}
 		}
 		note, granted = "알림으로 새 구독 연결", true
 	}
@@ -466,16 +480,30 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if user == 0 {
 		return "주인을 모르는 구매. 앱이 제출하면 연결됨", nil
 	}
-	inserted, err := iapRecordPurchase(ctx, s.DB, user, iap.KindProduct, p)
+	product, err := iapFindProduct(ctx, s.DB, route, p.ProductID)
 	if err != nil {
 		return "", err
 	}
-	if inserted && !p.Acknowledged {
-		product, e := iapFindProduct(ctx, s.DB, route, p.ProductID)
-		if e != nil {
-			return "", e
+	// 원장과 결제 완료 고지(T3)를 한 트랜잭션에 쓴다
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	inserted, err := iapRecordPurchase(ctx, tx, user, iap.KindProduct, p)
+	if err != nil {
+		return "", err
+	}
+	if inserted {
+		if err = iapNotePurchaseDone(ctx, tx, user, iap.KindProduct, p, product.Shelves); err != nil {
+			return "", err
 		}
-		if e = store.Confirm(storeCtx, ref, p.ProductID, product.Consume); e != nil {
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	if inserted && !p.Acknowledged {
+		if e := store.Confirm(storeCtx, ref, p.ProductID, product.Consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
 		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)

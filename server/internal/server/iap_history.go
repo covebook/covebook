@@ -267,6 +267,14 @@ func (s *Server) iapAdminStats(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, b)
+	// 최근 30일에 유저에게 알린 고지 수(종류별)
+	notices, err := iapNoticeCounts(r.Context(), s.DB)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, struct {
+		iapBacklog
+		Notices map[string]int `json:"notices30Days"`
+	}{b, notices})
 	return nil
 }

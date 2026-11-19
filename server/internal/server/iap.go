@@ -102,6 +102,8 @@ func (s *Server) routeIAP(m *http.ServeMux) {
 	m.HandleFunc("GET /iap/me", wrap(s.iapMe))
 	m.HandleFunc("POST /iap/purchases", wrap(s.iapSubmit))
 	m.HandleFunc("GET /iap/purchases", wrap(s.iapPurchases))
+	m.HandleFunc("GET /iap/notices", wrap(s.iapNotices))
+	m.HandleFunc("POST /iap/notices/read", wrap(s.iapNoticesRead))
 	m.HandleFunc("GET /admin/iap/stats", wrap(s.iapAdminStats))
 }
 
@@ -143,6 +145,10 @@ func (s *Server) iapMe(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	out["accountToken"] = token
+	// 알림함에서 아직 읽지 않은 고지 수
+	if out["unreadNotices"], err = iapUnreadNotices(ctx, s.DB, user, s.IAPSandbox); err != nil {
+		return err
+	}
 	// 지금 파는 상품. 켜져 있는 경로의 것만 준다
 	all, err := iapProductList(ctx, s.DB)
 	if err != nil {
@@ -323,11 +329,26 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		if !mine && taken {
 			log.Printf("iap subscription moved: route=%s from=%d to=%d", route, owner.user, user)
 		}
-		if _, err = iapUpsertSubscription(ctx, tx, user, iapSubscription{
+		// 고치기 전의 값을 읽어 둔다. 고지는 상태가 바뀐 순간에만 쓴다
+		before, e := iapSubBeforeOf(ctx, tx, route, current.OriginalTransactionID)
+		if e != nil {
+			return e
+		}
+		sub := iapSubscription{
 			Route: route, OriginalID: current.OriginalTransactionID, ProductID: current.ProductID, PlanID: current.PlanID, Env: current.Env,
 			State: current.State, ExpiresAt: current.ExpiresAt, GraceUntil: current.GraceUntil, AutoRenew: current.AutoRenew, LatestTxnID: current.TransactionID,
-		}); err != nil {
+		}
+		if _, err = iapUpsertSubscription(ctx, tx, user, sub); err != nil {
 			return err
+		}
+		if err = iapNoteSubscriptionChange(ctx, tx, user, before, sub, time.Now()); err != nil {
+			return err
+		}
+		// 새로 지급한 구독이면 결제 완료를 알린다(T3). 전에 지급한 것, 구매 복원, 만료된 구독은 알리지 않는다
+		if !mine && !body.Restore && !inactive && current.State == iap.StatePaid {
+			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, current, 0); err != nil {
+				return err
+			}
 		}
 		// 구글: 이 구독이 옛 구독을 대신한 것이면(요금제 변경, 만료 전 재가입) 옛 줄기를 끝낸다.
 		if err = iapEndLinked(ctx, tx, route, current.LinkedID, current.OriginalTransactionID); err != nil {
@@ -358,6 +379,10 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 		if !inserted {
 			status = "already"
+		} else if !body.Restore {
+			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, submitted, bought.Shelves); err != nil {
+				return err
+			}
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
