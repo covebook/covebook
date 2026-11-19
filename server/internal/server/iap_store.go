@@ -125,6 +125,36 @@ func iapSettleShelf(ctx context.Context, tx pgx.Tx, user int64, route iap.Route,
 	return
 }
 
+// iapOverCapRow는 환불을 다시 요청할 넘은 거래다.
+type iapOverCapRow struct {
+	Route iap.Route
+	Key   string // 원장의 transaction_id(구글 한 번 사는 상품은 구매 토큰)
+}
+
+// iapOverCapToRefund는 3칸을 넘게 산 거래 중 환불 요청을 아직 못 마친 것을 오래된 순으로 준다.
+// routes는 개발자가 환불할 수 있는 경로(구글)만 준다. 애플 거래가 목록을 차지해 구글 거래가 밀리지 않게.
+// 20번 넘게 실패한 거래는 빼고 운영자가 본다(/admin/iap/stats).
+func iapOverCapToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
+	rows, err := q.Query(ctx, `SELECT route, transaction_id FROM iap_purchases
+		WHERE over_cap AND refund_requested_at IS NULL AND state='paid' AND refund_attempts < 20 AND route = ANY($1)
+		ORDER BY created_at LIMIT $2`, routes, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []iapOverCapRow
+	for rows.Next() {
+		var r iapOverCapRow
+		var route string
+		if err = rows.Scan(&route, &r.Key); err != nil {
+			return nil, err
+		}
+		r.Route = iap.Route(route)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // iapNoteRefundAttempt는 넘게 산 거래의 환불 요청을 시도했다고 남긴다. ok면 요청한 시각도 적는다.
 func iapNoteRefundAttempt(ctx context.Context, q dbtx, route iap.Route, transactionKey string, ok bool) error {
 	_, err := q.Exec(ctx, `UPDATE iap_purchases SET refund_attempts=refund_attempts+1,
