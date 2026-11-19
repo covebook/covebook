@@ -481,5 +481,21 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
 		}
 	}
-	return "알림으로 새 구매 지급", nil
+	// 어느 해 책장의 칸인지는 넣을 때 계정 연결 값으로 적었다(D1)
+	year, err := iapTokenYear(ctx, s.DB, p.AccountToken)
+	if err != nil {
+		return "", err
+	}
+	if year == 0 {
+		return "연도를 모르는 선반 구매 기록. 앱이 연도와 함께 제출하면 그 해 책장에 줌", nil
+	}
+	paid, err := iapShelfPaid(ctx, s.DB, user, year, s.IAPSandbox)
+	if err != nil {
+		return "", err
+	}
+	if paid > iapPaidShelfMax {
+		log.Printf("iap shelf over cap: route=%s user=%d year=%d paid=%d", route, user, year, paid)
+		return fmt.Sprintf("알림으로 새 구매 지급(%d년 책장, 3칸 넘음: 환불 대상)", year), nil
+	}
+	return fmt.Sprintf("알림으로 새 구매 지급(%d년 책장)", year), nil
 }
