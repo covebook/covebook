@@ -740,4 +740,38 @@ void main() {
     final e = EntitlementStore.instance..apply({'shelvesByYear': {'${liveShelfYear() - 1}': 2}}, save: false);
     expect((e.shelves, IapSnapshot.of(e).shelves), (0, 2));
   });
+
+  test('넘은 선반 결제 고지: 구글은 자동 환불, 애플은 환불 요청 안내', () {
+    IapNotice n(String route, {bool auto = false}) => IapNotice.from({
+          'id': 9,
+          'kind': 'shelf_over_cap',
+          'createdAt': '2026-11-19T03:00:00Z',
+          'params': {'route': route, 'productId': 'shelf3', 'year': 2026, 'shelves': 3, 'autoRefund': auto},
+        })!;
+    final g = n('google', auto: true);
+    expect(g.important, isTrue);
+    expect(g.text!.$1, '추가 선반이 열리지 않았습니다');
+    expect(g.text!.$2, '2026년 책장은 다른 기기에서 먼저 결제해 유료 선반 3칸이 모두 열려 있었습니다. 이번 결제(선반 3칸)는 자동으로 환불했습니다. 환불 금액과 시기는 Google Play에서 확인할 수 있습니다.');
+    expect(n('google').text!.$2, endsWith('이번 결제(선반 3칸)는 환불해 드립니다. 처리되면 Google Play에서 확인할 수 있습니다.'));
+    expect(n('apple').text!.$2, endsWith('Apple의 문제 신고 페이지에서 이 구매를 골라 환불을 요청해 주세요.'));
+  });
+
+  testWidgets('넘은 선반 결제 창(애플): 환불 요청 단추와 닫기', (t) async {
+    final n = IapNotice.from({
+      'id': 9,
+      'kind': 'shelf_over_cap',
+      'createdAt': '2026-11-19T03:00:00Z',
+      'params': {'route': 'apple', 'productId': 'shelf1', 'year': 2026, 'shelves': 1},
+    })!;
+    await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showIapNotice(ctx, n))))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(_says('추가 선반이 열리지 않았습니다'), findsWidgets);
+    expect(_says('Apple에 환불 요청하기'), findsWidgets);
+    expect(_says('닫기'), findsWidgets);
+    await _shot(t, '26-notice-shelf-over-cap');
+    await t.tap(find.text('닫기'));
+    await t.pumpAndSettle();
+    expect(_says('추가 선반이 열리지 않았습니다'), findsNothing);
+  });
 }

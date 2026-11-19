@@ -95,7 +95,7 @@ class IapNotice {
   DateTime? _date(String key) => DateTime.tryParse('${params[key]}');
 
   /// 앱을 열었을 때 창으로도 한 번 띄우는 종류(꼭 읽어야 하는 것). 나머지는 알림함에만 둔다
-  bool get important => const {'payment_failed', 'expired', 'subscription_refunded', 'shelf_refunded'}.contains(kind);
+  bool get important => const {'payment_failed', 'expired', 'subscription_refunded', 'shelf_refunded', 'shelf_over_cap'}.contains(kind);
 
   /// 제목과 본문(고지 문구 T3, T7~T10). 모르는 종류는 null(새 종류를 아는 앱 버전이 나오기 전까지 보이지 않는다)
   (String, String)? get text {
@@ -116,6 +116,13 @@ class IapNotice {
           ? null
           : ('$name가 ${iapDate(expires)}에 갱신됩니다', '${_price == null ? '' : '결제 예정 금액은 $_price입니다. '}계속 이용하려면 할 일이 없습니다. 갱신을 원하지 않으면 ${iapDate(expires.subtract(const Duration(days: 1)))}까지 내 정보 › 구독 관리에서 해지할 수 있습니다.'),
       'cancel_scheduled' => ('$name의 자동 갱신이 꺼졌습니다', '${expires == null ? '' : '${iapDate(expires)}까지 이용할 수 있습니다. '}이후에는 결제되지 않습니다.'),
+      // 두 기기에서 함께 사서 그 해 유료 칸(3칸)을 넘었다: 칸을 열지 않고 돌려준다(고지 문구 T16, ADR-0002 D1)
+      'shelf_over_cap' => (
+          '추가 선반이 열리지 않았습니다',
+          '${year == null ? '이 책장은' : '$year년 책장은'} 다른 기기에서 먼저 결제해 유료 선반 3칸이 모두 열려 있었습니다. '
+              '${shelves > 0 ? '이번 결제(선반 $shelves칸)는' : '이번 결제는'} '
+              '${route == 'apple' ? 'Apple에 환불을 요청해 돌려받을 수 있습니다. Apple의 문제 신고 페이지에서 이 구매를 골라 환불을 요청해 주세요.' : params['autoRefund'] == true ? '자동으로 환불했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.' : '환불해 드립니다. 처리되면 $store에서 확인할 수 있습니다.'}'
+        ),
       'purchase_done' => params['kind'] == 'product'
           ? ('추가 선반 결제가 완료됐습니다', shelves > 0 ? '$bookcase선반 $shelves칸을 더 열 수 있습니다.' : '$bookcase선반을 더 열 수 있습니다.')
           : ('$name 결제가 완료됐습니다', '${expires == null ? '' : '다음 결제일은 ${iapDate(expires)}입니다. '}해지는 내 정보의 구독 관리에서 할 수 있습니다.'),
@@ -205,8 +212,18 @@ Future<void> showIapNotice(BuildContext context, IapNotice n) async {
       const AlertButton('닫기', style: AlertStyle.cancel),
     ], true, true);
   }
+  // 애플은 개발자가 환불할 수 없다: 사용자가 애플 문제 신고 페이지에서 요청한다
+  if (n.kind == 'shelf_over_cap' && n.route == 'apple') {
+    return appAlert(context, title, message, [
+      AlertButton('Apple에 환불 요청하기', onPress: () => launchUrl(appleRefundUrl, mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
+      const AlertButton('닫기', style: AlertStyle.cancel),
+    ], true, true);
+  }
   return appAlert(context, title, message);
 }
+
+/// 애플 구매 환불 요청 페이지(문제 신고)
+final appleRefundUrl = Uri.parse('https://reportaproblem.apple.com');
 
 /// 결제 완료(T3): 결제한 화면에서 바로 알린다. price: 스토어가 준 가격 문자열(모르면 줄을 내지 않는다)
 Future<void> showPurchaseDone(BuildContext context, IapSubscription sub, {String? price}) => appAlert(

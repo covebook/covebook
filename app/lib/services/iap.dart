@@ -101,6 +101,10 @@ class IapService extends ChangeNotifier {
 
   /// 이번 실행에서 선반을 사려고 연 책장의 연도. 구매 제출에 같이 보낸다(서버는 계정 연결 값의 연도를 먼저 본다)
   int? _shelfYear;
+
+  /// 선반 결제 중 예약 번호(서버가 5분 동안 그 해 칸을 잡아 둔다. 두 기기가 함께 사서 3칸을 넘지 않게).
+  /// 결제를 취소하거나 실패하면 바로 푼다. 제출하면 서버가 푼다
+  String? _reservation;
   bool _restoring = false;
 
   /// 결제·복원이 진행 중인지(버튼을 잠근다. 연타와 결제 중 계정 전환을 막는다)
@@ -174,13 +178,21 @@ class IapService extends ChangeNotifier {
       if (shelf) {
         final y = year ?? liveShelfYear();
         try {
-          account = await shelfToken(y);
+          final t = await shelfToken(y, shelves: product.shelves);
+          account = t?.token;
+          _reservation = t?.reservation;
         } on ApiError catch (e) {
-          if (e.code != 'iap_shelf_full') rethrow;
-          // 다른 기기에서 이미 다 열었다: 결제창을 띄우지 않고 칸 수를 다시 받는다
-          _done(IapResult.rejected, '이 책장의 선반은 모두 열었어요.');
-          unawaited(refresh());
-          return;
+          if (e.code == 'iap_shelf_full') {
+            // 다른 기기에서 이미 다 열었다: 결제창을 띄우지 않고 칸 수를 다시 받는다
+            _done(IapResult.rejected, '이 책장의 선반은 모두 열었어요.');
+            unawaited(refresh());
+            return;
+          }
+          if (e.code == 'iap_shelf_busy') {
+            _done(IapResult.retryLater, '다른 기기에서 이 책장의 선반을 결제하고 있어요. 잠시 뒤 다시 시도해 주세요.');
+            return;
+          }
+          rethrow;
         }
         _shelfYear = y;
       }
@@ -197,24 +209,37 @@ class IapService extends ChangeNotifier {
         await _store.buyConsumable(purchaseParam: param, autoConsume: false);
       }
     } catch (_) {
+      unawaited(_release());
       _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
     }
   }
 
-  /// 선반을 살 때 스토어에 넘길 그 해 책장의 계정 연결 값. 서버가 이 값으로 어느 해 책장의 칸인지 찾는다. 받지 못하면 null.
-  /// 그 해 칸을 다 열었으면 서버가 409 iap_shelf_full을 준다(ApiError로 던진다)
-  Future<String?> shelfToken(int year) async {
+  /// 선반을 살 때 스토어에 넘길 그 해 책장의 계정 연결 값과 결제 중 예약 번호. 서버가 이 값으로 어느 해 책장의 칸인지 찾는다. 받지 못하면 null.
+  /// 그 해 칸을 다 열었으면 409 iap_shelf_full, 다른 기기가 결제 중이라 넘칠 수 있으면 409 iap_shelf_busy(ApiError로 던진다)
+  Future<({String token, String? reservation})?> shelfToken(int year, {int shelves = 1}) async {
     final token = await KvStore.get(syncTokenKey);
     if (token == null) return null;
     try {
-      final res = await api('POST', '/iap/shelf-token', token, {'year': year});
-      return res is Map && res['token'] is String ? res['token'] as String : null;
+      final res = await api('POST', '/iap/shelf-token', token, {'year': year, 'shelves': shelves});
+      if (res is! Map || res['token'] is! String) return null;
+      return (token: res['token'] as String, reservation: res['reservation'] is String ? res['reservation'] as String : null);
     } on ApiError catch (e) {
-      if (e.code == 'iap_shelf_full') rethrow;
+      if (e.code == 'iap_shelf_full' || e.code == 'iap_shelf_busy') rethrow;
       return null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// 결제 중 예약을 푼다(결제를 취소·실패했을 때). 못 풀어도 5분 뒤 저절로 풀린다
+  Future<void> _release() async {
+    final r = _reservation;
+    _reservation = null;
+    if (r == null) return;
+    try {
+      final token = await KvStore.get(syncTokenKey);
+      if (token != null) await api('POST', '/iap/shelf-token/release', token, {'reservation': r});
+    } catch (_) {}
   }
 
   /// 구매 복원: 스토어가 이 스토어 계정의 구매를 다시 준다. 구독이 다른 계정에 있었으면 이 계정으로 옮겨진다(D8)
@@ -249,10 +274,12 @@ class IapService extends ChangeNotifier {
         return;
       case PurchaseStatus.canceled:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
+        unawaited(_release());
         _done(IapResult.rejected, null);
         return;
       case PurchaseStatus.error:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
+        unawaited(_release());
         _done(IapResult.retryLater, '결제가 이뤄지지 않았어요.');
         return;
       case PurchaseStatus.purchased:
@@ -271,12 +298,13 @@ class IapService extends ChangeNotifier {
     final proof = d.verificationData.serverVerificationData;
     if (token == null || proof.isEmpty) return (IapResult.retryLater, false, '구매를 확인하지 못했어요. 앱을 다시 켜면 이어서 확인해요.');
     try {
-      final res = await api('POST', '/iap/purchases', token, {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, 'year': _shelfYear ?? liveShelfYear()});
+      final res = await api('POST', '/iap/purchases', token, {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, 'year': _shelfYear ?? liveShelfYear(), if (_reservation != null) 'reservation': _reservation});
       if (res is! Map<String, dynamic>) {
         // 202: 결제가 아직 끝나지 않았다
         return (IapResult.pending, false, '결제를 확인하고 있어요. 끝나면 자동으로 반영돼요.');
       }
       EntitlementStore.instance.apply(res);
+      _reservation = null; // 서버가 제출을 처리하며 예약을 풀었다
       return switch (res['status']) {
         'already' => (IapResult.already, true, restore ? '구매를 복원했어요.' : null),
         'inactive' => (IapResult.inactive, true, '구독 기간이 끝난 구매예요.'),
