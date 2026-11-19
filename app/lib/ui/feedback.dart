@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/material.dart' show Material, MaterialType;
 import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -98,7 +99,10 @@ class _ToastState extends State<_Toast> {
               offset: _shown ? Offset.zero : const Offset(0, 0.25),
               duration: Duration(milliseconds: ms),
               curve: Curves.easeOutCubic,
-              child: Semantics(
+              // 맨 위 겹(오버레이)은 화면의 Material 밖이라 글자 바탕을 따로 깐다(없으면 글자 밑에 노란 줄)
+              child: Material(
+                type: MaterialType.transparency,
+                child: Semantics(
                 container: true,
                 liveRegion: true,
                 child: DecoratedBox(
@@ -131,6 +135,7 @@ class _ToastState extends State<_Toast> {
                     ),
                   ),
                 ),
+              ),
               ),
             ),
           ),
