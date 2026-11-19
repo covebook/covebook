@@ -9,7 +9,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding, Ticker;
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show OrdinalSortKey;
 
@@ -1876,6 +1876,13 @@ class _Header extends StatelessWidget {
 }
 
 /// 머리 아이콘 줄: 아이콘마다 누르는 칸 48×48(Space.hit, 2026-11-16 QA 영숙 F12), 가운데 사이 _headerPitch.
+/// 시험에서 머리줄 아이콘만 그려 보는 입구(새 알림 점 확인용)
+@visibleForTesting
+Widget headerIconsPreview({bool unread = false}) => _HeaderIcons(
+      dot: unread ? 2 : null,
+      items: const [('decorate', '꾸미기', null), ('add', '책 추가', null), ('profile', '내 정보', null)],
+    );
+
 /// 칸 사이 빈 곳은 가까운 아이콘이 받는다. 화면 읽기 칸도 48×48
 class _HeaderIcons extends StatefulWidget {
   const _HeaderIcons({required this.items, this.dot});
@@ -1917,8 +1924,8 @@ class _HeaderIconsState extends State<_HeaderIcons> {
           ),
           if (widget.dot == i)
             Positioned(
-              left: i * _headerPitch + Space.hit / 2 + _headerArt / 2 - 6,
-              top: Space.hit / 2 - _headerArt / 2 - 2,
+              left: i * _headerPitch + Space.hit / 2 + _headerArt / 2 - 13,
+              top: Space.hit / 2 - _headerArt / 2 + 3,
               child: IgnorePointer(
                 child: Container(
                   width: 9,
