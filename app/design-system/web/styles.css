@@ -70,6 +70,10 @@
   --ck-type-label-strong: 600 16px/22px var(--ck-font-ui);
   --ck-type-body-small: 400 16px/22px var(--ck-font-ui);
   --ck-type-micro: 400 13px/18px var(--ck-font-ui);
+  --ck-type-essay-title: 700 26px/34px var(--ck-font-ui);
+  --ck-type-intro-title: 700 26px/34px var(--ck-font-ui);
+  --ck-type-profile-name: 700 26px/34px var(--ck-font-ui);
+  --ck-type-legal-heading: 600 16px/22px var(--ck-font-ui);
   --ck-type-quote: 400 16px/27px var(--ck-font-reading);
   --ck-type-reading: 400 17px/30px var(--ck-font-reading);
   --ck-type-book-head-title: 700 23px/30px var(--ck-font-ui);
@@ -217,6 +221,10 @@
 .ck-type-label-strong { font: var(--ck-type-label-strong); color: var(--ck-ink); }
 .ck-type-body-small { font: var(--ck-type-body-small); color: var(--ck-ink); }
 .ck-type-micro { font: var(--ck-type-micro); color: var(--ck-ink-soft); font-variant-numeric: tabular-nums; }
+.ck-type-essay-title { font: var(--ck-type-essay-title); color: var(--ck-ink); }
+.ck-type-intro-title { font: var(--ck-type-intro-title); color: var(--ck-ink); }
+.ck-type-profile-name { font: var(--ck-type-profile-name); color: var(--ck-ink); }
+.ck-type-legal-heading { font: var(--ck-type-legal-heading); color: var(--ck-ink); }
 .ck-type-quote { font: var(--ck-type-quote); color: var(--ck-ink); }
 .ck-type-reading { font: var(--ck-type-reading); color: var(--ck-ink); }
 .ck-type-book-head-title { font: var(--ck-type-book-head-title); color: var(--ck-ink); }

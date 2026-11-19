@@ -181,6 +181,14 @@ abstract final class TypeSpecs {
   static const bodySmall = TypeSpec(AppFonts.ui, 16, 22);
   /// 아주 작은 표시(그래프 눈금 · 배지)
   static const micro = TypeSpec(AppFonts.ui, 13, 18, color: AppColors.inkSoft, tabular: true);
+  /// 감상 읽기 화면의 감상 제목(값은 탭 큰 제목과 같지만 감상만 바꿀 수 있게)
+  static const essayTitle = TypeSpec(AppFonts.uiTitle, 26, 34);
+  /// 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면)
+  static const introTitle = TypeSpec(AppFonts.uiTitle, 26, 34);
+  /// 사람 이름(독자 프로필 닉네임)
+  static const profileName = TypeSpec(AppFonts.uiTitle, 26, 34);
+  /// 약관 · 처리방침 조 제목
+  static const legalHeading = TypeSpec(AppFonts.uiBold, 16, 22);
   /// 갈피 문장(명조)
   static const quote = TypeSpec(AppFonts.serif, 16, 27);
   /// 긴 글 본문(명조)
@@ -242,6 +250,10 @@ abstract final class TypeSpecs {
     'labelStrong': labelStrong,
     'bodySmall': bodySmall,
     'micro': micro,
+    'essayTitle': essayTitle,
+    'introTitle': introTitle,
+    'profileName': profileName,
+    'legalHeading': legalHeading,
     'quote': quote,
     'reading': reading,
     'bookHeadTitle': bookHeadTitle,
@@ -291,6 +303,10 @@ abstract final class AppType {
   static TextStyle get labelStrong => TypeSpecs.labelStrong.style;
   static TextStyle get bodySmall => TypeSpecs.bodySmall.style;
   static TextStyle get micro => TypeSpecs.micro.style;
+  static TextStyle get essayTitle => TypeSpecs.essayTitle.style;
+  static TextStyle get introTitle => TypeSpecs.introTitle.style;
+  static TextStyle get profileName => TypeSpecs.profileName.style;
+  static TextStyle get legalHeading => TypeSpecs.legalHeading.style;
   static TextStyle get quote => TypeSpecs.quote.style;
   static TextStyle get reading => TypeSpecs.reading.style;
   static TextStyle get bookHeadTitle => TypeSpecs.bookHeadTitle.style;

@@ -59,6 +59,10 @@
 | `AppType.label` | 16/22 | Medium | ink | 작은 이름(칩·고르는 칸) |
 | `AppType.labelStrong` | 16/22 | SemiBold | ink | 굵은 작은 이름(카드 제목·닉네임·필터 칸) |
 | `AppType.micro` | 13/18 | 보통 | inkSoft | 아주 작은 표시(그래프 눈금·배지), 숫자 폭 고정 |
+| `AppType.essayTitle` | 26/34 | Bold | ink | 감상 읽기 화면의 감상 제목 |
+| `AppType.introTitle` | 26/34 | Bold | ink | 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면) |
+| `AppType.profileName` | 26/34 | Bold | ink | 사람 이름(독자 프로필 닉네임) |
+| `AppType.legalHeading` | 16/22 | SemiBold | ink | 약관 · 처리방침 조 제목 |
 | `AppType.quote` | 16/27 | 명조 | ink | 갈피 문장 |
 | `AppType.reading` | 17/30 | 명조 | ink | 감상 등 긴 글 본문 |
 | `AppType.input` | 16/— | 보통 | ink | 입력창 글자(줄 높이는 플랫폼 기본) |
