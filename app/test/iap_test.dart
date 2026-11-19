@@ -431,7 +431,7 @@ void main() {
 
   final noticeSub = IapSubscription(route: iapRoute, productId: 'plus', state: 'paid', active: true, autoRenew: true, expiresAt: DateTime.utc(2027, 1, 18, 3), graceUntil: DateTime.utc(2027, 2, 3, 3));
   for (final (kind, shot, texts) in [
-    (IapNoticeKind.paymentFailed, '13-notice-payment-failed', ['결제가 이뤄지지 않았습니다', '2027년 2월 3일까지는 계속 이용할 수 있습니다.', '결제 수단 확인하기', '닫기']),
+    (IapNoticeKind.paymentFailed, '13-notice-payment-failed', ['결제가 이뤄지지 않았습니다', '2027년 2월 3일까지는 계속 이용할 수 있습니다.', '결제 수단 확인하기', '나중에']),
     (IapNoticeKind.expired, '14-notice-expired', ['구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다.', '확인']),
     (IapNoticeKind.subscriptionRefunded, '15-notice-subscription-refunded', ['환불 처리됐습니다', '구독이 종료됐습니다.', '확인']),
     (IapNoticeKind.shelfRefunded, '16-notice-shelf-refunded', ['추가 선반 결제가 환불 처리됐습니다', '꽂혀 있던 책은 내 책에 보관했습니다.', '확인']),
@@ -756,7 +756,7 @@ void main() {
     expect(n('apple').text!.$2, endsWith('Apple의 문제 신고 페이지에서 이 구매를 골라 환불을 요청해 주세요.'));
   });
 
-  testWidgets('넘은 선반 결제 창(애플): 환불 요청 단추와 닫기', (t) async {
+  testWidgets('넘은 선반 결제 창(애플): 환불 요청 단추와 나중에', (t) async {
     final n = IapNotice.from({
       'id': 9,
       'kind': 'shelf_over_cap',
@@ -768,9 +768,9 @@ void main() {
     await t.pumpAndSettle();
     expect(_says('추가 선반이 열리지 않았습니다'), findsWidgets);
     expect(_says('Apple에 환불 요청하기'), findsWidgets);
-    expect(_says('닫기'), findsWidgets);
+    expect(_says('나중에'), findsWidgets);
     await _shot(t, '26-notice-shelf-over-cap');
-    await t.tap(find.text('닫기'));
+    await t.tap(find.text('나중에'));
     await t.pumpAndSettle();
     expect(_says('추가 선반이 열리지 않았습니다'), findsNothing);
   });

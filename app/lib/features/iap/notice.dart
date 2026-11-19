@@ -205,18 +205,18 @@ Future<void> showIapNotice(BuildContext context, IapNotice n) async {
   final text = n.text;
   if (text == null) return;
   final (title, message) = text;
-  // 결제 실패만 할 일이 있다: 결제 수단 확인을 주 버튼으로, 닫기는 아래 글자 버튼으로
+  // 결제 실패만 할 일이 있다: 결제 수단 확인을 주 버튼으로, 미루기('나중에')는 아래 글자 버튼으로
   if (n.kind == 'payment_failed' && n.route.isNotEmpty) {
     return appAlert(context, title, message, [
       AlertButton('${storeName(n.route)}에서 결제 수단 확인하기', onPress: () => launchUrl(storeManageUrl(n.route, n.productId), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
-      const AlertButton('닫기', style: AlertStyle.cancel),
+      const AlertButton('나중에', style: AlertStyle.cancel),
     ], true, true);
   }
   // 애플은 개발자가 환불할 수 없다: 사용자가 애플 문제 신고 페이지에서 요청한다
   if (n.kind == 'shelf_over_cap' && n.route == 'apple') {
     return appAlert(context, title, message, [
       AlertButton('Apple에 환불 요청하기', onPress: () => launchUrl(appleRefundUrl, mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
-      const AlertButton('닫기', style: AlertStyle.cancel),
+      const AlertButton('나중에', style: AlertStyle.cancel),
     ], true, true);
   }
   return appAlert(context, title, message);
