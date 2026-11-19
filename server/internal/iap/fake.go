@@ -41,11 +41,31 @@ func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
 	return p, nil
 }
 
+// FakeRefunder는 환불할 수 있는 스토어(구글)를 흉내 낸다. Fake에는 Refund가 없어서 애플 시험에 끼어들지 않는다.
+type FakeRefunder struct {
+	*Fake
+	Refunded  []string // Refund가 불린 주문 ID. 순서대로
+	RefundErr error    // 값이 있으면 Refund가 실패한다
+}
+
+func (f *FakeRefunder) Refund(_ context.Context, orderID string) error {
+	if f.RefundErr != nil {
+		return f.RefundErr
+	}
+	if orderID == "" {
+		return fmt.Errorf("fake: 주문 ID 없음")
+	}
+	f.Refunded = append(f.Refunded, orderID)
+	return nil
+}
+
 // 컴파일할 때 "Store를 구현했는지" 확인한다. Java의 implements 자리.
 var (
-	_ Store = (*Apple)(nil)
-	_ Store = (*Google)(nil)
-	_ Store = (*Fake)(nil)
+	_ Store    = (*Apple)(nil)
+	_ Store    = (*Google)(nil)
+	_ Store    = (*Fake)(nil)
+	_ Refunder = (*Google)(nil)
+	_ Refunder = (*FakeRefunder)(nil)
 )
 
 // Subscription은 Purchases에서 원 거래 ID가 같은 것을 찾는다. 여러 개면 만료가 가장 늦은 것이다.

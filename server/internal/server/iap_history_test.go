@@ -269,7 +269,7 @@ func TestIAPAdminStats(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("운영자 조회 %d %v", code, body)
 	}
-	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days", "shelfOverCap", "shelfNoYear"} {
+	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days", "shelfOverCap", "shelfOverCapRefunded", "shelfOverCapApple", "shelfNoYear"} {
 		if _, ok := body[k].(float64); !ok {
 			t.Fatalf("%s 없음: %v", k, body)
 		}
@@ -296,8 +296,33 @@ func TestIAPAdminStats(t *testing.T) {
 			t.Fatalf("선반 제출 %d %v", code, body)
 		}
 	}
+	// 구글의 넘은 거래는 서버가 환불을 요청했다
 	after, err := iapBacklogNow(e.ctx, e.db)
-	if err != nil || after.ShelfOverCap != b.ShelfOverCap+1 || after.ShelfNoYear != b.ShelfNoYear+1 {
-		t.Fatalf("넘은 거래 %d→%d, 연도 모름 %d→%d %v", b.ShelfOverCap, after.ShelfOverCap, b.ShelfNoYear, after.ShelfNoYear, err)
+	if err != nil || after.ShelfOverCap != b.ShelfOverCap || after.ShelfOverCapRefunded != b.ShelfOverCapRefunded+1 || after.ShelfNoYear != b.ShelfNoYear+1 {
+		t.Fatalf("구글 넘은 거래 %+v → %+v %v", b, after, err)
+	}
+	// 애플의 넘은 거래는 사용자가 환불을 요청해야 해서 남는다
+	ya := e.shelfToken(token, 2027)
+	for range 2 {
+		id := iapTestID(t, "apple")
+		p := e.shelfPurchase(id, ya)
+		p.Route, p.TransactionID, p.Acknowledged = iap.RouteApple, id, true
+		e.apple.Purchases[id] = p
+		e.submit(token, "apple", e.shelf, id, false)
+	}
+	last, err := iapBacklogNow(e.ctx, e.db)
+	if err != nil || last.ShelfOverCap != after.ShelfOverCap+1 || last.ShelfOverCapApple != after.ShelfOverCapApple+1 {
+		t.Fatalf("애플 넘은 거래 %+v → %+v %v", after, last, err)
+	}
+	// 구매 내역에도 넘은 거래가 보인다
+	_, list := e.call("GET", "/iap/purchases", token, nil)
+	over := 0
+	for _, it := range list["purchases"].([]any) {
+		if it.(map[string]any)["overCap"] == true {
+			over++
+		}
+	}
+	if over != 2 {
+		t.Fatalf("구매 내역의 넘은 거래 %d (구글 1, 애플 1)", over)
 	}
 }

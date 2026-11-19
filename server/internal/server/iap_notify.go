@@ -191,6 +191,7 @@ func (s *Server) iapSweepLocked(ctx context.Context) error {
 type iapSweepResult struct {
 	Notices, NoticesFailed, Confirmed, Refreshed int
 	Backfilled, Voided                           int // 스토어의 목록으로 메운 알림, 반영한 환불
+	Refunds                                      int // 3칸을 넘게 산 선반 거래의 환불을 다시 요청해 성공한 수(구글)
 }
 
 // iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
@@ -234,7 +235,6 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 
 	// 2. 스토어의 목록으로 빠진 알림과 환불을 메운다(6시간에 한 번). 넣은 알림은 바로 아래에서 처리된다
 	s.iapCatchUp(ctx, &res)
-
 	// 3. 밀린 알림
 	notices, err := iapPendingNotifications(ctx, s.DB, 100)
 	keep(err)
@@ -249,7 +249,35 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		keep(iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note))
 	}
 
-	// 4. 만료가 다가왔거나 지난 구독
+	// 4. 3칸을 넘게 산 선반 거래 중 환불 요청을 못 마친 것(구글). 처음 요청은 제출·알림 처리에서 한다
+	var refunders []string
+	for route, store := range s.IAP {
+		if _, ok := store.(iap.Refunder); ok {
+			refunders = append(refunders, string(route))
+		}
+	}
+	overCap, err := iapOverCapToRefund(ctx, s.DB, refunders, 50)
+	keep(err)
+	for _, o := range overCap {
+		store := s.IAP[o.Route]
+		if _, ok := store.(iap.Refunder); !ok {
+			continue
+		}
+		// 주문 ID는 원장에 두지 않는다. 구매 토큰으로 다시 물어 받는다
+		storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+		p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
+		cancel()
+		if e != nil {
+			log.Printf("iap over cap refund retry: lookup failed route=%s err=%v", o.Route, e)
+			keep(iapNoteRefundAttempt(ctx, s.DB, o.Route, o.Key, false))
+			continue
+		}
+		if s.iapRefundOverCap(ctx, store, o.Key, p.TransactionID) {
+			res.Refunds++
+		}
+	}
+
+	// 5. 만료가 다가왔거나 지난 구독
 	due, err := iapDueSubscriptions(ctx, s.DB, 200)
 	keep(err)
 	for _, d := range due {
@@ -484,7 +512,7 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if err != nil {
 		return "", err
 	}
-	// 원장과 결제 완료 고지(T3)를 한 트랜잭션에 쓴다
+	// 원장, 3칸 넘김 판정, 결제 중 예약 풀기, 고지(T3 또는 넘김)를 한 트랜잭션에 쓴다(앱보다 알림이 먼저 온 경우)
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return "", err
@@ -499,14 +527,15 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if err != nil {
 		return "", err
 	}
-	paid := 0
-	if year > 0 {
-		if paid, err = iapShelfPaid(ctx, tx, user, year, s.IAPSandbox); err != nil {
+	overCap := false
+	if inserted && year > 0 {
+		if overCap, err = iapSettleShelf(ctx, tx, user, route, key, s.IAPSandbox); err != nil {
 			return "", err
 		}
-	}
-	if inserted && year > 0 {
-		if err = iapNotePurchaseDone(ctx, tx, user, iap.KindProduct, p, iapShelfGrant{Shelves: product.Shelves, Year: year, OverCap: paid > iapPaidShelfMax}); err != nil {
+		if err = iapReleaseOldestReservation(ctx, tx, user, year); err != nil {
+			return "", err
+		}
+		if err = iapNoteShelfGrant(ctx, tx, user, p, iapShelfGrant{Shelves: product.Shelves, Year: year, OverCap: overCap}); err != nil {
 			return "", err
 		}
 	}
@@ -523,9 +552,12 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if year == 0 {
 		return "연도를 모르는 선반 구매 기록. 앱이 연도와 함께 제출하면 그 해 책장에 줌", nil
 	}
-	if paid > iapPaidShelfMax {
-		log.Printf("iap shelf over cap: route=%s user=%d year=%d paid=%d", route, user, year, paid)
-		return fmt.Sprintf("알림으로 새 구매 지급(%d년 책장, 3칸 넘음: 환불 대상)", year), nil
+	if overCap {
+		log.Printf("iap shelf over cap: route=%s user=%d year=%d", route, user, year)
+		if s.iapRefundOverCap(ctx, store, key, p.TransactionID) {
+			return fmt.Sprintf("알림으로 새 구매 기록(%d년 책장, 3칸 넘음: 칸을 주지 않고 환불 요청)", year), nil
+		}
+		return fmt.Sprintf("알림으로 새 구매 기록(%d년 책장, 3칸 넘음: 칸을 주지 않음, 환불은 사용자 요청 또는 다시 시도)", year), nil
 	}
 	return fmt.Sprintf("알림으로 새 구매 지급(%d년 책장)", year), nil
 }
