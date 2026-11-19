@@ -14,6 +14,7 @@ import '../features/record/record_tab.dart' show RecordTab;
 import '../features/community/community_screens.dart' show watchCommunityOpen;
 import '../domain/library.dart';
 import 'app_nav.dart';
+import '../features/book/place_books.dart' show enforceShelfLimit;
 import '../features/home/home_screen.dart';
 import '../features/iap/notice.dart' show checkIapNotice;
 import '../domain/reading.dart' show askGapMs, withJosa;
@@ -120,7 +121,11 @@ class _AppShellState extends State<AppShell> {
         // 결제를 켠 빌드: 스토어가 주는 거래를 듣기 시작한다(끝내지 않은 거래가 여기서 다시 온다)
         // 서버에서 상태를 받았으면, 지난번과 달라진 것(결제 실패, 만료, 환불)을 한 번 알린다
         IapService.instance.start().then((_) {
-          if (mounted && IapService.instance.synced) checkIapNotice(context);
+          if (!mounted || !IapService.instance.synced) return;
+          // 환불로 구매한 선반 칸이 줄었으면 먼저 그 칸을 닫고, 달라진 것을 알린다
+          enforceShelfLimit().catchError((Object _) => 0).whenComplete(() {
+            if (mounted) checkIapNotice(context);
+          });
         });
         watchCommunityOpen();
         // 표지 색·두께·갈피 색 맞추기는 켠 뒤 조금 있다 뒤에서(지금 앱 _layout: 3초 뒤)

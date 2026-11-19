@@ -27,10 +27,6 @@ int openableShelfCount(int shelves, [int paid = 0]) => (allowedShelfSlots(paid) 
 /// 구매해서 더 열 수 있는 칸 수(다섯 칸에서 지금 쓸 수 있는 칸을 뺀 만큼)
 int purchasableShelfCount([int paid = 0]) => shelfSlots - allowedShelfSlots(paid);
 
-/// 환불로 잠긴 선반(ADR-0002 D13): 쓸 수 있는 칸보다 아래에 있는 선반. 꽂힌 책은 그대로 두고 새로 꽂기만 막는다.
-/// index는 위에서부터 센 선반 번호(0부터)
-bool shelfLockedAt(int index, int paid) => index >= allowedShelfSlots(paid);
-
 class LockedRow {
   const LockedRow(this.books, this.bodies);
   final List<Book> books;

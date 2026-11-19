@@ -48,7 +48,7 @@ Future<void> showRefundSheet(BuildContext context, String route) => showSheet<vo
       builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
         WordText('환불은 ${storeName(route)}의 환불 절차를 따릅니다. 결제와 환불은 ${storeName(route)}가 처리해서, 앱에서 바로 환불해 드릴 수 없어요.', style: AppType.body),
         const SizedBox(height: Space.item),
-        WordText('환불이 처리되면 구독이 종료되고, 구매한 선반은 잠겨요. 꽂아 둔 책과 기록은 그대로 있어요.', style: AppType.body),
+        WordText('환불이 처리되면 구독이 종료되고, 구매한 선반은 잠겨요. 그 선반에 꽂아 둔 책은 내 책에 보관되고 기록은 그대로 있어요.', style: AppType.body),
         Padding(
           padding: const EdgeInsets.only(top: Space.item),
           child: Btn(label: '${storeName(route)}에서 환불 신청하기', kind: 'secondary', onPress: () => launchUrl(storeRefundUrl(route), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),

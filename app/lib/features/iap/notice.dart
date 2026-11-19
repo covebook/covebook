@@ -77,7 +77,7 @@ Future<void> showIapNotice(BuildContext context, IapNoticeKind kind, IapSubscrip
     IapNoticeKind.paymentFailed => ('$name 결제가 이뤄지지 않았습니다', '${grace == null ? '' : '${iapDate(grace)}까지는 계속 이용할 수 있습니다. '}그때까지 결제되지 않으면 구독이 끝납니다.'),
     IapNoticeKind.expired => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
     IapNoticeKind.subscriptionRefunded => ('$name 결제가 환불 처리됐습니다', '구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
-    IapNoticeKind.shelfRefunded => ('추가 선반 결제가 환불 처리됐습니다', '해당 선반이 잠겼습니다. 꽂힌 책은 그대로 있습니다. 환불 금액과 시기는 결제한 스토어에서 확인할 수 있습니다.'),
+    IapNoticeKind.shelfRefunded => ('추가 선반 결제가 환불 처리됐습니다', '해당 선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 결제한 스토어에서 확인할 수 있습니다.'),
   };
   // 결제 실패만 할 일이 있다: 결제 수단 확인을 주 버튼으로, 닫기는 아래 글자 버튼으로
   if (kind == IapNoticeKind.paymentFailed && sub != null) {

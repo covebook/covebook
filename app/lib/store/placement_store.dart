@@ -118,12 +118,11 @@ class PlacementStore {
   }
 
   /// 책장에 놓기(서랍에 있든 처음이든). 뺀 책이면 뺄 때 자리부터, 그다음 선반마다 끝, 줄 안의 빈 틈(fitCandidates). 놓았으면 true, 자리가 없으면 false
-  /// locked: 새로 꽂을 수 없는 선반(환불로 잠긴 선반, ADR-0002 D13)
-  Future<bool> placeOnShelf(String bookId, {Set<String> locked = const {}}) async {
+  Future<bool> placeOnShelf(String bookId) async {
     final l = layout;
     if (l == null || placementOf(l, bookId) != null) return l != null;
     final spot = _spots.remove(bookId);
-    if (spot != null && !locked.contains(spot.was.shelfId)) {
+    if (spot != null) {
       final next = reinsertAt(l, books, spot.was, spot.index);
       // 다른 책은 자리·자세·깊이가 그대로일 때만(기대기는 뺄 때처럼 다시 풀린다: 이 책에 기대 있던 옆 책은 다시 기댄다)
       if (next != null && _undisturbed(next, spot.was.shelfId, lean: false) && await commit(next)) {
@@ -133,9 +132,7 @@ class PlacementStore {
     }
     lastRestored = null;
     for (final next in fitCandidates(l, books, bookId)) {
-      final shelfId = placementOf(next, bookId)!.shelfId;
-      if (locked.contains(shelfId)) continue;
-      if (_undisturbed(next, shelfId)) return commit(next);
+      if (_undisturbed(next, placementOf(next, bookId)!.shelfId)) return commit(next);
     }
     return false;
   }
@@ -161,12 +158,14 @@ class PlacementStore {
     return true;
   }
 
-  /// 위에서부터 allowed번째 아래에 있는 선반들(환불로 잠긴 선반)
-  Set<String> shelvesBeyond(int allowed) {
+  /// 쓸 수 있는 칸(allowed)보다 아래의 선반을 닫는다(환불로 구매한 칸이 줄었을 때, ADR-0002 D13).
+  /// 그 선반의 책은 책장에서 빼 내 책에 보관하고, 칸은 아직 안 연 선반처럼 잠긴 모양으로 돌아간다. 옮긴 책 수를 돌려준다
+  Future<int> closeShelvesBeyondLimit(int allowed) async {
     final l = layout;
-    if (l == null) return const {};
-    final list = sortedShelves(l);
-    return {for (var i = allowed; i < list.length; i++) list[i].id};
+    final next = l == null ? null : closeShelvesBeyond(l, allowed);
+    if (l == null || next == null) return 0;
+    final moved = next.drawer.length - l.drawer.length;
+    return await commit(next) ? moved : 0;
   }
 
   /// 선반 한 칸 더 열기(맨 끝에 빈 선반)
@@ -201,7 +200,6 @@ class PlacementStore {
 
 /// 편집 실패 까닭 → 알림 글(지금 앱 ko.fail)
 const editFailText = {
-  'shelf-locked': '환불된 선반이라 새로 꽂을 수 없어요. 꽂혀 있는 책은 그대로예요.',
   'no-space': '공간이 부족해요. 다른 자리로 옮겨 주세요.',
   'unsupported': '아래 책 위에 다 올라가지 않아요. 더 큰 책 위에 쌓아 주세요.',
   'spin-only-lying': '눕힌 책만 돌릴 수 있어요.',

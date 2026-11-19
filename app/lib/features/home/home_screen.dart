@@ -18,9 +18,9 @@ import '../../services/cover_colors.dart';
 import '../../ui/kit.dart' show Btn, PullUp, Space, showSheet;
 import 'locked_rows.dart';
 import '../../store/entitlement_store.dart';
-import '../book/place_books.dart' show lockedShelfIds;
+import '../book/place_books.dart' show enforceShelfLimit;
 import '../iap/shelf_purchase_sheet.dart' show showShelfPurchase;
-import 'refunded_shelf_mark.dart';
+import 'lock_icon.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
 import '../store/store_screen.dart' show openStore;
@@ -411,8 +411,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     final withinX = centerDU > -sideMargin && centerDU < shelfUsableWidth + sideMargin;
     if (!withinX || index < 0 || index >= shelves.length) return (key: 'outside', shelfId: null, run: () => const EditResult.fail('outside'));
     final shelfId = shelves[index].id;
-    // 환불로 잠긴 선반에는 다른 선반의 책을 새로 꽂지 못한다(그 선반 안에서 자리를 바꾸거나 밖으로 빼는 것은 된다, D13)
-    if (shelfId != d.shelfId && lockedShelfIds().contains(shelfId)) return (key: 'locked:$shelfId', shelfId: null, run: () => const EditResult.fail('shelf-locked'));
     if (shelfId == d.shelfId) {
       final t = findSwapTarget(l, s.books, d.id, centerDU);
       return (key: 'same:${t.kind}:${t.itemKey}:${t.index}:${t.x}:${t.dx}', shelfId: shelfId, run: () => applySwapTarget(l, s.books, d.id, t));
@@ -996,7 +994,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     focusBookOnShelf.addListener(_focusBook);
     LibraryModel.instance.addListener(_libraryChanged);
     BookcaseStore.instance.addListener(_bookcasesChanged);
-    // 구매·환불로 쓸 수 있는 선반 칸이 바뀌면 환불된 선반 표시를 다시 그린다
+    // 환불로 쓸 수 있는 선반 칸이 줄면 그 칸을 닫는다(책은 내 책에 보관)
     if (iapOn) EntitlementStore.instance.addListener(_entitlementChanged);
     if (!BookcaseStore.instance.loaded) BookcaseStore.instance.load();
     _loadSnap();
@@ -1179,37 +1177,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     if (_pendingFocus != null) WidgetsBinding.instance.addPostFrameCallback((_) => _tryFocus());
   }
 
-  /// 환불로 잠긴 선반이 시작하는 줄 번호. 없으면 줄 수보다 큰 값(결제가 꺼졌거나 서버 상태를 아직 못 받았으면 잠그지 않는다)
   void _entitlementChanged() {
-    if (mounted) setState(() {});
+    enforceShelfLimit().catchError((Object _) => 0);
   }
-
-  int _refundedFrom() {
-    final e = EntitlementStore.instance;
-    return iapOn && e.loaded ? allowedShelfSlots(e.shelves) : 1 << 30;
-  }
-
-  // 환불된 선반 안내: 무엇이 되고 안 되는지 알리고, 다시 살 수 있으면 구매 시트로 가는 길을 둔다(권유 문장은 넣지 않는다)
-  void _openRefunded() => showSheet<void>(
-        context,
-        title: '환불된 선반',
-        description: '결제가 환불돼 잠긴 선반이에요.\n꽂힌 책은 그대로 있고, 빼거나 이 선반 안에서 옮길 수 있어요. 새로 꽂을 수는 없어요.',
-        builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          Padding(padding: const EdgeInsets.only(top: 8), child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx))),
-          Padding(
-            padding: const EdgeInsets.only(top: Space.s),
-            child: Btn(
-              label: '선반 구매 보기',
-              kind: 'secondary',
-              size: 'l',
-              onPress: () {
-                Navigator.pop(ctx);
-                showShelfPurchase(context);
-              },
-            ),
-          ),
-        ]),
-      );
 
   // 잠긴 선반 시트(지금 앱 LockedShelfSheet): 세 칸까지는 바로 열고, 그 위는 유료 예정이라 준비 중으로 알린다(2026-11-15 사용자 결정).
   // '무료로'는 쓰지 않는다(QA: 곧 돈 받겠다는 뜻으로 읽혔다). 남은 칸 수를 알린다
@@ -1511,15 +1481,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                     ? const SizedBox.shrink()
                                     : Semantics(container: true, explicitChildNodes: true, sortKey: const OrdinalSortKey(0), child: header(headerOpacity)),
                               ),
-                              // 환불로 잠긴 선반(D13): 책은 그대로 두고 표시만 얹는다. 표시를 누르면 안내, 책은 그대로 눌린다
-                              for (var i = _refundedFrom(); i < lockedFrom && i < geo.length; i++)
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  top: contentTop + geo[i].top,
-                                  height: geo[i].height,
-                                  child: RefundedShelfMark(onTap: _openRefunded),
-                                ),
                               // 잠긴 칸: 가운데 자물쇠, 누르면 선반 한 칸 더 열기
                               for (var i = lockedFrom; i < n && i < geo.length; i++)
                                 Positioned(

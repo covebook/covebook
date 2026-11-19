@@ -3,6 +3,9 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:chaekjang/domain/layout.dart';
+import 'package:chaekjang/domain/layout_engine.dart' show closeShelvesBeyond;
+import 'package:chaekjang/domain/types.dart' show BookPlacement, Shelf;
 import 'package:chaekjang/features/home/locked_rows.dart';
 import 'package:chaekjang/features/iap/consent_screen.dart';
 import 'package:chaekjang/features/iap/notice.dart';
@@ -247,11 +250,23 @@ void main() {
     expect(iapPlanOf(_detail('plus', '플러스', '스토어 가격')), isNull); // 스토어별 타입이 아니면 요금제로 보지 않는다
   });
 
-  test('환불로 잠긴 선반: 쓸 수 있는 칸 아래의 선반', () {
-    // 두 칸을 샀다가 환불돼 구매한 칸이 0이 됐다: 넷째, 다섯째 선반이 잠긴다
-    expect([for (var i = 0; i < 5; i++) shelfLockedAt(i, 0)], [false, false, false, true, true]);
-    expect([for (var i = 0; i < 5; i++) shelfLockedAt(i, 1)], [false, false, false, false, true]);
-    expect(shelfLockedAt(4, 2), isFalse);
+  test('환불로 줄어든 칸: 그 아래 선반을 닫고 책은 보관으로, 무료 세 칸은 그대로', () {
+    const shelves = [Shelf('s1', 0), Shelf('s2', 1), Shelf('s3', 2), Shelf('s4', 3), Shelf('s5', 4)];
+    BookPlacement at(String book, String shelf) => BookPlacement(bookId: book, shelfId: shelf, order: 0, pos: 0);
+    final l = ShelfLayout(shelves, [at('a', 's1'), at('b', 's3'), at('c', 's4'), at('d', 's5')], const ['z']);
+    // 두 칸을 샀다가 둘 다 환불됐다: 넷째, 다섯째 선반이 닫힌다
+    final next = closeShelvesBeyond(l, 3)!;
+    expect([for (final s in next.shelves) s.id], ['s1', 's2', 's3']);
+    expect([for (final p in next.placements) (p.bookId, p.shelfId)], [('a', 's1'), ('b', 's3')]);
+    expect(next.drawer, containsAll(['c', 'd', 'z']));
+    // 한 칸만 환불: 다섯째만 닫힌다
+    final one = closeShelvesBeyond(l, 4)!;
+    expect([for (final s in one.shelves) s.id], ['s1', 's2', 's3', 's4']);
+    expect(one.drawer, containsAll(['d', 'z']));
+    expect(one.drawer.contains('c'), isFalse);
+    // 닫을 것이 없으면 건드리지 않는다
+    expect(closeShelvesBeyond(l, 5), isNull);
+    expect(closeShelvesBeyond(next, 3), isNull);
   });
 
   void plans() {
@@ -406,7 +421,7 @@ void main() {
     (IapNoticeKind.paymentFailed, '13-notice-payment-failed', ['결제가 이뤄지지 않았습니다', '2027년 2월 3일까지는 계속 이용할 수 있습니다.', '결제 수단 확인하기', '닫기']),
     (IapNoticeKind.expired, '14-notice-expired', ['구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다.', '확인']),
     (IapNoticeKind.subscriptionRefunded, '15-notice-subscription-refunded', ['환불 처리됐습니다', '구독이 종료됐습니다.', '확인']),
-    (IapNoticeKind.shelfRefunded, '16-notice-shelf-refunded', ['추가 선반 결제가 환불 처리됐습니다', '꽂힌 책은 그대로 있습니다.', '확인']),
+    (IapNoticeKind.shelfRefunded, '16-notice-shelf-refunded', ['추가 선반 결제가 환불 처리됐습니다', '꽂혀 있던 책은 내 책에 보관했습니다.', '확인']),
   ]) {
     testWidgets('상태 변화 알림 화면: ${kind.name}', (t) async {
       await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showIapNotice(ctx, kind, noticeSub))))));
