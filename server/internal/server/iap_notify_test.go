@@ -553,3 +553,59 @@ func TestIAPSubmitAndNoticeRace(t *testing.T) {
 		}
 	}
 }
+
+// 알림이 앱보다 먼저 온 선반 구매: 그 해 예약 하나를 풀고, 3칸을 넘었으면 칸을 주지 않고 환불을 요청한다.
+// 환불 요청이 실패하면 정기 처리가 다시 시도한다. 애플의 넘은 거래는 다시 시도하지 않는다
+func TestIAPNotifyOverCap(t *testing.T) {
+	e := newIAPEnv(t)
+	token, user := e.user()
+	_, res := e.call("POST", "/iap/shelf-token", token, map[string]any{"year": 2026, "shelves": 2})
+	y := res["token"].(string)
+
+	first, second := iapTestID(t, "t1"), iapTestID(t, "t2")
+	e.google.Purchases[first] = e.shelfPurchase(first, y)
+	e.google.Purchases[second] = e.shelfPurchase(second, y)
+	e.notify("google", iap.Notice{ID: iapTestID(t, "n1"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: first}}, "Bearer pubsub")
+	e.sweep()
+	var held int
+	if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_shelf_reservations WHERE user_id=$1", user).Scan(&held); err != nil || held != 0 {
+		t.Fatalf("알림으로 지급하면 예약이 풀려야 함: %d %v", held, err)
+	}
+	// 두 번째(예약을 지나친 구매)는 환불 요청이 실패한다
+	e.google.RefundErr = errors.New("구글 장애")
+	n2 := iapTestID(t, "n2")
+	e.notify("google", iap.Notice{ID: n2, Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: second}}, "Bearer pubsub")
+	if r := e.sweep(); r.Refunds != 0 {
+		t.Fatalf("장애 중 환불: %+v", r)
+	}
+	if _, note, _ := e.noticeResult("google", n2); !strings.Contains(note, "3칸 넘음") {
+		t.Fatalf("처리 기록: %q", note)
+	}
+	if body := e.me(token); shelvesIn(body, 2026) != 2 {
+		t.Fatalf("넘은 거래는 칸을 주지 않음: %v", body)
+	}
+	if len(e.google.Refunded) != 0 {
+		t.Fatalf("실패했는데 환불 기록: %v", e.google.Refunded)
+	}
+	// 장애가 풀리면 다음 정기 처리가 다시 요청한다. 한 번만
+	e.google.RefundErr = nil
+	if r := e.sweep(); r.Refunds != 1 || len(e.google.Refunded) != 1 || e.google.Refunded[0] != "GPA."+second {
+		t.Fatalf("다시 요청: %+v %v", r, e.google.Refunded)
+	}
+	if r := e.sweep(); r.Refunds != 0 || len(e.google.Refunded) != 1 {
+		t.Fatalf("한 번 요청한 거래를 또 요청: %+v %v", r, e.google.Refunded)
+	}
+
+	// 애플의 넘은 거래는 기록만 하고 다시 시도 목록에 들어가지 않는다
+	ya := e.shelfToken(token, 2027)
+	for _, id := range []string{iapTestID(t, "a1"), iapTestID(t, "a2")} {
+		p := e.shelfPurchase(id, ya)
+		p.Route, p.TransactionID, p.Acknowledged = iap.RouteApple, id, true
+		e.apple.Purchases[id] = p
+		e.submit(token, "apple", e.shelf, id, false)
+	}
+	rows, err := iapOverCapToRefund(e.ctx, e.db, []string{"google"}, 50)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("애플 거래가 다시 시도 목록에: %v %v", rows, err)
+	}
+}

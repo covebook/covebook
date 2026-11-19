@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,6 +106,7 @@ func (s *Server) routeIAP(m *http.ServeMux) {
 	m.HandleFunc("POST /iap/shelf-token", wrap(s.iapShelfTokenFor))
 	m.HandleFunc("GET /iap/purchases", wrap(s.iapPurchases))
 	m.HandleFunc("GET /admin/iap/stats", wrap(s.iapAdminStats))
+	m.HandleFunc("POST /iap/shelf-token/release", wrap(s.iapShelfRelease))
 }
 
 var (
@@ -118,6 +121,7 @@ var (
 	iapOtherAccount     = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요. 구독은 구매 복원으로 이 계정에 옮길 수 있어요"}
 	iapProductNoRestore = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요"}
 	iapShelfFull        = apiError{409, "iap_shelf_full", "이 책장의 추가 선반을 모두 열었어요"}
+	iapShelfTooMany     = apiError{409, "iap_shelf_full", "이 책장에 남은 칸보다 많아요"}
 	iapShelfYearMissing = apiError{422, "iap_shelf_year_missing", "어느 해 책장의 선반인지 알 수 없어요. 문의해 주시면 확인해 드릴게요"}
 )
 
@@ -190,39 +194,96 @@ func (s *Server) iapStatus(ctx context.Context, user int64) (map[string]any, err
 // 앱은 선반 결제를 시작하기 직전에 이것을 부르고, 받은 값을 애플 appAccountToken·구글 obfuscatedAccountId로 넘긴다.
 // 서버는 거래에 돌아온 이 값으로 어느 해 책장의 칸인지 찾는다.
 //
-// 요청: {"year":2026}
-// 응답 200: {"token":"uuid", "year":2026, "shelves":n}  shelves는 그 해에 이미 산 칸 수
-// 응답 409 iap_shelf_full: 그 해 책장의 유료 칸을 모두 열었다. 결제를 시작하지 않는다
+// 값을 주면서 그 해 책장에 "결제 중" 예약을 5분(iapShelfHold) 잡는다. 두 기기가 동시에 사서 3칸을 넘지 않게 막는다.
+// 결제가 끝나면(구매 제출) 서버가 풀고, 취소하면 앱이 POST /iap/shelf-token/release로 푼다. 앱이 꺼지면 시간이 지나 풀린다.
+//
+// 요청: {"year":2026, "shelves":1}  shelves는 살 상품의 칸 수(1칸, 3칸 묶음). 없으면 1
+// 응답 200: {"token":"uuid", "year":2026, "shelves":n, "reservation":"uuid", "expiresAt":"..."}  shelves는 그 해에 이미 산 칸 수
+// 응답 409 iap_shelf_full: 그 해 책장의 유료 칸을 모두 열었거나 남은 칸보다 많다. 결제를 시작하지 않는다
+// 응답 409 iap_shelf_busy: 다른 기기가 그 해 선반을 결제하는 중이다. "retryAfter"(초) 뒤 다시 시도한다
 func (s *Server) iapShelfTokenFor(w http.ResponseWriter, r *http.Request) error {
 	user, err := s.user(r)
 	if err != nil {
 		return err
 	}
 	var body struct {
-		Year int `json:"year"`
+		Year    int `json:"year"`
+		Shelves int `json:"shelves"`
 	}
 	if err = decode(r, &body); err != nil {
 		return err
 	}
-	if !iapValidYear(body.Year) {
+	if body.Shelves == 0 {
+		body.Shelves = 1
+	}
+	if !iapValidYear(body.Year) || body.Shelves < 1 || body.Shelves > iapPaidShelfMax {
 		return bad
 	}
 	if !s.iapAllow(user, time.Now()) {
 		return iapTooMany
 	}
 	ctx := r.Context()
-	paid, err := iapShelfPaid(ctx, s.DB, user, body.Year, s.IAPSandbox)
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	// 유저 줄을 잠근다. 두 기기의 요청이 차례로 예약을 본다
+	var locked int64
+	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+		return err
+	}
+	paid, err := iapShelfPaid(ctx, tx, user, body.Year, s.IAPSandbox)
 	if err != nil {
 		return err
 	}
 	if paid >= iapPaidShelfMax {
 		return iapShelfFull
 	}
-	token, err := iapShelfToken(ctx, s.DB, user, body.Year)
+	if paid+body.Shelves > iapPaidShelfMax {
+		return iapShelfTooMany
+	}
+	res, wait, err := iapReserveShelf(ctx, tx, user, body.Year, body.Shelves, paid)
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, map[string]any{"token": token, "year": body.Year, "shelves": paid})
+	if res.ID == "" {
+		secs := int(math.Ceil(wait.Seconds()))
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
+		writeJSON(w, 409, map[string]any{
+			"error":      map[string]string{"code": "iap_shelf_busy", "message": "다른 기기에서 이 책장의 선반을 결제하고 있어요. 잠시 뒤 다시 시도해 주세요"},
+			"retryAfter": secs,
+		})
+		return nil
+	}
+	token, err := iapShelfToken(ctx, tx, user, body.Year)
+	if err != nil {
+		return err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	writeJSON(w, 200, map[string]any{"token": token, "year": body.Year, "shelves": paid, "reservation": res.ID, "expiresAt": res.ExpiresAt.UTC().Format(time.RFC3339)})
+	return nil
+}
+
+// iapShelfRelease는 선반 결제 중 예약을 푼다. 앱이 결제를 취소했거나 실패했을 때 부른다.
+// 요청: {"reservation":"uuid"}. 없거나 남의 예약이어도 204다(다시 불러도 같다).
+func (s *Server) iapShelfRelease(w http.ResponseWriter, r *http.Request) error {
+	user, err := s.user(r)
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Reservation string `json:"reservation"`
+	}
+	if err = decode(r, &body); err != nil {
+		return err
+	}
+	if err = iapReleaseReservation(r.Context(), s.DB, user, body.Reservation); err != nil {
+		return err
+	}
+	w.WriteHeader(204)
 	return nil
 }
 
@@ -231,7 +292,9 @@ func iapValidYear(year int) bool { return year >= 2000 && year <= 9999 }
 
 // iapSubmit은 앱이 제출한 구매를 스토어에 확인하고 지급한다.
 //
-// 요청: {"route":"apple|google", "productId":"...", "proof":"애플: 스토어가 서명한 거래(JWS). 구글: 구매 토큰", "restore":false, "year":2026}
+// 요청: {"route":"apple|google", "productId":"...", "proof":"애플: 스토어가 서명한 거래(JWS). 구글: 구매 토큰", "restore":false, "year":2026, "reservation":"uuid"}
+//
+// reservation은 POST /iap/shelf-token이 준 결제 중 예약이다. 처리한 뒤 푼다. 없으면 그 해의 가장 오래된 예약 하나를 푼다.
 //
 // year는 추가 선반에만 쓴다. 어느 해 책장의 칸인지는 거래에 돌아온 계정 연결 값(POST /iap/shelf-token)으로 정하고,
 // 그 값이 연도를 모를 때만(앱 밖에서 산 구매 등) year를 쓴다. 둘 다 없으면 거래는 기록하고 422 iap_shelf_year_missing이다.
@@ -240,7 +303,8 @@ func iapValidYear(year int) bool { return year >= 2000 && year <= 9999 }
 // 남의 구매를 내거나 restore로 남의 구독을 가져갈 수 있기 때문이다. 서명된 거래는 구매한 기기만 가진다.
 // 응답 200: {"status":"granted|already|inactive", "plus":bool, "shelvesByYear":{"2026":n}, "subscription":{...}}
 //
-//	추가 선반이면 "year"(칸이 열린 책장)도 준다. 그 해에 3칸을 넘게 샀으면 "overCap":true(넘은 칸은 환불 대상)
+//	추가 선반이면 "year"(칸이 열린 책장)도 준다. 그 해에 3칸을 넘게 샀으면 "overCap":true. 이 거래는 칸을 주지 않고 환불한다.
+//	"autoRefund":true면 서버가 스토어에 환불을 요청했다(구글). false면 사용자가 스토어에 환불을 요청해야 한다(애플)
 //
 //	granted  새로 지급했다        already  전에 지급한 거래다        inactive  구독이 만료·보류 상태라 권한이 없다
 //
@@ -259,6 +323,8 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		Proof     string `json:"proof"`
 		Restore   bool   `json:"restore"`
 		Year      int    `json:"year"`
+		// 선반 결제 중 예약(POST /iap/shelf-token). 처리한 뒤 푼다
+		Reservation string `json:"reservation"`
 	}
 	if err = decode(r, &body); err != nil {
 		return err
@@ -418,14 +484,22 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 		if shelfYear > 0 {
-			paid, e := iapShelfPaid(ctx, tx, user, shelfYear, s.IAPSandbox)
-			if e != nil {
+			// 예약을 지나쳐 3칸을 넘었으면(예약이 끝난 뒤 결제가 끝남 등) 이 거래는 칸을 주지 않고 환불한다
+			if overCap, e = iapSettleShelf(ctx, tx, user, route, key, s.IAPSandbox); e != nil {
 				return e
 			}
-			// 두 기기에서 동시에 사면 3칸을 넘을 수 있다. 칸은 3칸까지만 열고, 넘은 거래는 운영자가 환불한다
-			if overCap = paid > iapPaidShelfMax; overCap {
-				log.Printf("iap shelf over cap: route=%s user=%d year=%d paid=%d", route, user, shelfYear, paid)
+			if overCap {
+				log.Printf("iap shelf over cap: route=%s user=%d year=%d", route, user, shelfYear)
 			}
+		}
+		// 결제 중 예약을 푼다. 번호를 모르면 새로 넣은 거래일 때만 그 해의 가장 오래된 것 하나를 푼다
+		if body.Reservation != "" {
+			e = iapReleaseReservation(ctx, tx, user, body.Reservation)
+		} else if inserted && shelfYear > 0 {
+			e = iapReleaseOldestReservation(ctx, tx, user, shelfYear)
+		}
+		if e != nil {
+			return e
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -445,6 +519,12 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	// 6. 넘게 산 거래는 환불을 요청한다(구글만 된다). 소비한 뒤에 한다
+	autoRefund := false
+	if overCap {
+		autoRefund = s.iapRefundOverCap(ctx, store, key, submitted.TransactionID)
+	}
+
 	if asked.Kind == iap.KindProduct && shelfYear == 0 {
 		log.Printf("iap shelf year missing: route=%s user=%d product=%s", route, user, submitted.ProductID)
 		return iapShelfYearMissing
@@ -458,11 +538,42 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	if shelfYear > 0 {
 		out["year"] = shelfYear
 		if overCap {
-			out["overCap"] = true // 이 해 책장에 3칸을 넘게 샀다. 넘은 칸은 환불 대상
+			out["overCap"] = true // 이 해 책장에 3칸을 넘게 샀다. 칸을 주지 않고 환불한다
+			out["autoRefund"] = autoRefund
 		}
 	}
 	writeJSON(w, 200, out)
 	return nil
+}
+
+// iapRefundOverCap은 3칸을 넘게 산 선반 거래의 환불을 스토어에 요청한다. DB 커밋 뒤에 부른다.
+// 환불할 수 있는 스토어(구글)이면 요청하고 결과를 남긴다. 이미 요청한 거래면 다시 요청하지 않고 true다.
+// 애플은 개발자가 환불할 수 없어 false다(사용자에게 애플 환불 요청을 안내한다). 실패하면 정기 처리가 다시 시도한다.
+func (s *Server) iapRefundOverCap(ctx context.Context, store iap.Store, key, orderID string) bool {
+	rf, ok := store.(iap.Refunder)
+	if !ok {
+		return false
+	}
+	route := store.Route()
+	var requested bool
+	if err := s.DB.QueryRow(ctx, `SELECT refund_requested_at IS NOT NULL FROM iap_purchases
+		WHERE route=$1 AND transaction_id=$2 AND over_cap`, string(route), key).Scan(&requested); err != nil {
+		log.Printf("iap over cap refund: route=%s err=%v", route, err)
+		return false
+	}
+	if requested {
+		return true
+	}
+	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+	defer cancel()
+	err := rf.Refund(refundCtx, orderID)
+	if err != nil {
+		log.Printf("iap over cap refund failed (will retry): route=%s err=%v", route, err)
+	}
+	if e := iapNoteRefundAttempt(ctx, s.DB, route, key, err == nil); e != nil {
+		log.Printf("iap over cap refund not recorded: route=%s err=%v", route, e)
+	}
+	return err == nil
 }
 
 // iapStoreError는 스토어 조회 실패를 가른다. "그런 거래 없음"은 거절이고, 나머지는 결과를 모르는 것이라 다시 시도하게 한다.
