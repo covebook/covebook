@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,11 +26,13 @@ const (
 	noticeCancelScheduled = "cancel_scheduled"      // T10 해지 접수(자동 갱신 꺼짐)
 	noticeSubRefunded     = "subscription_refunded" // T9 환불(구독)
 	noticeShelfRefunded   = "shelf_refunded"        // T9 환불(선반)
+	noticeRenewalUpcoming = "renewal_upcoming"      // T4 갱신 예정(연 구독)
 )
 
 var iapNoticeTemplate = map[string]string{
 	noticePurchaseDone: "T3", noticePaymentFailed: "T7", noticeExpired: "T8",
 	noticeCancelScheduled: "T10", noticeSubRefunded: "T9", noticeShelfRefunded: "T9",
+	noticeRenewalUpcoming: "T4",
 }
 
 // iapStamp는 고지의 값과 유일 키에 쓰는 시각 표기다(UTC, 초 단위). SQL 쪽 표기(iapStampSQL)와 같아야 같은 일이 한 줄로 모인다.
@@ -247,4 +251,49 @@ func iapNoticeCounts(ctx context.Context, q dbtx) (map[string]int, error) {
 		out[kind] = n
 	}
 	return out, rows.Err()
+}
+
+// iapRenewalEvery는 갱신 예정 고지를 찾는 간격이다. 하루에 한 번이면 충분하지만, 한 회차가 실패했을 때 하루를 기다리지 않게 6시간으로 둔다.
+// 같은 갱신은 유일 키로 한 번만 쓰이므로 자주 돌아도 결과는 같다.
+const iapRenewalEvery = 6 * time.Hour
+
+// iapRenewalNoticeDays는 갱신일 며칠 전부터 알릴지다(ADR-0003 L9·L12, 한국 기본 14일). IAP_RENEWAL_NOTICE_DAYS로 바꾼다.
+func iapRenewalNoticeDays() int {
+	if n, err := strconv.Atoi(os.Getenv("IAP_RENEWAL_NOTICE_DAYS")); err == nil && n > 0 && n <= 60 {
+		return n
+	}
+	return 14
+}
+
+// iapRenewalDue는 갱신 예정 고지를 지금 찾을 차례인지 보고, 차례면 찾은 것으로 적는다(서버 한 대의 메모리로 센다).
+func (s *Server) iapRenewalDue(now time.Time) bool {
+	s.iapMu.Lock()
+	defer s.iapMu.Unlock()
+	if !s.iapRenewalAt.IsZero() && now.Sub(s.iapRenewalAt) < iapRenewalEvery {
+		return false
+	}
+	s.iapRenewalAt = now
+	return true
+}
+
+// iapNoteRenewals는 곧 갱신될 연 구독에 갱신 예정 고지(T4)를 쓴다. 쓴 줄 수를 돌려준다.
+// 대상: 주인이 있고, 이용 중(paid)이고, 자동 갱신이 켜져 있고, 만료일(다음 결제일)이 앞으로 days일 안이고, 요금제 주기가 연인 구독.
+// 월 구독은 보내지 않는다(L9). 주기를 모르는 요금제(iap_plans에 줄이 없음)도 보내지 않는다.
+// 유일 키에 만료일이 들어 있어서 갱신될 때마다 한 번씩 쓰인다. 해지했다가 다시 켜도 같은 갱신이면 다시 쓰지 않는다.
+func iapNoteRenewals(ctx context.Context, q dbtx, now time.Time, days int) (int, error) {
+	tag, err := q.Exec(ctx, `INSERT INTO iap_notices (user_id, kind, template, params, env, dedupe_key)
+		SELECT s.user_id, $1, 'T4',
+			jsonb_build_object('route', s.route, 'productId', s.product_id, 'period', 'year',
+				'expiresAt', to_char(s.expires_at AT TIME ZONE 'UTC', `+iapStampSQL+`)),
+			s.env,
+			$1 || ':' || s.route || ':' || s.original_id || ':' || to_char(s.expires_at AT TIME ZONE 'UTC', `+iapStampSQL+`)
+		FROM iap_subscriptions s
+		JOIN iap_plans pl ON pl.route=s.route AND pl.product_id=s.product_id AND pl.plan_id=s.plan_id AND pl.period='year'
+		WHERE s.user_id IS NOT NULL AND s.state='paid' AND s.auto_renew AND s.grace_until IS NULL
+			AND s.expires_at > $2 AND s.expires_at <= $2 + make_interval(days => $3)
+		ON CONFLICT (user_id, dedupe_key) DO NOTHING`, noticeRenewalUpcoming, now, days)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }

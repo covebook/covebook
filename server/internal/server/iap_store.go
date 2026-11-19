@@ -292,14 +292,17 @@ func iapMarkConfirmed(ctx context.Context, q dbtx, route iap.Route, key string) 
 // 주의: 유예 끝(grace_until)이 NULL이면 `만료 지남 OR NULL`은 NULL이다. coalesce로 false로 만들지 않으면 참·거짓으로 읽다가 실패한다.
 // iapCurrentSubscription은 구독 관리 화면에 보일 구독 하나를 고른다. 지금 유효한 것이 먼저, 그다음 만료가 늦은 것. 없으면 nil이다.
 func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbox bool) (map[string]any, error) {
-	var route, product, plan, state string
+	var route, product, plan, state, period string
 	var expires time.Time
 	var grace *time.Time
 	var autoRenew, active bool
-	err := q.QueryRow(ctx, `SELECT route, product_id, plan_id, state, expires_at, grace_until, auto_renew,
-			coalesce(state='paid' AND (expires_at > now() OR grace_until > now()), false) AS active
-		FROM iap_subscriptions WHERE user_id=$1 AND ($2 OR env='production') ORDER BY active DESC, expires_at DESC LIMIT 1`, user, allowSandbox).
-		Scan(&route, &product, &plan, &state, &expires, &grace, &autoRenew, &active)
+	err := q.QueryRow(ctx, `SELECT s.route, s.product_id, s.plan_id, s.state, s.expires_at, s.grace_until, s.auto_renew,
+			coalesce(s.state='paid' AND (s.expires_at > now() OR s.grace_until > now()), false) AS active,
+			coalesce(pl.period, '')
+		FROM iap_subscriptions s
+		LEFT JOIN iap_plans pl ON pl.route=s.route AND pl.product_id=s.product_id AND pl.plan_id=s.plan_id
+		WHERE s.user_id=$1 AND ($2 OR s.env='production') ORDER BY active DESC, s.expires_at DESC LIMIT 1`, user, allowSandbox).
+		Scan(&route, &product, &plan, &state, &expires, &grace, &autoRenew, &active, &period)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -310,6 +313,9 @@ func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbo
 		"expiresAt": expires.UTC().Format(time.RFC3339), "autoRenew": autoRenew}
 	if grace != nil {
 		out["graceUntil"] = grace.UTC().Format(time.RFC3339)
+	}
+	if period != "" {
+		out["period"] = period // 앱이 갱신 전 기기 예약 알림을 걸 때 쓴다. 모르면 넣지 않는다
 	}
 	return out, nil
 }

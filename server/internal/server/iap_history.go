@@ -253,8 +253,8 @@ func (s *Server) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	if skip {
 		return
 	}
-	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_pending=%ds",
-		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided,
+	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_pending=%ds",
+		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals,
 		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestPendingSecs)
 }
 

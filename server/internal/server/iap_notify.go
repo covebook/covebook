@@ -191,6 +191,7 @@ func (s *Server) iapSweepLocked(ctx context.Context) error {
 type iapSweepResult struct {
 	Notices, NoticesFailed, Confirmed, Refreshed int
 	Backfilled, Voided                           int // 스토어의 목록으로 메운 알림, 반영한 환불
+	Renewals                                     int // 새로 쓴 갱신 예정 고지
 }
 
 // iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
@@ -266,6 +267,13 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			continue
 		}
 		res.Refreshed++
+	}
+
+	// 5. 곧 갱신될 연 구독에 갱신 예정 고지(T4). 4에서 만료일을 새로 받은 뒤에 본다. 6시간에 한 번
+	if now := time.Now().UTC(); s.iapRenewalDue(now) {
+		n, e := iapNoteRenewals(ctx, s.DB, now, iapRenewalNoticeDays())
+		keep(e)
+		res.Renewals = n
 	}
 	return res, firstErr
 }
