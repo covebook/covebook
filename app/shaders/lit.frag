@@ -871,7 +871,10 @@ void main() {
     float be = endR > 0.0 ? slope(arc(366.000000 - P.x, endR)) - slope(arc(P.x - 0.00000000, endR)) : 0.0;
     // 점 → 눈(곡면 몫과 반사광이 함께 쓴다)
     vec3 V = normalize(vec3(cam4.x, cam4.y, cam4.z - cam4.w) - P);
-    vec3 cv = coveOf(P, V);
+    // 뒷벽 뒤로 늘려 그린 틀 면(뒷벽 둥근 꼭지점 밑으로 비치는 자리)은 실제로 없는 면이라 뒷벽 끝 자리로 곡면·가림을 잰다:
+    // 그 자리에서 재면 법선이 뒷벽 쪽으로 다 꺾여 꼭지점 밑이 어두운 쐐기로 보였다(Flutter 2026-11-19 사용자 '뒷라인도 앞이랑 똑같이 곡선')
+    vec3 Pc = env.x > 1.5 && abs(tN.z) < 0.5 && P.z > DEPTH ? vec3(P.x, P.y, DEPTH) : P;
+    vec3 cv = coveOf(Pc, V);
     vec3 n = normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + cv + vec3(be, 0.0, 0.0));
     // 휜 법선(안쪽 모서리 곡면·구멍 테)과 그 가림을 잴 자리. 테는 구멍 가장자리 바로 안쪽 점에서 잰다(앞 벽 평면 위 점은 안쪽 면을 앞에 둔 가리개로 본다)
     vec3 nB = normalize(tN + cv);
@@ -931,10 +934,10 @@ void main() {
       // 안쪽 모서리 곡면도 테와 같은 식: 휜 법선이 보는 둘레(벽·판·틀·되비침)의 가림을 그 자리에서 잰다(Flutter 2026-11-18).
       // 예전에는 '평평한 면보다 빛을 더 받지 않는다'로 잘라 맞닿은 두 면이 모서리 선에서 다른 빛이 되었다
       // 구운 가림(하늘 가림 + 그늘 몫/OCC)은 그릴 때 OCC를 곱한다: 휜 법선의 하늘 가림도 구운 하늘 가림과 같은 세기로 더한다(OCC로 나누면 곡면만 덜 가려져 밝은 띠가 된다)
-      loss += envLoss(P, nB) - envLoss(P, tN);
+      loss += envLoss(Pc, nB) - envLoss(Pc, tN);
       // 모서리 그늘은 받는 빛의 몫이다: 굽기는 평평한 면 법선의 빛에 곱해 담았으므로 휜 법선의 빛으로 바꾼다
       if (liveEnv < 0.5) {
-        float jf = jointShade(P, tN);
+        float jf = jointShade(Pc, tN);
         loss += jf * ((skyIrr(nB) - skyIrr(tN)) + KEYC * (DIFF * (max(0.0, dot(nB, LU)) - max(0.0, dot(tN, LU))))) / OCC;
       }
       nfF = nB;
