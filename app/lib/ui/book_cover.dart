@@ -68,7 +68,7 @@ String? bookTitle(Library lib, String? id) {
 String bookAuthor(Library lib, String? id) {
   final b = id == null ? null : lib.books[id];
   final e = b == null ? null : lib.editions[b.editionId];
-  return e != null && e.authors.isNotEmpty ? e.authors.join(', ') : '';
+  return e != null ? authorLine(e.authors) : '';
 }
 
 /// 서재 책의 표지: 실제 표지가 있으면 그것, 없으면 책 색 대체 표지(제목)

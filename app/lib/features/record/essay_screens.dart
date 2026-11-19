@@ -196,7 +196,7 @@ class _EssayScreenState extends State<EssayScreen> {
           BookRow(
             cover: IgnorePointer(child: LinkedCover(lib: lib, id: b.id, width: BookRow.coverWidth(BookRowSize.small))),
             title: e.title,
-            meta: e.authors.join(', '),
+            meta: authorLine(e.authors),
           ),
         Padding(
           padding: const EdgeInsets.only(top: Space.xl),
@@ -283,7 +283,7 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
           SelectField(
             label: '책',
             value: e?.title,
-            sub: e != null && e.authors.isNotEmpty ? e.authors.join(', ') : null,
+            sub: e != null && e.authors.isNotEmpty ? authorLine(e.authors) : null,
             placeholder: '책을 골라 주세요',
             // 쓴 감상의 책은 바꾸지 않는다(다른 책 감상이면 새로 쓴다)
             disabled: _old != null,

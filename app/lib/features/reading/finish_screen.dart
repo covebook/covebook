@@ -288,7 +288,7 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
   final ss = lib.sessions[sessionId];
   final sb = bookId == null ? null : lib.books[bookId];
   final se = sb == null ? null : lib.editions[sb.editionId];
-  final author = se != null && se.authors.isNotEmpty ? se.authors.join(', ') : '';
+  final author = se != null ? authorLine(se.authors) : '';
   final done = '${ss == null ? '' : formatDurationPrecise(ss.durationMs)} 기록했어요'.trim();
   return showGeneralDialog<void>(
     context: context,
@@ -324,14 +324,14 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
                       IntrinsicHeight(
                         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                           if (sb != null && se != null) ...[
-                            Align(alignment: Alignment.topCenter, child: ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: 72))),
+                            Align(alignment: Alignment.topCenter, child: ExcludeSemantics(child: LinkedCover(lib: lib, id: sb.id, width: CoverSize.saved))),
                             const SizedBox(width: Space.m + 2),
                           ],
                           Expanded(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               if (sb != null && se != null) ...[
-                                Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
-                                if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                                Text(se.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bookSavedTitle),
+                                if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
                               ] else
                                 Text('책 없이 읽은 시간', style: AppType.sub),
                               const Spacer(),

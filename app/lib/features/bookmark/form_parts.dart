@@ -8,7 +8,7 @@ import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 
-/// 쓰던 글 지킴: 적은 것이 있으면 나갈 때 묻는다(docs/UI_CONVENTIONS.md 7장). 문구·단추는 네 화면이 같다.
+/// 쓰던 글 지킴: 적은 것이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 5장). 문구·단추는 네 화면이 같다.
 /// onLeave가 없으면 화면(경로)을 닫고, 있으면(갈피 수정처럼 같은 화면 안 단계) 그것을 부른다
 class DraftGuard extends StatelessWidget {
   const DraftGuard({super.key, required this.dirty, required this.child, this.title = '쓰던 내용을 버릴까요?', this.onLeave});

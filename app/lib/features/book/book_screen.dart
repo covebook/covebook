@@ -247,10 +247,10 @@ class _BookScreenState extends State<BookScreen> {
         Padding(
           padding: const EdgeInsets.only(top: Space.xs, bottom: Space.l),
           child: Column(children: [
-            ExcludeSemantics(child: SizedBox(width: 56, child: BookVisual(lib: lib, id: id, width: 56))),
+            ExcludeSemantics(child: SizedBox(width: CoverSize.sheet, child: BookVisual(lib: lib, id: id, width: CoverSize.sheet))),
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
-              child: WordText(title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
+              child: WordText(title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
             ),
           ]),
         ),
@@ -304,13 +304,13 @@ class _BookScreenState extends State<BookScreen> {
         Padding(
           padding: const EdgeInsets.only(top: Space.l + Space.s),
           child: Column(children: [
-            BookVisual(lib: lib, id: id, width: 140),
+            BookVisual(lib: lib, id: id, width: CoverSize.head),
             Padding(
               padding: const EdgeInsets.only(top: Space.l),
-              child: Text(e.title, textAlign: TextAlign.center, style: AppType.pageTitle),
+              child: Text(e.title, textAlign: TextAlign.center, style: AppType.bookHeadTitle),
             ),
             if (e.authors.isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(e.authors.join(', '), textAlign: TextAlign.center, style: AppType.sub)),
+              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(authorLine(e.authors), textAlign: TextAlign.center, style: AppType.bookAuthor)),
             ReaderRating(data: reviews.data),
           ]),
         ),
@@ -470,7 +470,7 @@ class _BookScreenState extends State<BookScreen> {
         )
       else
         // 빈 구역 한 줄은 sub(2026-11-19 공통 규칙: 여기만 옅은 회색이었다)
-        WordText(note.isEmpty ? '이 책을 한 줄로 남겨 보세요' : note, style: note.isEmpty ? AppType.sub : AppType.body),
+        WordText(note.isEmpty ? '이 책을 한 줄로 남겨 보세요' : note, style: note.isEmpty ? AppType.sub : AppType.review),
       const SizedBox(height: Space.block),
       // 감상(기록 › 감상과 같은 데이터, 이 책 것만)
       SectionHead(title: '감상', count: essays.isEmpty ? null : '${essays.length}개', link: '쓰기', onLink: () => openNewEssay(context, book: id)),
@@ -656,7 +656,7 @@ class _BookScreenState extends State<BookScreen> {
             // 머리–첫 날짜 8 → 12(2026-11-18 사용자 '줄 위치가 좀 더 밑으로': 시안은 머리와 첫 날짜 사이가 더 넓다)
             padding: const EdgeInsets.only(top: Space.m),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Semantics(header: true, child: Text(g.day, style: AppType.row)),
+              Semantics(header: true, child: Text(g.day, style: AppType.recordDay)),
               for (final x in g.items)
                 Semantics(
                   button: true,
@@ -669,9 +669,9 @@ class _BookScreenState extends State<BookScreen> {
                       constraints: const BoxConstraints(minHeight: Space.dense),
                       child: Row(children: [
                         // 다른 화면 기록 줄과 같은 크기(시간대 16 · 읽은 시간 18, 2026-11-18 사용자 '독서 기록 글자가 좀 작다')
-                        Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.sub)),
+                        Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.recordRange)),
                         // 읽은 시간은 위 날짜('11월 17일')와 같은 글자(2026-11-18 사용자 '20분 글씨체 너무 두껍다')
-                        Text(formatDuration(x.durationMs), style: AppType.row.tnum),
+                        Text(formatDuration(x.durationMs), style: AppType.recordDuration),
                       ]),
                     ),
                   ),

@@ -12,7 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../domain/book_list_import.dart';
-import '../../domain/library.dart' show ReadStatus;
+import '../../domain/library.dart' show ReadStatus, authorLine;
 import '../../services/book_search.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
@@ -342,7 +342,7 @@ class _LineRow extends StatelessWidget {
     return BookRow(
       cover: RealCover(uri: b?.coverUrl, title: b?.title ?? l.row.title, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
       title: b?.title ?? (l.row.label.isEmpty ? '(제목 없음)' : l.row.label),
-      meta: b != null && b.authors.isNotEmpty ? b.authors.join(', ') : null,
+      meta: b != null && b.authors.isNotEmpty ? authorLine(b.authors) : null,
       third: sub,
       trailing: selectable
           ? RadioMark(on: l.picked)

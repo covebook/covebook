@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../store/files.dart' show keepImage;
+import '../../domain/library.dart' show authorLine;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/alert.dart';
@@ -32,7 +33,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
     final e = b == null ? null : _model.lib.editions[b.editionId];
     return <String, String?>{
       'title': e?.title ?? '',
-      'authors': e?.authors.join(', ') ?? '',
+      'authors': e == null ? '' : authorLine(e.authors),
       'publisher': e?.publisher ?? '',
       'publishedAt': e?.publishedAt ?? '',
       'isbn': e?.isbn13 ?? '',
@@ -126,7 +127,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
           Padding(
             padding: const EdgeInsets.only(top: Space.m),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              RealCover(uri: _f['coverUri'], title: _f['title']!, width: 96),
+              RealCover(uri: _f['coverUri'], title: _f['title']!, width: CoverSize.edit),
               const SizedBox(width: Space.l),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

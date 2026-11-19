@@ -13,6 +13,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../services/qa_probe.dart';
+import '../../domain/library.dart' show authorLine;
 import '../../domain/ocr_text.dart';
 import '../../services/photos.dart' show PhotoFail, PhotoOk, deniedMessage;
 import '../../services/text_recognition.dart';
@@ -242,7 +243,7 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
           SelectField(
             label: '책',
             value: e?.title,
-            sub: e != null && e.authors.isNotEmpty ? e.authors.join(', ') : null,
+            sub: e != null && e.authors.isNotEmpty ? authorLine(e.authors) : null,
             placeholder: '책을 골라 주세요',
             onPress: () async {
               final r = await pickBook(context, lib, addNew: true);

@@ -30,6 +30,12 @@ abstract final class Space {
 
   /// 누르는 자리 최소(안드로이드 접근성 기준 48). 겉모양은 그대로 두고 누르는 자리만 넓힐 때(2026-11-16 QA 영숙 F12)
   static const hit = 48.0;
+
+  /// 이름 → 값(토큰 내보내기 · 검사용). 값이 같아도 역할이 다르면 이름을 따로 둔다(group 28 · xl 28 등)
+  static const all = <String, double>{
+    'page': page, 'section': section, 'group': group, 'item': item, 'tight': tight,
+    'xs': xs, 's': s, 'm': m, 'l': l, 'xl': xl, 'xxl': xxl, 'touch': touch, 'block': block, 'dense': dense, 'hit': hit,
+  };
 }
 
 /// 정보 사이 구분: 가운데 점(·) 대신 세로줄(2026-11-18 사용자 '가운데 점 전부 빼고 | 선으로'). 글로 이어 붙일 때 쓴다
@@ -113,23 +119,104 @@ class WordText extends Text {
       Text(keepAll(data!), style: style, textAlign: textAlign, maxLines: maxLines, overflow: overflow, softWrap: softWrap, textScaler: textScaler, semanticsLabel: semanticsLabel ?? data).build(context);
 }
 
-/// 모양: 조작 요소 10, 칩 알약, 시트 20, 확인창 18
+/// 모서리(유일한 정의, docs/design/DESIGN.md 7-2): 조작 요소 10, 시트 20, 확인창 18, 칩 알약
 abstract final class Shape {
   static const button = 10.0, input = 10.0, sheet = 20.0, dialog = 18.0, tag = 6.0;
 
   /// 테두리 상자(읽은 기간 카드 · 통계 평균 카드)
   static const card = 12.0;
+
+  /// 고르는 큰 칸(Choice) 14 · 전환 칸 바깥 12 · 고른 칸 9 · 필터 단추 알약 20 · 칩 알약
+  static const choice = 14.0, segmented = 12.0, segment = 9.0, filterPill = 20.0, pill = 999.0;
+
+  /// 표지 · 대체 표지 · 줄 안 막대 끝 3
+  static const cover = 3.0;
+
+  /// 떠 있는 것(떠 있는 단추 · 미니 타이머 · 메뉴)
   static const floatShadow = BoxShadow(color: Color(0x1F191F28), offset: Offset(0, 4), blurRadius: 10);
+
+  /// 전환 칸의 고른 칸
+  static const segmentShadow = BoxShadow(color: Color(0x14191F28), offset: Offset(0, 2), blurRadius: 6);
+
+  /// 이름 → 값(토큰 내보내기 · 검사용)
+  static const all = <String, double>{
+    'button': button, 'input': input, 'sheet': sheet, 'dialog': dialog, 'tag': tag, 'card': card,
+    'choice': choice, 'segmented': segmented, 'segment': segment, 'filterPill': filterPill, 'pill': pill, 'cover': cover,
+  };
+}
+
+/// 조작부 크기(유일한 정의, docs/design/DESIGN.md 5-2 · 7장). 누르는 자리는 겉크기와 따로 늘 [Space.hit] 이상
+abstract final class ControlSize {
+  /// 단추 보이는 높이: 크게(화면 아래 주요 · 시트 안) · 보통(카드 · 창 안) · 작게(줄 안 · 보조)
+  static const buttonL = 52.0, buttonM = 48.0, buttonS = 40.0;
+
+  /// 입력칸 · 고르는 칸(Field · SelectField) 56, 여러 줄 입력칸 110, 검색칸 48, 필터 단추 40.
+  /// 검색칸: 11-18 사용자 '두께 좀 줄이고'로 52 → 44를 넣었지만 안쪽 검색 아이콘 칸(누르는 자리 48)이 높이를 정해 실제로는 48로 그려진다(2026-11-19 값 대조에서 발견). 지금 화면 그대로 48
+  static const field = 56.0, fieldMultiline = 110.0, search = 48.0, filter = 40.0;
+
+  /// 고르는 큰 칸(Choice) 56
+  static const choice = 56.0;
+
+  /// 전환 칸(Segmented): 고른 칸 38 + 위아래 7 = 줄 52(누르는 자리), 회색 칸은 위아래 4를 뺀 44
+  static const segment = 38.0, segmentPad = 7.0, segmentInset = 4.0;
+
+  /// 스위치 50×30, 손잡이 24
+  static const toggleWidth = 50.0, toggleHeight = 30.0, toggleKnob = 24.0;
+
+  /// 고르는 원 22, 고르는 칸 모서리 체크 24, 정보 넣기 네모 22
+  static const radio = 22.0, choiceBadge = 24.0, checkSquare = 22.0;
+
+  static const all = <String, double>{
+    'buttonL': buttonL, 'buttonM': buttonM, 'buttonS': buttonS, 'field': field, 'fieldMultiline': fieldMultiline, 'search': search, 'filter': filter, 'choice': choice,
+    'segment': segment, 'segmentPad': segmentPad, 'segmentInset': segmentInset, 'toggleWidth': toggleWidth, 'toggleHeight': toggleHeight, 'toggleKnob': toggleKnob,
+    'radio': radio, 'choiceBadge': choiceBadge, 'checkSquare': checkSquare,
+  };
+}
+
+/// 아이콘 크기 · 선 굵기(유일한 정의, docs/design/DESIGN.md 6장)
+abstract final class IconSize {
+  /// 머리줄 · 줄 안 기본 아이콘 22, 줄 끝 꺾쇠 20, 뒤로 꺾쇠 28, 선 굵기 1.6(처음 앱 lucide와 같은 굵기)
+  static const base = 22.0, chevron = 20.0, back = 28.0, stroke = 1.6;
+
+  /// 이미 넣음 체크(AddedMark) 20 · 굵기 2, 고른 원 · 정보 넣기 네모 안 흰 체크 굵기 3
+  static const mark = 20.0, markStroke = 2.0, checkStroke = 3.0;
+
+  static const all = <String, double>{
+    'base': base, 'chevron': chevron, 'back': back, 'stroke': stroke, 'mark': mark, 'markStroke': markStroke, 'checkStroke': checkStroke,
+  };
+}
+
+/// 책 표지 크기(폭, 유일한 정의, docs/design/DESIGN.md 3장)
+abstract final class CoverSize {
+  /// 책 한 줄(BookRow): 작게 40(고르기 · 선택 · 바코드 · 가져오기 · 읽기 목록 · 통계) · 보통 64(검색 결과 · 감상 목록) · 크게 80(내 책 목록)
+  static const row = 40.0, result = 64.0, list = 80.0;
+
+  /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 120, 책 확인(추가 전) 120, 책 정보 수정 96
+  static const head = 140.0, feature = 120.0, confirm = 120.0, edit = 96.0;
+
+  /// 창 · 시트 안 표지: '추가했어요' 88, 저장했어요 창 72(사용자 시안), 책장에 꽂기 68, 숨기기 · 삭제 확인 56
+  static const added = 88.0, saved = 72.0, place = 68.0, sheet = 56.0;
+
+  /// 작은 표지: 함께 읽기 글 안 36, 장정 고르기 칸 안 22
+  static const post = 36.0, swatch = 22.0;
+
+  /// 표지 가로:세로(대체 표지 · 책 없이 읽기 칸의 높이 = 폭 ÷ ratio)
+  static const ratio = 0.68;
+
+  static const all = <String, double>{
+    'row': row, 'result': result, 'list': list, 'head': head, 'feature': feature, 'confirm': confirm, 'edit': edit,
+    'added': added, 'saved': saved, 'place': place, 'sheet': sheet, 'post': post, 'swatch': swatch, 'ratio': ratio,
+  };
 }
 
 /// 내용 폭 상한(태블릿에서 화면 끝까지 늘어나지 않게)
 const contentMax = 640.0;
-const _sheetMax = 560.0;
+const sheetMax = 560.0;
 
 /// 선 아이콘(지금 앱 lucide 아이콘, 굵기 1.6)
 class LucideIcon extends StatelessWidget {
   // 선 굵기 1.6: 처음 앱(지금 앱 아이콘)과 같은 굵기(2026-11-19 사용자 '처음 썼던 걸로'. Tabler·lucide-static 때는 1.8)
-  const LucideIcon(this.name, {super.key, this.size = 22, this.color = AppColors.ink, this.stroke = 1.6, this.fill});
+  const LucideIcon(this.name, {super.key, this.size = IconSize.base, this.color = AppColors.ink, this.stroke = IconSize.stroke, this.fill});
   final String name;
   final double size;
   final Color color;
@@ -154,7 +241,7 @@ class Chevron extends StatelessWidget {
   const Chevron({super.key});
 
   @override
-  Widget build(BuildContext context) => const LucideIcon('ChevronRight', size: 20, color: AppColors.inkSoft);
+  Widget build(BuildContext context) => const LucideIcon('ChevronRight', size: IconSize.chevron, color: AppColors.inkSoft);
 }
 
 /// 머리줄 아이콘(검색 · + · 공유 · 더 보기 · 필터 · 보기 바꾸기): 22 · 선 1.6 · 회색(2026-11-18 사용자 '우측 상단 아이콘 회색' → 앱 전체 머리줄)
@@ -192,7 +279,7 @@ class AddedMark extends StatelessWidget {
   const AddedMark({super.key});
 
   @override
-  Widget build(BuildContext context) => const LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2);
+  Widget build(BuildContext context) => const LucideIcon('Check', size: IconSize.mark, color: AppColors.accent, stroke: IconSize.markStroke);
 }
 
 /// 정보 넣기 네모(공유 카드 '표시할 정보'): 22 네모, 켜면 갈색 채움 + 흰 체크
@@ -203,14 +290,14 @@ class CheckSquare extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        width: 22,
-        height: 22,
+        width: ControlSize.checkSquare,
+        height: ControlSize.checkSquare,
         decoration: BoxDecoration(
           color: on ? AppColors.accent : AppColors.white,
           borderRadius: BorderRadius.circular(Shape.tag),
           border: Border.all(color: on ? AppColors.accent : AppColors.line, width: 1.5),
         ),
-        child: on ? const Center(child: LucideIcon('Check', size: 14, color: AppColors.onAccent, stroke: 3)) : null,
+        child: on ? const Center(child: LucideIcon('Check', size: 14, color: AppColors.onAccent, stroke: IconSize.checkStroke)) : null,
       );
 }
 
@@ -313,7 +400,7 @@ class NavBar extends StatelessWidget {
                     excludeSemantics: true,
                     child: Pressable(
                       onPress: pop,
-                      child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: 28))),
+                      child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: IconSize.back))),
                     ),
                   ),
                 ),
@@ -600,7 +687,7 @@ class Btn extends StatefulWidget {
   final Widget? icon;
 
   /// 크기별 겉높이(누르는 자리는 위아래를 더해 48 이상)
-  static double heightOf(String size) => switch (size) { 'l' => 52.0, 's' => 40.0, _ => 48.0 };
+  static double heightOf(String size) => switch (size) { 'l' => ControlSize.buttonL, 's' => ControlSize.buttonS, _ => ControlSize.buttonM };
 
   @override
   State<Btn> createState() => _BtnState();
@@ -863,7 +950,7 @@ class BookRow extends StatelessWidget {
   final String? label;
   final bool? selected;
 
-  static double coverWidth(BookRowSize s) => switch (s) { BookRowSize.small => 40, BookRowSize.medium => 64, BookRowSize.large => 80 };
+  static double coverWidth(BookRowSize s) => switch (s) { BookRowSize.small => CoverSize.row, BookRowSize.medium => CoverSize.result, BookRowSize.large => CoverSize.list };
 
   @override
   Widget build(BuildContext context) {
@@ -876,9 +963,9 @@ class BookRow extends StatelessWidget {
           child: ExcludeSemantics(
             excluding: label != null,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text(title, maxLines: titleLines ?? (size == BookRowSize.small ? 1 : 2), overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-            if (meta != null && meta!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
-            if (third != null && third!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(third!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.caption)),
+            Text(title, maxLines: titleLines ?? (size == BookRowSize.small ? 1 : 2), overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
+            if (meta != null && meta!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
+            if (third != null && third!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(third!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bookNote)),
             ]),
           ),
         ),
@@ -910,8 +997,8 @@ class NoBookCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: width,
-        height: width / 0.68,
-        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(3)),
+        height: width / CoverSize.ratio,
+        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(Shape.cover)),
         child: Center(child: LucideIcon('BookOpen', size: width * 0.45, color: AppColors.inkFaint)),
       );
 }
@@ -996,7 +1083,7 @@ class _RealCoverState extends State<RealCover> {
           width: w,
           height: h,
           padding: const EdgeInsets.all(pad),
-          decoration: BoxDecoration(color: hexColor(widget.color), borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: hexColor(widget.color), borderRadius: BorderRadius.circular(Shape.cover)),
           alignment: Alignment.center,
           child: WordText(widget.title, maxLines: 4, textAlign: TextAlign.center, style: style.copyWith(fontSize: _titleSize(context, style, w - pad * 2))),
         ),
@@ -1004,7 +1091,7 @@ class _RealCoverState extends State<RealCover> {
     }
     return ExcludeSemantics(
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.circular(Shape.cover),
         child: Container(width: w, height: h, color: AppColors.surface, child: _img == null ? null : RawImage(image: _img, fit: BoxFit.cover, width: w, height: h)),
       ),
     );
@@ -1096,9 +1183,9 @@ class Segmented<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(children: [
         Positioned.fill(
-          top: 4,
-          bottom: 4,
-          child: DecoratedBox(decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12))),
+          top: ControlSize.segmentInset,
+          bottom: ControlSize.segmentInset,
+          child: DecoratedBox(decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(Shape.segmented))),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -1114,16 +1201,16 @@ class Segmented<T> extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: () => onChange(id),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        padding: const EdgeInsets.symmetric(vertical: ControlSize.segmentPad),
                         child: Container(
-                          constraints: const BoxConstraints(minHeight: 38),
+                          constraints: const BoxConstraints(minHeight: ControlSize.segment),
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           alignment: Alignment.center,
                           decoration: id == value
                               ? BoxDecoration(
                                   color: AppColors.bg,
-                                  borderRadius: BorderRadius.circular(9),
-                                  boxShadow: const [BoxShadow(color: Color(0x14191F28), offset: Offset(0, 2), blurRadius: 6)],
+                                  borderRadius: BorderRadius.circular(Shape.segment),
+                                  boxShadow: const [Shape.segmentShadow],
                                 )
                               : null,
                           child: Text(label,
@@ -1184,9 +1271,9 @@ class FilterButton extends StatelessWidget {
       child: GestureDetector(
         onTap: onPress,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 40, maxWidth: 220),
+          constraints: const BoxConstraints(minHeight: ControlSize.filter, maxWidth: 220),
           padding: const EdgeInsets.only(left: 16, right: 12),
-          decoration: BoxDecoration(color: active ? AppColors.chipOn : AppColors.surface, borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(color: active ? AppColors.chipOn : AppColors.surface, borderRadius: BorderRadius.circular(Shape.filterPill)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),
             const SizedBox(width: 4),
@@ -1305,7 +1392,7 @@ Future<T?> showSheet<T>(BuildContext context, {String? title, String? descriptio
     barrierColor: AppColors.scrim,
     // 뒤 덮개 이름(기본은 영어 'Scrim'으로 읽혔다, 2026-11-16 QA 영숙 F10)
     barrierLabel: '닫기',
-    constraints: const BoxConstraints(maxWidth: _sheetMax),
+    constraints: const BoxConstraints(maxWidth: sheetMax),
     builder: (ctx) {
       final insets = MediaQuery.paddingOf(ctx);
       final body = builder(ctx);
@@ -1371,7 +1458,7 @@ class Tabs<T> extends StatelessWidget {
       final on = it.id == value;
       final text = fill
           ? AppType.labelStrong.copyWith(color: on ? AppColors.ink : AppColors.inkSoft)
-          : AppType.body.copyWith(color: on ? AppColors.ink : AppColors.inkSoft, fontFamily: on ? AppFonts.uiBold : AppFonts.ui);
+          : (on ? AppType.body.strong : AppType.body.copyWith(color: AppColors.inkSoft));
       return Semantics(
         container: true,
         selected: on,
@@ -1476,7 +1563,7 @@ class FilterGroup extends StatelessWidget {
 /// 고르는 원(하나 고르기 시트 · 여러 권 고르기 · 진열할 책 고르기 · 바코드 · 목록 가져오기 모두 이것, 2026-11-19 공통 규칙).
 /// dim: 이미 있어서 고를 수 없는 것(흐린 채움 + 체크)
 class RadioMark extends StatelessWidget {
-  const RadioMark({super.key, required this.on, this.size = 22, this.dim = false});
+  const RadioMark({super.key, required this.on, this.size = ControlSize.radio, this.dim = false});
   final bool on;
   final double size;
   final bool dim;
@@ -1491,7 +1578,7 @@ class RadioMark extends StatelessWidget {
           color: dim ? AppColors.inkFaint : on ? AppColors.accent : AppColors.white,
           border: Border.all(color: dim ? AppColors.inkFaint : on ? AppColors.accent : AppColors.line, width: 1.5),
         ),
-        child: on || dim ? Center(child: LucideIcon('Check', size: size * 0.58, color: AppColors.onAccent, stroke: 3)) : null,
+        child: on || dim ? Center(child: LucideIcon('Check', size: size * 0.58, color: AppColors.onAccent, stroke: IconSize.checkStroke)) : null,
       );
 }
 
@@ -1586,9 +1673,9 @@ class _SearchFieldState extends State<SearchField> {
   }
 
   @override
-  // 높이 44(2026-11-18 사용자 '검색창 두께 좀 줄이고', 예전 52)
+  // 높이 ControlSize.search(2026-11-18 사용자 '검색창 두께 좀 줄이고', 예전 52)
   Widget build(BuildContext context) => Container(
-        constraints: const BoxConstraints(minHeight: 44),
+        constraints: const BoxConstraints(minHeight: ControlSize.search),
         padding: const EdgeInsets.only(right: 2),
         decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
         child: Row(children: [
@@ -1760,12 +1847,12 @@ class _ChoiceBoxState extends State<_ChoiceBox> {
         onTapUp: (_) => setState(() => _down = false),
         onTap: widget.onPress,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
+          constraints: const BoxConstraints(minHeight: ControlSize.choice),
           padding: widget.compact ? const EdgeInsets.symmetric(vertical: 12, horizontal: 8) : const EdgeInsets.all(16),
           alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
             color: _down && !widget.selected ? AppColors.surface : AppColors.bg,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Shape.choice),
             border: Border.all(color: widget.selected ? AppColors.accent : AppColors.line, width: 1.5),
           ),
           child: widget.child,
@@ -1780,6 +1867,14 @@ abstract final class NightColors {
   static const line = Color.fromRGBO(246, 239, 230, 0.22);
   static const shade = Color.fromRGBO(16, 13, 11, 0.28);
   static const fade = Color(0xFF100D0B);
+
+  static const all = <String, (Color, String)>{
+    'ink': (ink, '장면 위 글자'),
+    'inkSoft': (inkSoft, '장면 위 보조 글자(ink 78%)'),
+    'line': (line, '장면 위 선(ink 22%)'),
+    'shade': (shade, '장면 위 글자 그림자(28%)'),
+    'fade': (fade, '장면 아래 어둠'),
+  };
 }
 
 /// 막대 조절(소리 크기): 누른 곳부터 끌어 바꾸고, 손을 떼면 onCommit. dim이면 켜진 쪽·손잡이를 회색으로(값은 지키되 꺼진 상태).
@@ -1934,7 +2029,7 @@ class _FieldState extends State<Field> {
         _LabelRow(l.name, l.tag),
         Stack(children: [
           Container(
-            constraints: BoxConstraints(minHeight: widget.minHeight ?? (widget.multiline ? 110 : 56)),
+            constraints: BoxConstraints(minHeight: widget.minHeight ?? (widget.multiline ? ControlSize.fieldMultiline : ControlSize.field)),
             decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input), border: Border.all(color: border)),
             child: Semantics(
               label: widget.label,
@@ -1996,7 +2091,7 @@ class SelectField extends StatelessWidget {
             onTap: disabled ? null : onPress,
             child: Container(
               // 입력칸(Field)과 같은 높이 56(2026-11-19 공통 규칙: 52였다)
-              constraints: const BoxConstraints(minHeight: 56),
+              constraints: const BoxConstraints(minHeight: ControlSize.field),
               padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m),
               decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
               child: Row(children: [
@@ -2063,7 +2158,7 @@ class TextLink extends StatelessWidget {
                 // 가운데 정렬은 양옆 8을 누르는 자리로 둔다(지금 앱 hitSlop 8). 왼쪽 정렬은 글자가 위 글줄과 맞게 여백 없이
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: start ? 0 : 8),
-                  child: Center(widthFactor: 1, child: WordText(label, style: AppType.sub.copyWith(fontFamily: AppFonts.uiBold, color: soft ? AppColors.inkSoft : ink ? AppColors.ink : AppColors.accent))),
+                  child: Center(widthFactor: 1, child: WordText(label, style: soft ? AppType.link.copyWith(color: AppColors.inkSoft) : ink ? AppType.link.copyWith(color: AppColors.ink) : AppType.link)),
                 ),
               ),
             ),
@@ -2094,7 +2189,7 @@ class SectionHead extends StatelessWidget {
             Semantics(
               header: true,
               child: Text.rich(TextSpan(text: title, style: AppType.section, children: [
-                if (count != null) TextSpan(text: '  $count', style: AppType.sub.copyWith(fontFamily: AppFonts.uiMedium)),
+                if (count != null) TextSpan(text: '  $count', style: AppType.count),
               ])),
             ),
             if (note != null) Padding(padding: const EdgeInsets.only(top: 2), child: WordText(note!, style: AppType.sub)),
@@ -2180,7 +2275,7 @@ class FilterToggleRow extends StatelessWidget {
 /// 필터 시트의 고르는 칸(갈피 유형·내 책 정렬, 2026-11-17 사용자 시안): 테두리 상자, 고르면 진한 테두리와 오른쪽 위 모서리에 체크.
 /// 체크는 둥근 모서리 위에 걸치게(가운데가 모서리 곡선 위, 2026-11-17 사용자 '조금만 오른쪽으로, 모서리에')
 /// 고르는 칸 모서리 체크 지름(바깥 흰 테 2 포함). 시안: 칸 높이의 약 0.45
-const _choiceBadge = 24.0;
+const _choiceBadge = ControlSize.choiceBadge;
 
 class ChoiceBox extends StatelessWidget {
   const ChoiceBox({super.key, required this.label, required this.on, required this.onPress});
@@ -2228,6 +2323,9 @@ class ChoiceBox extends StatelessWidget {
 }
 
 /// 켜고 끄는 스위치(갈색 둥근 바탕 안에 흰 손잡이, 50×30·손잡이 24). 안드로이드 기본 스위치는 손잡이가 바탕 밖으로 커서 직접 그린다
+/// 스위치 손잡이와 바탕 끝 사이((30 - 24) / 2)
+const _toggleInset = (ControlSize.toggleHeight - ControlSize.toggleKnob) / 2;
+
 class Toggle extends StatelessWidget {
   const Toggle({super.key, required this.value, required this.onChange, required this.label});
   final bool value;
@@ -2246,24 +2344,24 @@ class Toggle extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () => onChange(!value),
           child: SizedBox(
-            width: 50,
+            width: ControlSize.toggleWidth,
             height: Space.hit,
             child: Center(
               child: TweenAnimationBuilder<double>(
                 tween: Tween(end: value ? 1 : 0),
                 duration: const Duration(milliseconds: 160),
                 builder: (_, x, _) => Container(
-                  width: 50,
-                  height: 30,
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(color: Color.lerp(AppColors.track, AppColors.accent, x), borderRadius: BorderRadius.circular(15)),
+                  width: ControlSize.toggleWidth,
+                  height: ControlSize.toggleHeight,
+                  padding: const EdgeInsets.all(_toggleInset),
+                  decoration: BoxDecoration(color: Color.lerp(AppColors.track, AppColors.accent, x), borderRadius: BorderRadius.circular(ControlSize.toggleHeight / 2)),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Transform.translate(
-                      offset: Offset(x * (50 - 24 - 6), 0),
+                      offset: Offset(x * (ControlSize.toggleWidth - ControlSize.toggleKnob - _toggleInset * 2), 0),
                       child: Container(
-                        width: 24,
-                        height: 24,
+                        width: ControlSize.toggleKnob,
+                        height: ControlSize.toggleKnob,
                         decoration: const BoxDecoration(
                           color: AppColors.white,
                           shape: BoxShape.circle,
@@ -2665,7 +2763,7 @@ class _WheelState extends State<_Wheel> {
                   child: Text(
                     widget.text?.call(i) ?? i.toString().padLeft(2, '0'),
                     // 고르지 않은 값도 읽히게 보조 글자색(옅은 회색은 흰 바탕에서 대비가 2:1이 안 됐다, 2026-11-16 QA 영숙 F18). 고른 값은 진한 굵은 글자 + 회색 띠
-                    style: AppType.section.copyWith(fontFamily: i == _cur ? AppFonts.uiBold : AppFonts.ui, color: i == _cur ? AppColors.ink : AppColors.inkSoft, fontFeatures: const [FontFeature.tabularFigures()]),
+                    style: i == _cur ? AppType.wheel.strong.copyWith(color: AppColors.ink) : AppType.wheel,
                   ),
                 ),
               ),

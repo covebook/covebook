@@ -2,7 +2,7 @@
 // 문장 갈피는 오른쪽 위에 한지 테이프, 사진 갈피는 인화 사진. 아래에 출처(표지·제목·저자·날짜), 목록에서는 오른쪽 아래 '아껴두기'
 // 2026-11-16 QA 은서 F11: 글이 있는 갈피는 원본 사진을 곁들여도 문장 갈피(문장이 주인공, 사진은 문장 아래 작게). 쪽 표기는 'p. 118' 하나로.
 // F13: 줄바꿈이 있는 글(시)은 화면 폭 때문에 접힌 줄을 들여 써 진짜 줄바꿈과 구분하고, 목록에서 줄 수를 넘으면 끝에 '…'
-// 카드의 글자 크기·색·여백 숫자는 옛 앱 화소 값 그대로(시안 99% 맞춤, docs/UI_CONVENTIONS.md 9장 예외)
+// 카드의 글자 크기·색·여백 숫자는 옛 앱 화소 값 그대로(시안 99% 맞춤, docs/design/DESIGN.md 9장 예외)
 library;
 
 import 'dart:math' as math;
@@ -20,6 +20,9 @@ import 'mark_text.dart';
 import 'photo_plate.dart';
 
 const cardPaper = Color(0xFFFFFFFF);
+
+/// 갈피 카드 종이 그림자(CSS 값 그대로, 시안 토큰 shadow.bookmarkCard)
+final bookmarkCardShadow = [cssShadow(const Color.fromRGBO(60, 50, 45, 0.06), 0, 1, 2), cssShadow(const Color.fromRGBO(60, 50, 45, 0.05), 0, 3, 10)];
 const _coverRatio = 40 / 56;
 const _deg = math.pi / 180;
 
@@ -225,7 +228,7 @@ class BookmarkCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cardPaper,
         borderRadius: BorderRadius.circular(8),
-        boxShadow: [cssShadow(const Color.fromRGBO(60, 50, 45, 0.06), 0, 1, 2), cssShadow(const Color.fromRGBO(60, 50, 45, 0.05), 0, 3, 10)],
+        boxShadow: bookmarkCardShadow,
       ),
       child: Stack(clipBehavior: Clip.none, children: [
         Positioned.fill(child: BookmarkPaper(color: cardPaper, radius: 8, seed: '$seed-front')),

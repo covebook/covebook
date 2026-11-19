@@ -5,7 +5,7 @@
 // 2026-11-16 QA 은서 F1: 수정·삭제·공유는 늘 화면에 보이는 갈피(넘길 때마다 그 갈피 id를 기억한다). 수정에서 돌아오면 넘기기 목록을
 // 그 갈피 자리에서 다시 붙인다(전에는 처음 연 갈피 자리로 붙어 보이는 갈피와 수정·삭제 대상이 달랐다). 삭제 확인창에 어느 갈피인지 보인다.
 // 영숙 F18: 아래 줄은 한 줄에 다 들어가면 '— 책장 한켠'과 '수정·공유'를 양끝에, 안 들어가면(큰 글씨) '수정·공유'만 가운데(빈 구분선 없음)
-// 공유 그림(화면 뒤 카드와 서명)의 글자·색 숫자는 옛 앱 화소 값 그대로(docs/UI_CONVENTIONS.md 9장)
+// 공유 그림(화면 뒤 카드와 서명)의 글자·색 숫자는 옛 앱 화소 값 그대로(docs/design/DESIGN.md 9장 예외)
 library;
 
 import 'dart:io';
@@ -43,7 +43,7 @@ BookmarkCardData? cardData(Library lib, Bookmark m, {bool short = false}) {
   return BookmarkCardData(
     text: m.text,
     title: e.title,
-    author: e.authors.isEmpty ? null : e.authors.join(', '),
+    author: e.authors.isEmpty ? null : authorLine(e.authors),
     page: m.page,
     date: short ? dateShort(m.createdAt) : dateLong(m.createdAt),
     memo: m.memo,
@@ -518,7 +518,7 @@ class _EditBookmarkState extends State<_EditBookmark> {
         children: [
           const SizedBox(height: Space.m),
           // 책 칸은 갈피 남기기 · 감상 수정과 같은 고르는 칸(쓴 갈피의 책은 바꾸지 않는다. 회색 글 한 줄이었다)
-          if (ed != null) SelectField(label: '책', value: ed.title, sub: ed.authors.isNotEmpty ? ed.authors.join(', ') : null, placeholder: '', disabled: true, onPress: () {}),
+          if (ed != null) SelectField(label: '책', value: ed.title, sub: ed.authors.isNotEmpty ? authorLine(ed.authors) : null, placeholder: '', disabled: true, onPress: () {}),
           if (_photo.uri != null)
             Padding(
               padding: const EdgeInsets.only(bottom: Space.l),

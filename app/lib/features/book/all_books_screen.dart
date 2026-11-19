@@ -513,7 +513,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             child: Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
               for (final (i, id) in ids.take(3).indexed) ...[
                 if (i > 0) const SizedBox(width: Space.m),
-                SizedBox(width: 56, child: BookVisual(lib: lib, id: id, width: 56)),
+                SizedBox(width: CoverSize.sheet, child: BookVisual(lib: lib, id: id, width: CoverSize.sheet)),
               ],
               if (ids.length > 3) Padding(padding: const EdgeInsets.only(left: Space.m, bottom: Space.xs), child: Text('외 ${ids.length - 3}권', style: AppType.sub)),
             ]),
@@ -653,7 +653,7 @@ class _GridCell extends StatelessWidget {
               ]),
               Padding(
                 padding: const EdgeInsets.only(top: Space.s),
-                child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(color: AppColors.ink)),
+                child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookGridTitle),
               ),
               // 저자가 길어도 '| 책장' 같은 뒤 표시는 잘리지 않게 저자만 줄인다(2026-11-16 QA 현우 F14: 'Antoine de Saint…'에서 책장 표시가 사라졌다)
               if (sub.isNotEmpty || tail.isNotEmpty)
@@ -661,11 +661,11 @@ class _GridCell extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 1),
                   child: LayoutBuilder(
                     builder: (context, box) => Row(children: [
-                      if (sub.isNotEmpty) Flexible(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro)),
+                      if (sub.isNotEmpty) Flexible(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookGridAuthor)),
                       if (tail.isNotEmpty)
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: box.maxWidth),
-                          child: MetaText('${sub.isNotEmpty ? metaSep : ''}$tail', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: AppType.micro),
+                          child: MetaText('${sub.isNotEmpty ? metaSep : ''}$tail', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: AppType.bookGridAuthor),
                         ),
                     ]),
                   ),

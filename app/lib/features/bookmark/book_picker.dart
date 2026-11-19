@@ -117,7 +117,7 @@ class _PickerState extends State<_Picker> {
       child: BookRow(
         cover: IgnorePointer(child: LinkedCover(lib: lib, id: id, width: BookRow.coverWidth(BookRowSize.small))),
         title: e?.title ?? '',
-        meta: [if (e != null && e.authors.isNotEmpty) e.authors.join(', '), fixed ? '목록에 있어요' : statusLabel[b.status]!].join(metaSep),
+        meta: [if (e != null && e.authors.isNotEmpty) authorLine(e.authors), fixed ? '목록에 있어요' : statusLabel[b.status]!].join(metaSep),
         trailing: _mark(id),
       ),
     );

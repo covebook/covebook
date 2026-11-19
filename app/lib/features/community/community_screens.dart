@@ -254,7 +254,7 @@ class ComposeScreen extends StatelessWidget {
                       child: Row(children: [
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(ed?.title ?? '제목 없음', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
+                            Text(ed?.title ?? '제목 없음', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
                             Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta, style: AppType.caption)),
                           ]),
                         ),
@@ -363,8 +363,8 @@ class _ShareDraftScreenState extends State<ShareDraftScreen> {
       children: [
         Padding(padding: const EdgeInsets.only(top: Space.tight), child: Text('공개할 것만 골라 주세요. 메모와 날짜는 공유되지 않아요.', style: AppType.sub)),
         Padding(padding: const EdgeInsets.only(top: Space.group), child: Text('책', style: AppType.section)),
-        Padding(padding: const EdgeInsets.only(top: 4), child: Text(payload['bookTitle']! as String, style: AppType.rowStrong)),
-        if (payload['bookAuthor'] case final String author) Text(author, style: AppType.sub),
+        Padding(padding: const EdgeInsets.only(top: 4), child: Text(payload['bookTitle']! as String, style: AppType.bookTitle)),
+        if (payload['bookAuthor'] case final String author) Text(author, style: AppType.bookAuthor),
         Padding(
           padding: const EdgeInsets.only(top: Space.item),
           child: ListGroup(children: [

@@ -44,7 +44,7 @@ BookShareData? bookShareData(Library lib, String id, Book? book) {
     id: id,
     book: book,
     title: e.title,
-    author: e.authors.isEmpty ? null : e.authors.join(', '),
+    author: e.authors.isEmpty ? null : authorLine(e.authors),
     note: note == null || note.isEmpty ? null : note,
     rating: b.rating,
     readTime: ms >= 60000 ? formatDuration(ms) : null,

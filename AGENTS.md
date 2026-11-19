@@ -11,6 +11,11 @@
 - main push에 `app/**` 변경이 있으면 안드로이드 Play 배포(`.github/workflows/android-flutter-play.yml`)도 자동으로 돌아 비공개 테스트(alpha)에 올라간다. 결과를 확인한다. 버전 이름은 `app/pubspec.yaml`의 `version`.
 - 서버(`server/**`) 변경은 push만으로 운영에 반영되지 않는다. KoDeploy에서 재배포해야 한다.
 
+## 화면 디자인
+- 규칙·역할·예외와 '무엇을 바꿀 때 어디를 고치나'는 `docs/design/DESIGN.md` 하나에 있다.
+- 값은 Flutter에서 한 번만 정의한다: 글꼴·크기·줄 높이·색은 `app/lib/ui/theme.dart`, 간격·모서리·조작부·아이콘·표지 크기와 공용 부품은 `app/lib/ui/kit.dart`. 화면 파일에 크기·색 숫자를 새로 쓰지 않는다.
+- 시안 토큰(`app/design-system/tokens.json`·`web/`)은 손으로 고치지 않는다. 값을 바꿨으면 `cd app && DESIGN_TOKENS_UPDATE=1 flutter test test/design_tokens_test.dart`로 다시 만들고 함께 커밋한다(안 하면 `flutter test`가 실패한다).
+
 ## 결제(인앱결제) 작업: 돈과 DB가 걸린 변경만 PR
 - 위 "무조건 main"의 예외다. 아래 변경은 main에 바로 올리지 않고 브랜치와 PR로 한다. 다른 사람이 확인한 뒤 머지하고, 머지 뒤 브랜치를 지운다.
   - DB 마이그레이션

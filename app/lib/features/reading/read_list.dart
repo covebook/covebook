@@ -217,13 +217,13 @@ class _ReadListState extends State<ReadList> {
           label: '$title 책 정보',
           excludeSemantics: true,
           onTap: featured == null ? null : open,
-          child: Pressable(onPress: featured == null ? null : open, child: _coverOf(lib, featured, 120)),
+          child: Pressable(onPress: featured == null ? null : open, child: _coverOf(lib, featured, CoverSize.feature)),
         ),
         const SizedBox(width: Space.l),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            WordText(title, maxLines: 2, style: AppType.heading),
-            if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+            WordText(title, maxLines: 2, style: AppType.bookFeatureTitle),
+            if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
             const SizedBox(height: Space.l),
             Text(_timeText(fMs, fActive), textAlign: TextAlign.right, style: AppType.section.tnum),
             const SizedBox(height: Space.s),

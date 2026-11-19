@@ -92,7 +92,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
     if (!mounted) return;
     final d = _Draft('search')
       ..title = c.title
-      ..authors = c.authors.join(', ')
+      ..authors = authorLine(c.authors)
       ..publisher = c.publisher ?? ''
       ..publishedAt = c.publishedAt ?? ''
       ..isbn = c.isbn13 ?? ''
@@ -200,12 +200,12 @@ class _AddBookScreenState extends State<AddBookScreen> {
       title: '추가했어요',
       builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (lib.books[id] != null) SizedBox(width: 88, child: BookVisual(lib: lib, id: id, width: 88)),
+          if (lib.books[id] != null) SizedBox(width: CoverSize.added, child: BookVisual(lib: lib, id: id, width: CoverSize.added)),
           const SizedBox(width: Space.l),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_draft.title, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-              if (_draft.authors.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(_draft.authors, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+              Text(_draft.title, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
+              if (_draft.authors.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(_draft.authors, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
               Padding(
                 padding: const EdgeInsets.only(top: Space.m),
                 child: Text(placed == 'shelf' ? '책장에 진열했어요' : keptTitle(full: placed == 'full'), style: AppType.button.copyWith(color: AppColors.accent)),
@@ -418,7 +418,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: Space.s, bottom: Space.l),
       child: Column(children: [
-        _shadowed(RealCover(uri: d.coverUri, title: d.title.isEmpty ? '표지' : d.title, width: 120)),
+        _shadowed(RealCover(uri: d.coverUri, title: d.title.isEmpty ? '표지' : d.title, width: CoverSize.confirm)),
         Padding(
           padding: const EdgeInsets.only(top: Space.l),
           child: CoverPhotoButton(
@@ -660,7 +660,7 @@ class _ResultRow extends StatelessWidget {
         child: _shadowed(RealCover(uri: c.coverUrl, title: c.title, width: BookRow.coverWidth(size), ratio: 0.72)),
       ),
       title: c.title,
-      meta: c.authors.isEmpty ? null : c.authors.join(', '),
+      meta: c.authors.isEmpty ? null : authorLine(c.authors),
       trailing: multi
           ? RadioMark(on: picked, dim: owned)
           // 오른쪽 + (이미 서재에 있는 책은 체크: 눌러도 별도 소장본으로 넣을지 묻는다). 시안처럼 작고 옅은 회색
@@ -674,7 +674,7 @@ class _ResultRow extends StatelessWidget {
       onPress: tap,
       selected: multi && picked,
       // 여러 권 고르기에서는 서재에 있는 책의 행동 이름이 '내 서재에 있음'이라 두 번 읽지 않는다(2026-11-18)
-      label: [c.title, if (c.authors.isNotEmpty) c.authors.join(', '), ?pub, if (owned && action != '내 서재에 있음') '내 서재에 있음', action].join(', '),
+      label: [c.title, if (c.authors.isNotEmpty) authorLine(c.authors), ?pub, if (owned && action != '내 서재에 있음') '내 서재에 있음', action].join(', '),
     );
   }
 }

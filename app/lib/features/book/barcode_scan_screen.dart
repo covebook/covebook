@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../domain/book_list_import.dart' show ImportRow, isbn13Of;
-import '../../domain/library.dart' show ReadStatus;
+import '../../domain/library.dart' show ReadStatus, authorLine;
 import '../../services/book_search.dart';
 import '../../store/library_model.dart';
 import '../../store/settings_store.dart';
@@ -202,7 +202,7 @@ class _ScanRow extends StatelessWidget {
     return BookRow(
       cover: RealCover(uri: b?.coverUrl, title: b?.title ?? s.code, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
       title: b?.title ?? 'ISBN ${s.code}',
-      meta: b != null && b.authors.isNotEmpty ? b.authors.join(', ') : null,
+      meta: b != null && b.authors.isNotEmpty ? authorLine(b.authors) : null,
       third: status,
       trailing: s.busy
           ? const SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.inkSoft))

@@ -140,7 +140,7 @@ class PostCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                     decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
                     child: Row(children: [
-                      RealCover(uri: p.coverUrl, title: p.bookTitle, color: _coverColor(p.bookTitle), width: 36, ratio: 0.7),
+                      RealCover(uri: p.coverUrl, title: p.bookTitle, color: _coverColor(p.bookTitle), width: CoverSize.post, ratio: 0.7),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

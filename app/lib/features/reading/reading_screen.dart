@@ -607,7 +607,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(soundOnly ? '소리와 함께 쉬어 가요' : bookTitle(lib, bookId) ?? '책 연결하기', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.section),
                     const SizedBox(height: 2),
-                    Text(soundOnly ? '독서 시간은 기록하지 않아요' : bookId != null ? bookAuthor(lib, bookId) : '책 없이 시작해도 좋아요', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
+                    Text(soundOnly ? '독서 시간은 기록하지 않아요' : bookId != null ? bookAuthor(lib, bookId) : '책 없이 시작해도 좋아요', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor),
                   ]),
                 ),
               ]),

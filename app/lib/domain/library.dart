@@ -651,6 +651,9 @@ String formatDuration(num ms) {
 /// 지난 시간: 1분이 안 되면 초까지('45초'), 그 밖은 분까지('3분'). 독서 끝 · 책 바꾸기 · 통계가 같이 쓴다(같은 식이 세 곳에 있었다)
 String formatDurationShort(num ms) => ms < 60000 ? formatDurationPrecise(ms) : formatDuration(ms);
 
+/// 작가 줄: 여러 작가는 쉼표로('클레어 키건, 홍한별'). 책 줄 · 책 정보 · 공유 그림이 모두 이것을 쓴다
+String authorLine(List<String> authors) => authors.join(', ');
+
 /// 책 색 표(장정이 없을 때 첫 색)
 const spinePalette = ['#3D5F57', '#1D426B', '#BE5D47', '#893E41', '#B5C7D7', '#F8C69F', '#E39E8A', '#4E6B60', '#F7E8D5', '#FAEDDE', '#6B5B7A', '#C9A46A'];
 

@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../domain/library.dart' show authorLine;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/kit.dart';
@@ -64,7 +65,7 @@ class _BindingScreenState extends State<BindingScreen> {
       children: [
         BindingEditor(
           title: e.title,
-          author: e.authors.join(', '),
+          author: authorLine(e.authors),
           size: e.widthMm != null && e.heightMm != null ? (widthMm: e.widthMm!, heightMm: e.heightMm!) : null,
           pages: e.pageCount,
           value: _v,

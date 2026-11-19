@@ -720,7 +720,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
         child: BookRow(
           cover: LinkedCover(lib: lib, id: widget.id, width: BookRow.coverWidth(BookRowSize.small)),
           title: e.title,
-          meta: [if (e.authors.isNotEmpty) e.authors.join(', '), '갈피 ${_marks.length}개'].join(metaSep),
+          meta: [if (e.authors.isNotEmpty) authorLine(e.authors), '갈피 ${_marks.length}개'].join(metaSep),
           trailing: Btn(
             label: '목록 보기',
             kind: 'secondary',

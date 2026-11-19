@@ -209,7 +209,7 @@ class _BindingEditorState extends State<BindingEditor> {
                   child: Row(
                     children: [
                       if (widget.realCover != null)
-                        RealCover(uri: coverAtSize(widget.realCover, 'L'), title: widget.title, color: v.spineColor, width: 22)
+                        RealCover(uri: coverAtSize(widget.realCover, 'L'), title: widget.title, color: v.spineColor, width: CoverSize.swatch)
                       else
                         Container(
                           width: 22,

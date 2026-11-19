@@ -148,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
         onPressed: onPressed,
         child: Text(
           label,
-          style: AppType.caption.copyWith(fontFamily: AppFonts.uiMedium),
+          style: AppType.loginLink,
         ),
       );
 
