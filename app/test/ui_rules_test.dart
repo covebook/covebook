@@ -155,17 +155,17 @@ void main() {
   });
 
   group('누르는 자리 48(DESIGN 15장)', () {
-    testWidgets('구역 링크 · 거르기 단추 · 칩', (t) async {
+    testWidgets('구역 링크 · 거르기 단추 · 작은 단추(칩 자리)', (t) async {
       await t.pumpWidget(_app(Scaffold(
         body: Column(children: [
           SectionHead(title: '독서 기록', link: '전체 보기', onLink: () {}, chevron: true),
           FilterButton(label: '모든 책', onPress: () {}),
-          AppChip(label: '읽는 중', onPress: () {}),
+          Btn(label: '다시 찍기', kind: 'secondary', size: 'small', onPress: () {}),
         ]),
       )));
       expect(t.getSize(find.ancestor(of: find.text('전체 보기'), matching: find.byType(ConstrainedBox)).first).height, greaterThanOrEqualTo(Space.hit));
       expect(t.getSize(find.byType(FilterButton)).height, greaterThanOrEqualTo(Space.hit));
-      expect(t.getSize(find.byType(AppChip)).height, greaterThanOrEqualTo(Space.hit));
+      expect(t.getSize(find.byType(Btn)).height, greaterThanOrEqualTo(Space.hit));
     });
   });
 

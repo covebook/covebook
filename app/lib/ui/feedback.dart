@@ -13,8 +13,8 @@ import 'alert.dart';
 import 'kit.dart';
 import 'theme.dart';
 
-/// 토스트를 얼마나 보이나: 되돌리기가 있으면 4초, 짧은 확인은 2.5초
-const toastShort = Duration(milliseconds: 2500), toastWithAction = Duration(seconds: 4);
+/// 토스트를 얼마나 보이나 = TDS Toast duration: 짧은 확인은 기본 3초, 되돌리기(단추)가 있으면 5초(theme.dart Motion)
+const toastShort = Motion.toast, toastWithAction = Motion.toastAction;
 
 _ToastHandle? _current;
 

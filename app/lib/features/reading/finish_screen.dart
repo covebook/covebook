@@ -228,14 +228,14 @@ class _FinishScreenState extends State<FinishScreen> {
       title: '독서 끝',
       back: false,
       topBar: true,
-      // 화면 아래 주요 단추는 l(2026-11-19 공통 규칙). 안내 · 저장 실패 글은 단추 바로 위
+      // 화면 아래 주요 단추는 xlarge(2026-11-19 공통 규칙). 안내 · 저장 실패 글은 단추 바로 위
       footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (tooShort) const NoticeText('1초가 안 되는 기록은 저장할 수 없어요. 이 기록은 버려 주세요.'),
         if (_saveError != null) NoticeText(_saveError!, error: true),
         if (tooShort || _saveError != null) const SizedBox(height: Space.m),
         Btn(
           label: '개인 기록 저장',
-          size: 'l',
+          size: 'xlarge',
           busy: _saving,
           disabled: !_lib.loaded || tooShort,
           onPress: () => fieldError != null ? _showError(fieldError) : _save(pending, sp, ep),
@@ -387,7 +387,8 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
                         ]),
                       ),
                       const SizedBox(height: Space.l),
-                      Btn(label: '확인', onPress: () => Navigator.pop(ctx)),
+                      // 가운데 작은 창 안 단추는 확인창과 같은 large(TDS ConfirmDialog 단추 기본값)
+                      Btn(label: '확인', size: 'large', onPress: () => Navigator.pop(ctx)),
                     ]),
                   ),
                 ),

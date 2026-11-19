@@ -146,7 +146,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                   padding: const EdgeInsets.only(top: 22),
                   child: Btn(
                     label: '책 정보 보기',
-                    size: 'l',
+                    size: 'xlarge',
                     onPress: () {
                       Navigator.pop(ctx);
                       openBook(context, bookId);
@@ -255,7 +255,7 @@ Future<void> _sampleSheet(BuildContext context, Book sample) => showModalBottomS
               padding: const EdgeInsets.only(top: 22),
               child: Btn(
                 label: '이 책을 내 책에 추가',
-                size: 'l',
+                size: 'xlarge',
                 onPress: () {
                   Navigator.pop(ctx);
                   openAddBook(context, q: sample.title);

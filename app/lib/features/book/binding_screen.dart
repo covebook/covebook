@@ -79,8 +79,8 @@ class _BindingScreenState extends State<BindingScreen> {
           onTap: _reset,
           child: TextLink(label: '초기화', soft: true, onPress: _reset),
         ),
-        // 화면 아래 주요 단추 l, 이름 '○○ 저장'(docs/design/DESIGN.md 5장)
-        footer: Btn(label: '장정 저장', size: 'l', onPress: _save, busy: _saving),
+        // 화면 아래 주요 단추 xlarge, 이름 '○○ 저장'(docs/design/DESIGN.md 5장)
+        footer: Btn(label: '장정 저장', size: 'xlarge', onPress: _save, busy: _saving),
         children: [
           BindingEditor(
             title: e.title,

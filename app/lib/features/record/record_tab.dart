@@ -179,7 +179,7 @@ class _RecordTabState extends State<RecordTab> {
           ...?more?.call(set),
           Btn(
             label: '적용',
-            size: 'l',
+            size: 'xlarge',
             onPress: () {
               Navigator.pop(ctx);
               onApply(picked);

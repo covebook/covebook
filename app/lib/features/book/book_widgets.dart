@@ -39,7 +39,7 @@ class CoverPhotoButton extends StatelessWidget {
   Widget build(BuildContext context) => Btn(
         label: hasCover ? '표지 바꾸기' : '표지 사진 등록',
         kind: 'secondary',
-        size: 's',
+        size: 'medium',
         onPress: () async {
           final r = await pickPhoto('library');
           if (!context.mounted) return;
@@ -109,7 +109,8 @@ Future<BookRemoval?> confirmRemoveBooks(BuildContext context, List<String> ids) 
       if (hidden.isNotEmpty && !hideOnly) Padding(padding: const EdgeInsets.only(top: Space.xs), child: WordText('${hidden.length}권은 $yearText에 있어서 숨기기만 해요.', style: AppType.sub)),
       if (hidden.isNotEmpty) Padding(padding: EdgeInsets.only(top: hideOnly ? 0 : Space.s), child: WordText(hiddenWhere, style: AppType.sub)),
       const SizedBox(height: Space.l),
-      Btn(label: hideOnly ? '숨기기' : '삭제', kind: hideOnly ? 'primary' : 'danger', size: 'l', onPress: () => Navigator.pop(ctx, true)),
+      // 지우기를 확정하는 단추는 danger fill(TDS Button color danger · variant fill)
+      Btn(label: hideOnly ? '숨기기' : '삭제', kind: hideOnly ? 'primary' : 'dangerFill', size: 'xlarge', onPress: () => Navigator.pop(ctx, true)),
       SubAction(label: '취소', onPress: () => Navigator.pop(ctx, false)),
     ]),
   );

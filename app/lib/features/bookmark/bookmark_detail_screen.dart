@@ -532,7 +532,7 @@ class _EditBookmarkState extends State<_EditBookmark> {
       child: Screen(
         title: isPhoto ? '사진 갈피 수정' : '갈피 수정',
         // 공통 규칙: 저장 단추는 '○○ 저장'(2026-11-19. '저장'이었다)
-        footer: Btn(label: '갈피 저장', size: 'l', busy: _saving, disabled: _text.trim().isEmpty && _photo.uri == null, onPress: _save),
+        footer: Btn(label: '갈피 저장', size: 'xlarge', busy: _saving, disabled: _text.trim().isEmpty && _photo.uri == null, onPress: _save),
         children: [
           const SizedBox(height: Space.m),
           // 책 칸은 갈피 남기기 · 감상 수정과 같은 고르는 칸(쓴 갈피의 책은 바꾸지 않는다. 회색 글 한 줄이었다)

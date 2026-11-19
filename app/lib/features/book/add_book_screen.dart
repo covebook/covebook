@@ -271,25 +271,25 @@ class _AddBookScreenState extends State<AddBookScreen> {
           ),
         ]),
         const SizedBox(height: Space.xl),
-        // 시트 안 단추는 l(2026-11-19 공통 규칙: 확인 시트는 l, 결과 시트는 m이었다)
+        // 시트 안 단추는 xlarge(2026-11-19 공통 규칙: 확인 시트는 l, 결과 시트는 m이었다)
         if (widget.pick)
-          Btn(label: '이 책으로 계속 쓰기', size: 'l', onPress: () => Navigator.pop(ctx))
+          Btn(label: '이 책으로 계속 쓰기', size: 'xlarge', onPress: () => Navigator.pop(ctx))
         // 바코드 · 목록 가져오기에서 왔으면 그 목록으로(여러 권 추가 결과의 '계속 추가'와 같은 뜻)
         else if (widget.fromList)
-          Btn(label: '계속 추가', size: 'l', onPress: () => Navigator.pop(ctx))
+          Btn(label: '계속 추가', size: 'xlarge', onPress: () => Navigator.pop(ctx))
         else ...[
           if (placed == 'shelf')
-            Btn(label: '책장에서 보기', size: 'l', onPress: () {
+            Btn(label: '책장에서 보기', size: 'xlarge', onPress: () {
               next = 'shelf';
               Navigator.pop(ctx);
             })
           else
-            Btn(label: '내 책 보기', size: 'l', onPress: () {
+            Btn(label: '내 책 보기', size: 'xlarge', onPress: () {
               next = 'books';
               Navigator.pop(ctx);
             }),
           const SizedBox(height: Space.s),
-          Btn(label: '책 정보 보기', kind: 'secondary', size: 'l', onPress: () {
+          Btn(label: '책 정보 보기', kind: 'secondary', size: 'xlarge', onPress: () {
             next = 'book';
             Navigator.pop(ctx);
           }),
@@ -375,9 +375,9 @@ class _AddBookScreenState extends State<AddBookScreen> {
         onLeave: _backToConfirm,
         child: Screen(
           title: '장정 미리보기',
-          // 화면 아래 주요 단추는 l(DESIGN 5-2)
+          // 화면 아래 주요 단추는 xlarge(DESIGN 5-2)
           footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Btn(label: '추가하고 책장에 진열', size: 'l', busy: _saving, onPress: () => _add()),
+            Btn(label: '추가하고 책장에 진열', size: 'xlarge', busy: _saving, onPress: () => _add()),
             SubAction(label: '보관만 하기', disabled: _saving, onPress: () => _add(keep: true)),
           ]),
           children: [
@@ -452,8 +452,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
       footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // 꺼진 주요 단추의 이유는 단추 바로 위 안내 글(DESIGN 9장)
         if (d.title.trim().isEmpty) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('제목을 적어야 추가할 수 있어요.', center: true)),
-        // 주요 행동: 추천 장정으로 바로 추가(책장에 놓기). 장정은 고르고 싶을 때만(보조). 화면 아래 주요 단추는 l(DESIGN 5-2)
-        Btn(label: '추천 장정으로 추가', size: 'l', disabled: !ready, busy: _saving, onPress: () => _confirmDuplicate(() => _add())),
+        // 주요 행동: 추천 장정으로 바로 추가(책장에 놓기). 장정은 고르고 싶을 때만(보조). 화면 아래 주요 단추는 xlarge(DESIGN 5-2)
+        Btn(label: '추천 장정으로 추가', size: 'xlarge', disabled: !ready, busy: _saving, onPress: () => _confirmDuplicate(() => _add())),
         SubAction(label: '장정 직접 고르기', disabled: !ready, onPress: () => _confirmDuplicate(_toBinding)),
       ]),
       children: [
@@ -482,9 +482,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 ]),
                 WordText('쪽수, 판형을 모르면 비워 두세요. 책장에는 흔한 크기로 보이고, 책 정보에는 ‘미입력’으로 표시돼요.', style: AppType.sub),
                 const H2('읽기 상태'),
-                Wrap(spacing: Space.s, runSpacing: Space.s, children: [
-                  for (final s in bookStatuses) AppChip(label: statusLabel[s]!, on: d.status == s, onPress: () => setState(() => d.status = s)),
-                ]),
+                // 하나 고르기: TDS에 칩이 없어 SegmentedControl(Radio와 같은 역할)
+                Segmented<ReadStatus>(items: [for (final s in bookStatuses) (s, statusLabel[s]!)], value: d.status, onChange: (s) => setState(() => d.status = s)),
               ]),
             ),
           ),
@@ -668,11 +667,11 @@ class _FindStepState extends State<_FindStep> {
         left: _m.multi ? TextLink(label: '취소', ink: true, onPress: _endMulti) : null,
         // 엑셀·CSV 목록으로 여러 권(책 고르기에서 왔을 때는 한 권만 고르므로 없음)
         right: widget.pick || _m.multi ? null : TextLink(label: '목록 가져오기', soft: true, onPress: () => openImportList(context)),
-        // 화면 아래 주요 단추 l. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
+        // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
         footer: _m.multi
             ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (n == 0) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('추가할 책을 골라 주세요.', center: true)),
-                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'l', disabled: n == 0, onPress: () => widget.onAddMany(_m.picked.values.toList())),
+                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'xlarge', disabled: n == 0, onPress: () => widget.onAddMany(_m.picked.values.toList())),
               ])
             : null,
         children: [

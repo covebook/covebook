@@ -136,13 +136,13 @@ class _MarkShareState extends State<_MarkShare> {
           // 공통 규칙: 안내 글은 sub(2026-11-19. caption이었다)
           child: WordText('글이 길어 그림에는 앞부분만 들어가요. 끝에 \'…\'로 표시돼요.', textAlign: TextAlign.center, style: AppType.sub),
         ),
-      // 시트 안 단추는 l(공통 규칙 7장)
+      // 시트 안 단추는 xlarge(TDS Button 기본값, 공통 규칙 7장)
       Row(children: [
         if (_canSave) ...[
-          Expanded(child: Btn(label: _saved ? '저장했어요' : '사진 저장', kind: 'secondary', size: 'l', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
+          Expanded(child: Btn(label: _saved ? '저장했어요' : '사진 저장', kind: 'secondary', size: 'xlarge', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
           const SizedBox(width: Space.s),
         ],
-        Expanded(child: Btn(label: '공유', size: 'l', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
+        Expanded(child: Btn(label: '공유', size: 'xlarge', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
       ]),
     ]);
   }

@@ -234,7 +234,7 @@ class _PickerState extends State<_Picker> {
       if (m != null)
         Padding(
           padding: const EdgeInsets.only(top: Space.s),
-          child: Btn(label: _picked.isEmpty ? '완료' : '완료 (${_picked.length})', size: 'l', onPress: () => widget.onDone?.call(List.of(_picked))),
+          child: Btn(label: _picked.isEmpty ? '완료' : '완료 (${_picked.length})', size: 'xlarge', onPress: () => widget.onDone?.call(List.of(_picked))),
         ),
     ]);
   }

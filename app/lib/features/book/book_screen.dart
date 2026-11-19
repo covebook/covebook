@@ -359,12 +359,12 @@ class _BookScreenState extends State<BookScreen> {
             : '읽기 시작';
     return IntrinsicHeight(
       child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Expanded(child: Btn(label: '갈피 남기기', kind: 'secondary', size: 'l', onPress: () => openNewBookmark(context, book: widget.id))),
+        Expanded(child: Btn(label: '갈피 남기기', kind: 'secondary', size: 'xlarge', onPress: () => openNewBookmark(context, book: widget.id))),
         const SizedBox(width: Space.s),
         Expanded(
           child: Btn(
             label: readLabel,
-            size: 'l',
+            size: 'xlarge',
             // 그 책으로 바로 독서를 시작하고 읽기 화면을 연다(2026-11-16 QA 영숙 F2: 읽기 탭 목록에 올리기만 하고 시계가 가지 않았다)
             // 완독한 책의 '다시 읽기'는 새 회차를 먼저 묻는다(지난 회차에 이어 붙지 않게)
             // 완독한 책의 '다시 읽기' 확인은 읽기 시작 한 곳(confirmReread)이 묻는다. 재는 중이면 묻지 않고 장면으로(점검 B7)

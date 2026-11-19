@@ -246,7 +246,7 @@ class _ReviewFormState extends State<_ReviewForm> {
   }
 
   // 쓰던 후기가 있으면 시트를 닫을 때 묻는다(공용 DraftGuard: 새로 쓰기 · 고치기, 2026-11-19 공통 규칙: 말없이 버려졌다).
-  // 별이 없으면 저장할 수 없어 단추 위에 까닭(docs/design/DESIGN.md 9장). 시트 안 확정 단추는 l
+  // 별이 없으면 저장할 수 없어 단추 위에 까닭(docs/design/DESIGN.md 9장). 시트 안 확정 단추는 xlarge
   @override
   Widget build(BuildContext context) {
     final noStar = _rating == null || _rating == 0;
@@ -259,7 +259,7 @@ class _ReviewFormState extends State<_ReviewForm> {
       if (noStar) const NoticeText('별점을 골라야 저장할 수 있어요.'),
       Padding(
         padding: const EdgeInsets.only(top: Space.item),
-        child: Btn(label: '후기 저장', size: 'l', disabled: noStar, busy: _busy, onPress: _save),
+        child: Btn(label: '후기 저장', size: 'xlarge', disabled: noStar, busy: _busy, onPress: _save),
       ),
     ]);
     return widget.editing ? DraftGuard.edit(dirty: _dirty, child: body) : DraftGuard(dirty: _dirty, child: body);

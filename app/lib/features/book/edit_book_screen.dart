@@ -146,13 +146,13 @@ class _EditBookScreenState extends State<EditBookScreen> {
       dirty: () => _dirty && !_saving,
       child: Screen(
         title: '책 정보 수정',
-        // 화면 아래 주요 단추 l, 이름 '○○ 저장'(docs/design/DESIGN.md 5장). 제목이 비면 할 일이 없어 꺼 두고 까닭은 단추 위에
+        // 화면 아래 주요 단추 xlarge, 이름 '○○ 저장'(docs/design/DESIGN.md 5장). 제목이 비면 할 일이 없어 꺼 두고 까닭은 단추 위에
         footer: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
           if (_saveError case final m?)
             Padding(padding: const EdgeInsets.only(bottom: Space.s), child: NoticeText(m, error: true))
           else if (_f['title']!.trim().isEmpty)
             const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('제목을 적어야 저장할 수 있어요.')),
-          Btn(label: '책 정보 저장', size: 'l', onPress: _save, busy: _saving, disabled: _f['title']!.trim().isEmpty),
+          Btn(label: '책 정보 저장', size: 'xlarge', onPress: _save, busy: _saving, disabled: _f['title']!.trim().isEmpty),
         ]),
         children: [
           // 표지 96 · 사이 16 · 표지 단추(책 확인과 같은 이름 · 모양) · 글자만 '표지 삭제'(2026-11-19 공통 규칙)

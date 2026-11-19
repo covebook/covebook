@@ -1,12 +1,11 @@
 // 공용 부품이 넘치거나 깨지지 않고 그려지는지(폰 폭 411·큰 글자 1.3배)
 import 'package:chaekjang/ui/kit.dart';
-import 'package:chaekjang/ui/theme.dart';
 import 'package:flutter/material.dart' hide Chip;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   for (final scale in [1.0, 1.3]) {
-    testWidgets('화면 틀·목록·전환 칸·칩·빈 화면(글자 $scale배)', (t) async {
+    testWidgets('화면 틀·목록·전환 칸·작은 단추·빈 화면(글자 $scale배)', (t) async {
       t.view.physicalSize = const Size(1080, 2340);
       t.view.devicePixelRatio = 2.625;
       addTearDown(t.view.reset);
@@ -29,7 +28,8 @@ void main() {
                 const ListItem(label: '두 번째 줄'),
               ]),
               const SectionBand(),
-              Wrap(spacing: 8, children: [AppChip(label: '전체', on: true, onPress: () {}), AppChip(label: '읽는 중', onPress: () {}, color: AppColors.accent)]),
+              // 칩은 없앴다(TDS에 칩 없음): 행동 칩 자리는 작은 weak 단추
+              Wrap(spacing: 8, children: [Btn(label: '다시 찍기', kind: 'secondary', size: 'small', onPress: () {}), Btn(label: '사진 빼기', kind: 'secondary', size: 'small', onPress: () {})]),
               FilterButton(label: '모든 책', onPress: () {}),
               FilterButton(label: '2026년', onPress: () {}, active: true),
               Empty(title: '아직 기록이 없어요', body: '읽기 탭에서 시작해 보세요', action: '읽기 시작', onAction: () {}),

@@ -412,11 +412,11 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           WordText(active ? '소리는 독서 타이머와 따로 켜고 꺼요. 읽은 시간은 그대로예요.' : '시간을 재지 않고 소리만 들어요. 독서 시간에는 쌓이지 않아요.', style: AppType.sub),
           Padding(
             padding: const EdgeInsets.only(top: Space.m),
-            // 시트 안 단추는 l(2026-11-19 공통 규칙)
+            // 시트 안 단추는 xlarge(TDS Button 기본값 · 2026-11-19 공통 규칙)
             child: Btn(
               label: _audio.playing ? (active ? '소리 끄기' : '소리 멈추기') : active ? '소리 켜기' : '소리만 듣기',
               kind: 'secondary',
-              size: 'l',
+              size: 'xlarge',
               onPress: () => _audio.playing ? _audio.pause() : _audio.play(_settings.scene),
             ),
           ),

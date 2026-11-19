@@ -739,7 +739,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
           trailing: Btn(
             label: '목록 보기',
             kind: 'secondary',
-            size: 's',
+            size: 'medium',
             onPress: () {
               Navigator.of(context).popUntil((r) => r.isFirst);
               AppNav.instance.goBookmarks(widget.id);
@@ -780,14 +780,14 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
           child: Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 16),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Btn(label: '전체 보기', kind: 'secondary', size: 's', disabled: _marks.isEmpty, onPress: _fit),
+              Btn(label: '전체 보기', kind: 'secondary', size: 'medium', disabled: _marks.isEmpty, onPress: _fit),
               // 화면 읽기 이름은 '갈피 추가'(단추 글은 '+ 갈피'라 '갈피'로만 읽혔다. Btn에 이름을 따로 줄 길이 없어 바깥에서 준다)
               Semantics(
                 button: true,
                 label: '갈피 추가',
                 onTap: _addHere,
                 excludeSemantics: true,
-                child: Btn(label: '갈피', kind: 'secondary', size: 's', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
+                child: Btn(label: '갈피', kind: 'secondary', size: 'medium', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
               ),
             ]),
           ),

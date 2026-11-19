@@ -29,7 +29,8 @@ const markMemoLabel = '한 줄 메모 (선택)', markMemoHint = '나만 보는 �
       _ => null,
     };
 
-/// 사진 칩 줄(갈피 남기기 · 갈피 수정): 다시 찍기 · 다른 사진 · (onRemove가 있으면) 사진 빼기. 사진 아래 가운데
+/// 사진 단추 줄(갈피 남기기 · 갈피 수정): 다시 찍기 · 다른 사진 · (onRemove가 있으면) 사진 빼기. 사진 아래 가운데.
+/// TDS에 칩이 없어 행동 단추는 Button small weak(dark)
 class PhotoChips extends StatelessWidget {
   const PhotoChips({super.key, required this.onCamera, required this.onLibrary, this.onRemove});
   final VoidCallback onCamera, onLibrary;
@@ -39,9 +40,9 @@ class PhotoChips extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: Space.s),
         child: Wrap(alignment: WrapAlignment.center, spacing: Space.s, runSpacing: Space.s, children: [
-          AppChip(label: '다시 찍기', onPress: onCamera),
-          AppChip(label: '다른 사진', onPress: onLibrary),
-          if (onRemove != null) AppChip(label: '사진 빼기', onPress: onRemove),
+          Btn(label: '다시 찍기', kind: 'secondary', size: 'small', onPress: onCamera),
+          Btn(label: '다른 사진', kind: 'secondary', size: 'small', onPress: onLibrary),
+          if (onRemove != null) Btn(label: '사진 빼기', kind: 'secondary', size: 'small', onPress: onRemove!),
         ]),
       );
 }

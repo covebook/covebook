@@ -238,7 +238,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       Row(children: [
         Expanded(
           child: Btn(
-            size: 'l',
+            size: 'xlarge',
             kind: hideOnly ? 'secondary' : 'danger',
             label: picked.isNotEmpty ? '${picked.length}권 $verb' : verb,
             disabled: picked.isEmpty,
@@ -246,7 +246,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
           ),
         ),
         const SizedBox(width: Space.s),
-        Expanded(child: Btn(size: 'l', label: chosen.isNotEmpty ? '${chosen.length}권 진열' : '진열', disabled: chosen.isEmpty, onPress: () => _placeNow(chosen))),
+        Expanded(child: Btn(size: 'xlarge', label: chosen.isNotEmpty ? '${chosen.length}권 진열' : '진열', disabled: chosen.isEmpty, onPress: () => _placeNow(chosen))),
       ]),
     ]);
   }
@@ -468,8 +468,8 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             ),
           ],
           const SizedBox(height: Space.l),
-          // 시트 안 단추는 l(2026-11-19 공통 규칙)
-          Btn(label: '적용', size: 'l', onPress: () {
+          // 시트 안 단추는 xlarge(2026-11-19 공통 규칙)
+          Btn(label: '적용', size: 'xlarge', onPress: () {
             Navigator.pop(ctx);
             setState(() {
               _sort = sort;
@@ -512,7 +512,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                 trailing: Btn(
                   label: '다시 보이기',
                   kind: 'secondary',
-                  size: 's',
+                  size: 'medium',
                   busy: busy.contains(b.id),
                   onPress: () async {
                     final title = lib.editions[b.editionId]?.title ?? '책';

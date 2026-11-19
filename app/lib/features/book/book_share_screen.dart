@@ -206,10 +206,10 @@ class _BookShareScreenState extends State<BookShareScreen> {
       footer: Row(children: [
         if (_canSave) ...[
           // 공유 그림을 사진첩에 넣는 단추는 '사진 저장'(docs/design/DESIGN.md 9장)
-          Expanded(child: Btn(label: '사진 저장', kind: 'secondary', size: 'l', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _run('save'))),
+          Expanded(child: Btn(label: '사진 저장', kind: 'secondary', size: 'xlarge', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _run('save'))),
           const SizedBox(width: Space.s),
         ],
-        Expanded(child: Btn(label: '공유', size: 'l', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _run('share'))),
+        Expanded(child: Btn(label: '공유', size: 'xlarge', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _run('share'))),
       ]),
       children: [
         Padding(
@@ -279,7 +279,7 @@ class _CheckLine extends StatelessWidget {
             child: Opacity(
               opacity: enabled ? 1 : disabledOpacity,
               child: Row(children: [
-                CheckSquare(on: on),
+                CheckCircle(on: on),
                 const SizedBox(width: Space.m),
                 Flexible(child: WordText(label, style: AppType.bodySmall)),
               ]),

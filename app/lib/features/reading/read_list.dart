@@ -232,8 +232,8 @@ class _ReadListState extends State<ReadList> {
             const SizedBox(height: Space.l),
             Text(_timeText(fMs, fActive), textAlign: TextAlign.right, style: AppType.section.tnum),
             const SizedBox(height: Space.s),
-            // 다른 화면 단추와 같은 보통 높이(m 48, 2026-11-18 사용자 '박스 세로 높이 다른 버튼처럼')
-            Btn(label: fLabel, size: 'm', icon: const PlayIcon(size: 17, color: AppColors.onAccent), onPress: () => fActive && running ? _openScene() : _begin(featured)),
+            // 다른 화면 단추와 같은 보통 높이(large 48, 2026-11-18 사용자 '박스 세로 높이 다른 버튼처럼')
+            Btn(label: fLabel, size: 'large', icon: const PlayIcon(size: 17, color: AppColors.onAccent), onPress: () => fActive && running ? _openScene() : _begin(featured)),
           ]),
         ),
       ]),

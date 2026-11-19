@@ -364,7 +364,7 @@ class _ShareDraftScreenState extends State<ShareDraftScreen> {
         title: title,
         footer: Btn(
           label: '게시하기',
-          size: 'l',
+          size: 'xlarge',
           busy: _posting,
           onPress: () => appAlert(context, '이 내용으로 게시할까요?', '다른 독자가 볼 수 있어요. 게시물은 언제든 삭제할 수 있고, 삭제해도 내 책 기록은 그대로예요.', [
             const AlertButton('취소', style: AlertStyle.cancel),
@@ -633,7 +633,7 @@ class _PostScreenState extends State<PostScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        Btn(label: '올리기', size: 's', disabled: _text.text.trim().isEmpty, busy: _sending, onPress: _send),
+        Btn(label: '올리기', size: 'medium', disabled: _text.text.trim().isEmpty, busy: _sending, onPress: _send),
       ]),
       children: [
         Bleed(child: PostCard(post: p, full: true, onAuthor: () => openCommunityUser(context, p.userId), onLike: _like, onMore: _menu)),
@@ -773,7 +773,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         else
           ListGroup(children: [
             for (final b in _blocked!)
-              ListItem(label: b.nickname.isEmpty ? '닉네임 없는 사용자' : b.nickname, right: Btn(label: '차단 풀기', kind: 'secondary', size: 's', onPress: () => _unblock(b))),
+              ListItem(label: b.nickname.isEmpty ? '닉네임 없는 사용자' : b.nickname, right: Btn(label: '차단 풀기', kind: 'secondary', size: 'medium', onPress: () => _unblock(b))),
           ]),
       ];
 
@@ -820,7 +820,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     final screen = Screen(
       title: title,
       // 저장 단추 이름은 '○○ 저장'(docs/design/DESIGN.md 5장)
-      footer: Btn(label: me.profile != null ? '공개 프로필 저장' : '공개 프로필 만들기', size: 'l', disabled: !changed || n.isEmpty || nickError != null, busy: _saving, onPress: _save),
+      footer: Btn(label: me.profile != null ? '공개 프로필 저장' : '공개 프로필 만들기', size: 'xlarge', disabled: !changed || n.isEmpty || nickError != null, busy: _saving, onPress: _save),
       children: [
         Padding(padding: const EdgeInsets.only(bottom: Space.group), child: WordText('공개 닉네임은 게시물, 후기, 댓글에 보여요. 로그인한 계정 이름이나 내 책 기록은 공개되지 않아요.', style: AppType.sub)),
         Field(label: '공개 닉네임', value: _nick, placeholder: '2~20자', error: nickError, onChange: (v) => setState(() => _nick = v.length > 20 ? v.substring(0, 20) : v)),

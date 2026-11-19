@@ -238,7 +238,7 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
         // 책을 안 골라 저장이 꺼졌으면 단추 바로 위에 이유를 보인다(QA F15, 공통 규칙 9장 NoticeText · 마침표)
         footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (_bookId == null) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('책을 골라야 저장할 수 있어요.', center: true)),
-          Btn(label: '갈피 저장', size: 'l', onPress: _save, busy: _saving, disabled: !_canSave),
+          Btn(label: '갈피 저장', size: 'xlarge', onPress: _save, busy: _saving, disabled: !_canSave),
         ]),
         children: [
           const SizedBox(height: Space.m),
@@ -258,9 +258,9 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Padding(padding: const EdgeInsets.only(bottom: Space.s), child: WordText('사진을 찍으면 글자를 바로 읽어 아래에 채워요.', style: AppType.sub)),
                 Row(children: [
-                  Expanded(child: Btn(label: '페이지 찍기', kind: 'secondary', size: 's', onPress: () => _fromPhoto('camera'))),
+                  Expanded(child: Btn(label: '페이지 찍기', kind: 'secondary', size: 'medium', onPress: () => _fromPhoto('camera'))),
                   const SizedBox(width: Space.s),
-                  Expanded(child: Btn(label: '사진 고르기', kind: 'secondary', size: 's', onPress: () => _fromPhoto('library'))),
+                  Expanded(child: Btn(label: '사진 고르기', kind: 'secondary', size: 'medium', onPress: () => _fromPhoto('library'))),
                 ]),
                 if (_msg case final msg?) NoticeText(msg.text, error: msg.error),
               ]),
@@ -336,7 +336,7 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             // 공통 규칙 9장: 글자 인식을 다시 하는 것은 '다시 인식'('다시 읽기'는 재독)
             const NoticeText('글자를 읽지 못했어요. 다시 인식하거나, 직접 적거나, 사진만 저장할 수 있어요.', error: true),
             const SizedBox(height: Space.s),
-            Btn(label: '다시 인식', kind: 'secondary', size: 's', onPress: () => _runOcr(photo)),
+            Btn(label: '다시 인식', kind: 'secondary', size: 'medium', onPress: () => _runOcr(photo)),
           ]),
         ),
       // 빈 결과는 같은 사진을 다시 읽어도 같다: 다시 인식 대신 사진만 저장(다시 찍기·다른 사진은 사진 아래 칩, QA F15)
@@ -346,7 +346,7 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const NoticeText('사진에서 글자를 찾지 못했어요. 글자가 크고 반듯하게 보이도록 다시 찍거나, 아래에 직접 적거나, 사진만 저장할 수 있어요.', error: true),
             const SizedBox(height: Space.s),
-            Btn(label: '사진만 저장하기', kind: 'secondary', size: 's', onPress: () => _choosePhotoOnly(true)),
+            Btn(label: '사진만 저장하기', kind: 'secondary', size: 'medium', onPress: () => _choosePhotoOnly(true)),
           ]),
         ),
       if (recog?.state == 'done' && !empty)
@@ -356,20 +356,24 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             Text('읽은 글자를 사진과 비교해 고쳐 주세요. 사진을 누르면 크게 볼 수 있어요.${unsure > 0 ? ' 흐릿하게 읽힌 줄이 $unsure개 있어요.' : ''}', style: AppType.sub),
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
-              child: Wrap(spacing: Space.s, runSpacing: Space.s, children: [
-                AppChip(label: '줄 끝 이어 쓰기', on: _lineMode == LineMode.join, onPress: () => _changeLineMode(LineMode.join)),
-                AppChip(label: '줄바꿈 그대로(시)', on: _lineMode == LineMode.keep, onPress: () => _changeLineMode(LineMode.keep)),
-              ]),
+              // 하나 고르기: TDS에 칩이 없어 SegmentedControl
+              child: Segmented<LineMode>(
+                items: const [(LineMode.join, '줄 끝 이어 쓰기'), (LineMode.keep, '줄바꿈 그대로(시)')],
+                value: _lineMode,
+                onChange: (m) => _changeLineMode(m),
+              ),
             ),
             // 한글 줄 끝: 낱말 가운데서 끊긴 곳만 붙이기(알아서)·늘 붙이기·늘 띄우기(QA F5)
             if (_lineMode == LineMode.join)
               Padding(
                 padding: const EdgeInsets.only(top: Space.s),
-                child: Wrap(spacing: Space.s, runSpacing: Space.s, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Text('줄이 바뀐 곳', style: AppType.caption),
-                  AppChip(label: '알아서 잇기', on: _words == WordJoin.auto, onPress: () => _changeWords(WordJoin.auto)),
-                  AppChip(label: '붙여 잇기', on: _words == WordJoin.attach, onPress: () => _changeWords(WordJoin.attach)),
-                  AppChip(label: '띄어 잇기', on: _words == WordJoin.space, onPress: () => _changeWords(WordJoin.space)),
+                  Segmented<WordJoin>(
+                    items: const [(WordJoin.auto, '알아서 잇기'), (WordJoin.attach, '붙여 잇기'), (WordJoin.space, '띄어 잇기')],
+                    value: _words,
+                    onChange: (w) => _changeWords(w),
+                  ),
                 ]),
               ),
             if (_modeNote && _edited) ...[

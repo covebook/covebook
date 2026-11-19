@@ -1586,7 +1586,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         padding: const EdgeInsets.only(top: Space.s),
         child: Btn(
           label: '선반 열기',
-          size: 'l',
+          size: 'xlarge',
           onPress: () async {
             Navigator.pop(ctx);
             Object? err;
@@ -2194,10 +2194,11 @@ Future<void> dropHomeSnapshot() async {
 /// 하단바 덮개 농도(끝이 부드러운 곡선)
 const _fadeStops = [(0.0, 0.0), (0.2, 0.05), (0.4, 0.2), (0.6, 0.48), (0.8, 0.8), (1.0, 1.0)];
 
-/// 머리줄 높이(지금 앱은 배치에서 잰다): 위 16 + 제목 줄 34 − 2 + 해 줄 23 + 아래 4. 글자 줄은 지금 앱처럼 화소로 올린 높이(rnPx)
+/// 머리줄 높이(지금 앱은 배치에서 잰다) = 위 여백(TDS Top upperGap 24) + 제목 줄(title) − 2 + 해 줄(Top 부제 secondary) + 아래 4(홈만: 바로 아래가 책장 벽).
+/// 줄 높이는 글자 역할에서 읽고, 지금 앱처럼 화소로 올린다(rnPx). 숫자를 따로 두면 글자 위계를 바꿀 때 어긋난다
 /// (2026-11-10 사용자 '책장 좀 더 높이', '2026이랑 나의 책장 사이 간격 줄이고': 아래 여백 12 → 4, 해 위 4 → −2)
 const _headerBottom = 4.0;
-double get homeHeaderHeight => TabHeader.paddingTop + rnPx(34) - 2 + rnPx(23) + _headerBottom;
+double get homeHeaderHeight => TabHeader.paddingTop + rnPx(TypeSpecs.title.line) - 2 + rnPx(TypeSpecs.secondary.line) + _headerBottom;
 
 /// 책장 줄 배치에서 하단바 몫(지금 앱 navigation.shelfReserve)
 const navigationShelfReserve = 78.0;
@@ -2249,8 +2250,9 @@ class _Header extends StatelessWidget {
                     PullUp(
                       dy: 2,
                       child: qaFrames
-                          ? Tooltip(message: status, child: Text('$year', style: AppType.sub, maxLines: 1))
-                          : Text('$year', style: AppType.sub, maxLines: 1),
+                          // 해는 제목 아래 부제(TDS Top.SubtitleParagraph size 15: t6 regular grey700)
+                          ? Tooltip(message: status, child: Text('$year', style: AppType.secondary, maxLines: 1))
+                          : Text('$year', style: AppType.secondary, maxLines: 1),
                     ),
                   ],
                 ),

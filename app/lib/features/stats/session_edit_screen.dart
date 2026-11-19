@@ -124,10 +124,10 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
       dirty: () => _dirty,
       child: Screen(
         title: '독서 기록 수정',
-        // 화면 아래 주요 단추는 l, 이름은 '○○ 저장'(2026-11-19 공통 규칙)
+        // 화면 아래 주요 단추는 xlarge, 이름은 '○○ 저장'(2026-11-19 공통 규칙)
         footer: Btn(
           label: '기록 저장',
-          size: 'l',
+          size: 'xlarge',
           busy: _saving,
           disabled: patch == null,
           onPress: () {

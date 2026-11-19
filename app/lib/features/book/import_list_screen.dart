@@ -183,16 +183,16 @@ class _ImportListScreenState extends State<ImportListScreen> {
       keep: '계속 가져오기',
       child: Screen(
         title: '책 목록 가져오기',
-        // 화면 아래 주요 단추 l. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
+        // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
         footer: _searching
-            ? Btn(label: '그만 찾기', kind: 'secondary', size: 'l', onPress: () => setState(() => _stop = true))
+            ? Btn(label: '그만 찾기', kind: 'secondary', size: 'xlarge', onPress: () => setState(() => _stop = true))
             : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (n == 0)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Space.s),
                     child: NoticeText(found.isEmpty ? '추가할 수 있는 책이 없어요.' : '추가할 책을 골라 주세요.', center: true),
                   ),
-                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'l', disabled: n == 0, busy: _saving, onPress: _addAll),
+                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'xlarge', disabled: n == 0, busy: _saving, onPress: _addAll),
               ]),
         children: [
           Text(_file ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
@@ -215,7 +215,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
                 Text(_searching ? '${_lines.length}권 중 $_searched권 찾았어요' : '$waiting권은 찾지 않았어요', style: AppType.sub.tnum),
                 const SizedBox(height: Space.s),
                 ProgressBar(value: _lines.isEmpty ? 0 : _searched / _lines.length),
-                if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 's', onPress: _searchAll)),
+                if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 'medium', onPress: _searchAll)),
               ]),
             ),
           // 검색이 실패한 줄: 오류 글(화면 읽기가 바로 읽는다) + 다시 찾기. 찾지 않은 줄이 있으면 '이어서 찾기'가 함께 찾는다(단추 하나만)
@@ -224,7 +224,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
               padding: const EdgeInsets.only(top: Space.s),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 NoticeText(failed.any((l) => l.fail == 'network') ? '인터넷에 연결되지 않아 찾지 못한 책이 있어요.' : '검색에 잠시 문제가 있어 찾지 못한 책이 있어요.', error: true),
-                if (waiting == 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '다시 찾기', kind: 'secondary', size: 's', onPress: _searchAll)),
+                if (waiting == 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '다시 찾기', kind: 'secondary', size: 'medium', onPress: _searchAll)),
               ]),
             ),
           if (found.isNotEmpty) ...[

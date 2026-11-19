@@ -213,14 +213,14 @@ Future<String?> showBulkDone(BuildContext context, BulkResult r) {
     builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       for (final l in lines) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: WordText(l, style: AppType.body)),
       const SizedBox(height: Space.l),
-      // 시트 안 단추는 l(2026-11-19 공통 규칙)
+      // 시트 안 단추는 xlarge(2026-11-19 공통 규칙)
       if (r.placed > 0)
-        Btn(label: '책장에서 보기', size: 'l', onPress: () {
+        Btn(label: '책장에서 보기', size: 'xlarge', onPress: () {
           next = 'shelf';
           Navigator.pop(ctx);
         })
       else if (added > 0)
-        Btn(label: '내 책 보기', size: 'l', onPress: () {
+        Btn(label: '내 책 보기', size: 'xlarge', onPress: () {
           next = 'books';
           Navigator.pop(ctx);
         }),

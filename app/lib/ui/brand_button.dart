@@ -73,7 +73,7 @@ class _BrandButtonState extends State<BrandButton> {
         child: Opacity(
           opacity: off ? 0.45 : 1,
           child: Container(
-            constraints: BoxConstraints(minHeight: Btn.heightOf('m')),
+            constraints: BoxConstraints(minHeight: Btn.heightOf('large')),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
               color: bg,

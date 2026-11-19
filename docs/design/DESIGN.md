@@ -17,7 +17,7 @@
 | **공용 부품 모양**(단추·줄·시트의 생김새) | `kit.dart`의 그 위젯 | 그 부품을 쓰는 모든 화면이 함께 바뀐다 |
 | **한 화면 배치만**(순서·정렬·묶음 사이) | 그 화면 파일(`app/lib/features/…`)의 Row·Column·Padding | 간격은 `Space` 이름으로 쓴다. 새 숫자가 필요하면 새 역할을 만들거나 16장 예외에 적는다 |
 
-값이 우연히 같아도 역할이 다르면 이름을 따로 둔다. 예: 책 한 줄 제목 `AppType.bookTitle`과 굵은 줄 이름 `AppType.rowStrong`은 지금 둘 다 18/26 SemiBold지만, 책 제목만 키울 수 있게 따로 있다.
+값이 우연히 같아도 역할이 다르면 이름을 따로 둔다. 예: 책 한 줄 제목 `AppType.bookTitle`과 굵은 줄 이름 `AppType.rowStrong`은 지금 둘 다 17/25.5 SemiBold지만, 책 제목만 키울 수 있게 따로 있다.
 
 ## 1. 원칙
 
@@ -38,31 +38,34 @@
 
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
-| `AppType.hero` | 32/40 | Bold | ink | 화면에 하나뿐인 큰 이름(로그인 '책장 한켠') |
-| `AppType.title` | 26/34 | Bold | ink | 탭 첫 화면 왼쪽 큰 제목 `Screen(back: false, title:)` |
-| `AppType.pageTitle` | 23/30 | Bold | ink | 머리줄 왼쪽 큰 제목(책 추가·꾸미기) |
-| `AppType.navTitle` | 18/25 | SemiBold | ink | 밀어 넣은 화면 위 줄 가운데 제목 `NavBar` |
-| `AppType.heading` | 21/29 | SemiBold | ink | 시트·확인창 제목, 큰 카드 제목 |
-| `AppType.section` | 19/27 | SemiBold | ink | 구역 제목 `SectionHead` |
-| `AppType.count` | 16/23 | Medium | inkSoft | 구역 제목 옆 개수('갈피  3') |
+| `AppType.hero` | 30/40 | Bold | title | 화면에 하나뿐인 큰 이름(로그인 '책장 한켠') |
+| `AppType.title` | 22/31 | Bold | title | 탭 첫 화면 왼쪽 큰 제목 `Screen(back: false, title:)` |
+| `AppType.pageTitle` | 22/31 | Bold | title | 머리줄 왼쪽 큰 제목(책 추가·꾸미기) |
+| `AppType.navTitle` | 18/27 | SemiBold | ink | 밀어 넣은 화면 위 줄 가운데 제목 `NavBar` |
+| `AppType.heading` | 20/29 | Bold | title | 시트·확인창 제목, 큰 카드 제목 |
+| `AppType.section` | 20/29 | Bold | title | 구역 제목 `SectionHead` |
+| `AppType.count` | 15/22.5 | Medium | inkSoft | 구역 제목 옆 개수('갈피  3') |
+| `AppType.listHeader` | 17/25.5 | Bold | title | 묶음 이름(`ListGroup`·`FilterGroup`·`SheetLabel`) |
 
 ### 2-2. 줄과 글
 
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
-| `AppType.row` | 18/26 | 보통 | ink | 목록 줄 이름(설정·메뉴·이름+값) `ListItem` |
-| `AppType.rowStrong` | 18/26 | SemiBold | ink | 굵은 줄 이름(시트 안 묶음 이름 `SheetLabel`) |
-| `AppType.body` | 17/27 | 보통 | ink | 본문 |
-| `AppType.sub` | 16/23 | 보통 | inkSoft | 보조 글(값·설명·출처·안내). 오류는 `danger`로 색만 |
-| `AppType.caption` | 15/21 | 보통 | inkSoft | 작은 보조 글(묶음 이름 `ListGroup`·메타) |
-| `AppType.bodySmall` | 16/22 | 보통 | ink | 작은 본문(체크 이름·날짜 칸·짧은 글) |
-| `AppType.label` | 16/22 | Medium | ink | 작은 이름(칩·고르는 칸) |
-| `AppType.labelStrong` | 16/22 | SemiBold | ink | 굵은 작은 이름(카드 제목·닉네임·필터 칸) |
-| `AppType.micro` | 13/18 | 보통 | inkSoft | 아주 작은 표시(그래프 눈금·배지), 숫자 폭 고정 |
-| `AppType.essayTitle` | 26/34 | Bold | ink | 감상 읽기 화면의 감상 제목 |
-| `AppType.introTitle` | 26/34 | Bold | ink | 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면) |
-| `AppType.profileName` | 26/34 | Bold | ink | 사람 이름(독자 프로필 닉네임) |
-| `AppType.legalHeading` | 16/22 | SemiBold | ink | 약관 · 처리방침 조 제목 |
+| `AppType.row` | 17/25.5 | 보통 | ink | 목록 줄 이름(설정·메뉴·이름+값) `ListItem` |
+| `AppType.rowStrong` | 17/25.5 | SemiBold | ink | 굵은 줄 이름(시트 안 묶음 이름 `SheetLabel`) |
+| `AppType.body` | 17/25.5 | 보통 | ink | 본문 |
+| `AppType.sub` | 15/22.5 | 보통 | inkSoft | 보조 글(값·설명·출처·안내). 오류는 `danger`로 색만 |
+| `AppType.secondary` | 15/22.5 | 보통 | inkSub | 부제·오른쪽 값(탭 머리 부제·`ListItem` 값·`SectionHead` 링크) |
+| `AppType.dialogBody` | 15/22.5 | Medium | inkSoft | 확인창 설명(`appAlert`) |
+| `AppType.caption` | 13/19.5 | 보통 | inkSoft | 작은 보조 글(묶음 이름 `ListGroup`·메타) |
+| `AppType.bodySmall` | 15/22.5 | 보통 | ink | 작은 본문(체크 이름·날짜 칸·짧은 글) |
+| `AppType.label` | 16/24 | Medium | ink | 작은 이름(칩·고르는 칸) |
+| `AppType.labelStrong` | 16/24 | SemiBold | ink | 굵은 작은 이름(카드 제목·닉네임·필터 칸) |
+| `AppType.micro` | 13/19.5 | 보통 | inkSoft | 아주 작은 표시(그래프 눈금·배지), 숫자 폭 고정 |
+| `AppType.essayTitle` | 22/31 | Bold | title | 감상 읽기 화면의 감상 제목 |
+| `AppType.introTitle` | 22/31 | Bold | title | 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면) |
+| `AppType.profileName` | 22/31 | Bold | title | 사람 이름(독자 프로필 닉네임) |
+| `AppType.legalHeading` | 16/24 | SemiBold | ink | 약관 · 처리방침 조 제목 |
 | `AppType.quote` | 16/27 | 명조 | ink | 갈피 문장 |
 | `AppType.reading` | 17/30 | 명조 | ink | 감상 등 긴 글 본문 |
 | `AppType.input` | 16/— | 보통 | ink | 입력창 글자(줄 높이는 플랫폼 기본) |
@@ -71,12 +74,12 @@
 
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
-| `AppType.button` | 17/24 | SemiBold | (단추가 정함) | 보통·큰 단추 `Btn` m·l |
-| `AppType.buttonSmall` | 16/22 | SemiBold | (단추가 정함) | 작은 단추 `Btn` s |
-| `AppType.link` | 16/23 | SemiBold | accent | 글자 단추 `TextLink`(색만 바꿔 쓴다: 5장) |
-| `AppType.loginLink` | 15/21 | Medium | inkSoft | 로그인 화면 아래 작은 글자 단추 |
-| `AppType.toast` | 16/22 | 보통 | onToast(흰색) | 토스트 글(`showToast`, 먹색 바탕 `AppColors.toast`) |
-| `AppType.toastAction` | 16/22 | SemiBold | onToast(흰색) | 토스트 '되돌리기' |
+| `AppType.button` | 17/25.5 | SemiBold | (단추가 정함) | 보통·큰 단추 `Btn` large·xlarge |
+| `AppType.buttonSmall` | 16/24 | SemiBold | (단추가 정함) | 작은 단추 `Btn` medium·small |
+| `AppType.link` | 17/25.5 | SemiBold | accent | 글자 단추 `TextLink`(색만 바꿔 쓴다: 5장) |
+| `AppType.loginLink` | 13/19.5 | Medium | inkSoft | 로그인 화면 아래 작은 글자 단추 |
+| `AppType.toast` | 16/24 | 보통 | onToast(흰색) | 토스트 글(`showToast`, 먹색 바탕 `AppColors.toast`) |
+| `AppType.toastAction` | 16/24 | SemiBold | onToast(흰색) | 토스트 '되돌리기' |
 
 ### 2-4. 숫자 (모두 숫자 폭 고정)
 
@@ -84,11 +87,11 @@
 |---|---|---|---|---|
 | `AppType.timer` | 64/72 | 보통 | ink | 읽기 장면 시간 |
 | `AppType.display` | 48/58 | Bold | ink | 아주 큰 숫자(통계 '이번 달 읽은 시간'). 단위는 `AppType.displayUnit` |
-| `AppType.displayUnit` | 22/30 | Medium | ink | 위 숫자의 단위 |
+| `AppType.displayUnit` | 22/31 | Medium | ink | 위 숫자의 단위 |
 | `AppType.clock` | 36/44 | 보통 | ink | 큰 시간(독서 끝·접은 읽기 장면) |
 | `AppType.score` | 36/44 | Bold | ink | 큰 점수(독자 평점 평균) |
-| `AppType.figure` | 24/32 | Bold | ink | 숫자 값(통계 읽은 날·독서 횟수·쪽수) `StatNumber` |
-| `AppType.wheel` | 19/27 | 보통 | inkSoft | 돌려 고르는 숫자(분·시각 시트). 고른 값은 `.strong` + ink |
+| `AppType.figure` | 24/33 | Bold | ink | 숫자 값(통계 읽은 날·독서 횟수·쪽수) `StatNumber` |
+| `AppType.wheel` | 20/29 | 보통 | inkSoft | 돌려 고르는 숫자(분·시각 시트). 고른 값은 `.strong` + ink |
 
 ## 3. 책: 제목·작가·한줄평·표지
 
@@ -96,15 +99,15 @@
 
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
-| `AppType.bookTitle` | 18/26 | SemiBold | ink | **책 제목 기본.** 책 한 줄 `BookRow`(고르기·검색 결과·내 책 목록·기록 줄), 책 확인, 시트 머리 |
-| `AppType.bookHeadTitle` | 23/30 | Bold | ink | 책 정보 머리(표지 아래 가운데) |
-| `AppType.bookFeatureTitle` | 21/29 | SemiBold | ink | 읽기 탭 '최근 읽던 책' 큰 카드 |
-| `AppType.bookSavedTitle` | 19/27 | SemiBold | ink | 저장했어요 창(사용자 시안) |
-| `AppType.bookGridTitle` | 15/21 | 보통 | ink | 내 책 격자 표지 아래 |
-| `AppType.bookAuthor` | 16/23 | 보통 | inkSoft | **작가 줄 기본.** 책 줄 둘째 줄('작가 \| 출판사', '작가 \| 상태'), 책 정보 머리 작가 |
-| `AppType.bookGridAuthor` | 13/18 | 보통 | inkSoft | 내 책 격자 둘째 줄 |
-| `AppType.bookNote` | 15/21 | 보통 | inkSoft | 한줄평 · 책 줄 셋째 줄(한줄평·미리보기·진행) |
-| `AppType.review` | 17/27 | 보통 | ink | 한줄평 · 평가 탭 본문. 비었을 때 안내는 `AppType.sub` |
+| `AppType.bookTitle` | 17/25.5 | SemiBold | ink | **책 제목 기본.** 책 한 줄 `BookRow`(고르기·검색 결과·내 책 목록·기록 줄), 책 확인, 시트 머리 |
+| `AppType.bookHeadTitle` | 22/31 | Bold | title | 책 정보 머리(표지 아래 가운데) |
+| `AppType.bookFeatureTitle` | 20/29 | Bold | title | 읽기 탭 '최근 읽던 책' 큰 카드 |
+| `AppType.bookSavedTitle` | 20/29 | Bold | title | 저장했어요 창(사용자 시안) |
+| `AppType.bookGridTitle` | 13/19.5 | 보통 | ink | 내 책 격자 표지 아래 |
+| `AppType.bookAuthor` | 15/22.5 | 보통 | inkSoft | **작가 줄 기본.** 책 줄 둘째 줄('작가 \| 출판사', '작가 \| 상태'), 책 정보 머리 작가 |
+| `AppType.bookGridAuthor` | 13/19.5 | 보통 | inkSoft | 내 책 격자 둘째 줄 |
+| `AppType.bookNote` | 13/19.5 | 보통 | inkSoft | 한줄평 · 책 줄 셋째 줄(한줄평·미리보기·진행) |
+| `AppType.review` | 17/25.5 | 보통 | ink | 한줄평 · 평가 탭 본문. 비었을 때 안내는 `AppType.sub` |
 
 - 작가 글자는 `authorLine(authors)` 하나로 만든다(여러 작가는 쉼표: '클레어 키건, 홍한별', `app/lib/domain/library.dart`).
 - 제목은 줄 수만 정한다: 책 줄 작게 1줄, 보통·크게 2줄, 넘치면 말줄임. 책 정보 머리는 줄 수 제한 없음.
@@ -112,7 +115,7 @@
 
 ### 3-2. 책 한 줄 `BookRow`
 
-표지 + 16(`Space.l`) + (제목 `bookTitle`, 둘째 줄 `bookAuthor`를 `MetaText`로, 셋째 줄 `bookNote`) + 오른쪽 자리. 위아래 12(`dense`면 4).
+표지 + 16(`Space.l`) + (제목 `bookTitle`, 둘째 줄 `bookAuthor`를 `MetaText`로, 셋째 줄 `bookNote`) + 오른쪽 자리. 위아래 12(`dense`면 8).
 
 | 크기 | 표지 폭 | 쓰는 곳 |
 |---|---|---|
@@ -159,13 +162,13 @@
 | 시각 칸 · 'HH:MM' 값 | 값은 'HH:MM'으로 두고 보이는 글자는 '오후 9:05' | `hmLabel`·`clockText` (`ui/kit.dart`) |
 | 달 이름 | '2026년 11월'(통계 머리) | `monthTitle` (`features/stats/chart_data.dart`) |
 
-독서 기록 줄(책 정보 '독서 기록')은 날짜로 묶는다: 날짜 머리 `AppType.recordDay` 18/26, 그 아래 시간대 `AppType.recordRange` 16/23 회색, 오른쪽 읽은 시간 `AppType.recordDuration` 18/26(숫자 폭 고정). 줄 높이 최소 `Space.dense`.
+독서 기록 줄(책 정보 '독서 기록')은 날짜로 묶는다: 날짜 머리 `AppType.recordDay` 17/25.5, 그 아래 시간대 `AppType.recordRange` 15/22.5 회색, 오른쪽 읽은 시간 `AppType.recordDuration` 17/25.5(숫자 폭 고정). 줄 높이 최소 `Space.dense`.
 
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
-| `AppType.recordDay` | 18/26 | 보통 | ink | 기록 묶음 날짜 머리('11월 17일') |
-| `AppType.recordRange` | 16/23 | 보통 | inkSoft | 기록 시간대('오후 9:05-9:30') |
-| `AppType.recordDuration` | 18/26 | 보통 | ink | 기록 한 줄 읽은 시간('38분') |
+| `AppType.recordDay` | 17/25.5 | 보통 | ink | 기록 묶음 날짜 머리('11월 17일') |
+| `AppType.recordRange` | 15/22.5 | 보통 | inkSoft | 기록 시간대('오후 9:05-9:30') |
+| `AppType.recordDuration` | 17/25.5 | 보통 | ink | 기록 한 줄 읽은 시간('38분') |
 
 - 정보 사이는 옅은 세로줄 `metaSep`(' \| ', 색 `metaBar`). 그릴 때는 늘 `MetaText`(화면 읽기는 쉼표로 읽는다).
 - 개수는 '갈피 N개', '책 N권' 어순.
@@ -193,9 +196,9 @@
 
 | 이름 | 보이는 높이 | 언제 |
 |---|---|---|
-| `ControlSize.buttonL` | 52 | 화면 아래 주요 단추, 시트 안 단추(`Btn(size: 'l')`) |
-| `ControlSize.buttonM` | 48 | 카드·창 안 단추(기본, 읽기 탭 '이어서 읽기') |
-| `ControlSize.buttonS` | 40 | 줄 안 작은 단추 |
+| `ControlSize.buttonL` | 52 | 화면 아래 주요 단추, 시트 안 단추(`Btn(size: 'xlarge')`, 기본) |
+| `ControlSize.buttonM` | 48 | 카드·창 안 단추(`Btn(size: 'large')`, 읽기 탭 '이어서 읽기') |
+| `ControlSize.buttonS` | 40 | 줄 안 작은 단추(`Btn(size: 'medium')`·`'small'`) |
 
 모서리 `Shape.button` 10. 꺼진 단추는 primary는 `line` 바탕 + `inkFaint` 글자, 그 밖은 투명도 `disabledOpacity` 0.4. 눌림: primary는 `accentPressed`, secondary는 `input` 바탕, 글자·아이콘 단추는 투명도 `pressOpacity` 0.55.
 
@@ -205,14 +208,15 @@
 |---|---|---|
 | `IconSize.base` | 22 | 머리줄·줄 안 아이콘(lucide 선 아이콘) |
 | `IconSize.stroke` | 1.6 | 선 아이콘 굵기 |
-| `IconSize.chevron` | 20 | 줄 끝 꺾쇠 `Chevron`(inkSoft) |
+| `IconSize.chevron` | 24 | 줄 끝 꺾쇠 `Chevron`(inkFaint) |
+| `IconSize.head` | 24 | 머리줄 아이콘 `HeadIcon`·`FilterIcon` |
 | `IconSize.back` | 28 | 뒤로 꺾쇠(`NavBar`) |
 | `IconSize.mark` | 20 | 이미 넣음 체크 `AddedMark`(accent) |
 | `IconSize.markStroke` | 2 | 위 체크 굵기 |
-| `IconSize.checkStroke` | 3 | 고른 원·정보 넣기 네모 안 흰 체크 굵기 |
+| `IconSize.checkStroke` | 3 | 고른 원 안 흰 체크 굵기 |
 | `Space.hit` | 48 | 누르는 자리 최소(아이콘·글자 단추·작은 단추 모두) |
 
-- 머리줄 아이콘은 `HeadIcon`: 22, 굵기 1.6, **회색 inkSoft**, 아이콘 사이 4(`headIconGap`).
+- 머리줄 아이콘은 `HeadIcon`: 24, 굵기 1.6, **회색 inkSoft**, 아이콘 사이 4(`headIconGap`).
 - 줄 끝 꺾쇠는 **다른 화면이나 시트로 넘어가는 줄에만**. 메뉴 시트(⋯) 안 줄에는 없다.
 - 하단 탭 아이콘은 하단 탭 전용 규칙을 따른다(`ui/tab_icons.dart`): 크기 23(`TabBarStyle.icon`), 기본 상태는 `tabInkSoft` 윤곽선, 고른 상태는 `tabInk` 채움. 한 탭에 윤곽선 · 채움 두 모양을 짝으로 둔다. '내 책' 탭은 책 한 권(`myBooksTabIcon`: 선 버전이 기본, 채운 버전이 고른 상태). 글자는 없다(아이콘만, 화면 읽기 이름은 탭 이름). 누르면 다른 아이콘처럼 옅어진다(`Pressable`). 새 탭 아이콘도 이 규칙으로 만든다.
 - 겉모양이 48보다 작아도 누르는 자리는 위아래 빈 자리까지 48로 넓힌다(작은 단추·전환 칸·스위치).
@@ -221,7 +225,7 @@
 
 | 항목 | 규칙 | 부품 |
 |---|---|---|
-| 탭 첫 화면 머리 | 왼쪽 `title`, 위 16·아래 12·좌우 24(`TabHeader`) | `Screen(back: false, title:)` |
+| 탭 첫 화면 머리 | 왼쪽 `title`, 위 24·아래 24·좌우 24(`TabHeader`) | `Screen(back: false, title:)` |
 | 밀어 넣은 화면 머리 | 가운데 `navTitle`, 줄 높이 60, 뒤로 꺾쇠 28 | `NavBar` |
 | 구역 제목 | `section`, 오른쪽 개수 `count`, 오른쪽 링크는 회색 보통 글자(`sub`) + 꺾쇠·누르는 자리 48, 아래 설명 한 줄 `sub` | `SectionHead(note:)` |
 | 구역 사이 | `Space.block` 48 | — |
@@ -230,16 +234,15 @@
 | 설정·메뉴 줄 | 이름 `row`, 값 `sub`, 보이는 높이 50 | `ListItem` |
 | 켜고 끄는 줄 | `ListItem`과 같은 글자, 줄 전체가 스위치 | `ListItem(right: Toggle)`·`FilterToggleRow` |
 | 하나 고르기 시트 줄 | 고르면 진한 굵은 글자, 아니면 회색, 오른쪽 고르는 원 | `FilterOption` |
-| 고르는 원 | `ControlSize.radio` 22, 고르면 갈색 채움 + 흰 체크, 이미 있는 것은 흐린 채움 | `RadioMark` |
+| 고르는 원 | `ControlSize.radio` 24, 고르면 갈색 채움 + 흰 체크, 이미 있는 것은 흐린 채움 | `RadioMark` |
 | 상자형 고르기 | 테두리 상자 + 모서리 체크 `ControlSize.choiceBadge` 24 | `ChoiceBox` |
-| 정보 넣기 네모 | `ControlSize.checkSquare` 22 + 흰 체크 | `CheckSquare` |
+| 정보 넣기(여러 개 고르기) | `ControlSize.radio` 24 원 + 흰 체크 | `CheckCircle` |
 | 전환 칸 | 회색 칸 44, 고른 칸 `ControlSize.segment` 38 흰 바탕 | `Segmented` |
 | 안쪽 탭(내 책·기록) | 글자만, 고른 탭 굵게 + 갈색 밑줄 | `Tabs` |
 | 스위치 | `ControlSize.toggleWidth` 50 × `ControlSize.toggleHeight` 30, 손잡이 24 | `Toggle` |
 | 입력칸 | 높이 `ControlSize.field` 56(여러 줄 110), `input` 바탕, 테두리 없음 | `Field`·`SelectField`·`DateField`·`TimeField` |
 | 검색칸 | 높이 `ControlSize.search` 48 | `SearchField` |
 | 거르기 단추('모든 책 ⌄') | 글자 + 꺾쇠, 누르는 자리 48, 고른 값이 기본이 아니면 굵게. 누르면 하나 고르기 시트 | `FilterButton` |
-| 칩 | 보이는 높이 `ControlSize.chip` 40(누르는 자리 48), 알약. 여러 개 켜고 끄기에만 | `AppChip` |
 | 작은 돌아가는 원 | `ControlSize.spinner` 20, 굵기 2(단추 · 칸 · 줄 안 진행). 화면 전체는 `Loading` | `Spinner` |
 | 화면 전체 빈 상태 · 실패 | 11장 | `Empty` |
 | 구역 빈 줄 | 11장 | `EmptyLine` |
@@ -267,6 +270,12 @@
 | `Space.xl` | 28 | 아주 넓은 간격 |
 | `Space.xxl` | 40 | 가장 넓은 간격 |
 | `Space.touch` | 44 | 아이콘 칸의 겉폭(머리줄·검색칸 안). 누르는 자리는 `Space.hit` |
+| `Space.rowS` | 8 | 목록 줄 위아래(촘촘한 목록) |
+| `Space.rowM` | 12 | 목록 줄 위아래(`ListItem`·`BookRow`) |
+| `Space.rowL` | 16 | 목록 줄 위아래(넓게) |
+| `Space.rowXL` | 24 | 목록 줄 위아래(아주 넓게) |
+| `Space.ctaBottom` | 20 | 화면 아래 고정 단추 · 시트 아래 여백 최소(안전 영역과 큰 쪽) |
+| `Space.band` | 16 | 구간을 나누는 회색 띠 높이 `SectionBand` |
 
 ### 7-2. 모서리 (`kit.dart` `Shape`)
 

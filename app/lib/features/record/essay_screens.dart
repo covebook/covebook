@@ -300,7 +300,7 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
         // 책을 안 골라 저장이 꺼졌으면 단추 바로 위에 이유(갈피 남기기와 같게, 공통 규칙 9장)
         footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (_bookId == null) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('책을 골라야 저장할 수 있어요.', center: true)),
-          Btn(label: '감상 저장', size: 'l', onPress: _save, busy: _saving, disabled: !_canSave),
+          Btn(label: '감상 저장', size: 'xlarge', onPress: _save, busy: _saving, disabled: !_canSave),
         ]),
         children: [
           const SizedBox(height: Space.m),
