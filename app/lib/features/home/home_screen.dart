@@ -20,6 +20,7 @@ import 'locked_rows.dart';
 import '../../store/entitlement_store.dart';
 import '../book/place_books.dart' show lockedShelfIds;
 import '../iap/shelf_purchase_sheet.dart' show showShelfPurchase;
+import 'refunded_shelf_mark.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
 import '../store/store_screen.dart' show openStore;
@@ -995,6 +996,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     focusBookOnShelf.addListener(_focusBook);
     LibraryModel.instance.addListener(_libraryChanged);
     BookcaseStore.instance.addListener(_bookcasesChanged);
+    // 구매·환불로 쓸 수 있는 선반 칸이 바뀌면 환불된 선반 표시를 다시 그린다
+    if (iapOn) EntitlementStore.instance.addListener(_entitlementChanged);
     if (!BookcaseStore.instance.loaded) BookcaseStore.instance.load();
     _loadSnap();
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
@@ -1176,6 +1179,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     if (_pendingFocus != null) WidgetsBinding.instance.addPostFrameCallback((_) => _tryFocus());
   }
 
+  /// 환불로 잠긴 선반이 시작하는 줄 번호. 없으면 줄 수보다 큰 값(결제가 꺼졌거나 서버 상태를 아직 못 받았으면 잠그지 않는다)
+  void _entitlementChanged() {
+    if (mounted) setState(() {});
+  }
+
+  int _refundedFrom() {
+    final e = EntitlementStore.instance;
+    return iapOn && e.loaded ? allowedShelfSlots(e.shelves) : 1 << 30;
+  }
+
+  // 환불된 선반 안내: 무엇이 되고 안 되는지 알리고, 다시 살 수 있으면 구매 시트로 가는 길을 둔다(권유 문장은 넣지 않는다)
+  void _openRefunded() => showSheet<void>(
+        context,
+        title: '환불된 선반',
+        description: '결제가 환불돼 잠긴 선반이에요.\n꽂힌 책은 그대로 있고, 빼거나 이 선반 안에서 옮길 수 있어요. 새로 꽂을 수는 없어요.',
+        builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          Padding(padding: const EdgeInsets.only(top: 8), child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx))),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.s),
+            child: Btn(
+              label: '선반 구매 보기',
+              kind: 'secondary',
+              size: 'l',
+              onPress: () {
+                Navigator.pop(ctx);
+                showShelfPurchase(context);
+              },
+            ),
+          ),
+        ]),
+      );
+
   // 잠긴 선반 시트(지금 앱 LockedShelfSheet): 세 칸까지는 바로 열고, 그 위는 유료 예정이라 준비 중으로 알린다(2026-11-15 사용자 결정).
   // '무료로'는 쓰지 않는다(QA: 곧 돈 받겠다는 뜻으로 읽혔다). 남은 칸 수를 알린다
   void _openLocked() {
@@ -1268,6 +1303,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     focusBookOnShelf.removeListener(_focusBook);
     LibraryModel.instance.removeListener(_libraryChanged);
     BookcaseStore.instance.removeListener(_bookcasesChanged);
+    if (iapOn) EntitlementStore.instance.removeListener(_entitlementChanged);
     if (_decorating) MiniTimerPlace.instance.setHidden(false);
     for (final i in _atlases) {
       i.dispose();
@@ -1475,6 +1511,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                     ? const SizedBox.shrink()
                                     : Semantics(container: true, explicitChildNodes: true, sortKey: const OrdinalSortKey(0), child: header(headerOpacity)),
                               ),
+                              // 환불로 잠긴 선반(D13): 책은 그대로 두고 표시만 얹는다. 표시를 누르면 안내, 책은 그대로 눌린다
+                              for (var i = _refundedFrom(); i < lockedFrom && i < geo.length; i++)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  top: contentTop + geo[i].top,
+                                  height: geo[i].height,
+                                  child: RefundedShelfMark(onTap: _openRefunded),
+                                ),
                               // 잠긴 칸: 가운데 자물쇠, 누르면 선반 한 칸 더 열기
                               for (var i = lockedFrom; i < n && i < geo.length; i++)
                                 Positioned(
@@ -1491,7 +1536,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                     excludeSemantics: true,
                                     child: _Pressable(
                                       onTap: _openLocked,
-                                      child: const Center(child: _LockIcon()),
+                                      child: const Center(child: LockIcon()),
                                     ),
                                   ),
                                 ),
@@ -1923,40 +1968,6 @@ class _HeaderIconsState extends State<_HeaderIcons> {
       ]),
     );
   }
-}
-
-/// 잠긴 칸 자물쇠(지금 앱 TabIcons LockIcon 32×40, 색 #3F4347·구멍 #F4F3F2)
-class _LockIcon extends StatelessWidget {
-  const _LockIcon();
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(size: const Size(32, 40), painter: _LockPainter());
-}
-
-class _LockPainter extends CustomPainter {
-  static const _ink = Color(0xFF3F4347), _hole = Color(0xFFF4F3F2);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final shackle = Path()
-      ..moveTo(8.5, 19)
-      ..lineTo(8.5, 11.5)
-      ..arcToPoint(const Offset(23.5, 11.5), radius: const Radius.circular(7.5))
-      ..lineTo(23.5, 19);
-    canvas.drawPath(
-      shackle,
-      Paint()
-        ..color = _ink
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.6,
-    );
-    canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(2.5, 16.5, 27, 22), const Radius.circular(5.5)), Paint()..color = _ink);
-    canvas.drawCircle(const Offset(16, 25.5), 3.1, Paint()..color = _hole);
-    canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(14.5, 25.5, 3, 6.5), const Radius.circular(1.5)), Paint()..color = _hole);
-  }
-
-  @override
-  bool shouldRepaint(_LockPainter old) => false;
 }
 
 /// 눌리는 동안 옅어지는 단추(지금 앱 press 0.55)
