@@ -378,13 +378,16 @@ class _MiniPainter extends CustomPainter {
 /// 이름 + 숫자 칸(작은 회색 이름 위, 굵은 숫자 19 아래): 통계 요약 · 평균 카드 · 책 한 권 기록이 모두 이것
 /// (2026-11-19 공통 규칙: 같은 '읽은 날'이 24와 19로 달랐고, 같은 칸을 세 벌로 만들었다)
 class StatNumber extends StatelessWidget {
-  const StatNumber({super.key, required this.label, required this.value});
+  const StatNumber({super.key, required this.label, required this.value, this.flex = 1});
   final String label;
   final String value;
+  /// 한 줄에 놓인 칸끼리 나누는 몫(값이 긴 '읽은 시간'은 넓게)
+  final int flex;
 
   // 화면 읽기는 '이름 값' 한 번(안쪽 글자까지 두 번 읽혔다)
   @override
   Widget build(BuildContext context) => Expanded(
+        flex: flex,
         child: Semantics(
           container: true,
           label: '$label $value',

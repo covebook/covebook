@@ -293,15 +293,18 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   // 맨 위 숫자 셋 한 줄: 읽은 시간 · 읽은 날 · 독서 횟수(2026-11-20 사용자 '이번 달 읽은 시간 말고 짧게 해서 3개 다 넣고', 이름 '읽은 시간').
-  // 세 칸 모두 책 한 권 기록의 숫자 칸과 같은 StatNumber, 시간 글은 앱의 지난 시간 글자 formatDuration 하나(공통 규칙 4장)
+  // 세 칸 모두 책 한 권 기록의 숫자 칸과 같은 StatNumber, 시간 글은 앱의 지난 시간 글자 formatDuration 하나(공통 규칙 4장).
+  // '21시간 5분'처럼 긴 시간 값이 옆 칸 '17일'에 붙어 보여서 첫 칸을 넓게(4:3:3) 하고 칸 사이를 띄운다(2026-11-20 촬영 확인)
   Widget _summary(PeriodStats st0, List<Session> sessions, int activeDays, String periodName) => Semantics(
         container: true,
         label: '$periodName 읽은 시간 ${formatDuration(st0.readMs)}, 읽은 날 $activeDays일, 독서 ${sessions.length}회',
         excludeSemantics: true,
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          StatNumber(label: '읽은 시간', value: formatDuration(st0.readMs)),
-          StatNumber(label: '읽은 날', value: '$activeDays일'),
-          StatNumber(label: '독서 횟수', value: '${sessions.length}회'),
+          StatNumber(label: '읽은 시간', value: formatDuration(st0.readMs), flex: 4),
+          const SizedBox(width: Space.l),
+          StatNumber(label: '읽은 날', value: '$activeDays일', flex: 3),
+          const SizedBox(width: Space.l),
+          StatNumber(label: '독서 횟수', value: '${sessions.length}회', flex: 3),
         ]),
       );
 
