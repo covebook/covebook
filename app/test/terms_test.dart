@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:chaekjang/features/settings/terms.dart';
+import 'package:chaekjang/store/entitlement_store.dart' show iapOn;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,7 +22,7 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  test('문서 초안(docs/legal/terms-draft-2026-11-18.md)과 앱 전문이 같은 조 제목', () {
+  test('문서 초안(docs/legal/terms-draft-2026-11-18.md)과 앱 전문이 같은 조 제목', skip: iapOn ? '결제를 켠 빌드는 조 번호가 달라 iap_entry_test에서 본다' : null, () {
     final doc = File('../docs/legal/terms-draft-2026-11-18.md').readAsStringSync();
     for (final (title, paras) in termsArticles) {
       expect(doc.contains('### $title'), isTrue, reason: title);
@@ -29,5 +30,17 @@ void main() {
         expect(doc.contains(p), isTrue, reason: p);
       }
     }
+  });
+
+  test('유료 서비스 조(결제를 켤 때 넣는 조)도 문서 초안과 같다', () {
+    final doc = File('../docs/legal/terms-draft-2026-11-18.md').readAsStringSync();
+    for (final (title, paras) in paidArticles) {
+      expect(doc.contains('### $title'), isTrue, reason: title);
+      for (final p in paras) {
+        expect(doc.contains(p), isTrue, reason: p);
+      }
+    }
+    // 결제 화면에 없는 약속을 약관에 적지 않는다(청약철회 제한 표시는 아직 구매 화면에 없다)
+    expect(paidArticles.expand((a) => a.$2).any((p) => p.contains('구매 화면에 미리 알립니다')), isFalse);
   });
 }

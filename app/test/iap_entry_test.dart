@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:chaekjang/features/home/home_screen.dart' show headerIconsPreview;
 import 'package:chaekjang/features/settings/settings_screen.dart';
+import 'package:chaekjang/features/settings/terms.dart' show paidArticles, termsArticles;
 import 'package:chaekjang/services/sync.dart' show SyncService;
 import 'package:chaekjang/store/entitlement_store.dart';
 import 'package:flutter/material.dart';
@@ -83,4 +84,13 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('새 알림 1개'), findsNothing);
   }, skip: !on);
+
+  test('결제를 켠 빌드의 약관: 유료 조가 서비스 변경 조 앞에 들어가고 번호가 이어진다', () {
+    final titles = [for (final a in termsArticles) a.$1];
+    expect(titles.length, 10 + paidArticles.length);
+    expect(titles[6], '제7조 (유료 서비스)');
+    expect(titles[10], '제11조 (서비스의 변경과 중단)');
+    expect(titles.last, '제14조 (문의)');
+    expect(termsArticles[3].$2.last, contains('결제 기록은 관계 법령에 따라'));
+  }, skip: !iapOn);
 }
