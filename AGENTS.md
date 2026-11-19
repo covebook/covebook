@@ -1,6 +1,7 @@
 # 작업 규칙 (사람·AI 에이전트 공통)
 
 ## Git: 무조건 main (결제의 일부 변경만 예외)
+- 작업을 시작할 때 지금 브랜치가 main이면 먼저 `git pull --rebase origin main`으로 최신을 받고 시작한다.
 - 브랜치를 따로 만들지 않는다. 실험·점검도 main에서 한다(`git checkout -b`, `git worktree add`로 다른 브랜치 만들기 금지).
 - 단계가 끝날 때마다(코드나 문서가 바뀐 단계) 그 단계에서 바꾼 파일만 골라 main에 커밋하고 바로 push한다.
 - 다른 사람이 먼저 push했으면 `git pull --rebase origin main`으로 받아 합친 뒤 push한다. 강제 push 금지.
