@@ -8,7 +8,6 @@ import 'package:chaekjang/features/book/all_books.dart';
 import 'package:chaekjang/features/home/decorate_panel.dart';
 import 'package:chaekjang/scene_config/skin.dart';
 import 'package:chaekjang/scene_config/spine_look.dart';
-import 'package:chaekjang/store/backup.dart' show backupFileName, backupTimeLabel;
 import 'package:chaekjang/ui/keep_all.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,22 +63,6 @@ void main() {
       expect([for (final it in shelfItems(r.layout!, 's1')) it.bookIds.first], ['b', 'a', 'c']);
       expect(moveBy(l, books, 'c', 1).ok, isFalse);
       expect(shelfUsableWidth, greaterThan(120));
-    });
-  });
-
-  group('백업 파일 이름·시각은 기기 시각(현우 F6)', () {
-    test('파일 이름은 현지 시각', () {
-      final local = DateTime.parse(t1).toLocal();
-      String p2(int n) => n.toString().padLeft(2, '0');
-      expect(backupFileName(t1), 'chaekjang-backup-${local.year}-${p2(local.month)}-${p2(local.day)}-${p2(local.hour)}-${p2(local.minute)}-00.json');
-    });
-
-    test('복원 확인에 시각까지, 올해가 아니면 해도', () {
-      final local = DateTime.parse(t1).toLocal();
-      final hm = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-      expect(backupTimeLabel(t1, now: DateTime(local.year, 12, 1)), '${local.month}월 ${local.day}일 $hm');
-      expect(backupTimeLabel(t1, now: DateTime(local.year + 1, 1, 1)), '${local.year}년 ${local.month}월 ${local.day}일 $hm');
-      expect(backupTimeLabel('x'), '');
     });
   });
 

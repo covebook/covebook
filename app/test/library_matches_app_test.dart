@@ -1,4 +1,5 @@
-// 서재 읽기(표 행 → 서재)·기간 통계·시간 글자가 지금 앱과 같은지 본다. test/fixtures/library_cases.json 은 tool/gen_shaders.sh 가
+// 서재 읽기(표 행 → 서재)·기간 통계·시간 글자가 옛 앱(RN)과 같은지 본다. test/fixtures/library_cases.json 은 tool/gen_shaders.sh 가
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 // 지금 앱 db/local-db.ts로 실사 비교 책장의 읽기 기록을 저장(node:sqlite)하고 다시 읽어 뽑는다
 import 'dart:convert';
 import 'dart:io';

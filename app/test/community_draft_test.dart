@@ -1,4 +1,5 @@
-// 지금 앱 domain/__tests__/community-draft.test.ts와 같은 시험
+// 옛 앱(RN) domain/__tests__/community-draft.test.ts와 같은 시험
+// (옛 앱 시험을 옮겨 온 것이다. 지금은 이 Flutter 코드의 규칙 시험이다)
 import 'dart:convert';
 
 import 'package:chaekjang/domain/community_draft.dart';

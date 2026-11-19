@@ -76,7 +76,7 @@ const _addNew = '\u0000new';
 Future<List<String>> pickBooks(BuildContext context, Library lib, MultiPick multi, {bool allowNone = false}) async {
   final r = await showSheet<List<String>>(
     context,
-    title: '책 추가',
+    title: '읽기 목록에 추가',
     description: '타이머에 둘 책을 골라요. 여러 권 고를 수 있어요.',
     maxHeight: 0.85,
     fit: true,

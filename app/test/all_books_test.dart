@@ -1,4 +1,5 @@
-// 전체 책 목록 거르기·정렬과 삭제 문구가 지금 앱(features/book/all-books.ts) 규칙대로인지 본다
+// 전체 책 목록 거르기·정렬과 삭제 문구가 옛 앱(RN)(features/book/all-books.ts) 규칙대로인지 본다
+// (옛 앱 시험을 옮겨 온 것이다. 지금은 이 Flutter 코드의 규칙 시험이다)
 import 'package:chaekjang/domain/layout.dart';
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/domain/types.dart';

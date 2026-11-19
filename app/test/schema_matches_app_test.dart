@@ -1,4 +1,5 @@
-// 서재 DB 표 구조가 지금 앱(옮기기를 끝까지 돌린 뒤)과 같은지 본다: 표·열 이름·차례·형·NOT NULL·기본값·기본 키, 색인, user_version.
+// 서재 DB 표 구조가 옛 앱(RN)(옮기기를 끝까지 돌린 뒤)과 같은지 본다: 표·열 이름·차례·형·NOT NULL·기본값·기본 키, 색인, user_version.
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 // test/fixtures/app_schema.json 은 tool/gen_shaders.sh 가 지금 앱 db/local-db.ts를 node:sqlite로 돌려 뽑는다
 import 'dart:convert';
 import 'dart:io';

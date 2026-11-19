@@ -1,4 +1,5 @@
-// 책 면이 받는 창빛 그림자(3D 단계)가 지금 앱 receivedShadow3 결과와 같은지 본다: 실사 책장(real·real-side) 줄마다 책마다
+// 책 면이 받는 창빛 그림자(3D 단계)가 옛 앱(RN) receivedShadow3 결과와 같은지 본다: 실사 책장(real·real-side) 줄마다 책마다
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 // 받는 면·빛 길이 구간·가리개 조각 꼭짓점·흐림·가리는 몫. test/fixtures/received_cases.json 은 tool/gen_shaders.sh 가 뽑는다
 import 'dart:convert';
 import 'dart:io';

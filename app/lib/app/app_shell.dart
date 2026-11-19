@@ -238,10 +238,10 @@ class _AppShellState extends State<AppShell> {
         [
           AlertButton('이어서 읽기', onPress: () async {
             reading.clearStale();
-            if (!await resumeReadingOrTell(context)) return;
+            if (!await resumeReadingOrTell(context) || !mounted) return;
             // 이어 읽으면 소리도 함께(복구 창 이어 읽기와 같게, 점검 B14)
             Ambient.instance.resumeIfWanted();
-            if (context.mounted) openReadingScene(context);
+            openReadingScene(context);
           }),
           AlertButton('여기서 끝내고 기록하기', onPress: () {
             reading.clearStale();
