@@ -14,7 +14,9 @@ import '../../store/placement_store.dart';
 import '../../ui/book_visual.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../home/locked_rows.dart' show freeShelfSlots, openableShelfCount;
+import '../home/locked_rows.dart' show allowedShelfSlots, freeShelfSlots, openableShelfCount;
+import '../../services/iap.dart' show IapService;
+import '../../store/entitlement_store.dart';
 
 /// 놓을 수 있는 만큼 놓는다(놓은 책, 자리가 없어 남은 책)
 Future<({List<String> placed, List<String> left})> placeBooks(Iterable<String> ids) async {
@@ -48,7 +50,7 @@ Future<({int placed, int kept, bool full})> placeWithChoice(BuildContext context
 
     // 새 빈 선반에도 한 권도 못 놓았으면(선반보다 큰 책) 더 묻지 않는다(선반이 끝없이 늘지 않게). 무료 칸을 다 열었으면 보관
     if (afterNewShelf && r.placed.isEmpty) return keep(false);
-    final free = openableShelfCount(s.layout!.shelves.length);
+    final free = openableShelfCount(s.layout!.shelves.length, iapOn ? EntitlementStore.instance.shelves : 0);
     if (free == 0 || !context.mounted) return keep(free == 0);
     final open = await _askNoRoom(context, r.left, free);
     if (open != true || !await s.addShelf()) return keep(false);
@@ -105,4 +107,15 @@ Future<bool?> _askNoRoom(BuildContext context, List<String> ids, int free) {
       SubAction(label: '보관만 하기', onPress: () => Navigator.pop(ctx, false)),
     ]),
   );
+}
+
+/// 환불로 구매한 선반 칸이 줄었으면 그 칸을 닫는다(ADR-0002 D13, 2026-11-19 정환: 무료 세 칸은 건드리지 않고,
+/// 잠기는 칸은 책을 다 빼고 아직 안 연 선반처럼 잠근다). 뺀 책은 내 책에 보관된다. 옮긴 책 수를 돌려준다.
+/// 서버에서 이번 실행에 받은 상태로만 한다: 기기에 남긴 지난번 값이나 받기 전의 0으로 선반을 닫지 않는다
+Future<int> enforceShelfLimit() async {
+  final e = EntitlementStore.instance;
+  if (!iapOn || !IapService.instance.synced) return 0;
+  final s = PlacementStore.instance;
+  await s.ensure();
+  return s.closeShelvesBeyondLimit(allowedShelfSlots(e.shelves));
 }

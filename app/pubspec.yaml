@@ -14,10 +14,15 @@ dependencies:
   file_picker: ^13.3.3
   flutter:
     sdk: flutter
+  flutter_local_notifications: ^22.0.0
   flutter_svg: ^2.4.0
   google_sign_in: ^7.2.0
   image_cropper: ^13.0.0
   image_picker: ^1.2.4
+  in_app_purchase: ^3.3.1
+  # 구독 주기(월·연)를 읽으려고 스토어별 타입을 직접 쓴다
+  in_app_purchase_android: ^0.5.5
+  in_app_purchase_storekit: ^0.4.17
   just_audio: ^0.10.6
   just_audio_background: ^0.0.1-beta.17
   kakao_flutter_sdk_user: ^2.1.0
@@ -28,6 +33,7 @@ dependencies:
   share_plus: ^13.3.1
   sign_in_with_apple: ^8.2.0
   sqflite: ^2.4.6
+  timezone: ^0.11.2
   url_launcher: ^6.3.3
   video_player: ^2.14.1
 

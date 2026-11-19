@@ -15,6 +15,11 @@ import '../../ui/kit.dart';
 import '../book/import_list_screen.dart' show openImportList;
 import '../community/community_screens.dart' show communityOpen, openCommunityProfile;
 import 'backup_screen.dart' show openBackup;
+import '../../store/entitlement_store.dart' show EntitlementStore, iapOn;
+import '../iap/notices_screen.dart' show openNotices;
+import '../iap/purchase_history_screen.dart' show openPurchaseHistory;
+import '../iap/seller_sheet.dart' show hasSellerInfo, showSellerSheet;
+import '../iap/subscription_screen.dart' show openSubscription;
 import 'terms.dart' show legalParagraph, showTermsSheet;
 import '../../ui/feedback.dart';
 
@@ -50,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _s.addListener(_changed);
     communityOpen.addListener(_changed);
+    if (iapOn) EntitlementStore.instance.addListener(_changed);
     _s.load();
     PackageInfo.fromPlatform().then((p) {
       if (mounted) setState(() => _version = p.version);
@@ -60,12 +66,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _s.removeListener(_changed);
     communityOpen.removeListener(_changed);
+    if (iapOn) EntitlementStore.instance.removeListener(_changed);
     super.dispose();
   }
 
   void _changed() {
     if (mounted) setState(() {});
   }
+
+  int get _unread => EntitlementStore.instance.unreadNotices;
 
   // 하나 고르기 시트: 통계 '기간'과 같은 줄(FilterOption: 고르면 굵게, 모든 줄에 고르는 원), 설명은 시트 공통 설명 자리(2026-11-19 공통 규칙)
   void _motionSheet() => showSheet<void>(
@@ -115,6 +124,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ListGroup(title: '내 기록', children: [
           // 백업·복원은 뺐다(2026-11-17 사용자: 기록은 계정에 보관, 다른 앱에서 갈아타는 가져오기만)
           ListItem(label: '계정 및 동기화', chevron: true, onPress: () => openBackup(context)),
+          // 구독 관리: 내 정보 첫 화면에서 한 번에 닿는다(해지 경로를 숨기지 않는다, ADR-0003). 결제를 켠 빌드에만 있다
+          if (iapOn && _syncAvailable) ListItem(label: '구독 관리', chevron: true, onPress: () => openSubscription(context)),
+          // 알림: 결제 고지가 쌓이는 알림함(ADR-0003 L8). 안 읽은 것이 있으면 개수를 보인다
+          if (iapOn && _syncAvailable)
+            ListItem(label: '알림', value: _unread > 0 ? '새 알림 $_unread개' : null, chevron: true, onPress: () => openNotices(context)),
+          // 구매 내역: 자기 결제 기록을 앱에서 본다(ADR-0003 L17)
+          if (iapOn && _syncAvailable) ListItem(label: '구매 내역', chevron: true, onPress: () => openPurchaseHistory(context)),
           // 다른 앱·엑셀에 정리해 둔 책을 한 번에(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어')
           ListItem(label: '책 목록 가져오기', chevron: true, onPress: () => openImportList(context)),
           // 커뮤니티가 열렸고 서버를 쓰는 빌드일 때만
@@ -126,6 +142,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // 이용약관(2026-11-18: 외부 표지 제공 중단 안내 포함)
           ListItem(label: '이용약관', chevron: true, onPress: () => showTermsSheet(context)),
           ListItem(label: '개인정보 처리방침', chevron: true, onPress: () => showPrivacySheet(context)),
+          // 사업자 정보: 설정에서 한 번에 닿는다(ADR-0003 L14). 서버가 값을 준 빌드에만 있다
+          if (iapOn && hasSellerInfo) ListItem(label: '사업자 정보', chevron: true, onPress: () => showSellerSheet(context)),
           // 버전을 못 읽으면 값 없이(빈 값을 읽지 않게)
           ListItem(label: '앱 정보', value: _version.isEmpty ? null : _version),
         ]),
@@ -155,7 +173,7 @@ void showPrivacySheet(BuildContext context) => showSheet<void>(
               ? '내 기록은 공개되지 않아요. 커뮤니티에 직접 올린 글과 고른 항목만 공개돼요.'
               : '공개되는 기록은 없어요. 별점, 한줄평, 감상, 갈피는 나만 봐요.'),
           // 계정 삭제는 서버를 쓰는 빌드에만 있다(로그인 없는 빌드에서 '서버 계정 삭제'를 말하지 않는다)
-          if (_syncAvailable) para('회원탈퇴를 요청하면 연결된 로그인과 서버 기록, 사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
+          if (_syncAvailable) para('회원탈퇴를 요청하면 연결된 로그인과 서버 기록, 사진을 삭제 처리하고, 이 기기의 기록은 남겨요.${iapOn ? ' 결제 기록은 법에 따라 5년 동안 계정과 분리해 보관해요.' : ''}'),
           Padding(
             padding: const EdgeInsets.only(top: Space.s),
             // 시트 안 단추는 l(2026-11-19 공통 규칙)

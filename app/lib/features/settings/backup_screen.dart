@@ -8,11 +8,13 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../services/sync.dart';
+import '../../store/entitlement_store.dart';
 import '../../store/reading_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/brand_button.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import '../iap/withdraw_notice.dart' show showWithdrawNotice;
 import '../book/labels.dart' show dateTimeLabel;
 import '../../ui/feedback.dart' show errorText;
 
@@ -72,12 +74,20 @@ class _BackupScreenState extends State<BackupScreen> {
     _removeAccount();
   }
 
-  void _removeAccount() => appAlert(
+  /// 구독 중인 계정이 탈퇴하려 할 때(고지 문구 T12): 탈퇴해도 스토어 구독은 해지되지 않는다고 먼저 알린다.
+  /// 탈퇴를 막지 않는다. '탈퇴 계속'을 누르면 원래 확인창으로 간다
+  void _removeAccount() {
+    final sub = iapOn ? EntitlementStore.instance.subscription : null;
+    if (sub == null || !sub.active) return _confirmRemove();
+    showWithdrawNotice(context, sub, onContinue: _confirmRemove);
+  }
+
+  void _confirmRemove() => appAlert(
         context,
         '회원탈퇴할까요?',
         _sync.loginRequired
-            ? '연결된 로그인과 서버의 독서 기록, 사진 삭제를 요청해요. 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
-            : '연결된 로그인과 서버의 독서 기록, 사진 삭제를 요청해요. 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
+            ? '연결된 로그인과 서버의 독서 기록, 사진 삭제를 요청해요.${iapOn ? ' 결제 기록은 법에 따라 계정과 분리해 보관해요.' : ''} 이 폰의 기록도 지워지고 로그인 화면으로 돌아가요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.'
+            : '연결된 로그인과 서버의 독서 기록, 사진 삭제를 요청해요.${iapOn ? ' 결제 기록은 법에 따라 계정과 분리해 보관해요.' : ''} 이 기기의 책과 사진은 남고 동기화는 중지돼요. 다른 기기의 오래된 앱이 기록을 다시 올리지 않도록 먼저 최신 버전으로 업데이트해 주세요.',
         [
           const AlertButton('취소', style: AlertStyle.cancel),
           AlertButton('회원탈퇴', style: AlertStyle.destructive, onPress: () async {

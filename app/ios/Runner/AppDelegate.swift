@@ -3,6 +3,7 @@ import Flutter
 import Photos
 import UIKit
 import UniformTypeIdentifiers
+import UserNotifications
 import Vision
 
 @main
@@ -11,6 +12,8 @@ import Vision
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // 기기 예약 알림(flutter_local_notifications, 연 구독 갱신 전 안내): 앱이 열려 있을 때도 알림을 보여 준다
+    UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
