@@ -21,8 +21,14 @@ type dbtx interface {
 }
 
 // iapPaidShelfMax는 연도 책장 하나에서 돈을 내고 여는 칸의 최대 수다. 책장 6칸 중 3칸은 무료다(D1).
-// 이 수를 넘게 산 거래도 원장에는 남기고, 칸 수만 여기서 자른다. 넘은 거래는 운영자가 환불한다.
+// 두 겹으로 지킨다
+//   - 결제 전: 결제 중 예약(iap_shelf_reservations)으로 두 기기가 동시에 3칸을 넘게 사지 못하게 막는다
+//   - 결제 뒤: 그래도 넘은 거래는 over_cap으로 표시해 칸을 주지 않고 환불한다. 칸 수를 셀 때도 3에서 한 번 더 자른다
 const iapPaidShelfMax = 3
+
+// iapShelfHold는 선반 결제 중 예약이 살아 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다.
+// 앱이 결제 중에 꺼지면 이 시간이 지나야 다른 기기가 그 해 선반을 살 수 있다.
+const iapShelfHold = 5 * time.Minute
 
 // iapAccountToken은 유저의 구독용 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
 // 여러 개면 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
@@ -174,7 +180,7 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 
 // iapEntitlements는 유저가 지금 가진 것을 계산한다. 따로 저장한 값이 없고 매번 표에서 센다(D5).
 //   - plus: 결제된 구독이 있고, 만료 전이거나 유예 기간 안이다(D11). 만료 판단은 DB 서버 시계다(D23).
-//   - shelves: 연도 책장마다, 환불되지 않은 선반 거래가 준 칸 수의 합. iapPaidShelfMax에서 자른다(D1).
+//   - shelves: 연도 책장마다, 환불되지 않은 선반 거래가 준 칸 수의 합. 3칸을 넘게 산 거래(over_cap)는 세지 않고, iapPaidShelfMax에서 한 번 더 자른다(D1).
 //     산 칸이 없는 연도는 들어 있지 않다. 연도를 모르는 거래는 어느 책장에도 세지 않는다.
 func iapEntitlements(ctx context.Context, q dbtx, user int64) (plus bool, shelves map[int]int, err error) {
 	err = q.QueryRow(ctx, `SELECT
@@ -186,7 +192,7 @@ func iapEntitlements(ctx context.Context, q dbtx, user int64) (plus bool, shelve
 	}
 	rows, err := q.Query(ctx, `SELECT b.shelf_year, least(sum(p.shelves), $2)::int
 		FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND b.shelf_year IS NOT NULL
+		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND b.shelf_year IS NOT NULL AND NOT b.over_cap
 		GROUP BY b.shelf_year`, user, iapPaidShelfMax)
 	if err != nil {
 		return
@@ -225,5 +231,53 @@ func iapRecordNotification(ctx context.Context, q dbtx, n iap.Notice, payload st
 func iapFinishNotification(ctx context.Context, q dbtx, route iap.Route, id, result, errText string) error {
 	_, err := q.Exec(ctx, `UPDATE iap_notifications SET result=$3, error=nullif($4,''), processed_at=now(), attempts=attempts+1
 		WHERE route=$1 AND notification_id=$2`, string(route), id, result, errText)
+	return err
+}
+
+// iapReservation은 선반 결제 중 예약 하나다.
+type iapReservation struct {
+	ID        string
+	ExpiresAt time.Time
+}
+
+// iapReserveShelf는 그 해 책장에 shelves칸 결제 중 예약을 잡는다. paid는 그 해에 이미 산 칸 수다.
+// 산 칸 + 살아 있는 예약 칸 + 이번 칸이 iapPaidShelfMax를 넘으면 잡지 않고, 가장 먼저 끝나는 예약까지 남은 시간(wait)을 준다.
+// 부르는 쪽이 유저 줄을 잠근 트랜잭션 안에서 부른다(두 기기가 동시에 잡지 못하게). 시각은 DB 시계다(D23).
+func iapReserveShelf(ctx context.Context, tx pgx.Tx, user int64, year, shelves, paid int) (r iapReservation, wait time.Duration, err error) {
+	// 끝난 예약은 지운다. 남아 있어도 세지 않지만 표가 쌓이지 않게
+	if _, err = tx.Exec(ctx, "DELETE FROM iap_shelf_reservations WHERE user_id=$1 AND expires_at <= now()", user); err != nil {
+		return
+	}
+	var held int
+	var waitSecs float64
+	if err = tx.QueryRow(ctx, `SELECT coalesce(sum(shelves),0)::int, coalesce(extract(epoch FROM min(expires_at) - now()),0)::float8
+		FROM iap_shelf_reservations WHERE user_id=$1 AND year=$2 AND expires_at > now()`, user, year).Scan(&held, &waitSecs); err != nil {
+		return
+	}
+	if paid+held+shelves > iapPaidShelfMax {
+		wait = time.Duration(waitSecs * float64(time.Second))
+		if wait < time.Second {
+			wait = time.Second
+		}
+		return
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO iap_shelf_reservations(user_id, year, shelves, expires_at)
+		VALUES($1,$2,$3, now() + make_interval(secs => $4)) RETURNING id::text, expires_at`,
+		user, year, shelves, iapShelfHold.Seconds()).Scan(&r.ID, &r.ExpiresAt)
+	return
+}
+
+// iapReleaseReservation은 이 유저의 예약 하나를 푼다. 없거나 남의 예약이거나 UUID 모양이 아니면 아무 일도 하지 않는다.
+func iapReleaseReservation(ctx context.Context, q dbtx, user int64, id string) error {
+	_, err := q.Exec(ctx, "DELETE FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=lower($2)", user, id)
+	return err
+}
+
+// iapReleaseOldestReservation은 그 해 책장의 살아 있는 예약 중 가장 먼저 잡은 것 하나를 푼다.
+// 어느 예약의 결제인지 모를 때 쓴다(스토어 알림으로 지급될 때, 앱이 예약 번호를 보내지 않았을 때).
+func iapReleaseOldestReservation(ctx context.Context, q dbtx, user int64, year int) error {
+	_, err := q.Exec(ctx, `DELETE FROM iap_shelf_reservations WHERE id = (
+		SELECT id FROM iap_shelf_reservations WHERE user_id=$1 AND year=$2 AND expires_at > now()
+		ORDER BY created_at, id LIMIT 1)`, user, year)
 	return err
 }
