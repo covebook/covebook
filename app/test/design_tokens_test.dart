@@ -408,7 +408,7 @@ void main() {
     expect(missing, isEmpty);
   });
 
-  test('화면 코드에 글자 크기 숫자가 없다(DESIGN.md 9장 예외만)', () {
+  test('화면 코드에 글자 크기 숫자가 없다(DESIGN.md 16장 예외만)', () {
     // 옛 앱 화소 값을 그대로 옮긴 그림 · 종이와 글꼴 데우기만 예외
     const allowed = {'lib/services/warmup.dart', 'lib/features/bookmark/board_card.dart', 'lib/features/bookmark/bookmark_detail_screen.dart'};
     final raw = RegExp(r'fontSize:\s*[0-9]');
@@ -421,6 +421,6 @@ void main() {
         if (raw.hasMatch(lines[i])) hits.add('$p:${i + 1}');
       }
     }
-    expect(hits, isEmpty, reason: '글자 크기는 AppType 역할로(theme.dart TypeSpecs). 그림 · 종이처럼 일부러 다른 값이면 DESIGN.md 9장과 이 시험 예외에 함께 적는다');
+    expect(hits, isEmpty, reason: '글자 크기는 AppType 역할로(theme.dart TypeSpecs). 그림 · 종이처럼 일부러 다른 값이면 DESIGN.md 16장과 이 시험 예외에 함께 적는다');
   });
 }

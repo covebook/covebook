@@ -13,18 +13,13 @@ import '../../ui/alert.dart';
 import '../../ui/brand_button.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../stats/chart_data.dart' show timeLabel;
+import '../book/labels.dart' show dateTimeLabel;
 
 Future<void> openBackup(BuildContext context) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/backup'), builder: (_) => const BackupScreen()));
 
-/// 마지막 동기화 시각: 오늘·어제는 그 말로, 그 밖은 날짜. 시각은 앱 공통 '오후 3:10'(timeLabel)
-String syncTimeLabel(DateTime t, DateTime now) {
-  final d = DateTime(t.year, t.month, t.day), today = DateTime(now.year, now.month, now.day);
-  final days = today.difference(d).inDays;
-  final day = days == 0 ? '오늘' : days == 1 ? '어제' : t.year == now.year ? '${t.month}월 ${t.day}일' : '${t.year}년 ${t.month}월 ${t.day}일';
-  return '$day ${timeLabel(t)}';
-}
+/// 마지막 동기화 시각: 앱 공통 날과 시각 글자('어제 오후 3:10', dateTimeLabel)
+String syncTimeLabel(DateTime t, DateTime now) => dateTimeLabel(t, now: now);
 
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});

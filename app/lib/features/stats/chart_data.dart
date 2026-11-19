@@ -2,7 +2,7 @@
 // 지금 앱 features/stats/chart-data.ts를 옮긴 것(값이 같은지는 test/chart_data_matches_app_test.dart)
 library;
 
-import '../../ui/kit.dart' show weekdays;
+import '../../ui/kit.dart' show clockText, weekdays;
 import 'dart:math' as math;
 
 import '../../domain/library.dart';
@@ -228,8 +228,9 @@ String dayTitle(String day) {
 }
 
 ({String noon, String text}) _clock(DateTime t) {
-  final h = t.hour;
-  return (noon: h < 12 ? '오전' : '오후', text: '${h % 12 == 0 ? 12 : h % 12}:${_p2(t.minute)}');
+  final c = clockText(t.hour, t.minute); // '오후 9:05'(kit, 앱의 시각 글자 하나)
+  final i = c.indexOf(' ');
+  return (noon: c.substring(0, i), text: c.substring(i + 1));
 }
 
 /// 시각 하나: '오후 9:05'(앱의 시각 글자는 이것과 [timeRange] 둘뿐, 2026-11-19 공통 규칙: 24시간 '21:05'가 섞여 있었다)

@@ -15,7 +15,7 @@ import 'chart_data.dart';
 // 표지 부품은 lib/ui/book_cover.dart(책장 시트 등이 이 파일에서 가져다 써서 다시 내보낸다)
 export '../../ui/book_cover.dart';
 import '../../ui/book_cover.dart';
-import '../book/labels.dart' show dateShort;
+import '../book/labels.dart' show dateRange;
 
 final _small = AppType.micro;
 
@@ -407,8 +407,7 @@ class BookRecordView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = bookRecord(lib, id);
-    String dot(String d) => dateShort(d);
-    final span = r.firstDay != null ? (r.firstDay == r.lastDay ? dot(r.firstDay!) : '${dot(r.firstDay!)} ~ ${dot(r.lastDay!)}') : '아직 기록이 없어요';
+    final span = r.firstDay != null ? dateRange(r.firstDay, r.lastDay) : '아직 기록이 없어요';
     // 책 줄은 앱 공통 BookRow(작게 40, 2026-11-19 공통 규칙). 위아래 12는 BookRow가 가진다
     final w = BookRow.coverWidth(BookRowSize.small);
     return Column(children: [

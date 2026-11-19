@@ -157,9 +157,10 @@ class _StatsScreenState extends State<StatsScreen> {
     return Screen(
       back: !widget.tab,
       title: widget.tab ? '통계' : '내 기록',
+      // 누르는 자리 48이 되며 위 빈 자리를 10 → 2로 줄여 글자 자리는 그대로
       right: Padding(
-        padding: const EdgeInsets.only(top: 10, right: 10),
-        child: FilterButton(plain: true, label: bookName ?? '모든 책', active: book != null, onPress: () => _pickBook(lib)),
+        padding: const EdgeInsets.only(top: Space.xs / 2, right: 10),
+        child: FilterButton(label: bookName ?? '모든 책', active: book != null, onPress: () => _pickBook(lib)),
       ),
       // 떠 있는 하단바 아래까지 내용이 내려가게
       bottomPad: widget.tab ? TabBarStyle.contentPad - Space.section : 0,
@@ -184,7 +185,7 @@ class _StatsScreenState extends State<StatsScreen> {
             child: const LucideIcon('ChevronRight'),
           ),
           const Spacer(),
-          if (_view == 'records') FilterButton(plain: true, label: _yearly ? '연도별' : '월별', onPress: _periodSheet),
+          if (_view == 'records') FilterButton(label: _yearly ? '연도별' : '월별', onPress: _periodSheet),
         ]),
       );
 

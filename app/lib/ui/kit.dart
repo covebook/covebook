@@ -126,8 +126,8 @@ abstract final class Shape {
   /// 테두리 상자(읽은 기간 카드 · 통계 평균 카드)
   static const card = 12.0;
 
-  /// 고르는 큰 칸(Choice) 14 · 전환 칸 바깥 12 · 고른 칸 9 · 필터 단추 알약 20 · 칩 알약
-  static const choice = 14.0, segmented = 12.0, segment = 9.0, filterPill = 20.0, pill = 999.0;
+  /// 고르는 큰 칸(Choice) 14 · 전환 칸 바깥 12 · 고른 칸 9 · 칩 알약
+  static const choice = 14.0, segmented = 12.0, segment = 9.0, pill = 999.0;
 
   /// 표지 · 대체 표지 · 줄 안 막대 끝 3
   static const cover = 3.0;
@@ -141,7 +141,7 @@ abstract final class Shape {
   /// 이름 → 값(토큰 내보내기 · 검사용)
   static const all = <String, double>{
     'button': button, 'input': input, 'sheet': sheet, 'dialog': dialog, 'tag': tag, 'card': card,
-    'choice': choice, 'segmented': segmented, 'segment': segment, 'filterPill': filterPill, 'pill': pill, 'cover': cover,
+    'choice': choice, 'segmented': segmented, 'segment': segment, 'pill': pill, 'cover': cover,
   };
 }
 
@@ -150,9 +150,9 @@ abstract final class ControlSize {
   /// 단추 보이는 높이: 크게(화면 아래 주요 · 시트 안) · 보통(카드 · 창 안) · 작게(줄 안 · 보조)
   static const buttonL = 52.0, buttonM = 48.0, buttonS = 40.0;
 
-  /// 입력칸 · 고르는 칸(Field · SelectField) 56, 여러 줄 입력칸 110, 검색칸 48, 필터 단추 40.
+  /// 입력칸 · 고르는 칸(Field · SelectField) 56, 여러 줄 입력칸 110, 검색칸 48.
   /// 검색칸: 11-18 사용자 '두께 좀 줄이고'로 52 → 44를 넣었지만 안쪽 검색 아이콘 칸(누르는 자리 48)이 높이를 정해 실제로는 48로 그려진다(2026-11-19 값 대조에서 발견). 지금 화면 그대로 48
-  static const field = 56.0, fieldMultiline = 110.0, search = 48.0, filter = 40.0;
+  static const field = 56.0, fieldMultiline = 110.0, search = 48.0;
 
   /// 고르는 큰 칸(Choice) 56
   static const choice = 56.0;
@@ -166,10 +166,16 @@ abstract final class ControlSize {
   /// 고르는 원 22, 고르는 칸 모서리 체크 24, 정보 넣기 네모 22
   static const radio = 22.0, choiceBadge = 24.0, checkSquare = 22.0;
 
+  /// 칩 보이는 높이 40(누르는 자리는 위아래 4를 더해 48)
+  static const chip = 40.0;
+
+  /// 작은 돌아가는 원(단추 · 칸 · 줄 안 진행) 20, 굵기 2
+  static const spinner = 20.0, spinnerStroke = 2.0;
+
   static const all = <String, double>{
-    'buttonL': buttonL, 'buttonM': buttonM, 'buttonS': buttonS, 'field': field, 'fieldMultiline': fieldMultiline, 'search': search, 'filter': filter, 'choice': choice,
+    'buttonL': buttonL, 'buttonM': buttonM, 'buttonS': buttonS, 'field': field, 'fieldMultiline': fieldMultiline, 'search': search, 'choice': choice,
     'segment': segment, 'segmentPad': segmentPad, 'segmentInset': segmentInset, 'toggleWidth': toggleWidth, 'toggleHeight': toggleHeight, 'toggleKnob': toggleKnob,
-    'radio': radio, 'choiceBadge': choiceBadge, 'checkSquare': checkSquare,
+    'radio': radio, 'choiceBadge': choiceBadge, 'checkSquare': checkSquare, 'chip': chip, 'spinner': spinner, 'spinnerStroke': spinnerStroke,
   };
 }
 
@@ -567,6 +573,8 @@ class Screen extends StatelessWidget {
         : fixedHead
             ? fixed
             : NestedScrollView(
+                // 탭 첫 화면이면 탭의 스크롤(탭을 다시 누르면 맨 위로), 밀어 넣은 화면은 그 경로의 것
+                controller: PrimaryScrollController.maybeOf(context),
                 headerSliverBuilder: (_, _) => [SliverToBoxAdapter(child: head), ?pinnedSliver],
                 body: fixed,
               );
@@ -815,14 +823,18 @@ class _ChipState extends State<AppChip> {
       button: true,
       selected: widget.on,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
         onTapCancel: () => setState(() => _down = false),
         onTapUp: (_) => setState(() => _down = false),
         onTap: widget.onPress,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 40),
+        // 누르는 자리 48: 겉모양 40 위아래 빈 4까지(2026-11-19 규칙)
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: (Space.hit - ControlSize.chip) / 2),
+          child: Container(
+          constraints: const BoxConstraints(minHeight: ControlSize.chip),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999), border: Border.all(color: bg)),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(Shape.pill), border: Border.all(color: bg)),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -838,12 +850,15 @@ class _ChipState extends State<AppChip> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
 }
 
 /// 빈 화면: 제목(가운데) + 설명 + 행동 하나
+/// 화면 전체가 빈 상태 · 불러오기 실패(docs/design/DESIGN.md 11장): 가운데 제목(heading, 마침표 없음) + 본문 한두 문장 + 다음 행동 단추 하나.
+/// 첫 사용은 만들 것을 권하는 primary, 실패의 '다시 시도'·조건 0건의 '조건 지우기'는 secondary. 한 구역만 빈 것은 [EmptyLine]
 class Empty extends StatelessWidget {
   const Empty({super.key, required this.title, this.body, this.action, this.onAction, this.actionKind = 'primary'});
   final String title;
@@ -854,34 +869,91 @@ class Empty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: Space.block, horizontal: Space.s),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            WordText(title, textAlign: TextAlign.center, style: AppType.heading),
+            Semantics(header: true, child: WordText(title, textAlign: TextAlign.center, style: AppType.heading)),
             if (body != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText(body!, textAlign: TextAlign.center, style: AppType.sub)),
             if (action != null && onAction != null)
               Padding(
                 padding: const EdgeInsets.only(top: Space.xl),
-                child: Center(child: ConstrainedBox(constraints: const BoxConstraints(minWidth: 160), child: Btn(label: action!, kind: actionKind, onPress: onAction!))),
+                child: Center(child: ConstrainedBox(constraints: const BoxConstraints(minWidth: emptyActionMinWidth), child: Btn(label: action!, kind: actionKind, onPress: onAction!))),
               ),
           ],
         ),
       );
 }
 
-/// 불러오는 중
+/// 빈 화면 단추 최소 폭(가운데 짧은 단추)
+const emptyActionMinWidth = 160.0;
+
+/// 화면 전체를 불러오는 중: 가운데 원(accent) + 글(있으면). 화면 읽기는 글이 없어도 '불러오는 중'
 class Loading extends StatelessWidget {
   const Loading({super.key, this.label});
   final String? label;
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48),
-        child: Column(children: [
-          const CircularProgressIndicator(color: AppColors.accent),
-          if (label != null) Padding(padding: const EdgeInsets.only(top: 12), child: WordText(label!, style: AppType.sub)),
+        padding: const EdgeInsets.symmetric(vertical: Space.block),
+        child: Semantics(
+          label: label ?? '불러오는 중',
+          liveRegion: true,
+          child: Column(children: [
+            const ExcludeSemantics(child: CircularProgressIndicator(color: AppColors.accent)),
+            if (label != null) Padding(padding: const EdgeInsets.only(top: Space.m), child: ExcludeSemantics(child: WordText(label!, style: AppType.sub))),
+          ]),
+        ),
+      );
+}
+
+/// 작은 돌아가는 원(단추 · 칸 · 줄 안 진행, 2026-11-19 규칙: 18 · 20 · 22가 섞여 있었다). 화면 전체는 [Loading]
+class Spinner extends StatelessWidget {
+  const Spinner({super.key, this.color = AppColors.inkSoft, this.label});
+  final Color color;
+
+  /// 화면 읽기 이름(단추 안처럼 이미 이름이 있으면 비운다)
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = SizedBox(width: ControlSize.spinner, height: ControlSize.spinner, child: CircularProgressIndicator(strokeWidth: ControlSize.spinnerStroke, color: color));
+    return label == null ? ExcludeSemantics(child: w) : Semantics(label: label, child: ExcludeSemantics(child: w));
+  }
+}
+
+/// 한 구역만 빈 상태(docs/design/DESIGN.md 11장): 왼쪽 회색 한 줄(sub, 한 문장이면 마침표 없음) + 필요하면 글자 단추 하나('다시 시도' 등)
+class EmptyLine extends StatelessWidget {
+  const EmptyLine(this.text, {super.key, this.action, this.onAction});
+  final String text;
+  final String? action;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: Space.s),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          WordText(text, style: AppType.sub),
+          if (action != null && onAction != null) TextLink(label: action!, start: true, onPress: onAction!),
         ]),
+      );
+}
+
+/// 안내 · 오류 글(회색 상자 없이 글자만, 화면 읽기가 바로 읽는다): 안내 sub, 오류 sub danger(문장, 마침표).
+/// 권한 거부는 사용자가 고른 것이라 오류가 아닌 안내로 쓴다(docs/design/DESIGN.md 11장)
+class NoticeText extends StatelessWidget {
+  const NoticeText(this.text, {super.key, this.error = false, this.center = false});
+  final String text;
+  final bool error;
+  final bool center;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: Space.s),
+        child: Semantics(
+          liveRegion: true,
+          child: WordText(text, textAlign: center ? TextAlign.center : null, style: error ? AppType.sub.copyWith(color: AppColors.danger) : AppType.sub),
+        ),
       );
 }
 
@@ -1155,7 +1227,7 @@ class ListItem extends StatelessWidget {
                   constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.55),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: ExcludeSemantics(child: MetaText(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub)),
+                    child: ExcludeSemantics(child: MetaText(value!, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.sub)),
                   ),
                 ),
               ?right,
@@ -1232,57 +1304,32 @@ class Segmented<T> extends StatelessWidget {
 
 /// 거르기 단추: 옅은 회색 알약(고르면 갈색), plain이면 글자 + 아래 꺾쇠만
 class FilterButton extends StatelessWidget {
-  const FilterButton({super.key, required this.label, required this.onPress, this.active = false, this.plain = false});
+  const FilterButton({super.key, required this.label, required this.onPress, this.active = false});
   final String label;
   final VoidCallback onPress;
   final bool active;
-  final bool plain;
 
+  /// '모든 책 ⌄' · '월별 ⌄': 글자와 꺾쇠, 누르면 고르기 시트. 누르는 자리 48(2026-11-19 규칙: 32였다). 고른 값이 기본이 아니면 굵게
   @override
-  Widget build(BuildContext context) {
-    final text = (active ? AppType.labelStrong : AppType.bodySmall).copyWith(color: active && !plain ? AppColors.onAccent : AppColors.ink);
-    // 화면 읽기: '모든 책, 바꾸기' 한 번만(안쪽 글자까지 겹쳐 읽혔다, 2026-11-16 QA 영숙 F9)
-    if (plain) {
-      return Semantics(
+  Widget build(BuildContext context) => Semantics(
         container: true,
         button: true,
+        // 화면 읽기: '모든 책, 바꾸기' 한 번만(안쪽 글자까지 겹쳐 읽혔다, 2026-11-16 QA 영숙 F9)
         label: '$label, 바꾸기',
         onTap: onPress,
         excludeSemantics: true,
         child: Pressable(
           onPress: onPress,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 32, maxWidth: 220),
+            constraints: const BoxConstraints(minHeight: Space.hit, maxWidth: 220),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),
-              const SizedBox(width: 4),
+              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: active ? AppType.labelStrong : AppType.bodySmall)),
+              const SizedBox(width: Space.xs),
               const LucideIcon('ChevronDown', size: 16),
             ]),
           ),
         ),
       );
-    }
-    return Semantics(
-      container: true,
-      button: true,
-      label: '$label, 바꾸기',
-      onTap: onPress,
-      excludeSemantics: true,
-      child: GestureDetector(
-        onTap: onPress,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: ControlSize.filter, maxWidth: 220),
-          padding: const EdgeInsets.only(left: 16, right: 12),
-          decoration: BoxDecoration(color: active ? AppColors.chipOn : AppColors.surface, borderRadius: BorderRadius.circular(Shape.filterPill)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),
-            const SizedBox(width: 4),
-            LucideIcon('ChevronDown', size: 16, color: active ? AppColors.onAccent : AppColors.inkSoft),
-          ]),
-        ),
-      ),
-    );
-  }
 }
 
 /// 목록 묶음(줄 사이에 선을 긋지 않는다): 묶음 이름은 작은 회색 글자
@@ -1613,9 +1660,9 @@ class FilterOption extends StatelessWidget {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                 Text(label,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.row.copyWith(color: selected ? AppColors.ink : AppColors.inkSoft, fontFamily: selected ? AppFonts.uiBold : AppFonts.ui)),
+                    style: selected ? AppType.row.strong : AppType.row.copyWith(color: AppColors.inkSoft)),
                 if (sub != null) WordText(sub!, style: AppType.caption),
               ]),
             ),
@@ -2203,9 +2250,10 @@ class SectionHead extends StatelessWidget {
             onTap: onLink,
             child: Pressable(
               onPress: onLink,
-              child: SizedBox(
-                height: 30,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
+              // 누르는 자리 48(2026-11-19 규칙: 30이었다). 글자는 회색 보통(sub) 그대로
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: Space.hit, minWidth: Space.hit),
+                child: Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.end, children: [
                   Text(link!, style: AppType.sub),
                   if (chevron) ...[const SizedBox(width: 2), const Chevron()],
                 ]),
@@ -2441,6 +2489,15 @@ class Stars extends StatelessWidget {
 /// 요일 이름(일요일부터). 앱의 요일 글자는 이것 하나(달력 · 통계 · 읽기 탭 날짜)
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 String _p2(int n) => n.toString().padLeft(2, '0');
+
+/// 시각 글자 하나: '오후 9:05'(앱의 시각 글자, timeLabel · timeRange도 이것을 쓴다)
+String clockText(int hour, int minute) => '${hour < 12 ? '오전' : '오후'} ${hour % 12 == 0 ? 12 : hour % 12}:${_p2(minute)}';
+
+/// 'HH:MM' → '오후 9:05'(형식이 다르면 그대로)
+String hmLabel(String hhmm) {
+  final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(hhmm);
+  return m == null ? hhmm : clockText(int.parse(m[1]!), int.parse(m[2]!));
+}
 String dayKey(int y, int m, int d) => '$y-${_p2(m)}-${_p2(d)}';
 String todayKey([DateTime? now]) {
   final t = now ?? DateTime.now();
@@ -2592,7 +2649,8 @@ class TimeField extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SelectField(
         label: label,
-        value: value.isNotEmpty ? value : null,
+        // 값은 'HH:MM'으로 두고 보이는 글자는 앱 시각 글자 하나('오후 9:05', 2026-11-19 규칙: 24시간 '21:05'로 보였다)
+        value: value.isNotEmpty ? hmLabel(value) : null,
         placeholder: '시각 고르기',
         onPress: () async {
           final r = await showSheet<String>(context, title: label.replaceAll(RegExp(r' \(.+\)$'), ''), builder: (_) => _TimeBody(value: value));
@@ -2646,7 +2704,7 @@ class _TimeBodyState extends State<_TimeBody> {
         ]),
       ),
       const SizedBox(height: Space.l),
-      Btn(label: '확인', onPress: () => Navigator.pop(context, '${p2(_h)}:${p2(_m)}')),
+      Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(context, '${p2(_h)}:${p2(_m)}')),
     ]);
   }
 }
@@ -2690,7 +2748,7 @@ class _MinutesBodyState extends State<_MinutesBody> {
           ]),
         ),
         const SizedBox(height: Space.l),
-        Btn(label: '${minutesLabel(_total)}으로 정하기', onPress: () => Navigator.pop(context, _total)),
+        Btn(label: '${minutesLabel(_total)}으로 정하기', size: 'l', onPress: () => Navigator.pop(context, _total)),
       ]);
 }
 

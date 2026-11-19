@@ -33,6 +33,7 @@ import '../store/reading_store.dart';
 import '../store/settings_store.dart';
 import '../ui/alert.dart';
 import '../ui/tab_icons.dart';
+import '../ui/kit.dart' show Pressable;
 import '../ui/theme.dart';
 import 'app_nav.dart';
 import 'startup.dart';
@@ -80,6 +81,21 @@ const _qaSeedYear = int.fromEnvironment('QA_SEED_YEAR');
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+
+  /// 탭마다 첫 화면 스크롤(탭을 다시 누르면 맨 위로, docs/design/DESIGN.md 10장)
+  final _tabScroll = [for (var i = 0; i < 5; i++) ScrollController()];
+
+  void _toTop(int i) {
+    final c = _tabScroll[i];
+    if (!c.hasClients) return;
+    final s = SettingsStore.instance;
+    final still = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && MediaQuery.disableAnimationsOf(context));
+    if (still) {
+      c.jumpTo(0);
+    } else {
+      c.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+    }
+  }
 
   /// 한 번 연 탭은 살려 둔다(책장 그림·굽기를 다시 하지 않게)
   final _opened = <int>{0};
@@ -190,6 +206,9 @@ class _AppShellState extends State<AppShell> {
     ReadingStore.instance.removeListener(_readingChanged);
     shelfReady.removeListener(_shelfChanged);
     _coverTimer?.cancel();
+    for (final c in _tabScroll) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -302,7 +321,10 @@ class _AppShellState extends State<AppShell> {
     // 키보드가 열려 있으면 탭 바를 숨긴다: 탭 화면은 Scaffold가 키보드 위로 줄이므로 탭 바가 키보드 바로 위에 떠서 입력하는 내용을 가렸다(2026-11-16 QA 키보드 F1 묶음)
     final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
     void tap(int i) {
-      if (!AppNav.instance.tabsBlocked) _select(i);
+      if (AppNav.instance.tabsBlocked) return;
+      // 보고 있는 탭을 다시 누르면 그 탭 첫 화면 맨 위로(2026-11-19 규칙: 아무 일도 없었다)
+      if (i == _index) return _toTop(i);
+      _select(i);
     }
 
     // 키보드가 오르내리는 동안 숨은 탭(특히 책장)이 매 프레임 다시 배치되지 않게(2026-11-18 측정: 키보드 프레임마다 책장 배치 43ms).
@@ -323,7 +345,7 @@ class _AppShellState extends State<AppShell> {
               for (var i = 0; i < _tabs.length; i++)
                 MediaQuery(
                   data: i == _index && front ? mq : noKeyboard,
-                  child: _opened.contains(i) ? _tabs[i].build(context) : const SizedBox.shrink(),
+                  child: _opened.contains(i) ? PrimaryScrollController(controller: _tabScroll[i], child: _tabs[i].build(context)) : const SizedBox.shrink(),
                 ),
             ],
           ),
@@ -356,10 +378,10 @@ class _AppShellState extends State<AppShell> {
                                   label: _tabs[i].label,
                                   onTap: () => tap(i),
                                   excludeSemantics: true,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => tap(i),
-                                    child: Center(child: _tabs[i].icon(i == _index ? AppColors.tabInk : AppColors.tabInkSoft, i == _index)),
+                                  // 누르는 동안 옅어짐(다른 아이콘 단추와 같은 Pressable, 2026-11-19 규칙: 탭만 표시가 없었다)
+                                  child: Pressable(
+                                    onPress: () => tap(i),
+                                    child: SizedBox.expand(child: Center(child: _tabs[i].icon(i == _index ? AppColors.tabInk : AppColors.tabInkSoft, i == _index))),
                                   ),
                                 ),
                               ),

@@ -147,7 +147,7 @@ void main() {
             ListItem(label: '백업 및 복원', sub: '기록은 이 기기에 저장돼요', chevron: true, onPress: () {}),
             const ListItem(label: '앱 정보', value: '0.1.0'),
             TextLink(label: '고치기', onPress: () {}),
-            FilterButton(label: '모든 책', plain: true, onPress: () {}),
+            FilterButton(label: '모든 책', onPress: () {}),
             Choice(label: '직접 정하기', sub: '10분', selected: true, onPress: () {}),
             const Empty(title: '아직 쓴 감상이 없어요'),
             Btn(label: '감상 쓰기', onPress: () {}),

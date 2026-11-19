@@ -31,7 +31,7 @@ void main() {
               const SectionBand(),
               Wrap(spacing: 8, children: [AppChip(label: '전체', on: true, onPress: () {}), AppChip(label: '읽는 중', onPress: () {}, color: AppColors.accent)]),
               FilterButton(label: '모든 책', onPress: () {}),
-              FilterButton(label: '2026년', onPress: () {}, plain: true),
+              FilterButton(label: '2026년', onPress: () {}, active: true),
               Empty(title: '아직 기록이 없어요', body: '읽기 탭에서 시작해 보세요', action: '읽기 시작', onAction: () {}),
               const LucideIcon('Timer'),
             ]),

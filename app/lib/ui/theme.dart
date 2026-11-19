@@ -33,6 +33,10 @@ abstract final class AppColors {
   static const tabInk = Color(0xFF000000);
   static const tabInkSoft = Color(0xFF787676);
 
+  /// 토스트(짧은 알림) 바탕: 본문색보다 조금 밝은 먹색(흰 화면 · 책장 장면 위 모두에서 보인다). 글자는 흰색
+  static const toast = Color(0xFF2B323C);
+  static const onToast = Color(0xFFFFFFFF);
+
   /// 이름 → (값, 쓰임). 토큰 내보내기 · 검사용(test/design_tokens_test.dart). 색을 더하면 여기에도 넣는다
   static const all = <String, (Color, String)>{
     'bg': (bg, '화면 바탕'),
@@ -56,6 +60,8 @@ abstract final class AppColors {
     'scrim': (scrim, '시트 · 확인창 뒤 막'),
     'tabInk': (tabInk, '하단 탭 고른 아이콘'),
     'tabInkSoft': (tabInkSoft, '하단 탭 안 고른 아이콘'),
+    'toast': (toast, '토스트(짧은 알림) 바탕'),
+    'onToast': (onToast, '토스트 글자'),
   };
 }
 
@@ -160,6 +166,9 @@ abstract final class TypeSpecs {
   static const wheel = TypeSpec(AppFonts.ui, 19, 27, color: AppColors.inkSoft, tabular: true);
   /// 로그인 화면 아래 작은 글자 단추(약관 · 둘러보기)
   static const loginLink = TypeSpec(AppFonts.uiMedium, 15, 21, color: AppColors.inkSoft);
+  /// 토스트 글과 되돌리기 단추(먹색 바탕 위 흰 글자)
+  static const toast = TypeSpec(AppFonts.ui, 16, 22, color: AppColors.onToast);
+  static const toastAction = TypeSpec(AppFonts.uiBold, 16, 22, color: AppColors.onToast);
   /// 글자 단추(TextLink: 밑줄 없음. 기본 갈색, 보조는 회색 · 끝내기는 본문색으로 색만 바꾼다)
   static const link = TypeSpec(AppFonts.uiBold, 16, 23, color: AppColors.accent);
   /// 작은 단추 글자
@@ -225,6 +234,8 @@ abstract final class TypeSpecs {
     'count': count,
     'wheel': wheel,
     'loginLink': loginLink,
+    'toast': toast,
+    'toastAction': toastAction,
     'link': link,
     'buttonSmall': buttonSmall,
     'label': label,
@@ -272,6 +283,8 @@ abstract final class AppType {
   static TextStyle get count => TypeSpecs.count.style;
   static TextStyle get wheel => TypeSpecs.wheel.style;
   static TextStyle get loginLink => TypeSpecs.loginLink.style;
+  static TextStyle get toast => TypeSpecs.toast.style;
+  static TextStyle get toastAction => TypeSpecs.toastAction.style;
   static TextStyle get link => TypeSpecs.link.style;
   static TextStyle get buttonSmall => TypeSpecs.buttonSmall.style;
   static TextStyle get label => TypeSpecs.label.style;
