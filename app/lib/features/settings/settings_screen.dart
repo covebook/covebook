@@ -17,7 +17,8 @@ import '../../services/sync.dart';
 import '../../ui/theme.dart';
 import '../book/import_list_screen.dart' show openImportList;
 import 'backup_screen.dart' show openBackup;
-import '../../store/entitlement_store.dart' show iapOn;
+import '../../store/entitlement_store.dart' show EntitlementStore, iapOn;
+import '../iap/notices_screen.dart' show openNotices;
 import '../iap/purchase_history_screen.dart' show openPurchaseHistory;
 import '../iap/seller_sheet.dart' show hasSellerInfo, showSellerSheet;
 import '../iap/subscription_screen.dart' show openSubscription;
@@ -58,6 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _s.addListener(_changed);
     communityOpen.addListener(_changed);
+    if (iapOn) EntitlementStore.instance.addListener(_changed);
     _s.load();
     PackageInfo.fromPlatform().then((p) {
       if (mounted) setState(() => _version = p.version);
@@ -68,12 +70,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _s.removeListener(_changed);
     communityOpen.removeListener(_changed);
+    if (iapOn) EntitlementStore.instance.removeListener(_changed);
     super.dispose();
   }
 
   void _changed() {
     if (mounted) setState(() {});
   }
+
+  int get _unread => EntitlementStore.instance.unreadNotices;
 
   void _motionSheet() => showSheet<void>(
         context,
@@ -150,6 +155,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListItem(label: '계정 및 동기화', chevron: true, onPress: () => openBackup(context)),
           // 구독 관리: 내 정보 첫 화면에서 한 번에 닿는다(해지 경로를 숨기지 않는다, ADR-0003). 결제를 켠 빌드에만 있다
           if (iapOn && _syncAvailable) ListItem(label: '구독 관리', chevron: true, onPress: () => openSubscription(context)),
+          // 알림: 결제 고지가 쌓이는 알림함(ADR-0003 L8). 안 읽은 것이 있으면 개수를 보인다
+          if (iapOn && _syncAvailable)
+            ListItem(label: '알림', value: _unread > 0 ? '새 알림 $_unread개' : null, chevron: true, onPress: () => openNotices(context)),
           // 구매 내역: 자기 결제 기록을 앱에서 본다(ADR-0003 L17)
           if (iapOn && _syncAvailable) ListItem(label: '구매 내역', chevron: true, onPress: () => openPurchaseHistory(context)),
           // 다른 앱·엑셀에 정리해 둔 책을 한 번에(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어')

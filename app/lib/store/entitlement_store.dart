@@ -112,6 +112,9 @@ class EntitlementStore extends ChangeNotifier {
   /// 사업자 정보(서버 설정에서 온다. 공개 저장소라 앱에 적지 않는다). 키: name, owner, address, phone, email, bizNo, saleNo
   Map<String, String> seller = const {};
 
+  /// 알림함의 안 읽은 고지 수(서버 값)
+  int unreadNotices = 0;
+
   /// 서버에서 한 번이라도 받았는지
   bool loaded = false;
 
@@ -134,6 +137,7 @@ class EntitlementStore extends ChangeNotifier {
     if (j['accountToken'] is String) accountToken = j['accountToken'] as String;
     if (j['products'] is List) products = [for (final p in j['products'] as List) ?IapProduct.from(p)];
     if (j['seller'] is Map) seller = {for (final e in (j['seller'] as Map).entries) if ('${e.value}'.trim().isNotEmpty) '${e.key}': '${e.value}'.trim()};
+    if (j['unreadNotices'] is num) unreadNotices = (j['unreadNotices'] as num).toInt();
     if (j['routes'] is List) routes = [for (final r in j['routes'] as List) '$r'];
     loaded = true;
     if (save) {
@@ -150,12 +154,19 @@ class EntitlementStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setUnread(int n) {
+    if (unreadNotices == n) return;
+    unreadNotices = n;
+    notifyListeners();
+  }
+
   /// 로그아웃·계정 전환 때 비운다
   Future<void> clear() async {
     plus = false;
     shelves = 0;
     subscription = null;
     accountToken = '';
+    unreadNotices = 0;
     products = const [];
     loaded = false;
     await KvStore.remove(_cacheKey).catchError((_) {});

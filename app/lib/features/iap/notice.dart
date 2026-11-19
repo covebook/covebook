@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../db/kv_store.dart';
+import '../../services/sync.dart' show api, syncTokenKey;
 import '../../store/entitlement_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/kit.dart';
@@ -57,32 +58,135 @@ IapNoticeKind? iapNoticeFor(IapSnapshot? seen, IapSnapshot now, {String subState
   return null;
 }
 
-/// 서버에서 상태를 받은 뒤 부른다. 알릴 것이 있으면 한 번 띄우고, 본 상태를 남긴다
+/// 고지 한 건(서버의 알림함 한 줄, ADR-0003 L8·L11). 서버가 종류와 문구에 넣을 값을 주고, 글은 앱이 고지 문구 템플릿대로 만든다
+class IapNotice {
+  const IapNotice({required this.kind, this.id = 0, this.createdAt, this.readAt, this.params = const {}});
+  final int id;
+
+  /// payment_failed, expired, subscription_refunded, shelf_refunded, cancel_scheduled, purchase_done
+  final String kind;
+  final DateTime? createdAt, readAt;
+  final Map<String, dynamic> params;
+
+  static IapNotice? from(Object? j) {
+    if (j is! Map || j['kind'] is! String) return null;
+    return IapNotice(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      kind: j['kind'] as String,
+      createdAt: DateTime.tryParse('${j['createdAt']}'),
+      readAt: DateTime.tryParse('${j['readAt']}'),
+      params: j['params'] is Map ? Map<String, dynamic>.from(j['params'] as Map) : const {},
+    );
+  }
+
+  bool get unread => readAt == null;
+  String get route => '${params['route'] ?? ''}';
+  String get productId => '${params['productId'] ?? ''}';
+  DateTime? _date(String key) => DateTime.tryParse('${params[key]}');
+
+  /// 앱을 열었을 때 창으로도 한 번 띄우는 종류(꼭 읽어야 하는 것). 나머지는 알림함에만 둔다
+  bool get important => const {'payment_failed', 'expired', 'subscription_refunded', 'shelf_refunded'}.contains(kind);
+
+  /// 제목과 본문(고지 문구 T3, T7~T10). 모르는 종류는 null(새 종류를 아는 앱 버전이 나오기 전까지 보이지 않는다)
+  (String, String)? get text {
+    const name = '책장 한켠 플러스';
+    final store = route.isEmpty ? '결제한 스토어' : storeName(route);
+    final grace = _date('graceUntil'), expires = _date('expiresAt');
+    final shelves = (params['shelves'] as num?)?.toInt() ?? 0;
+    final revoked = _date('revokedAt');
+    final when = revoked == null ? '' : '환불일은 ${iapDate(revoked)}입니다. ';
+    return switch (kind) {
+      'payment_failed' => ('$name 결제가 이뤄지지 않았습니다', '${grace == null ? '' : '${iapDate(grace)}까지는 계속 이용할 수 있습니다. '}$store 계정의 결제 수단을 확인해 주세요. 그때까지 결제되지 않으면 구독이 끝납니다.'),
+      'expired' => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
+      'subscription_refunded' => ('$name 결제가 환불 처리됐습니다', '$when구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+      'shelf_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when해당 선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+      'cancel_scheduled' => ('$name의 자동 갱신이 꺼졌습니다', '${expires == null ? '' : '${iapDate(expires)}까지 이용할 수 있습니다. '}이후에는 결제되지 않습니다.'),
+      'purchase_done' => params['kind'] == 'product'
+          ? ('추가 선반 결제가 완료됐습니다', shelves > 0 ? '선반 $shelves칸을 더 열 수 있습니다.' : '선반을 더 열 수 있습니다.')
+          : ('$name 결제가 완료됐습니다', '${expires == null ? '' : '다음 결제일은 ${iapDate(expires)}입니다. '}해지는 내 정보의 구독 관리에서 할 수 있습니다.'),
+      _ => null,
+    };
+  }
+}
+
+/// 서버 알림함을 읽는다. 서버가 아직 알림함을 주지 않으면(예전 서버) null
+Future<List<IapNotice>?> fetchIapNotices() async {
+  final token = await KvStore.get(syncTokenKey);
+  if (token == null) return null;
+  try {
+    final res = await api('GET', '/iap/notices', token);
+    if (res is! Map<String, dynamic> || res['notices'] is! List) return null;
+    return [for (final j in res['notices'] as List) ?IapNotice.from(j)];
+  } catch (_) {
+    return null;
+  }
+}
+
+/// 읽음으로 표시한다. ids가 없으면 전부. 실패해도 넘어간다(다음에 다시 안 읽음으로 보일 뿐이다)
+Future<void> markIapNoticesRead([List<int>? ids]) async {
+  final token = await KvStore.get(syncTokenKey);
+  if (token == null) return;
+  try {
+    final res = await api('POST', '/iap/notices/read', token, ids == null ? {'all': true} : {'ids': ids});
+    if (res is Map<String, dynamic> && res['unread'] is num) EntitlementStore.instance.setUnread((res['unread'] as num).toInt());
+  } catch (_) {}
+}
+
+/// 앱을 열었을 때 창으로 띄울 고지: 안 읽은 중요한 것 가운데 가장 새것 하나. 한 번에 여러 창을 쌓지 않는다
+IapNotice? iapNoticeToShow(List<IapNotice> list) {
+  final unread = [for (final n in list) if (n.unread && n.important && n.text != null) n];
+  if (unread.isEmpty) return null;
+  unread.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+  return unread.first;
+}
+
+/// 서버에서 상태를 받은 뒤 부른다. 기준은 서버 알림함이다: 안 읽은 중요한 고지를 하나 띄우고 읽음으로 남긴다(띄운 것만. 나머지는 알림함에 안 읽음으로 남는다).
+/// 서버가 알림함을 주지 않으면 기기에 남긴 지난번 상태와 견주는 예전 방식으로 알린다
 Future<void> checkIapNotice(BuildContext context) async {
   final e = EntitlementStore.instance;
   if (!iapOn || !e.loaded) return;
+  final list = await fetchIapNotices();
   final now = IapSnapshot.of(e);
   final seen = IapSnapshot.parse(await KvStore.get(iapSeenKey));
-  final kind = iapNoticeFor(seen, now, subState: e.subscription?.state ?? '');
   await KvStore.set(iapSeenKey, now.encode());
-  if (kind != null && context.mounted) await showIapNotice(context, kind, e.subscription);
+  if (list != null) {
+    final n = iapNoticeToShow(list);
+    if (n == null || !context.mounted) return;
+    await markIapNoticesRead([n.id]);
+    if (context.mounted) await showIapNotice(context, n);
+    return;
+  }
+  final kind = iapNoticeFor(seen, now, subState: e.subscription?.state ?? '');
+  if (kind != null && context.mounted) await showIapNotice(context, iapNoticeOf(kind, e.subscription));
 }
 
+/// 기기에서 알아낸 변화를 고지 모양으로(서버 알림함이 없을 때)
+IapNotice iapNoticeOf(IapNoticeKind kind, IapSubscription? sub) => IapNotice(
+      kind: switch (kind) {
+        IapNoticeKind.paymentFailed => 'payment_failed',
+        IapNoticeKind.expired => 'expired',
+        IapNoticeKind.subscriptionRefunded => 'subscription_refunded',
+        IapNoticeKind.shelfRefunded => 'shelf_refunded',
+      },
+      params: {
+        if (sub != null && kind != IapNoticeKind.shelfRefunded) ...{
+          'route': sub.route,
+          'productId': sub.productId,
+          'expiresAt': sub.expiresAt.toIso8601String(),
+          if (sub.graceUntil != null) 'graceUntil': sub.graceUntil!.toIso8601String(),
+        },
+      },
+    );
+
 /// 가운데 확인창으로 알린다(꼭 읽어야 하는 알림이고, 뒤 화면과 관계가 없다. 아래 시트는 뒤 화면을 보며 고르는 일에 쓴다)
-Future<void> showIapNotice(BuildContext context, IapNoticeKind kind, IapSubscription? sub) {
-  final store = storeName(sub?.route ?? '');
-  const name = '책장 한켠 플러스';
-  final grace = sub?.graceUntil;
-  final (title, message) = switch (kind) {
-    IapNoticeKind.paymentFailed => ('$name 결제가 이뤄지지 않았습니다', '${grace == null ? '' : '${iapDate(grace)}까지는 계속 이용할 수 있습니다. '}그때까지 결제되지 않으면 구독이 끝납니다.'),
-    IapNoticeKind.expired => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
-    IapNoticeKind.subscriptionRefunded => ('$name 결제가 환불 처리됐습니다', '구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
-    IapNoticeKind.shelfRefunded => ('추가 선반 결제가 환불 처리됐습니다', '해당 선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 결제한 스토어에서 확인할 수 있습니다.'),
-  };
+Future<void> showIapNotice(BuildContext context, IapNotice n) async {
+  final text = n.text;
+  if (text == null) return;
+  final (title, message) = text;
   // 결제 실패만 할 일이 있다: 결제 수단 확인을 주 버튼으로, 닫기는 아래 글자 버튼으로
-  if (kind == IapNoticeKind.paymentFailed && sub != null) {
+  if (n.kind == 'payment_failed' && n.route.isNotEmpty) {
     return appAlert(context, title, message, [
-      AlertButton('$store에서 결제 수단 확인하기', onPress: () => launchUrl(storeManageUrl(sub.route, sub.productId), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
+      AlertButton('${storeName(n.route)}에서 결제 수단 확인하기', onPress: () => launchUrl(storeManageUrl(n.route, n.productId), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
       const AlertButton('닫기', style: AlertStyle.cancel),
     ], true, true);
   }

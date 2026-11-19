@@ -1854,11 +1854,18 @@ class _Header extends StatelessWidget {
           if (icons)
             Padding(
               padding: const EdgeInsets.only(top: 2.5 - _HeaderIcons.slopY),
-              child: _HeaderIcons(items: [
-                ('decorate', '꾸미기', onDecorate),
-                ('add', '책 추가', () => openAddBook(context)),
-                ('profile', '내 정보', () => openProfile(context)),
-              ]),
+              // 알림함에 안 읽은 결제 고지가 있으면 '내 정보'에 점을 찍는다(ADR-0003 L8: 앱을 열면 볼 수 있어야 한다)
+              child: ListenableBuilder(
+                listenable: EntitlementStore.instance,
+                builder: (context, _) => _HeaderIcons(
+                  dot: iapOn && EntitlementStore.instance.unreadNotices > 0 ? 2 : null,
+                  items: [
+                    ('decorate', '꾸미기', onDecorate),
+                    ('add', '책 추가', () => openAddBook(context)),
+                    ('profile', '내 정보', () => openProfile(context)),
+                  ],
+                ),
+              ),
             )
           else
             const Padding(padding: EdgeInsets.only(top: 2.5), child: SizedBox(height: 44)),
@@ -1871,8 +1878,11 @@ class _Header extends StatelessWidget {
 /// 머리 아이콘 줄: 아이콘마다 누르는 칸 48×48(Space.hit, 2026-11-16 QA 영숙 F12), 가운데 사이 _headerPitch.
 /// 칸 사이 빈 곳은 가까운 아이콘이 받는다. 화면 읽기 칸도 48×48
 class _HeaderIcons extends StatefulWidget {
-  const _HeaderIcons({required this.items});
+  const _HeaderIcons({required this.items, this.dot});
   final List<(String, String, VoidCallback?)> items;
+
+  /// 새 알림 점을 찍을 아이콘 순번(없으면 null)
+  final int? dot;
 
   /// 머리줄 높이(44) 밖으로 넓힌 누르는 자리(위아래)
   static const slopY = (Space.hit - 44) / 2;
@@ -1905,12 +1915,24 @@ class _HeaderIconsState extends State<_HeaderIcons> {
               child: Center(child: Image.asset('assets/header/${it.$1}.png', width: _headerArt, height: _headerArt, excludeFromSemantics: true)),
             ),
           ),
+          if (widget.dot == i)
+            Positioned(
+              left: i * _headerPitch + Space.hit / 2 + _headerArt / 2 - 6,
+              top: Space.hit / 2 - _headerArt / 2 - 2,
+              child: IgnorePointer(
+                child: Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(color: const Color(0xFFD9534F), shape: BoxShape.circle, border: Border.all(color: const Color(0xFFF4F3F2), width: 1.5)),
+                ),
+              ),
+            ),
           Positioned(
             left: i * _headerPitch,
             top: 0,
             width: Space.hit,
             height: Space.hit,
-            child: Semantics(container: true, button: true, label: it.$2, onTap: it.$3, child: const SizedBox.expand()),
+            child: Semantics(container: true, button: true, label: widget.dot == i ? '${it.$2}, 새 알림 있음' : it.$2, onTap: it.$3, child: const SizedBox.expand()),
           ),
         ],
         Positioned.fill(

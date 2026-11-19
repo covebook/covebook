@@ -9,6 +9,7 @@ import 'package:chaekjang/domain/types.dart' show BookPlacement, Shelf;
 import 'package:chaekjang/features/home/locked_rows.dart';
 import 'package:chaekjang/features/iap/consent_screen.dart';
 import 'package:chaekjang/features/iap/notice.dart';
+import 'package:chaekjang/features/iap/notices_screen.dart';
 import 'package:chaekjang/features/iap/plan_screen.dart';
 import 'package:chaekjang/features/iap/purchase_history_screen.dart';
 import 'package:chaekjang/features/iap/seller_sheet.dart';
@@ -424,7 +425,7 @@ void main() {
     (IapNoticeKind.shelfRefunded, '16-notice-shelf-refunded', ['추가 선반 결제가 환불 처리됐습니다', '꽂혀 있던 책은 내 책에 보관했습니다.', '확인']),
   ]) {
     testWidgets('상태 변화 알림 화면: ${kind.name}', (t) async {
-      await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showIapNotice(ctx, kind, noticeSub))))));
+      await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showIapNotice(ctx, iapNoticeOf(kind, noticeSub)))))));
       await t.tap(find.text('열기'));
       await t.pumpAndSettle();
       for (final text in texts) {
@@ -442,6 +443,64 @@ void main() {
       expect(_says(texts.first), findsNothing);
     });
   }
+
+  group('알림함', () {
+    IapNotice n(int id, String kind, String at, {bool read = false, Map<String, dynamic> params = const {}}) => IapNotice.from({
+          'id': id,
+          'kind': kind,
+          'template': 'T',
+          'createdAt': at,
+          if (read) 'readAt': at,
+          'params': params,
+        })!;
+    final list = [
+      n(5, 'payment_failed', '2027-01-18T03:00:00Z', params: {'route': iapRoute, 'productId': 'plus', 'graceUntil': '2027-02-03T03:00:00Z'}),
+      n(4, 'cancel_scheduled', '2027-01-10T03:00:00Z', read: true, params: {'route': iapRoute, 'expiresAt': '2027-01-18T03:00:00Z'}),
+      n(3, 'shelf_refunded', '2027-01-05T03:00:00Z', read: true, params: {'route': iapRoute}),
+      n(2, 'purchase_done', '2026-12-18T03:00:00Z', read: true, params: {'kind': 'subscription', 'expiresAt': '2027-01-18T03:00:00Z'}),
+      n(1, 'purchase_done', '2026-12-01T03:00:00Z', read: true, params: {'kind': 'product', 'shelves': 1}),
+    ];
+
+    test('서버 고지를 읽는다. 모르는 종류와 깨진 줄은 보이지 않는다', () {
+      expect(IapNotice.from({'id': 1}), isNull);
+      expect(IapNotice.from('깨짐'), isNull);
+      expect(n(9, 'future_kind', '2027-01-01T00:00:00Z').text, isNull);
+      expect(list.first.unread, isTrue);
+      expect(list[1].unread, isFalse);
+      expect(list[1].text!.$1, contains('자동 갱신이 꺼졌습니다'));
+      expect(list[1].text!.$2, contains('2027년 1월 18일까지 이용할 수 있습니다'));
+      expect(list[4].text!.$2, '선반 1칸을 더 열 수 있습니다.');
+      // 고지에 금액은 넣지 않는다(서버가 주지 않고, 금액은 결제한 스토어가 정한다)
+      for (final x in list) {
+        expect(x.text!.$2.contains('원'), isFalse, reason: x.kind);
+      }
+    });
+
+    test('앱을 열 때 띄우는 것은 안 읽은 중요한 고지 하나(가장 새것)', () {
+      expect(iapNoticeToShow(list)!.id, 5);
+      expect(iapNoticeToShow(list.skip(1).toList()), isNull); // 다 읽었으면 없다
+      // 해지 접수·결제 완료는 알림함에만 둔다
+      expect(iapNoticeToShow([n(7, 'cancel_scheduled', '2027-01-20T00:00:00Z'), n(8, 'purchase_done', '2027-01-21T00:00:00Z')]), isNull);
+      final two = [n(10, 'expired', '2027-01-01T00:00:00Z'), n(11, 'shelf_refunded', '2027-01-02T00:00:00Z')];
+      expect(iapNoticeToShow(two)!.id, 11);
+    });
+
+    testWidgets('알림 화면: 새 알림 표시, 날짜, 권유 문장 없음', (t) async {
+      await _pump(t, NoticesScreen(items: list));
+      expect(_says('새 알림'), findsOneWidget);
+      expect(_says('결제가 이뤄지지 않았습니다'), findsWidgets);
+      expect(_says('자동 갱신이 꺼졌습니다'), findsWidgets);
+      expect(_says('2027년 1월 18일'), findsWidgets);
+      expect(_says('다시 구독'), findsNothing);
+      await _shot(t, '21-notices');
+    });
+
+    testWidgets('알림 화면: 받은 알림이 없을 때', (t) async {
+      await _pump(t, const NoticesScreen(items: []));
+      expect(_says('받은 알림이 없어요'), findsOneWidget);
+      await _shot(t, '22-notices-empty');
+    });
+  });
 
   testWidgets('결제 완료: 결제한 화면에서 금액, 다음 결제일, 해지하는 곳을 알린다', (t) async {
     plans();
