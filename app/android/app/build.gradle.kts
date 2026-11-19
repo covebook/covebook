@@ -10,6 +10,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications(예약 알림)가 옛 안드로이드에서 java.time을 쓰려면 필요하다
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -71,4 +73,5 @@ flutter {
 // 기기 안 문장 인식(지금 앱 modules/text-recognition과 같은 모델): ML Kit 한국어(한글·라틴). 모델이 앱에 들어 있어 인터넷 없이 동작하고 사진은 밖으로 보내지 않는다
 dependencies {
     implementation("com.google.mlkit:text-recognition-korean:16.0.1")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

@@ -16,7 +16,8 @@ import '../../store/entitlement_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import 'subscription_screen.dart' show iapDate, storeManageUrl, storeName;
+import '../../services/iap.dart' show IapService;
+import 'subscription_screen.dart' show iapDate, iapPriceOf, storeManageUrl, storeName;
 
 enum IapNoticeKind { paymentFailed, expired, subscriptionRefunded, shelfRefunded }
 
@@ -80,6 +81,14 @@ class IapNotice {
   }
 
   bool get unread => readAt == null;
+
+  /// 갱신 예정(T4)의 결제 예정 금액: 서버는 금액을 주지 않아 스토어가 준 지금 가격을 쓴다. 가려낼 수 없으면 null(금액 줄을 뺀다)
+  String? get _price {
+    final sub = EntitlementStore.instance.subscription;
+    if (sub == null || sub.productId != productId) return null;
+    final plan = [for (final p in IapService.instance.plans) if (p.details.id == productId && p.period == '${params['period'] ?? ''}') p];
+    return plan.length == 1 ? plan.first.price : iapPriceOf(IapService.instance, sub);
+  }
   String get route => '${params['route'] ?? ''}';
   String get productId => '${params['productId'] ?? ''}';
   DateTime? _date(String key) => DateTime.tryParse('${params[key]}');
@@ -100,6 +109,9 @@ class IapNotice {
       'expired' => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
       'subscription_refunded' => ('$name 결제가 환불 처리됐습니다', '$when구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
       'shelf_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when해당 선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+      'renewal_upcoming' => expires == null
+          ? null
+          : ('$name가 ${iapDate(expires)}에 갱신됩니다', '${_price == null ? '' : '결제 예정 금액은 $_price입니다. '}계속 이용하려면 할 일이 없습니다. 갱신을 원하지 않으면 ${iapDate(expires.subtract(const Duration(days: 1)))}까지 내 정보 › 구독 관리에서 해지할 수 있습니다.'),
       'cancel_scheduled' => ('$name의 자동 갱신이 꺼졌습니다', '${expires == null ? '' : '${iapDate(expires)}까지 이용할 수 있습니다. '}이후에는 결제되지 않습니다.'),
       'purchase_done' => params['kind'] == 'product'
           ? ('추가 선반 결제가 완료됐습니다', shelves > 0 ? '선반 $shelves칸을 더 열 수 있습니다.' : '선반을 더 열 수 있습니다.')

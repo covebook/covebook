@@ -17,6 +17,7 @@ import 'package:chaekjang/features/iap/shelf_purchase_sheet.dart';
 import 'package:chaekjang/features/iap/subscription_screen.dart';
 import 'package:chaekjang/features/iap/withdraw_notice.dart';
 import 'package:chaekjang/services/iap.dart';
+import 'package:chaekjang/services/renewal_reminder.dart';
 import 'package:chaekjang/store/entitlement_store.dart';
 import 'package:chaekjang/ui/kit.dart';
 import 'package:flutter/material.dart';
@@ -499,6 +500,52 @@ void main() {
       await _pump(t, const NoticesScreen(items: []));
       expect(_says('받은 알림이 없어요'), findsOneWidget);
       await _shot(t, '22-notices-empty');
+    });
+  });
+
+  group('갱신 전 알림(L9, T4)', () {
+    IapSubscription sub({String period = 'year', bool autoRenew = true, bool active = true, DateTime? grace}) => IapSubscription(
+          route: iapRoute,
+          productId: 'plus',
+          state: 'paid',
+          active: active,
+          autoRenew: autoRenew,
+          expiresAt: DateTime(2027, 3, 1, 9),
+          graceUntil: grace,
+          period: period,
+        );
+    final now = DateTime(2027, 1, 20);
+
+    test('연 구독·자동 갱신·이용 중일 때만, 결제일 14일 전 오전 10시', () {
+      expect(renewalReminderAt(sub(), now), DateTime(2027, 2, 15, 10));
+      expect(renewalReminderAt(sub(period: 'month'), now), isNull); // 월 구독은 보내지 않는다
+      expect(renewalReminderAt(sub(period: ''), now), isNull); // 주기를 모르면 보내지 않는다
+      expect(renewalReminderAt(sub(autoRenew: false), now), isNull); // 해지 예약
+      expect(renewalReminderAt(sub(active: false), now), isNull);
+      expect(renewalReminderAt(sub(grace: DateTime(2027, 3, 10)), now), isNull); // 결제 실패 유예 중
+      expect(renewalReminderAt(sub(), DateTime(2027, 2, 16)), isNull); // 이미 지났다
+      expect(renewalReminderAt(null, now), isNull);
+    });
+
+    test('알림 글: 갱신일, 금액(알 때만), 하루 전까지 해지할 수 있다는 안내. 권유 문장 없음', () {
+      final (title, body) = renewalReminderText(sub(), price: '스토어 가격');
+      expect(title, '책장 한켠 플러스가 2027년 3월 1일에 갱신됩니다');
+      expect(body, contains('결제 예정 금액은 스토어 가격입니다.'));
+      expect(body, contains('2027년 2월 28일까지 내 정보 › 구독 관리에서 해지할 수 있습니다.'));
+      expect(renewalReminderText(sub()).$2, isNot(contains('결제 예정 금액')));
+    });
+
+    test('알림함의 갱신 예정 고지: 창으로 띄우지 않고 알림함에만', () {
+      final n = IapNotice.from({
+        'id': 30,
+        'kind': 'renewal_upcoming',
+        'createdAt': '2027-02-15T01:00:00Z',
+        'params': {'route': iapRoute, 'productId': 'plus', 'expiresAt': '2027-03-01T00:00:00Z', 'period': 'year'},
+      })!;
+      expect(n.text!.$1, contains('갱신됩니다'));
+      expect(n.text!.$2, contains('구독 관리에서 해지할 수 있습니다'));
+      expect(n.important, isFalse);
+      expect(iapNoticeToShow([n]), isNull);
     });
   });
 

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/iap.dart';
+import '../../services/renewal_reminder.dart' show askRenewalPermission, syncRenewalReminder;
 import '../../store/entitlement_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
@@ -61,7 +62,14 @@ class _PlanScreenState extends State<PlanScreen> {
     final sub = _e.subscription;
     if (!_wasActive && sub != null && sub.active && _iap.lastResult == IapResult.granted) {
       _wasActive = true;
-      showPurchaseDone(context, sub, price: _picked?.price);
+      final price = _picked?.price;
+      final yearly = (_picked?.period ?? sub.period) == 'year';
+      showPurchaseDone(context, sub, price: price).then((_) async {
+        // 연 구독: 갱신 전 기기 알림을 걸고, 알림 권한은 이때 한 번만 묻는다(거절해도 알림함에 남는다)
+        if (!yearly) return;
+        await askRenewalPermission();
+        await syncRenewalReminder(price: price);
+      });
     }
   }
 

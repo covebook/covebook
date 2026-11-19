@@ -17,6 +17,9 @@ import 'app_nav.dart';
 import '../features/book/place_books.dart' show enforceShelfLimit;
 import '../features/home/home_screen.dart';
 import '../features/iap/notice.dart' show checkIapNotice;
+import '../features/iap/subscription_screen.dart' show iapPriceOf;
+import '../services/renewal_reminder.dart' show syncRenewalReminder;
+import '../store/entitlement_store.dart' show EntitlementStore;
 import '../domain/reading.dart' show askGapMs, withJosa;
 import '../features/reading/finish_screen.dart';
 import '../features/reading/reading_screen.dart';
@@ -126,6 +129,9 @@ class _AppShellState extends State<AppShell> {
           enforceShelfLimit().catchError((Object _) => 0).whenComplete(() {
             if (mounted) checkIapNotice(context);
           });
+          // 연 구독이면 갱신 전 기기 알림을 지금 상태에 맞게 다시 건다(L9)
+          final sub = EntitlementStore.instance.subscription;
+          syncRenewalReminder(price: sub == null ? null : iapPriceOf(IapService.instance, sub));
         });
         watchCommunityOpen();
         // 표지 색·두께·갈피 색 맞추기는 켠 뒤 조금 있다 뒤에서(지금 앱 _layout: 3초 뒤)
