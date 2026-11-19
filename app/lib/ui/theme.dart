@@ -32,6 +32,9 @@ abstract final class AppColors {
   static const input = grey100;
   static const surface = grey100;
 
+  /// 회색 바탕 화면(통계) 위 전환 칸 바탕: surface(grey100)는 바탕과 같아 묻혀 한 단계 진하게 grey200
+  static const surfaceOnGrey = grey200;
+
   /// 로그인 화면 아래쪽 바탕(공식 없음 → 우리 값, 2026-11-18 사용자 '하단 그라데이션 좀 더 진하게')
   static const loginFloor = Color(0xFFE4E7EB);
   static const sectionLine = Color(0xFFEFF1F3);
@@ -51,6 +54,9 @@ abstract final class AppColors {
   /// 자리 표시 글자 · 꺼진 것 · 줄 끝 화살표: grey400(ListHeader 화살표 · Board Row 아이콘 · Stepper 화살표 기본 색)
   static const inkFaint = grey400;
   static const line = grey200;
+
+  /// 밑줄 탭 아래 화면 폭 옅은 선(토스 앱 실측 #EBECEE, 2026-11-20 사용자 '이런 은은한 선 괜찮은 듯'). 테두리 line보다 옅다
+  static const divider = Color(0xFFEBECEE);
   static const track = grey300;
 
   /// 정보 사이 세로줄(가운데 점 대신, 2026-11-18): 글자보다 옅고 흰·회색 바탕 모두에서 보이는 회색
@@ -82,6 +88,7 @@ abstract final class AppColors {
     'white': (white, '카드 위 흰색 · 전환 칸 고른 칸'),
     'input': (input, '입력칸 바탕'),
     'surface': (surface, '옅은 회색 면(전환 칸 · 표지 자리)'),
+    'surfaceOnGrey': (surfaceOnGrey, '회색 바탕 화면(통계) 위 전환 칸 바탕'),
     'loginFloor': (loginFloor, '로그인 화면 아래쪽'),
     'sectionLine': (sectionLine, '묶음 사이 띠'),
     'ink': (ink, '본문(grey900)'),
@@ -90,6 +97,7 @@ abstract final class AppColors {
     'inkSoft': (inkSoft, '설명 · 보조 글자 · 머리줄 아이콘(grey600)'),
     'inkFaint': (inkFaint, '흐린 글자 · 빈 칸 안내 · 줄 끝 화살표(grey400)'),
     'line': (line, '구분선 · 테두리'),
+    'divider': (divider, '밑줄 탭 아래 화면 폭 옅은 선'),
     'track': (track, '막대 · 손잡이 자리'),
     'metaBar': (metaBar, '정보 사이 세로줄(|)'),
     'accent': (accent, '주요 단추 · 고른 것(갈색)'),
@@ -423,7 +431,9 @@ abstract final class AppType {
 /// 탭 첫 화면 머리줄 = TDS Top: upperGap 24 · lowerGap 24(Top 절 기본값). 양옆은 ListRow horizontalPadding medium 24와 같은 24
 abstract final class TabHeader {
   static const paddingTop = 24.0;
-  static const paddingBottom = 24.0;
+
+  /// 제목 아래(2026-11-20 사용자: 토스 공식 24는 '밑에랑 간격이 너무 커', 갈피 · 감상 탭은 아이콘 줄 바로 아래)
+  static const paddingBottom = 4.0;
   static const paddingH = 24.0;
   static const minHeight = 64.0;
 }

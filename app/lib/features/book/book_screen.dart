@@ -703,7 +703,31 @@ class _BookScreenState extends State<BookScreen> {
           Padding(
             // 머리–첫 날짜 8 → 12(2026-11-18 사용자 '줄 위치가 좀 더 밑으로': 시안은 머리와 첫 날짜 사이가 더 넓다)
             padding: const EdgeInsets.only(top: Space.m),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // 그날 기록이 하나면 날짜 · 시간대 두 줄을 한 줄로 누르고, 읽은 시간은 두 줄 세로 가운데(DESIGN 7장 '두 줄 줄의 오른쪽 값',
+            // 2026-11-20 사용자 '20분 같은 시간은 11월 9일이랑 그 밑에 오후 라인 중앙'). 여럿이면 날짜 아래 시간대 줄마다 오른쪽에
+            child: g.items.length == 1
+                ? Semantics(
+                    button: true,
+                    label: '${g.day}, ${timeRange(g.items.first.startedAt, g.items.first.endedAt)}, ${formatDuration(g.items.first.durationMs)}, 수정',
+                    excludeSemantics: true,
+                    onTap: () => openSessionEdit(context, g.items.first.id),
+                    child: Pressable(
+                      onPress: () => openSessionEdit(context, g.items.first.id),
+                      child: Row(children: [
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(g.day, style: AppType.recordDay),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: Space.dense),
+                              child: Align(alignment: Alignment.centerLeft, child: Text(timeRange(g.items.first.startedAt, g.items.first.endedAt), style: AppType.recordRange)),
+                            ),
+                          ]),
+                        ),
+                        Text(formatDuration(g.items.first.durationMs), style: AppType.recordDuration),
+                      ]),
+                    ),
+                  )
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Semantics(header: true, child: Text(g.day, style: AppType.recordDay)),
               for (final x in g.items)
                 Semantics(

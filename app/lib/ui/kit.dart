@@ -43,11 +43,14 @@ abstract final class Space {
   /// TDS Border variant height16: 구간을 나누는 띠 높이(Border 절)
   static const band = 16.0;
 
+  /// 통계의 흰 띠(Band) 안 위아래(2026-11-20 토스 공식+: 회색 바탕 위 좌우 끝까지 붙인 흰 띠. 띠 사이는 band 16 회색)
+  static const bandPad = 24.0;
+
   /// 이름 → 값(토큰 내보내기 · 검사용). 값이 같아도 역할이 다르면 이름을 따로 둔다(group 28 · xl 28 등)
   static const all = <String, double>{
     'page': page, 'section': section, 'group': group, 'item': item, 'tight': tight,
     'xs': xs, 's': s, 'm': m, 'l': l, 'xl': xl, 'xxl': xxl, 'touch': touch, 'block': block, 'dense': dense, 'hit': hit,
-    'rowS': rowS, 'rowM': rowM, 'rowL': rowL, 'rowXL': rowXL, 'ctaBottom': ctaBottom, 'band': band,
+    'rowS': rowS, 'rowM': rowM, 'rowL': rowL, 'rowXL': rowXL, 'ctaBottom': ctaBottom, 'band': band, 'bandPad': bandPad,
   };
 }
 
@@ -470,6 +473,7 @@ class Screen extends StatelessWidget {
     this.topBar,
     this.pinned,
     this.fixedHead = false,
+    this.background = AppColors.bg,
   });
   final List<Widget> children;
   final String? title;
@@ -489,6 +493,9 @@ class Screen extends StatelessWidget {
   /// 위 줄 아래 칸. 스크롤하면 위 줄은 올라가 사라지고 이 칸만 화면 맨 위에 붙어 남는다
   /// (책 정보의 '책 정보 · 평가 · 내 기록' 전환, 2026-11-18 사용자 '천장 고정' → 11-19 위 줄 고정 없앰)
   final Widget? pinned;
+
+  /// 화면 바탕. 흰색이 기본이고, 회색 바탕 + 흰 띠(Band)는 통계 화면만 쓴다(2026-11-20 사용자 '통계랑 캘린더에만')
+  final Color background;
 
   /// 위 줄을 화면에 고정(스크롤해도 그대로). 카메라처럼 몸통이 스크롤하지 않는 화면만.
   /// 다른 화면은 위 줄도 내용·목록과 함께 올라간다(2026-11-19 사용자 '이런 고정들 다 없애버려')
@@ -565,7 +572,7 @@ class Screen extends StatelessWidget {
     final barW = NavBar(title: headerField == null ? title : null, left: left, back: back, headerField: headerField, right: right);
     final pinnedSliver = pinned == null
         ? null
-        : PinnedHeaderSliver(child: ColoredBox(color: AppColors.bg, child: Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!))));
+        : PinnedHeaderSliver(child: ColoredBox(color: background, child: Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!))));
     // 스크롤하는 화면은 위 줄·아래 단추도 내용과 함께 움직인다(2026-11-19 사용자 '상단이랑 하단이 고정, 이런 고정들 다 없애버려':
     // 감상 쓰기처럼 키보드가 올라오면 고정된 위아래가 쓸 자리를 먹었다). 아래 단추는 내용 끝에 붙는다
     final scrolled = Column(
@@ -618,7 +625,7 @@ class Screen extends StatelessWidget {
     // (2026-11-16 QA 영숙 F1·F13, 현우 F11, 은서 F7. 지금 앱 KeyboardAvoidingView). 탭 화면도 같다: 탭 틀(app_shell)은 몸통을 줄이지 않고
     // 보이는 탭에만 키보드 높이를 넘긴다(숨은 탭이 키보드 프레임마다 다시 배치되지 않게, 2026-11-18)
     return Material(
-      color: AppColors.bg,
+      color: background,
       child: Padding(
         padding: EdgeInsets.only(top: insets.top, bottom: keyboard),
         child: Column(
@@ -1306,10 +1313,13 @@ Toggle? _rowToggle(VoidCallback? onPress, Widget? right) => onPress == null && r
 /// TDS에 칩이 없어 하나 고르는 칩 자리도 이것을 쓴다. 높이 · 모양 · 글자는 공식 글에 없음 → 지금 앱 모양(회색 칸 44 안 고른 칸만 흰 바탕),
 /// 글자는 t6 15(작은 본문): 고른 칸 SemiBold grey900, 나머지 Regular grey600. 화면 읽기는 라디오처럼 '선택됨'(role radio · aria-checked)
 class Segmented<T> extends StatelessWidget {
-  const Segmented({super.key, required this.items, required this.value, required this.onChange});
+  const Segmented({super.key, required this.items, required this.value, required this.onChange, this.track = AppColors.surface});
   final List<(T, String)> items;
   final T value;
   final ValueChanged<T> onChange;
+
+  /// 칸 바탕. 회색 바탕 화면(통계)에서는 AppColors.surfaceOnGrey
+  final Color track;
 
   // 겉모양은 회색 칸 44(고른 칸 38): 2026-11-17 사용자 '책 정보·평가·내 기록 바가 두껍다'(예전 50) → 40은 너무 얇아 조금 키움(2026-11-18 사용자 '조금만 더 키우라고').
   // 누르는 자리는 위아래 빈 4까지 48 그대로(2026-11-16 QA 영숙 F12). 큰 글씨면 칸이 글자만큼 늘어난다
@@ -1318,7 +1328,7 @@ class Segmented<T> extends StatelessWidget {
         Positioned.fill(
           top: ControlSize.segmentInset,
           bottom: ControlSize.segmentInset,
-          child: DecoratedBox(decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(Shape.segmented))),
+          child: DecoratedBox(decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(Shape.segmented))),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -1436,6 +1446,28 @@ class SectionBand extends StatelessWidget {
             minWidth: 0,
             maxWidth: double.infinity,
             child: Container(height: Space.band, width: MediaQuery.sizeOf(context).width, color: AppColors.greyBackground),
+          ),
+        ),
+      );
+}
+
+/// 회색 바탕 화면(Screen background: greyBackground)의 흰 띠: 좌우는 화면 끝까지 붙이고 위아래로만 층을 나눈다.
+/// 띠 사이는 회색 Space.band, 띠 안 위아래 Space.bandPad, 좌우는 화면 여백 Space.page.
+/// 통계(캘린더 · 분석)에만 쓴다(2026-11-20 사용자 '박스인데 위아래 층만 나누고 좌우는 붙히자', '통계랑 캘린더에만 쓰라 했지')
+class Band extends StatelessWidget {
+  const Band({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: Space.band),
+        child: Bleed(
+          child: ColoredBox(
+            color: AppColors.bg,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.page, vertical: Space.bandPad),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children),
+            ),
           ),
         ),
       );
@@ -1575,11 +1607,14 @@ Future<T?> showSheet<T>(BuildContext context, {String? title, String? descriptio
 /// 밑줄 모양 · 두께 · 색, fluid 칸 사이는 공식 글에 없음 → 지금 앱 값(2026-11-05 시안: 글자 폭 갈색 밑줄 3, 둥근 끝 · 칸 사이 28).
 /// fill: 칸을 똑같이 나눠 화면 끝까지, 고른 칸은 굵은 본문색 + 칸 폭 밑줄(2), 아래 얇은 선
 class Tabs<T> extends StatelessWidget {
-  const Tabs({super.key, required this.items, required this.value, required this.onChange, this.fill = false, this.gap});
+  const Tabs({super.key, required this.items, required this.value, required this.onChange, this.fill = false, this.gap, this.line = true});
   final List<({T id, String label})> items;
   final T value;
   final ValueChanged<T> onChange;
   final bool fill;
+
+  /// 밑줄 탭 아래 화면 폭 옅은 선(2026-11-20 사용자: 토스 앱 실측의 '은은한 선'). 고른 탭 밑줄이 그 위에 덮인다
+  final bool line;
   /// 탭 사이(없으면 양 끝에 맞춰 벌린다)
   final double? gap;
 
@@ -1637,24 +1672,31 @@ class Tabs<T> extends StatelessWidget {
         child: Row(children: [for (final it in items) Expanded(child: tab(it))]),
       );
     }
+    // 탭 줄 아래 옅은 선: 밑줄과 같은 바닥에 화면 폭(양옆 화면 여백까지)으로 깐다
+    Widget lined(Widget row) => !line
+        ? row
+        : Stack(clipBehavior: Clip.none, children: [
+            const Positioned(left: -Space.page, right: -Space.page, bottom: 0, child: Hairline(color: AppColors.divider)),
+            row,
+          ]);
     // TDS Tab fluid: 5개부터 글자 폭 칸 + 가로 스크롤(칸 사이는 반씩 나눠 누르는 자리)
     if (items.length > fixedMax) {
       final g = gap ?? fluidGap;
-      return SingleChildScrollView(
+      return lined(SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (final (i, it) in items.indexed) tab(it, left: i > 0 ? g / 2 : 0, right: i < items.length - 1 ? g / 2 : 0),
         ]),
-      );
+      ));
     }
-    return Row(
+    return lined(Row(
       mainAxisAlignment: gap == null ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final (i, it) in items.indexed)
           tab(it, left: i > 0 && gap != null ? gap! / 2 : 0, right: i < items.length - 1 && gap != null ? gap! / 2 : 0),
       ],
-    );
+    ));
   }
 }
 

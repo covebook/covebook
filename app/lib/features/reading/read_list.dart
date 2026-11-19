@@ -1,5 +1,5 @@
 // 읽기 탭(지금 앱 features/reading/ReadList.tsx): 맨 위 오늘 날짜와 오늘 읽은 시간, '최근 읽던 책' 큰 카드(표지 · 오늘 시간 · 이어서 읽기),
-// 아래 '내 읽기 목록'은 책마다 한 줄(표지 · 제목 · 저자 · 오늘 읽은 시간이나 ▶ 읽기). 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
+// 아래 '내 읽기 목록'은 책마다 한 줄(표지 · 제목 · 저자 · 오늘 읽은 시간이나 '읽기'). 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
 // 줄을 길게 누르면 메뉴(책 정보 · 독서 기록 · 목록에서 빼기). 장면에서 뒤로 나오면 이 목록이다(타이머는 계속 돈다).
 // 다른 책을 재는 중에 다른 책을 누르면 묻는다(앞 책 시간이 설명 없이 새 책으로 옮겨 가지 않게).
 // '내 읽기 목록' 오른쪽 +는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
@@ -26,7 +26,6 @@ import '../stats/chart_data.dart' show dayTitle;
 import '../stats/stats_screen.dart';
 import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';
-import 'play_icons.dart';
 import 'reading_screen.dart';
 import 'start_book.dart';
 
@@ -178,12 +177,9 @@ class _ReadListState extends State<ReadList> {
           onPress: () => _tapRow(id),
           trailing: ms > 0 || isActive
               ? Text(_timeText(ms, isActive), style: AppType.rowStrong.tnum)
-              // 회색(위 +와 같은 색, 2026-11-19 사용자 '읽기 회색으로 하는 게 낫지 않나'): 줄마다 책 제목이 먼저 보인다
-              : Row(mainAxisSize: MainAxisSize.min, children: [
-                  const PlayIcon(size: 14, color: AppColors.inkSoft),
-                  const SizedBox(width: 6),
-                  Text('읽기', style: AppType.rowStrong.copyWith(color: AppColors.inkSoft)),
-                ]),
+              // 회색(위 +와 같은 색, 2026-11-19 사용자 '읽기 회색으로 하는 게 낫지 않나'): 줄마다 책 제목이 먼저 보인다.
+              // 글자 앞 ▶는 두지 않는다(DESIGN 5장 '단추 글자 앞 기호 없음', 2026-11-20 사용자 '삼각형 없애고')
+              : Text('읽기', style: AppType.rowStrong.copyWith(color: AppColors.inkSoft)),
         ),
       ),
     );
@@ -233,7 +229,7 @@ class _ReadListState extends State<ReadList> {
             Text(_timeText(fMs, fActive), textAlign: TextAlign.right, style: AppType.section.tnum),
             const SizedBox(height: Space.s),
             // 다른 화면 단추와 같은 보통 높이(large 48, 2026-11-18 사용자 '박스 세로 높이 다른 버튼처럼')
-            Btn(label: fLabel, size: 'large', icon: const PlayIcon(size: 17, color: AppColors.onAccent), onPress: () => fActive && running ? _openScene() : _begin(featured)),
+            Btn(label: fLabel, size: 'large', onPress: () => fActive && running ? _openScene() : _begin(featured)),
           ]),
         ),
       ]),

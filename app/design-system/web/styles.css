@@ -8,6 +8,7 @@
   --ck-white: #FFFFFF; /* 카드 위 흰색 · 전환 칸 고른 칸 */
   --ck-input: #F2F4F6; /* 입력칸 바탕 */
   --ck-surface: #F2F4F6; /* 옅은 회색 면(전환 칸 · 표지 자리) */
+  --ck-surface-on-grey: #E5E8EB; /* 회색 바탕 화면(통계) 위 전환 칸 바탕 */
   --ck-login-floor: #E4E7EB; /* 로그인 화면 아래쪽 */
   --ck-section-line: #EFF1F3; /* 묶음 사이 띠 */
   --ck-ink: #191F28; /* 본문(grey900) */
@@ -16,6 +17,7 @@
   --ck-ink-soft: #6B7684; /* 설명 · 보조 글자 · 머리줄 아이콘(grey600) */
   --ck-ink-faint: #B0B8C1; /* 흐린 글자 · 빈 칸 안내 · 줄 끝 화살표(grey400) */
   --ck-line: #E5E8EB; /* 구분선 · 테두리 */
+  --ck-divider: #EBECEE; /* 밑줄 탭 아래 화면 폭 옅은 선 */
   --ck-track: #D1D6DB; /* 막대 · 손잡이 자리 */
   --ck-meta-bar: #C9CED4; /* 정보 사이 세로줄(|) */
   --ck-accent: #6C534A; /* 주요 단추 · 고른 것(갈색) */
@@ -131,10 +133,11 @@
   --ck-space-row-x-l: 24px;
   --ck-space-cta-bottom: 20px;
   --ck-space-band: 16px;
+  --ck-space-band-pad: 24px;
   --ck-space-content-max: 640px;
   --ck-space-sheet-max: 560px;
   --ck-tab-header-padding-top: 24px;
-  --ck-tab-header-padding-bottom: 24px;
+  --ck-tab-header-padding-bottom: 4px;
   --ck-tab-header-padding-h: 24px;
   --ck-tab-header-min-height: 64px;
 

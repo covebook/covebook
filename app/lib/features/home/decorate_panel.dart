@@ -39,20 +39,18 @@ class DecorateBar extends StatelessWidget {
   final VoidCallback onUndo;
   final VoidCallback onDone;
 
-  // 탭 글자와 되돌리기·완료 글자를 같은 줄 높이(글자 기준선)에 둔다: 탭은 글자 밑에 밑줄 몫이 있어 가운데 맞추면 탭 글자가 떠 보였다
+  // 책 배치 · 선반 · 벽지는 꾸미기 아래 칸을 통째로 바꾸는 모드라 전환 칸(DESIGN 7장 '전환 칸과 밑줄 탭', 2026-11-20 사용자 '캘린더 분석같이 버튼으로').
+  // 되돌리기 · 완료는 전환 칸 오른쪽에 세로 가운데로
   @override
-  Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+  Widget build(BuildContext context) => Row(children: [
         Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Tabs<DecorateTab>(
-              items: const [(id: DecorateTab.books, label: '책 배치'), (id: DecorateTab.shelf, label: '선반'), (id: DecorateTab.wall, label: '벽지')],
-              value: tab,
-              onChange: onTab,
-              gap: Space.l + Space.s,
-            ),
+          child: Segmented<DecorateTab>(
+            items: const [(DecorateTab.books, '책 배치'), (DecorateTab.shelf, '선반'), (DecorateTab.wall, '벽지')],
+            value: tab,
+            onChange: onTab,
           ),
         ),
+        const SizedBox(width: Space.l),
         Semantics(
           button: true,
           enabled: canUndo,
