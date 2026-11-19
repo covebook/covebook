@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:chaekjang/features/home/locked_rows.dart';
+import 'package:chaekjang/features/iap/consent_screen.dart';
 import 'package:chaekjang/features/iap/notice.dart';
 import 'package:chaekjang/features/iap/plan_screen.dart';
 import 'package:chaekjang/features/iap/purchase_history_screen.dart';
@@ -529,4 +530,52 @@ void main() {
     iap.plans = const [];
     expect(iapPriceOf(iap, sub('')), '월 가격');
   });
+
+  for (final (name, shot, accept, open) in [
+    (
+      '가격 변경 동의',
+      '19-consent-price-change',
+      '바뀐 가격에 동의',
+      (BuildContext ctx) => openPriceChangeConsent(ctx, product: '책장 한켠 플러스', period: '매월', oldPrice: '지금 스토어 가격', newPrice: '새 스토어 가격', effectiveAt: DateTime.utc(2027, 3, 1, 3), expiresAt: DateTime.utc(2027, 3, 18, 3)),
+    ),
+    (
+      '유료 전환 동의',
+      '20-consent-trial',
+      '유료 전환에 동의',
+      (BuildContext ctx) => openTrialConversionConsent(ctx, convertAt: DateTime.utc(2027, 1, 25, 3), price: '스토어 가격', period: '매월'),
+    ),
+  ]) {
+    testWidgets('$name: 동의와 거절이 같은 크기·같은 모양이고, 답을 그대로 돌려준다', (t) async {
+      final answers = <bool?>[];
+      await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () async => answers.add(await open(ctx)))))));
+      Future<void> show() async {
+        await t.tap(find.text('열기'));
+        await t.pumpAndSettle();
+      }
+
+      await show();
+      final no = find.widgetWithText(Btn, '동의하지 않음'), yes = find.widgetWithText(Btn, accept);
+      expect(t.getSize(no), t.getSize(yes));
+      expect(t.widget<Btn>(no).kind, t.widget<Btn>(yes).kind);
+      expect(t.getTopLeft(no).dy, t.getTopLeft(yes).dy);
+      expect(find.textContaining('동의로 봅니다'), findsNothing);
+      // 줄 값이 잘리지 않는다
+      for (final v in t.widgetList<ListItem>(find.byType(ListItem))) {
+        expect(find.text(v.value!), findsOneWidget);
+        expect(v.value!.length, lessThan(22), reason: v.value);
+      }
+      expect(find.textContaining('·'), findsNothing);
+      await _shot(t, shot);
+      await t.tap(no);
+      await t.pumpAndSettle();
+      await show();
+      await t.tap(yes);
+      await t.pumpAndSettle();
+      // 답하지 않고 뒤로 가면 답이 없는 것이다(거절로도 동의로도 치지 않는다)
+      await show();
+      await t.binding.handlePopRoute();
+      await t.pumpAndSettle();
+      expect(answers, [false, true, null]);
+    });
+  }
 }
