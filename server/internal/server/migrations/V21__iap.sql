@@ -1,6 +1,6 @@
 -- 인앱결제(ADR-0002). 거래 원장, 구독 상태, 받은 알림, 파는 상품, 계정 연결 값.
 -- 규칙
---  * 권한은 저장하지 않는다. plus 여부와 선반 칸 수는 아래 표에서 계산한다(D5).
+--  * 권한은 저장하지 않는다. plus 여부와 연도 책장마다의 선반 칸 수는 아래 표에서 계산한다(D5).
 --  * 결제 경로(route)는 문자열 값이다('apple', 'google'). 새 경로가 생겨도 표를 고치지 않게 CHECK를 두지 않는다(D19).
 --  * 거래·구독은 계정을 지워도 남긴다(거래 기록 보존, ADR-0003). 그래서 user_id는 ON DELETE SET NULL이다.
 --    다른 표는 CASCADE로 지워지지만 이 두 표는 유저 연결만 끊긴다.
@@ -8,13 +8,19 @@
 --  * 금액은 통화 1단위 = 1000인 정수(D20). 구글 구매 조회에는 금액이 없어 NULL이다.
 
 -- 스토어에 넘기는 계정 연결 값(애플 appAccountToken, 구글 obfuscatedAccountId). 유저 번호를 밖에 내보내지 않는다(D7).
--- 유저 하나에 여러 개일 수 있다: 애플은 첫 구매 때 값이 굳어 계정을 옮겨도 그대로 오기 때문에, 옮길 때 값도 함께 옮긴다(D8).
+-- 유저 하나에 여러 개다
+--  * 구독용: year가 NULL인 값. 유저마다 하나를 쓴다
+--  * 추가 선반용: 연도 책장마다 하나(year). 스토어 거래에는 연도가 없어서, 선반을 살 때 그 연도의 값을 넘기고
+--    돌아온 값으로 어느 해 책장의 칸인지 찾는다(D1). 앱이 결제 중 꺼져도, 스토어 알림으로 와도 연도를 잃지 않는다
 CREATE TABLE iap_account_tokens (
     token      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    year       INT CHECK (year BETWEEN 2000 AND 9999),  -- 추가 선반을 여는 연도 책장. 구독용은 NULL
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX iap_account_tokens_user_idx ON iap_account_tokens (user_id, created_at);
+-- 연도 하나에 값 하나. 두 기기가 동시에 받아도 같은 값이 나온다
+CREATE UNIQUE INDEX iap_account_tokens_year_idx ON iap_account_tokens (user_id, year) WHERE year IS NOT NULL;
 
 -- 파는 상품. "어떤 상품이 무엇을 주는가"를 코드가 아니라 여기에 둔다(D21). 가격은 두지 않는다(스토어가 정한다, D22).
 CREATE TABLE iap_products (
@@ -22,7 +28,7 @@ CREATE TABLE iap_products (
     product_id  TEXT NOT NULL,
     kind        TEXT NOT NULL CHECK (kind IN ('subscription', 'product')),
     entitlement TEXT,              -- 구독이 주는 권한('plus')
-    shelves     INT,               -- 한 번 사는 상품이 주는 선반 칸 수
+    shelves     INT,               -- 한 번 사는 상품이 주는 선반 칸 수(1칸, 3칸 묶음)
     consume     BOOLEAN NOT NULL DEFAULT true,  -- 구글에서 소비 처리할지. true면 같은 상품을 다시 살 수 있고 스토어 복원은 안 된다(D1). 구독에는 뜻이 없다
     active      BOOLEAN NOT NULL DEFAULT true,  -- 새로 팔지 않게 된 상품은 false. 이미 산 것은 그대로 인정한다
     PRIMARY KEY (route, product_id),
@@ -39,6 +45,7 @@ CREATE TABLE iap_purchases (
     original_id    TEXT   NOT NULL,   -- 구독 줄기를 묶는 값. 애플: 원 거래 ID. 구글: 구매 토큰
     user_id        BIGINT REFERENCES users(id) ON DELETE SET NULL,
     account_token  UUID,              -- 스토어가 돌려준 계정 연결 값. 없는 구매도 있다
+    shelf_year     INT,               -- 추가 선반이 열린 연도 책장. 넣을 때 계정 연결 값에서 찾아 적는다(값을 지워도 남게). 구독·연도 모름은 NULL
     product_id     TEXT   NOT NULL,
     kind           TEXT   NOT NULL CHECK (kind IN ('subscription', 'product')),
     env            TEXT   NOT NULL CHECK (env IN ('production', 'sandbox')),  -- 샌드박스도 받되 매출 집계에서 뺀다(D15)
