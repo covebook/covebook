@@ -68,15 +68,20 @@ func iapTokenYear(ctx context.Context, q dbtx, token string) (int, error) {
 
 // iapSetShelfYear는 선반 거래가 어느 해 책장의 것인지 정하고 그 연도를 돌려준다(D1).
 // 넣을 때 계정 연결 값으로 적은 연도가 있으면 그대로 둔다. 없을 때만 year(앱이 보낸 연도)로 채운다. 끝내 모르면 0이다.
-func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKey string, year int) (int, error) {
-	var got *int
-	err := q.QueryRow(ctx, `UPDATE iap_purchases SET shelf_year=coalesce(shelf_year, nullif($3,0)),
-			updated_at=CASE WHEN shelf_year IS NULL AND $3<>0 THEN now() ELSE updated_at END
-		WHERE route=$1 AND transaction_id=$2 AND kind='product' RETURNING shelf_year`, string(route), transactionKey, year).Scan(&got)
-	if errors.Is(err, pgx.ErrNoRows) || got == nil {
-		return 0, nil
+// filled는 이번에 연도를 채웠는지다(그때 결제 완료를 알린다).
+func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKey string, year int) (got int, filled bool, err error) {
+	var now *int
+	err = q.QueryRow(ctx, `WITH old AS (
+			SELECT id, shelf_year FROM iap_purchases WHERE route=$1 AND transaction_id=$2 AND kind='product' FOR UPDATE
+		)
+		UPDATE iap_purchases b SET shelf_year=coalesce(old.shelf_year, nullif($3,0)),
+			updated_at=CASE WHEN old.shelf_year IS NULL AND $3<>0 THEN now() ELSE b.updated_at END
+		FROM old WHERE b.id=old.id
+		RETURNING b.shelf_year, old.shelf_year IS NULL AND $3<>0`, string(route), transactionKey, year).Scan(&now, &filled)
+	if errors.Is(err, pgx.ErrNoRows) || now == nil {
+		return 0, false, nil
 	}
-	return *got, err
+	return *now, filled, err
 }
 
 // iapShelfPaid는 그 해 책장에서 환불되지 않은 선반 거래가 준 칸 수의 합이다. iapPaidShelfMax에서 자르지 않는다(넘었는지 볼 때 쓴다).
@@ -168,13 +173,14 @@ func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transaction
 	err := q.QueryRow(ctx, `WITH r AS (
 			UPDATE iap_purchases SET state='revoked', revoked_at=$3, updated_at=now()
 			WHERE route=$1 AND transaction_id=$2 AND state='paid'
-			RETURNING user_id, kind, product_id, original_id, transaction_id, env, revoked_at
+			RETURNING user_id, kind, product_id, original_id, transaction_id, env, revoked_at, shelf_year
 		), n AS (
 			INSERT INTO iap_notices (user_id, kind, template, params, env, dedupe_key)
 			SELECT r.user_id,
 				CASE WHEN r.kind='product' THEN 'shelf_refunded' ELSE 'subscription_refunded' END, 'T9',
 				jsonb_strip_nulls(jsonb_build_object('route', $1::text, 'productId', r.product_id, 'kind', r.kind,
 					'shelves', CASE WHEN r.kind='product' THEN p.shelves END,
+					'year', r.shelf_year,
 					'revokedAt', to_char(r.revoked_at AT TIME ZONE 'UTC', `+iapStampSQL+`))),
 				r.env,
 				CASE WHEN r.kind='product' THEN 'shelf_refunded:' || $1::text || ':' || r.transaction_id

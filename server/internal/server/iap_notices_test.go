@@ -49,14 +49,13 @@ func (e *iapEnv) wantKinds(token, when string, want ...string) {
 func TestIAPNoticeShelf(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
-	account := e.accountToken(token)
 	e.wantKinds(token, "처음")
 	if e.me(token)["unreadNotices"] != float64(0) {
 		t.Fatalf("처음 안 읽은 수: %v", e.me(token))
 	}
 
 	tok := iapTestID(t, "tok")
-	e.google.Purchases[tok] = e.shelfPurchase(tok, account)
+	e.google.Purchases[tok] = e.shelfPurchase(tok, e.shelfToken(token, 2026))
 	for range 3 { // 앱이 같은 구매를 여러 번 내도(재전송, 앱 재시작) 한 번만 알린다
 		if code, body := e.submit(token, "google", e.shelf, tok, false); code != 200 {
 			t.Fatalf("제출 %d %v", code, body)
@@ -65,7 +64,7 @@ func TestIAPNoticeShelf(t *testing.T) {
 	e.wantKinds(token, "구매 뒤", noticePurchaseDone)
 	n := e.notices(token)[0]
 	params := n["params"].(map[string]any)
-	if n["template"] != "T3" || n["readAt"] != nil || params["route"] != "google" || params["productId"] != e.shelf || params["kind"] != "product" || params["shelves"] != float64(2) {
+	if n["template"] != "T3" || n["readAt"] != nil || params["route"] != "google" || params["productId"] != e.shelf || params["kind"] != "product" || params["shelves"] != float64(2) || params["year"] != float64(2026) || params["overCap"] != nil {
 		t.Fatalf("결제 완료 고지: %v", n)
 	}
 	for k := range params { // 금액을 넣지 않는다
@@ -85,7 +84,7 @@ func TestIAPNoticeShelf(t *testing.T) {
 	e.wantKinds(token, "환불 뒤", noticePurchaseDone, noticeShelfRefunded)
 	refund := e.notices(token)[0]
 	rp := refund["params"].(map[string]any)
-	if refund["kind"] != noticeShelfRefunded || refund["template"] != "T9" || rp["shelves"] != float64(2) || rp["kind"] != "product" {
+	if refund["kind"] != noticeShelfRefunded || refund["template"] != "T9" || rp["shelves"] != float64(2) || rp["year"] != float64(2026) || rp["kind"] != "product" {
 		t.Fatalf("환불 고지(최신이 먼저): %v", refund)
 	}
 	if _, err := time.Parse(time.RFC3339, rp["revokedAt"].(string)); err != nil {
@@ -100,9 +99,8 @@ func TestIAPNoticeShelf(t *testing.T) {
 func TestIAPNoticeGrantedByNotificationAndRestore(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
-	account := e.accountToken(token)
 	tok := iapTestID(t, "tok")
-	e.google.Purchases[tok] = e.shelfPurchase(tok, account)
+	e.google.Purchases[tok] = e.shelfPurchase(tok, e.shelfToken(token, 2026))
 	e.notify("google", iap.Notice{ID: iapTestID(t, "n"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: tok}}, "Bearer pubsub")
 	e.sweep()
 	e.wantKinds(token, "알림으로 지급", noticePurchaseDone)
@@ -242,7 +240,7 @@ func TestIAPNoticeRead(t *testing.T) {
 	b, _ := e.user()
 	buy := func(token string) {
 		tok := iapTestID(t, "tok")
-		e.google.Purchases[tok] = e.shelfPurchase(tok, e.accountToken(token))
+		e.google.Purchases[tok] = e.shelfPurchase(tok, e.shelfToken(token, 2026))
 		if code, body := e.submit(token, "google", e.shelf, tok, false); code != 200 {
 			t.Fatalf("제출 %d %v", code, body)
 		}
@@ -291,7 +289,7 @@ func TestIAPNoticeCascadeAndOwnerless(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
 	tok := iapTestID(t, "tok")
-	e.google.Purchases[tok] = e.shelfPurchase(tok, e.accountToken(token))
+	e.google.Purchases[tok] = e.shelfPurchase(tok, e.shelfToken(token, 2026))
 	e.submit(token, "google", e.shelf, tok, false)
 	count := func() (n int) {
 		if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_notices WHERE user_id=$1", user).Scan(&n); err != nil {
@@ -326,9 +324,8 @@ func TestIAPNoticeCascadeAndOwnerless(t *testing.T) {
 func TestIAPNoticeSandbox(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
-	account := e.accountToken(token)
 	tok := iapTestID(t, "tok")
-	p := e.shelfPurchase(tok, account)
+	p := e.shelfPurchase(tok, e.shelfToken(token, 2026))
 	p.Env = iap.EnvSandbox
 	e.google.Purchases[tok] = p
 	if code, _ := e.submit(token, "google", e.shelf, tok, false); code != 422 {
@@ -354,7 +351,7 @@ func TestIAPAdminStatsNotices(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
 	tok := iapTestID(t, "tok")
-	e.google.Purchases[tok] = e.shelfPurchase(tok, e.accountToken(token))
+	e.google.Purchases[tok] = e.shelfPurchase(tok, e.shelfToken(token, 2026))
 	e.submit(token, "google", e.shelf, tok, false)
 	t.Setenv("ADMIN_TOKEN", "test-admin-token")
 	req := httptest.NewRequest("GET", "/admin/iap/stats", nil)
@@ -369,5 +366,36 @@ func TestIAPAdminStatsNotices(t *testing.T) {
 	}
 	if _, ok := out["pendingNotifications"].(float64); !ok {
 		t.Fatalf("기존 숫자가 빠짐: %v", out)
+	}
+}
+
+// 연도를 모르는 선반 거래는 칸을 주지 않았으니 결제 완료를 알리지 않는다. 연도를 채운 순간 한 번 알린다.
+// 한 책장에서 3칸을 넘게 산 거래의 결제 완료에는 overCap을 적는다(앱이 "넘은 칸은 환불" 안내를 붙인다).
+func TestIAPNoticeShelfYear(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	orphan := iapTestID(t, "orphan")
+	e.google.Purchases[orphan] = e.shelfPurchase(orphan, "")
+	if code, body := e.submit(token, "google", e.shelf, orphan, false); code != 422 || errCode(body) != "iap_shelf_year_missing" {
+		t.Fatalf("연도 모름: %d %v", code, body)
+	}
+	e.wantKinds(token, "연도 모름")
+	for range 2 {
+		if code, body := e.submitYear(token, "google", e.shelf, orphan, 2026); code != 200 {
+			t.Fatalf("연도와 다시 제출: %d %v", code, body)
+		}
+	}
+	e.wantKinds(token, "연도를 채운 뒤", noticePurchaseDone)
+	if p := e.notices(token)[0]["params"].(map[string]any); p["year"] != float64(2026) || p["overCap"] != nil {
+		t.Fatalf("결제 완료 params: %v", p)
+	}
+	// 같은 해에 2칸을 더 사면 4칸 → 넘음
+	more := iapTestID(t, "more")
+	e.google.Purchases[more] = e.shelfPurchase(more, e.shelfToken(token, 2026))
+	if code, body := e.submit(token, "google", e.shelf, more, false); code != 200 || body["overCap"] != true {
+		t.Fatalf("넘는 구매: %d %v", code, body)
+	}
+	if p := e.notices(token)[0]["params"].(map[string]any); p["overCap"] != true || p["year"] != float64(2026) {
+		t.Fatalf("넘는 구매의 결제 완료 params: %v", p)
 	}
 }

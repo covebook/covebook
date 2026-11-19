@@ -55,14 +55,26 @@ func iapWriteNotice(ctx context.Context, q dbtx, user int64, kind string, env ia
 }
 
 // iapNotePurchaseDone은 새로 지급한 구매를 알린다(T3). 거래 키가 유일 키라 같은 거래는 한 번만 알린다.
-func iapNotePurchaseDone(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, shelves int) error {
+// 추가 선반은 칸이 열린 연도 책장(year)을 함께 적는다. 그 해에 3칸을 넘게 샀으면 overCap을 적는다(넘은 칸은 환불 대상, D1).
+// 구독이면 shelf는 쓰지 않는다.
+func iapNotePurchaseDone(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, shelf iapShelfGrant) error {
 	params := map[string]any{"route": string(p.Route), "productId": p.ProductID, "kind": string(kind)}
 	if kind == iap.KindSubscription {
 		params["expiresAt"] = iapStamp(p.ExpiresAt)
 	} else {
-		params["shelves"] = shelves
+		params["shelves"], params["year"] = shelf.Shelves, shelf.Year
+		if shelf.OverCap {
+			params["overCap"] = true
+		}
 	}
 	return iapWriteNotice(ctx, q, user, noticePurchaseDone, p.Env, "purchase_done:"+string(p.Route)+":"+iapTransactionKey(kind, p), params)
+}
+
+// iapShelfGrant는 선반 구매 하나가 어느 해 책장에 몇 칸을 줬는지다.
+type iapShelfGrant struct {
+	Shelves int  // 상품이 주는 칸 수
+	Year    int  // 칸이 열린 연도 책장
+	OverCap bool // 그 해에 산 칸의 합이 iapPaidShelfMax를 넘었다
 }
 
 // iapSubBefore는 구독 줄을 고치기 전의 값이다. 고지는 이 값과 새 값이 달라진 순간에만 쓴다.

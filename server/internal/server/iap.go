@@ -400,7 +400,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 		// 새로 지급한 구독이면 결제 완료를 알린다(T3). 전에 지급한 것, 구매 복원, 만료된 구독은 알리지 않는다
 		if !mine && !body.Restore && !inactive && current.State == iap.StatePaid {
-			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, current, 0); err != nil {
+			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, current, iapShelfGrant{}); err != nil {
 				return err
 			}
 		}
@@ -433,13 +433,10 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 		if !inserted {
 			status = "already"
-		} else if !body.Restore {
-			if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, submitted, bought.Shelves); err != nil {
-				return err
-			}
 		}
 		// 어느 해 책장의 칸인지(D1). 넣을 때 계정 연결 값으로 이미 적었다. 값이 연도를 몰랐으면 앱이 보낸 연도로 채운다
-		if shelfYear, e = iapSetShelfYear(ctx, tx, route, key, body.Year); e != nil {
+		filled := false
+		if shelfYear, filled, e = iapSetShelfYear(ctx, tx, route, key, body.Year); e != nil {
 			return e
 		}
 		if shelfYear > 0 {
@@ -450,6 +447,12 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			// 두 기기에서 동시에 사면 3칸을 넘을 수 있다. 칸은 3칸까지만 열고, 넘은 거래는 운영자가 환불한다
 			if overCap = paid > iapPaidShelfMax; overCap {
 				log.Printf("iap shelf over cap: route=%s user=%d year=%d paid=%d", route, user, shelfYear, paid)
+			}
+			// 결제 완료 고지(T3)는 칸을 준 때 쓴다: 새로 넣으면서 연도를 안 때, 또는 연도를 몰랐던 거래에 이번에 연도를 채운 때
+			if (inserted || filled) && !body.Restore {
+				if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, submitted, iapShelfGrant{Shelves: bought.Shelves, Year: shelfYear, OverCap: overCap}); err != nil {
+					return err
+				}
 			}
 		}
 	}

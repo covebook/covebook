@@ -403,7 +403,7 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 		}
 		// 알림만으로 새로 지급한 구독도 결제 완료를 알린다(T3). 뒤에 앱이 같은 거래를 제출하면 "전에 지급한 것"이라 다시 알리지 않는다
 		if cur.State == iap.StatePaid {
-			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, 0); err != nil {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapShelfGrant{}); err != nil {
 				return "", err
 			}
 		}
@@ -494,8 +494,19 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if err != nil {
 		return "", err
 	}
-	if inserted {
-		if err = iapNotePurchaseDone(ctx, tx, user, iap.KindProduct, p, product.Shelves); err != nil {
+	// 어느 해 책장의 칸인지는 넣을 때 계정 연결 값으로 적었다(D1). 연도를 모르면 칸을 주지 않았으니 결제 완료도 알리지 않는다
+	year, err := iapTokenYear(ctx, tx, p.AccountToken)
+	if err != nil {
+		return "", err
+	}
+	paid := 0
+	if year > 0 {
+		if paid, err = iapShelfPaid(ctx, tx, user, year, s.IAPSandbox); err != nil {
+			return "", err
+		}
+	}
+	if inserted && year > 0 {
+		if err = iapNotePurchaseDone(ctx, tx, user, iap.KindProduct, p, iapShelfGrant{Shelves: product.Shelves, Year: year, OverCap: paid > iapPaidShelfMax}); err != nil {
 			return "", err
 		}
 	}
@@ -509,17 +520,8 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
 		}
 	}
-	// 어느 해 책장의 칸인지는 넣을 때 계정 연결 값으로 적었다(D1)
-	year, err := iapTokenYear(ctx, s.DB, p.AccountToken)
-	if err != nil {
-		return "", err
-	}
 	if year == 0 {
 		return "연도를 모르는 선반 구매 기록. 앱이 연도와 함께 제출하면 그 해 책장에 줌", nil
-	}
-	paid, err := iapShelfPaid(ctx, s.DB, user, year, s.IAPSandbox)
-	if err != nil {
-		return "", err
 	}
 	if paid > iapPaidShelfMax {
 		log.Printf("iap shelf over cap: route=%s user=%d year=%d paid=%d", route, user, year, paid)
