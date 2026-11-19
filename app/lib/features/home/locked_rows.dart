@@ -1,5 +1,6 @@
 // 잠긴 선반(지금 앱 features/home/LockedShelves·domain/locked-preview): 마지막 선반 아래 칸은 흐린 책과 자물쇠로 보이고,
-// 누르면 '선반 한 칸 더 열기' 시트가 뜬다. 칸 수는 다섯 칸(SHELF_SLOTS)에서 지금 선반 수를 뺀 만큼. 무료는 세 칸까지, 그 위는 유료 예정(준비 중 안내 확인창).
+// 누르면 '선반 한 칸 더 열기' 시트가 뜬다. 칸 수는 여섯 칸(shelfSlots)에서 지금 선반 수를 뺀 만큼. 무료는 세 칸까지, 나머지 세 칸은 유료 예정(준비 중 안내 확인창).
+// 2026-11-19 정환: 책장 6칸 = 무료 3 + 유료 3, 유료 칸은 연도 책장마다 산다(ADR-0002 D1)
 // 흐린 책은 지금 앱이 고른 예시 책(색만, 제목·표지 없음)과 배치 계산이 끝난 상자 그대로(assets/locked_preview.json)
 library;
 
@@ -12,7 +13,7 @@ import '../../domain/book3_physics.dart';
 import '../../domain/placed.dart';
 import '../../domain/types.dart';
 
-const shelfSlots = 5;
+const shelfSlots = 6;
 int lockedShelfCount(int shelves) => (shelfSlots - shelves).clamp(0, shelfSlots);
 
 /// 무료로 쓸 수 있는 선반 칸 수(2026-11-15 사용자 결정: 3칸까지 무료, 그 위는 유료 예정·결제는 아직 없음)

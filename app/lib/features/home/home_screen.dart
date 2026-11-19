@@ -1460,7 +1460,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     // 못 받은 표지는 잠시 뒤 다시(앞서 걸어 둔 다시 받기가 있으면 그대로)
     _coverRetry ??= Timer(const Duration(seconds: 30), _retryCovers);
     final shelves = placeShelves(lib);
-    // 마지막 선반 아래 잠긴 칸(다섯 칸까지): 흐린 예시 책
+    // 마지막 선반 아래 잠긴 칸(여섯 칸까지): 흐린 예시 책. 예시 줄은 세 줄을 돌려 쓴다
     final locked = [for (var i = 0; i < lockedShelfCount(shelves.length); i++) await lockedRow(i)];
     final lockedCount = locked.length;
     final rebuild = _rebuild;
