@@ -285,7 +285,7 @@
 - 환불 문의: 스토어가 환불을 처리하고 개발사는 직접 못 함. 개발사와 스토어 사이에서 사용자가 오가는 사례가 반복됨 (커뮤니티)
 - 중국 사례: 환불 뒤 재화가 남는 것이 환불 대행 산업의 수익원이었음. 대응은 환불 이력으로 경고→제한→정지. 정상 사용자가 걸리는 것이 난점 (커뮤니티, 2016~2018)
 - 선택지 (8장 T9)
-  - 환불된 선반: ADR-0002 D13은 "잠금, 꽂힌 책은 유지". 잠긴 선반의 책을 옮기게 할지는 #6에서 미정
+  - 환불된 선반: ADR-0002 D13은 "잠금, 꽂힌 책은 유지". 잠긴 선반의 책을 옮기게 할지는 #6에서 미정 → 2026-11-19 정환: 책을 빼 내 책에 보관하고 그 칸을 잠금(D13 변경)
   - 환불 요청 때 사용 정보를 보낼지: 보내려면 동의 수집과 개인정보 라벨 변경. 안 보내면 구현 없음. 응답이 없으면 환불이 승인되는 경향이라는 글이 있음 (대행사, 한 회사 사례)
   - 반복 환불 계정: 아무 조치 없음 / 구매 제한. 제한하려면 약관에 적어야 함
 - 출처: [애플 환불 알림 처리](https://developer.apple.com/documentation/storekit/handling-refund-notifications), [사용 정보 보내기](https://developer.apple.com/documentation/appstoreserverapi/send-consumption-information), [구글 구매 관리](https://developer.android.com/google/play/billing/manage-purchases), [환불 대행 산업](https://www.baijing.cn/article/3324)
@@ -333,6 +333,8 @@
 - 선택지 (8장 T11): 구독을 다른 계정으로 옮길 때(ADR-0002 D8) 애플에 새 값을 써넣을지. 넣으면 이후 알림이 새 계정을 가리킴. 안 넣으면 옛 값이 계속 와서 우리 표로 풀어야 함
 
 ### 5-3. 기기 계정으로 산 뒤 로그인
+
+- **결정됨 (2026-11-19 정환)**: 로그인 필수, 오프라인 계정 없음(ADR-0002 D9). 구매가 늘 로그인 계정에 묶여 이 문제가 생기지 않음. 남은 일은 기존 기기 계정 사용자를 로그인 계정으로 옮기는 것(로그인 작업)
 
 - 사실: 우리 서버의 계정 전환은 데이터를 합치지 않고 "이전 계정" 관계만 기록 (`server/internal/server/google.go`의 `recordSwitch`)
 - 문제: 비로그인으로 산 구매(ADR-0002 D9)가 옛 기기 계정에 남음
@@ -550,13 +552,15 @@
 
 **T6. 구글 확인**
 
+- **결정됨 (2026-11-19 정환)**: 선반은 연도 책장마다(ADR-0002 D1). 사는 횟수에 끝이 없어 소모성 유지. 비소모성 여러 개 안은 쓸 수 없음. 서버가 지급 직후 확인(소비)하는 부분은 그대로
+
 - 서버가: "server side APIs provide additional protection against issues like poor network connectivity and malicious activity." ([구글 보안](https://developer.android.com/google/play/billing/security))
 - 지급 직후: "You should acknowledge the purchase immediately after granting entitlement." (같은 문서). "DB 커밋 뒤"라고 쓴 문장은 없음. 지급 기록이 먼저라는 뜻으로 읽은 것
 - 영구 상품은 소비하지 않음: "Google removed the ability to query consumed one-time purchases" ([RevenueCat 알려진 문제](https://www.revenuecat.com/docs/known-store-issues/play-billing-library/restore-consumable-purchases-bc8.md)). RevenueCat은 비소모성으로 표시한 상품을 "will never consume"
 - **ADR-0002 D1과 충돌**: D1은 추가 선반을 소모성으로 정함(같은 상품을 여러 번 사기 위해). 소비하면 스토어 복원이 안 되고 서버 기록만 남음. 비로그인 구매(D9)에서 앱을 지우면 되찾을 길이 없는 약점이 여기서 나옴
   - 대안: 선반을 비소모성 상품 여러 개로 등록(첫째 칸, 둘째 칸, 셋째 칸). 스토어가 복원해 줌. 상품이 늘고 "몇 번째를 살 차례인지" 로직이 필요
   - "최대 3칸"이 계정 전체면 이 대안이 가능. 연도 책장마다면 개수가 정해지지 않아 소모성밖에 안 됨
-  - #6에서 선반 범위와 함께 다시 정함
+  - #6에서 선반 범위와 함께 다시 정함 → 2026-11-19 연도 책장마다로 정해져 소모성 유지
 
 **T7. 유예·보류 설정**
 
@@ -609,6 +613,8 @@
 
 **T12. 익명 구매 뒤 로그인**
 
+- **결정됨 (2026-11-19 정환)**: 익명 구매 자체를 두지 않음. 로그인 필수(ADR-0002 D9)
+
 - RevenueCat: 로그인하면 익명 ID를 계정 ID에 묶어 합침. 로그아웃하면 새 익명 ID ([RevenueCat 고객 식별](https://www.revenuecat.com/docs/customers/identifying-customers))
 - Adapty: 옮기기 방식은 "limits purchase access to 1 customer ID at a time"이고 "works best for applications that allow purchases with or without authentication." ([Adapty](https://adapty.io/docs/sharing-paid-access-between-user-accounts))
 - 심사 지침 5.1.1(v): "If your app doesn't include significant account-based features, let people use it without a login."
@@ -660,8 +666,8 @@
 
 - 그대로 구현: T4, T5(있어야 함), T6(서버가 지급 직후), T10(다른 값 거절), T15(매출은 정산 보고서), T3(재조회, 유예 중 유지)
 - 정환과 정할 것
-  - T6에서 나온 것: 추가 선반을 소모성으로 둘지 비소모성 여러 개로 바꿀지. 선반 범위(#6)와 함께
-  - T12: 익명 구매를 로그인 계정으로 옮길지. 업계 기본은 옮김
+  - T6에서 나온 것: 추가 선반을 소모성으로 둘지 비소모성 여러 개로 바꿀지. 선반 범위(#6)와 함께 → 소모성 유지(2026-11-19)
+  - T12: 익명 구매를 로그인 계정으로 옮길지. 업계 기본은 옮김 → 로그인 필수로 문제 자체가 없어짐(2026-11-19)
   - T13: 샌드박스 범위
   - T9: 환불 요청에 응답할지, 반복 환불 조치
   - T8: 월↔연 변경 화면
@@ -706,7 +712,7 @@
 | #27 | 구글 확인(acknowledge·consume) 3일 규칙과 재시도 | 4-1장, T6 | 트레이드오프, 난이도-중 | #10 |
 | #28 | 구글 거래 유일 키와 토큰 잇기(linkedPurchaseToken) | 4-3장 | 난이도-중 | #8 |
 | #29 | 계정 연결 값이 없거나 다른 구매를 누구에게 줄지 | 5-1장, 5-2장, T10, T11 | 트레이드오프, 난이도-상 | #10 |
-| #30 | 기기 계정으로 산 뒤 로그인하면 구매를 어디에 둘지 | 5-3장, T12 | 트레이드오프, 난이도-상 | #6 |
+| #30 | 기기 계정으로 산 뒤 로그인하면 구매를 어디에 둘지 (2026-11-19 로그인 필수로 정리) | 5-3장, T12 | 트레이드오프, 난이도-상 | #6 |
 | #31 | 운영 서버가 샌드박스 거래를 어디까지 받을지 (D15 재검토) | 6-1장, T13 | 트레이드오프, 난이도-상 | #15 |
 | #32 | 환불 대응: 회수, 복원, 환불 요청 응답, 반복 환불 | 4-6장, T9 | 트레이드오프, 난이도-상 | #14 |
 | #33 | 구독 변경(월↔연): 스토어 규칙과 출시 때 지원 범위 | 4-5장, T8 | 트레이드오프, 난이도-중 | #13 |

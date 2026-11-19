@@ -1,4 +1,5 @@
-// 독서 기록 수정 규칙(지금 앱 domain/session-edit.ts·library.ts updateSessionIn)
+// 독서 기록 수정 규칙(옛 앱(RN) domain/session-edit.ts·library.ts updateSessionIn)
+// (옛 앱 시험을 옮겨 온 것이다. 지금은 이 Flutter 코드의 규칙 시험이다)
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/domain/session_edit.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -1,6 +1,8 @@
-// 긴 감상(2026-11-16 기록 > 감상): 목록 줄 · 읽기 화면 · 쓰기/고치기 화면.
+// 긴 감상(2026-11-16 기록 > 감상): 목록 줄 · 읽기 화면 · 쓰기/수정 화면.
 // 별점·한 줄 감상(책 정보 평가)·갈피 메모·독서 메모와 따로 저장한다(서재 essays). 책 정보 '평가'에서도 같은 감상을 그 책만 골라 본다.
-// 읽기 화면은 본문이 주인공: 입력 칸 테두리·키보드·저장 단추 없이 글만 보이고, 고치기는 머리줄 단추로 따로 연다
+// 읽기 화면은 본문이 주인공: 입력 칸 테두리·키보드·저장 단추 없이 글만 보이고, 수정은 머리줄 단추로 따로 연다.
+// 2026-11-19 공통 규칙: 같은 동작은 갈피와 같은 이름('수정' · '삭제'), 책 줄은 BookRow(누르면 책 정보), ' | '는 MetaText,
+// 삭제는 확인창 → 화면 닫고 토스트('삭제했어요.'), 저장 · 삭제 실패는 알린다(예외 원문 없이 errorText)
 library;
 
 import 'package:flutter/material.dart';
@@ -8,10 +10,13 @@ import 'package:flutter/material.dart';
 import '../../domain/library.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import '../book/book_screen.dart' show openBook;
 import '../book/labels.dart';
 import '../bookmark/book_picker.dart' show pickBook;
+import '../bookmark/form_parts.dart';
 import '../stats/stats_widgets.dart' show LinkedCover;
 
 /// 감상 읽기 화면 열기
@@ -22,7 +27,7 @@ Future<void> openEssay(BuildContext context, String id) => Navigator.of(context,
 Future<void> openNewEssay(BuildContext context, {String? book}) => Navigator.of(context, rootNavigator: true)
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/essay/new'), builder: (_) => EssayEditScreen(book: book)));
 
-/// 감상 고치기
+/// 감상 수정
 Future<void> openEditEssay(BuildContext context, String id) => Navigator.of(context, rootNavigator: true)
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/essay/edit'), builder: (_) => EssayEditScreen(id: id)));
 
@@ -30,7 +35,7 @@ Future<void> openEditEssay(BuildContext context, String id) => Navigator.of(cont
 String essayDateLine(Essay e, {bool long = false}) {
   final f = long ? dateLong : dateShort;
   final made = f(e.createdAt), changed = f(e.updatedAt);
-  return changed.isNotEmpty && changed != made ? '$made | $changed 고침' : made;
+  return changed.isNotEmpty && changed != made ? '$made$metaSep$changed 고침' : made;
 }
 
 /// 감상 목록 한 줄(표지 · 책 제목 · 지은이 · 감상 제목 · 미리보기 · 쓴 날). 상자 없이 줄로 나눈다
@@ -52,17 +57,16 @@ class EssayRow extends StatelessWidget {
     final e = b == null ? null : lib.editions[b.editionId];
     final head = essayHeadline(essay);
     final preview = essayPreview(essay);
-    final author = e == null || e.authors.isEmpty ? '' : e.authors.join(', ');
     return Semantics(
       button: true,
       label: [if (showBook && e != null) e.title, head, dateShort(essay.createdAt)].join(', '),
       excludeSemantics: true,
       child: Pressable(
         onPress: onOpen ?? () => openEssay(context, essay.id),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: compact ? Space.m : Space.l),
-          child: compact
-              ? Row(children: [
+        child: compact
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.m),
+                child: Row(children: [
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       // 구역 제목 '감상'(19)과 같은 크기로 보여 구분이 안 됐다(2026-11-18 사용자): 한 단계 작게
@@ -73,12 +77,13 @@ class EssayRow extends StatelessWidget {
                     ]),
                   ),
                   const SizedBox(width: Space.s),
-                  const LucideIcon('ChevronRight', size: 20, color: AppColors.inkFaint),
-                ])
-              : showBook && b != null && e != null
-                  ? _withCover(b.id, e.title, author, head, preview)
-                  : _text(head, preview),
-        ),
+                  // 공통 규칙: 줄 끝 꺾쇠는 Chevron(옅은 회색이었다)
+                  const Chevron(),
+                ]),
+              )
+            : showBook && b != null && e != null
+                ? _withCover(b.id, e.title, head, preview)
+                : Padding(padding: const EdgeInsets.symmetric(vertical: Space.l), child: _text(head, preview)),
       ),
     );
   }
@@ -86,7 +91,8 @@ class EssayRow extends StatelessWidget {
   Widget _headline(String head, {int lines = 2, TextStyle? style}) => Text(head.isEmpty ? '(빈 감상)' : head,
       maxLines: lines, overflow: TextOverflow.ellipsis, style: style ?? AppType.rowStrong);
 
-  Widget _date() => Text(essayDateLine(essay), maxLines: 1, style: AppType.micro);
+  /// 쓴 날(고쳤으면 고친 날도). 공통 규칙: ' | '는 MetaText, 감상 날짜는 목록·읽기 모두 caption(2026-11-19. 목록 micro였다)
+  Widget _date() => MetaText(essayDateLine(essay), maxLines: 1, style: AppType.caption);
 
   /// 책 정보 화면 안(표지 없이): 감상 제목 · 미리보기 · 쓴 날
   Widget _text(String head, String preview) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -99,46 +105,19 @@ class EssayRow extends StatelessWidget {
         Padding(padding: const EdgeInsets.only(top: Space.s), child: _date()),
       ]);
 
-  /// 기록 탭 목록: 표지 높이와 글 묶음 높이를 맞춘다(위는 표지 위 끝, 쓴 날은 표지 아래 끝에).
-  /// 2026-11-16 사용자 '책 크기랑 옆에 글 내용이랑 맞춰야': 작은 표지 옆에 다섯 줄이 길게 내려가던 것을 책 줄 하나·제목 한 줄·미리보기 두 줄·날짜로 줄이고 표지를 키움
-  Widget _withCover(String bookId, String title, String author, String head, String preview) => IntrinsicHeight(
-        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SizedBox(width: essayCoverW, child: Align(alignment: Alignment.topCenter, child: IgnorePointer(child: LinkedCover(lib: lib, id: bookId, width: essayCoverW)))),
-          const SizedBox(width: Space.l),
-          Expanded(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: essayCoverW / 0.68),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text.rich(
-                    TextSpan(children: [
-                      TextSpan(text: title, style: const TextStyle(fontFamily: AppFonts.uiBold, color: AppColors.ink)),
-                      if (author.isNotEmpty) TextSpan(text: ' | $author', style: const TextStyle(color: AppColors.inkSoft)),
-                    ]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.micro,
-                  ),
-                  const SizedBox(height: 6),
-                  _headline(head, lines: 1),
-                  if (preview.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(color: AppColors.ink)),
-                    ),
-                ]),
-                Padding(padding: const EdgeInsets.only(top: Space.xs), child: _date()),
-              ]),
-            ),
-          ),
-        ]),
+  /// 기록 탭 목록: 표지 · 감상 제목 · '책 제목 | 쓴 날' · 미리보기 두 줄(세 줄 묶음 높이가 표지 높이와 맞는다).
+  /// 2026-11-16 사용자 '책 크기랑 옆에 글 내용이랑 맞춰야'. 2026-11-19 공통 규칙: 책 줄은 BookRow(감상 목록은 보통 64, 표지 80이었다)
+  Widget _withCover(String bookId, String title, String head, String preview) => BookRow(
+        size: BookRowSize.medium,
+        cover: IgnorePointer(child: LinkedCover(lib: lib, id: bookId, width: BookRow.coverWidth(BookRowSize.medium))),
+        title: head.isEmpty ? '(빈 감상)' : head,
+        titleLines: 1,
+        meta: [title, essayDateLine(essay)].join(metaSep),
+        third: preview,
       );
 }
 
-/// 기록 탭 감상 목록 표지 폭(높이는 폭/0.68 ≈ 118: 책 줄·제목·미리보기 두 줄·쓴 날을 합한 높이)
-const essayCoverW = 80.0;
-
-/// 감상 읽기: 책 줄 · 제목 · 날짜 · 본문. 고치기·지우기는 머리줄에서
+/// 감상 읽기: 책 줄 · 제목 · 날짜 · 본문. 수정·삭제는 머리줄에서
 class EssayScreen extends StatefulWidget {
   const EssayScreen({super.key, required this.id});
   final String id;
@@ -149,6 +128,10 @@ class EssayScreen extends StatefulWidget {
 
 class _EssayScreenState extends State<EssayScreen> {
   final _model = LibraryModel.instance;
+
+  /// 마지막으로 보인 감상(삭제하고 화면이 닫히는 동안 '찾을 수 없어요'로 바뀌지 않게 그대로 그린다)
+  Essay? _shown;
+  bool _deleted = false;
 
   @override
   void initState() {
@@ -166,27 +149,36 @@ class _EssayScreenState extends State<EssayScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _delete() => appAlert(context, '이 감상을 지울까요?', '지우면 되돌릴 수 없어요. 별점, 한줄평, 갈피는 그대로 남아요.', [
+  // 공통 규칙: 갈피와 같은 말('삭제', 2026-11-19. '지우기'였다). 보고 있던 것을 지우면 화면을 닫고 토스트, 실패는 확인창(실패 처리가 없었다)
+  Future<void> _delete() => appAlert(context, '이 감상을 삭제할까요?', '되돌릴 수 없어요. 별점, 한줄평, 갈피는 그대로 남아요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
-        AlertButton('지우기', style: AlertStyle.destructive, onPress: () async {
+        AlertButton('삭제', style: AlertStyle.destructive, onPress: () async {
           final nav = Navigator.of(context);
-          await _model.deleteEssay(widget.id);
+          setState(() => _deleted = true);
+          final wrote = _model.deleteEssay(widget.id);
           if (nav.canPop()) nav.pop();
+          try {
+            await wrote;
+            if (nav.mounted) showToast(nav.context, '삭제했어요.');
+          } catch (e) {
+            if (nav.mounted) appAlert(nav.context, '감상을 삭제하지 못했어요', errorText(e));
+          }
         }),
       ]);
 
+  // 더 보기 메뉴: 갈피 더 보기와 같은 묶음 · 같은 이름('수정' · '삭제')
   void _menu() => showSheet<void>(
         context,
-        builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+        builder: (ctx) => ListGroup(children: [
           ListItem(
-            label: '감상 고치기',
+            label: '수정',
             onPress: () {
               Navigator.pop(ctx);
               openEditEssay(context, widget.id);
             },
           ),
           ListItem(
-            label: '감상 지우기',
+            label: '삭제',
             danger: true,
             onPress: () {
               Navigator.pop(ctx);
@@ -199,37 +191,39 @@ class _EssayScreenState extends State<EssayScreen> {
   @override
   Widget build(BuildContext context) {
     final lib = _model.lib;
-    final essay = lib.essays[widget.id];
-    // 다른 곳에서 지웠으면 빈 화면(뒤로 가면 된다)
-    if (essay == null) return const Screen(children: [Empty(title: '지운 감상이에요')]);
+    final essay = lib.essays[widget.id] ?? (_deleted ? _shown : null);
+    // 다른 곳에서 지웠으면 찾을 수 없음(공통 규칙 9장 틀: '○○을 찾을 수 없어요' + '돌아가기')
+    if (essay == null) {
+      return Screen(children: [
+        Empty(title: '감상을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+      ]);
+    }
+    _shown = essay;
     final b = lib.books[essay.myBookId];
     final e = b == null ? null : lib.editions[b.editionId];
     final title = essay.title?.trim() ?? '';
     return Screen(
+      // 공통 규칙: 머리줄 아이콘은 HeadIcon, 사이 headIconGap(2026-11-19. 사이가 0이었다)
       right: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconBtn(label: '감상 고치기', onPress: () => openEditEssay(context, widget.id), child: const LucideIcon('PenLine')),
-        IconBtn(label: '더 보기', onPress: _menu, child: const LucideIcon('MoreHorizontal')),
+        IconBtn(label: '감상 수정', onPress: () => openEditEssay(context, widget.id), child: const HeadIcon('PenLine')),
+        const SizedBox(width: headIconGap),
+        IconBtn(label: '더 보기', onPress: _menu, child: const HeadIcon('MoreHorizontal')),
       ]),
       children: [
+        // 공통 규칙: 책 줄은 BookRow small(2026-11-19. 제목 16 · 저자 caption이었다). 다른 책 줄처럼 누르면 책 정보(눌러도 아무 일 없었다)
         if (b != null && e != null)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.s),
-            child: Row(children: [
-              IgnorePointer(child: LinkedCover(lib: lib, id: b.id, width: 40)),
-              const SizedBox(width: Space.m),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label.copyWith(fontFamily: AppFonts.uiBold)),
-                  if (e.authors.isNotEmpty) Text(e.authors.join(', '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption),
-                ]),
-              ),
-            ]),
+          BookRow(
+            cover: IgnorePointer(child: LinkedCover(lib: lib, id: b.id, width: BookRow.coverWidth(BookRowSize.small))),
+            title: e.title,
+            meta: authorLine(e.authors),
+            onPress: () => openBook(context, b.id),
           ),
         Padding(
           padding: const EdgeInsets.only(top: Space.xl),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (title.isNotEmpty) Semantics(header: true, child: Text(title, style: AppType.title)),
-            Padding(padding: EdgeInsets.only(top: title.isNotEmpty ? Space.s : 0), child: Text(essayDateLine(essay, long: true), style: AppType.caption)),
+            // 감상 제목 역할(탭 첫 화면 큰 제목 title과 따로, 값은 같은 26)
+            if (title.isNotEmpty) Semantics(header: true, child: Text(title, style: AppType.essayTitle)),
+            Padding(padding: EdgeInsets.only(top: title.isNotEmpty ? Space.s : 0), child: MetaText(essayDateLine(essay, long: true), style: AppType.caption)),
           ]),
         ),
         // 본문: 읽는 글꼴로 넉넉한 줄 간격. 고를 수 있게만(입력 칸이 아니다)
@@ -242,11 +236,11 @@ class _EssayScreenState extends State<EssayScreen> {
   }
 }
 
-/// 감상 쓰기·고치기: 책(새로 쓸 때만 고른다) · 제목(선택) · 본문
+/// 감상 쓰기·수정: 책(새로 쓸 때만 고른다) · 제목(선택) · 본문
 class EssayEditScreen extends StatefulWidget {
   const EssayEditScreen({super.key, this.id, this.book});
 
-  /// 고칠 감상(없으면 새로 쓴다)
+  /// 수정할 감상(없으면 새로 쓴다)
   final String? id;
 
   /// 새로 쓸 때 정해 둔 책
@@ -262,7 +256,7 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
   late String? _bookId = _old?.myBookId ?? (widget.book != null && _model.lib.books[widget.book] != null ? widget.book : null);
   late String _title = _old?.title ?? '';
   late String _body = _old?.body ?? '';
-  bool _saving = false, _released = false;
+  bool _saving = false;
   String? _error;
 
   bool get _canSave => _bookId != null && _body.trim().isNotEmpty && !_saving;
@@ -279,54 +273,46 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
       final old = _old;
       if (old != null) {
         await _model.updateEssay(old.id, title: _title, body: _body);
-        _released = true;
         if (mounted) Navigator.of(context).pop();
       } else {
         final id = await _model.addEssay(myBookId: book, title: _title, body: _body);
-        _released = true;
         if (mounted) {
           Navigator.of(context).pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/essay'), builder: (_) => EssayScreen(id: id)));
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '감상을 저장하지 못했어요. 쓴 글은 그대로 있어요. ($e)');
+      // 공통 규칙 11장: 쓰던 글이 있는 화면의 실패는 화면 안 글(예외 원문 대신 errorText)
+      if (mounted) setState(() => _error = '감상을 저장하지 못했어요. 쓴 글은 그대로 있어요. ${errorText(e)}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
-
-  Future<void> _askLeave() => appAlert(context, '쓰던 감상을 버릴까요?', '지금 나가면 저장되지 않아요.', [
-        const AlertButton('계속 쓰기', style: AlertStyle.cancel),
-        AlertButton('버리기', style: AlertStyle.destructive, onPress: () {
-          _released = true;
-          Navigator.of(context).pop();
-        }),
-      ]);
 
   @override
   Widget build(BuildContext context) {
     final lib = _model.lib;
     final b = _bookId == null ? null : lib.books[_bookId];
     final e = b == null ? null : lib.editions[b.editionId];
-    return PopScope(
-      canPop: _released || !_dirty,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _askLeave();
-      },
-      child: Screen(
-        title: _old == null ? '감상 쓰기' : '감상 고치기',
-        footer: Btn(label: '감상 저장', onPress: _save, busy: _saving, disabled: !_canSave),
+    // 쓰던 글 지킴: 갈피 남기기 · 갈피 수정과 같은 부품(form_parts). 새로 쓰기는 '쓰던 내용…', 수정은 '고친 내용…'(공통 규칙 12장).
+    // 저장 뒤 닫기는 pop이라 묻지 않는다
+    final screen = Screen(
+        title: _old == null ? '감상 쓰기' : '감상 수정',
+        // 책을 안 골라 저장이 꺼졌으면 단추 바로 위에 이유(갈피 남기기와 같게, 공통 규칙 9장)
+        footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (_bookId == null) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('책을 골라야 저장할 수 있어요.', center: true)),
+          Btn(label: '감상 저장', size: 'l', onPress: _save, busy: _saving, disabled: !_canSave),
+        ]),
         children: [
           const SizedBox(height: Space.m),
           SelectField(
             label: '책',
             value: e?.title,
-            sub: e != null && e.authors.isNotEmpty ? e.authors.join(', ') : null,
+            sub: e != null && e.authors.isNotEmpty ? authorLine(e.authors) : null,
             placeholder: '책을 골라 주세요',
             // 쓴 감상의 책은 바꾸지 않는다(다른 책 감상이면 새로 쓴다)
             disabled: _old != null,
             onPress: () async {
-              final r = await pickBook(context, lib, addNew: true);
+              final r = await pickBook(context, lib, addNew: true, current: (id: _bookId));
               if (r.picked && r.id != null && mounted) setState(() => _bookId = r.id);
             },
           ),
@@ -339,9 +325,9 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
             multiline: true,
             minHeight: 280,
           ),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(_error!, style: AppType.sub.copyWith(color: AppColors.danger))),
+          if (_error != null) NoticeText(_error!, error: true),
         ],
-      ),
-    );
+      );
+    return _old == null ? DraftGuard(dirty: () => _dirty, child: screen) : DraftGuard.edit(dirty: () => _dirty, child: screen);
   }
 }

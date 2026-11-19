@@ -14,7 +14,7 @@ import '../../services/share_image.dart';
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/alert.dart';
-import '../../ui/keep_all.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../reading/start_book.dart' show startReadingBook;
@@ -43,15 +43,11 @@ class _BookShareScreenState extends State<BookShareScreen> {
   String get _note => _model.lib.books[widget.id]?.note ?? '';
   ShareParts _parts = defaultParts;
   String? _busy; // save · share
-  bool _saved = false, _canSave = false, _coverWaiting = true;
-  Timer? _savedTimer;
+  bool _canSave = false, _coverWaiting = true;
   ShareSceneAssets? _assets;
   // 미리보기 그림(같은 입력·폭이면 다시 그리지 않는다)
   ui.Image? _preview;
   Object? _previewKey;
-  // 비어 있는 칩을 누르면 쓰는 자리로 데려간다(2026-11-15 QA: 빈 '한 줄 감상'·'별점' 칩은 눌러도 반응이 없었다)
-  String? _hint; // 방금 누른 빈 칩: 그 안내 줄을 잠깐 진하게
-  Timer? _hintTimer;
 
   @override
   void initState() {
@@ -87,8 +83,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
   @override
   void dispose() {
     _model.removeListener(_changed);
-    _savedTimer?.cancel();
-    _hintTimer?.cancel();
     _preview?.dispose();
     super.dispose();
   }
@@ -96,7 +90,6 @@ class _BookShareScreenState extends State<BookShareScreen> {
   void _changed() {
     if (mounted) setState(() {});
   }
-
 
   /// 비어 있는 항목을 누르면 바로 그것을 채우는 곳으로(2026-11-18 사용자 '없는 애 누르면 바로 추가 페이지로'):
   /// 한줄평·별점은 책 정보 › 평가, 읽은 기간은 내 기록(돌려준 탭으로 책 정보가 바꾼다), 독서 시간은 이 책으로 읽기 시작
@@ -110,17 +103,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
         return;
       case 'time':
         startReadingBook(context, widget.id);
-        return;
     }
-    _hintFor(k);
-  }
-
-  void _hintFor(String k) {
-    _hintTimer?.cancel();
-    setState(() => _hint = k == 'note' || k == 'rating' ? 'eval' : k);
-    _hintTimer = Timer(const Duration(milliseconds: 2400), () {
-      if (mounted) setState(() => _hint = null);
-    });
   }
 
   BookShareData? get _data {
@@ -145,17 +128,21 @@ class _BookShareScreenState extends State<BookShareScreen> {
       img.dispose();
       if (kind == 'save') {
         await savePng(png, name: 'chaekjang_book');
-        if (!mounted) return;
-        setState(() => _saved = true);
-        _savedTimer?.cancel();
-        _savedTimer = Timer(const Duration(milliseconds: 2400), () {
-          if (mounted) setState(() => _saved = false);
-        });
+        // 사진첩에 생긴 결과는 토스트(2026-11-19 공통 규칙: 단추 글자를 2.4초 '저장했어요'로 바꿨다)
+        if (mounted) showToast(context, '사진첩에 저장했어요.');
       } else {
         await sharePng(png, name: 'chaekjang_book', title: '책 공유');
       }
     } catch (e) {
-      if (mounted) appAlert(context, shareErrorTitle(e), '$e');
+      // 예외 원문 대신 사람 문장(docs/design/DESIGN.md 9장). 앱이 만든 문장(이미지 · 기기 안 됨)은 그대로, 그 밖은 errorText. 다시 할 수 있으면 '다시 시도'
+      final again = !(e is ShareImageError && e.stage == 'unavailable');
+      final body = e is ShareImageError && (e.stage == 'image' || e.stage == 'unavailable') ? e.message : errorText(e);
+      if (mounted) {
+        appAlert(context, shareErrorTitle(e), body, [
+          if (again) const AlertButton('취소', style: AlertStyle.cancel),
+          AlertButton(again ? '다시 시도' : '확인', onPress: again ? () => _run(kind) : null),
+        ]);
+      }
     } finally {
       if (mounted) setState(() => _busy = null);
     }
@@ -174,6 +161,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
         _previewKey = key;
       }
     }
+    // 그림 재료를 받는 동안은 카드 자리 가운데 작은 원(2026-11-19 공통 규칙: 빈 카드만 보였다)
     return Semantics(
       label: '${d.title} 공유 카드',
       image: true,
@@ -181,7 +169,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
         width: width,
         height: height,
         color: _wall,
-        child: a == null || _preview == null ? null : RawImage(image: _preview, width: width, height: height, fit: BoxFit.fill),
+        child: a == null || _preview == null ? const Center(child: Spinner(label: '카드를 만드는 중')) : RawImage(image: _preview, width: width, height: height, fit: BoxFit.fill),
       ),
     );
   }
@@ -192,7 +180,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
     final d = _data;
     if (b == null || d == null) {
       return Screen(title: '책 공유', children: [
-        Empty(title: '책을 찾을 수 없어요', action: '책장으로', onAction: () => Navigator.of(context).popUntil((r) => r.isFirst)),
+        Empty(title: '책을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     final has = {'note': d.note != null, 'rating': d.rating != null && d.rating != 0, 'time': d.readTime != null, 'period': d.period != null};
@@ -206,19 +194,19 @@ class _BookShareScreenState extends State<BookShareScreen> {
     final width = MediaQuery.sizeOf(context).width;
     // 미리보기는 화면에 맞춰 줄인 같은 카드(옵션이 보이게 화면 폭의 3/4 정도)
     final previewW = [width - Space.page * 2, math.max(240.0, width * 0.66), 340.0].reduce(math.min);
-    final hair = 1 / MediaQuery.devicePixelRatioOf(context);
-    // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게)
-    final missing = {
-      if (!has['note']! || !has['rating']!) 'eval': '비어 있는 한줄평, 별점을 누르면 평가에서 적을 수 있어요',
-      if (!has['time']!) 'time': '독서 시간을 누르면 이 책으로 타이머를 켜요',
-      if (!has['period']!) 'period': '읽은 기간을 누르면 내 기록에서 날짜를 적어요',
-    };
+    final hair = Hairline.of(context);
+    // 비어 있는 것이 생기는 법(한 줄씩, 낱말 단위로 줄바꿈: '완/독일'처럼 낱말이 갈리지 않게). 안내 문장이라 마침표(docs/design/DESIGN.md 9장)
+    final missing = [
+      if (!has['note']! || !has['rating']!) '비어 있는 한줄평, 별점을 누르면 평가에서 적을 수 있어요.',
+      if (!has['time']!) '독서 시간을 누르면 이 책으로 타이머를 켜요.',
+      if (!has['period']!) '읽은 기간을 누르면 내 기록에서 날짜를 적어요.',
+    ];
     return Screen(
       title: '책 공유',
-      compact: true,
       footer: Row(children: [
         if (_canSave) ...[
-          Expanded(child: Btn(label: _saved ? '저장했어요' : '저장', kind: 'secondary', size: 'l', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _run('save'))),
+          // 공유 그림을 사진첩에 넣는 단추는 '사진 저장'(docs/design/DESIGN.md 9장)
+          Expanded(child: Btn(label: '사진 저장', kind: 'secondary', size: 'l', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _run('save'))),
           const SizedBox(width: Space.s),
         ],
         Expanded(child: Btn(label: '공유', size: 'l', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _run('share'))),
@@ -248,6 +236,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
                   label: _partLabel[k]!,
                   on: on[k]! && has[k]!,
                   enabled: has[k]!,
+                  hint: has[k]! ? null : (k == 'time' ? '비어 있어요. 누르면 이 책으로 읽기 시작' : k == 'period' ? '비어 있어요. 누르면 내 기록에서 적기' : '비어 있어요. 누르면 평가에서 적기'),
                   onPress: has[k]! ? () => toggle(k) : () => _empty(k),
                 ),
               ),
@@ -256,9 +245,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
           Padding(
             padding: const EdgeInsets.only(top: Space.s),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              for (final e in missing.entries)
-                Text(keepAll(e.value),
-                    semanticsLabel: e.value, style: _hint == e.key ? AppType.caption.copyWith(color: AppColors.ink, fontFamily: AppFonts.uiBold) : AppType.caption),
+              for (final t in missing) WordText(t, style: AppType.caption),
             ]),
           ),
       ],
@@ -266,39 +253,33 @@ class _BookShareScreenState extends State<BookShareScreen> {
   }
 }
 
-/// 체크 상자 한 줄(표시할 정보): 네모 상자 24(고르면 갈색 채움 + 흰 체크) + 글. 누르는 자리 48
+/// 체크 상자 한 줄(표시할 정보): 공용 정보 넣기 네모(CheckSquare 22) + 글. 누르는 자리 48. 내용이 없는 것은 꺼짐 투명도.
+/// 내용이 없는 줄도 누르면 그것을 적는 곳으로 가므로 화면 읽기에는 '사용할 수 없음' 대신 그 길을 알린다(hint)
 class _CheckLine extends StatelessWidget {
-  const _CheckLine({required this.label, required this.on, required this.enabled, required this.onPress});
+  const _CheckLine({required this.label, required this.on, required this.enabled, required this.onPress, this.hint});
   final String label;
   final bool on, enabled;
+  final String? hint;
   final VoidCallback onPress;
 
   @override
   Widget build(BuildContext context) => Semantics(
         container: true,
-        checked: on,
-        enabled: enabled,
+        button: !enabled,
+        checked: enabled ? on : null,
         label: label,
+        hint: hint,
         onTap: onPress,
         excludeSemantics: true,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onPress,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(minHeight: Space.hit),
             child: Opacity(
-              opacity: enabled ? 1 : 0.4,
+              opacity: enabled ? 1 : disabledOpacity,
               child: Row(children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: on ? AppColors.accent : AppColors.bg,
-                    borderRadius: BorderRadius.circular(6),
-                    border: on ? null : Border.all(color: AppColors.inkFaint, width: 1.5),
-                  ),
-                  child: on ? const Center(child: LucideIcon('Check', size: 16, color: AppColors.bg, stroke: 2.6)) : null,
-                ),
+                CheckSquare(on: on),
                 const SizedBox(width: Space.m),
                 Flexible(child: WordText(label, style: AppType.bodySmall)),
               ]),

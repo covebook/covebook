@@ -1,4 +1,5 @@
-// 배치 계산(자리·쌓기·표지 전시·기대기 물리)이 지금 앱 computeShelf 결과와 같은지 본다.
+// 배치 계산(자리·쌓기·표지 전시·기대기 물리)이 옛 앱(RN) computeShelf 결과와 같은지 본다.
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 // test/fixtures/layout_cases.json 은 tool/gen_shaders.sh 가 커밋된 지금 앱의 실제 책 비교 책장(real·real-front·real-side·real-before)과
 // 그 변형(위치 없는 예전 저장본·기대는 방향 뒤집기)으로 뽑는다.
 import 'dart:convert';

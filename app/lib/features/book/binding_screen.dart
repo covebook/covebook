@@ -4,10 +4,13 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../domain/library.dart' show authorLine;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
+import '../../ui/alert.dart';
+import '../../ui/draft_guard.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
-import '../../ui/theme.dart';
 import 'binding_editor.dart';
 
 Future<void> openBindingEditor(BuildContext context, String id) =>
@@ -34,59 +37,64 @@ class _BindingScreenState extends State<BindingScreen> {
         _v = next;
       });
 
+  void _reset() => _set(resetBinding(_recommended, _v.seed));
+
   Future<void> _save() async {
     final nav = Navigator.of(context);
     if (!_touched) return nav.pop();
     if (_saving) return;
     setState(() => _saving = true);
-    // 추천으로 되돌려 재질·표지 그림이 비면 예전 값도 지운다
-    await _model.setBinding(widget.id, _v);
-    await PlacementStore.instance.reload();
+    // 추천으로 되돌려 재질·표지 그림이 비면 예전 값도 지운다. 실패하면 고른 장정은 그대로 두고 확인창으로(말없이 멈췄다)
+    try {
+      await _model.setBinding(widget.id, _v);
+      await PlacementStore.instance.reload();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      appAlert(context, '장정을 저장하지 못했어요', '고른 장정은 그대로 있어요. ${errorText(e)}');
+      return;
+    }
+    // 저장했으니 나가기 확인(DraftGuard)을 거치지 않고 닫는다
     if (mounted) nav.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final e = _edition;
-    if (_book == null || e == null) return const Screen(title: '장정 편집', children: [Empty(title: '책을 찾을 수 없어요')]);
-    return Screen(
-      title: '장정 편집',
-      right: Semantics(
-        button: true,
-        label: '추천 장정으로 초기화',
-        excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _set(BindingDraft(
-            spineColor: _recommended.spineColor,
-            motif: _recommended.motif,
-            seed: _v.seed,
-            inkColor: _recommended.inkColor,
-            accentColor: _recommended.accentColor,
-            layout: _recommended.layout,
-          )),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.only(right: 10, left: 10),
-            child: Text('초기화', style: AppType.sub),
+    if (_book == null || e == null) {
+      return Screen(title: '장정 편집', children: [
+        Empty(title: '책을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+      ]);
+    }
+    // 고른 장정이 있으면 나갈 때 묻는다(공용 DraftGuard.edit, 2026-11-19 공통 규칙: 말없이 버려졌다)
+    return DraftGuard.edit(
+      dirty: () => _touched && !_saving,
+      child: Screen(
+        title: '장정 편집',
+        // 머리줄 글자 단추는 공용 TextLink(회색 보조, 누르는 자리 48, 2026-11-19 공통 규칙). 화면 읽기 이름은 '추천 장정으로 초기화' 그대로
+        right: Semantics(
+          button: true,
+          label: '추천 장정으로 초기화',
+          excludeSemantics: true,
+          onTap: _reset,
+          child: TextLink(label: '초기화', soft: true, onPress: _reset),
+        ),
+        // 화면 아래 주요 단추 l, 이름 '○○ 저장'(docs/design/DESIGN.md 5장)
+        footer: Btn(label: '장정 저장', size: 'l', onPress: _save, busy: _saving),
+        children: [
+          BindingEditor(
+            title: e.title,
+            author: authorLine(e.authors),
+            size: e.widthMm != null && e.heightMm != null ? (widthMm: e.widthMm!, heightMm: e.heightMm!) : null,
+            pages: e.pageCount,
+            value: _v,
+            recommended: _recommended,
+            current: _touched ? null : PlacementStore.instance.books[widget.id],
+            realCover: e.coverUri,
+            onChange: _set,
           ),
-        ),
+        ],
       ),
-      footer: Btn(label: '저장', onPress: _save, busy: _saving),
-      children: [
-        BindingEditor(
-          title: e.title,
-          author: e.authors.join(', '),
-          size: e.widthMm != null && e.heightMm != null ? (widthMm: e.widthMm!, heightMm: e.heightMm!) : null,
-          pages: e.pageCount,
-          value: _v,
-          recommended: _recommended,
-          current: _touched ? null : PlacementStore.instance.books[widget.id],
-          realCover: e.coverUri,
-          onChange: _set,
-        ),
-      ],
     );
   }
 }

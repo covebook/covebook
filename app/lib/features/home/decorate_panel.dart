@@ -1,9 +1,12 @@
-// 꾸미기 모드에서 하단 탭 바 자리에 뜨는 조작부(지금 앱 features/home/DecoratePanel.tsx, 2026-10-26 꾸미기 시안):
-// 고른 책 제목·되돌리기·완료, 자세 탭(책등·표지·눕힘, 아이콘 + 밑줄), 줄마다 '이름 · 막대 · 숫자'(위치 mm, 회전 °),
+// 꾸미기 화면 부품(지금 앱 features/home/DecoratePanel.tsx, 2026-10-26 꾸미기 시안을 2026-11-19 사용자 시안으로 바꿈):
+// 맨 위 줄 DecorateBar('책 배치 | 선반 | 벽지' 탭, 되돌리기·완료), 아래는 탭마다
+//  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 누르거나 끌어보세요' + 책 측면 고르기), 고르면 DecoratePanel
+//  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
+// DecoratePanel: 고른 책 제목, 자세 탭(책등·표지·눕힘, 아이콘 + 밑줄), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
 // 책등 책은 회전 대신 기대기(왼쪽·바로·오른쪽: 방향만 고르고 각도는 옆 책과의 틈으로). 막대에는 갈 수 있는 범위를 진한 띠로.
 // 막대는 놓을 때 확정한다(끄는 동안은 숫자와 손잡이만 따라간다).
-// 2026-11-16 QA 영숙 F7·F8: 큰 글씨에서는 제목·라벨을 따로 줄에 두고(잘리거나 '위치기대기'로 세로로 섰다), 안내에 끌어 옮기기를 넣고,
-// 고른 책을 왼쪽·오른쪽으로 한 칸씩 옮기는 단추를 둔다(끌기를 못 하는 화면 읽기 사용자도 순서를 바꾼다)
+// 2026-11-16 QA 영숙 F7: 큰 글씨에서는 라벨을 따로 줄에 둔다(잘리거나 '위치기대기'로 세로로 섰다).
+// 2026-11-18 사용자: '순서' 줄·자리 표시와 안내 글을 뺐다. 한 칸씩 옮기기는 책장 책 칸의 화면 읽기 동작으로 남겼다(home_screen)
 library;
 
 import 'dart:math' as math;
@@ -12,15 +15,184 @@ import 'package:flutter/material.dart';
 
 import '../../domain/geometry.dart';
 import '../../domain/types.dart';
+import '../../scene_config/skin.dart';
+import '../../scene_config/spine_look.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 
-const _thumb = 26.0, _track = 4.0;
+/// 막대 손잡이 원 지름(2026-11-18 사용자 '원 줄이기' 26 → 18). 잡는 칸은 막대 그림 칸 높이(누르는 자리 48, Space.hit)
+const _thumb = 18.0, _track = 4.0;
 
 /// 막대 양 끝 안쪽 여백 = 손잡이 반지름 + 2: 끝까지 가도 손잡이가 막대 밖 숫자('193mm')를 덮지 않는다(2026-11-18 사용자)
 const _inset = _thumb / 2 + 2;
 
+/// 꾸미기 탭
+enum DecorateTab { books, shelf, wall }
+
+/// 꾸미기 맨 위 줄(책장 머리줄 자리, 같은 높이라 들어가고 나와도 책장이 밀리지 않는다): 왼쪽 탭, 오른쪽 되돌리기·완료
+class DecorateBar extends StatelessWidget {
+  const DecorateBar({super.key, required this.tab, required this.onTab, required this.canUndo, required this.onUndo, required this.onDone});
+  final DecorateTab tab;
+  final ValueChanged<DecorateTab> onTab;
+  final bool canUndo;
+  final VoidCallback onUndo;
+  final VoidCallback onDone;
+
+  // 탭 글자와 되돌리기·완료 글자를 같은 줄 높이(글자 기준선)에 둔다: 탭은 글자 밑에 밑줄 몫이 있어 가운데 맞추면 탭 글자가 떠 보였다
+  @override
+  Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Tabs<DecorateTab>(
+              items: const [(id: DecorateTab.books, label: '책 배치'), (id: DecorateTab.shelf, label: '선반'), (id: DecorateTab.wall, label: '벽지')],
+              value: tab,
+              onChange: onTab,
+              gap: Space.l + Space.s,
+            ),
+          ),
+        ),
+        Semantics(
+          button: true,
+          enabled: canUndo,
+          label: '되돌리기',
+          onTap: canUndo ? onUndo : null,
+          excludeSemantics: true,
+          child: Pressable(
+            onPress: canUndo ? onUndo : null,
+            child: SizedBox(
+              height: Space.hit,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                LucideIcon('Undo2', size: 20, color: canUndo ? AppColors.inkSoft : AppColors.inkFaint),
+                const SizedBox(width: Space.xs),
+                Text('되돌리기', softWrap: false, style: AppType.body.copyWith(color: canUndo ? AppColors.inkSoft : AppColors.inkFaint)),
+              ]),
+            ),
+          ),
+        ),
+        const SizedBox(width: Space.l),
+        // 머리줄 '완료'는 본문색 글자 단추(DESIGN 5-1). 이 줄은 폭이 빠듯해 양옆 여백 없이 글자 폭만큼(start), 높이는 누르는 자리 48
+        SizedBox(height: Space.hit, child: TextLink(label: '완료', ink: true, start: true, onPress: onDone)),
+      ]);
+}
+
+/// 아래 칸 공통 겉모양: 흰 바탕, 위 모서리 둥글게, 위 얇은 선, 아래 안전 여백
+class _Sheet extends StatelessWidget {
+  const _Sheet({required this.child, this.top = Space.l});
+  final Widget child;
+  final double top;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        // 큰 글씨에서도 책장이 위에 보이게 높이를 막고 안을 밀어 본다
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.62),
+        decoration: const BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Shape.sheet)),
+          border: Border(top: BorderSide(color: AppColors.line, width: 0.5)),
+        ),
+        padding: EdgeInsets.fromLTRB(Space.page + 4, top, Space.page + 4, MediaQuery.paddingOf(context).bottom + 6),
+        child: child,
+      );
+}
+
+/// 책 배치 탭에서 책을 고르기 전: 떠 있는 안내(놓지 못한 까닭이 있으면 그 글) + 아래 책 측면 고르기(책 모양이라 책 배치 탭에, 2026-11-19 사용자)
+class DecorateHint extends StatelessWidget {
+  const DecorateHint({super.key, required this.msg, required this.spine, required this.onSpine});
+  final String? msg;
+  final SpineLook spine;
+  final ValueChanged<SpineLook> onSpine;
+
+  @override
+  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Center(
+          child: Semantics(
+            liveRegion: true,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.s + 2),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(Shape.pill),
+                border: Border.all(color: AppColors.line, width: Hairline.of(context)),
+                boxShadow: const [Shape.floatShadow],
+              ),
+              child: Text(msg ?? '책을 누르거나 끌어보세요', style: AppType.caption.copyWith(color: msg != null ? AppColors.danger : AppColors.ink)),
+            ),
+          ),
+        ),
+        const SizedBox(height: Space.m),
+        _Sheet(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // 묶음 이름은 꾸미기 시안 모양(본문색 16 보통, 1c111a7 사용자 시안) 그대로: DESIGN 16장 예외(시트 안 SheetLabel 18 굵게와 다름)
+            Text('책 측면', style: AppType.sub.copyWith(color: AppColors.ink)),
+            const SizedBox(height: Space.xs),
+            Segmented<SpineLook>(
+              items: const [(SpineLook.color, '색 한 가지'), (SpineLook.photo, '실물 측면'), (SpineLook.stripe, '표지 이어 쌓기')],
+              value: spine,
+              onChange: onSpine,
+            ),
+          ]),
+        ),
+      ]);
+}
+
+/// 선반·벽지 탭: 고르는 대로 책장에 바로 보인다(실시간 스킨). 저장은 고를 때, 빛 다시 굽기는 꾸미기를 마칠 때(home_screen)
+class SkinSheet extends StatelessWidget {
+  const SkinSheet({super.key, required this.tab, required this.choice, required this.onPick});
+  final DecorateTab tab;
+  final SkinChoice choice;
+  final ValueChanged<SkinChoice> onPick;
+
+  Widget _section(BuildContext context, String label, Map<String, SkinPart?> table, String value, SkinChoice Function(String k) next) => Padding(
+        padding: const EdgeInsets.only(bottom: Space.m),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // 묶음 이름은 꾸미기 시안 모양 그대로(DESIGN 16장 예외)
+          Text(label, style: AppType.sub.copyWith(color: AppColors.ink)),
+          const SizedBox(height: Space.s),
+          // 한 줄 네 칸 폭(칸이 셋이어도 같은 폭으로 왼쪽부터)
+          LayoutBuilder(
+            builder: (_, box) => Wrap(spacing: Space.s, runSpacing: Space.s, children: [
+              for (final e in table.entries)
+                if (e.value != null)
+                  SizedBox(
+                    width: (box.maxWidth - Space.s * 3) / 4,
+                    child: Choice(
+                      compact: true,
+                      label: e.value!.name,
+                      selected: value == e.key,
+                      onPress: () => onPick(next(e.key)),
+                      child: Container(
+                        height: 28,
+                        margin: const EdgeInsets.only(bottom: Space.s),
+                        decoration: BoxDecoration(
+                          color: Color(0xFF000000 | e.value!.color),
+                          borderRadius: BorderRadius.circular(Shape.tag),
+                          border: Border.all(color: AppColors.line, width: Hairline.of(context)),
+                        ),
+                      ),
+                    ),
+                  ),
+            ]),
+          ),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) => _Sheet(
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (tab == DecorateTab.shelf) ...[
+              _section(context, '선반', plankSkins, choice.plank, (k) => choice.copyWith(plank: k)),
+              _section(context, '벽', frameSkins, choice.frame, (k) => choice.copyWith(frame: k)),
+            ] else
+              _section(context, '벽지', wallSkins, choice.wall, (k) => choice.copyWith(wall: k)),
+          ]),
+        ),
+      );
+}
+
+/// 책 배치 탭에서 책을 골랐을 때: 제목, 자세 탭, 앞뒤·회전/기대기
 class DecoratePanel extends StatelessWidget {
   const DecoratePanel({
     super.key,
@@ -34,21 +206,14 @@ class DecoratePanel extends StatelessWidget {
     required this.spinMax,
     required this.spinRange,
     required this.depth,
-    required this.canUndo,
     required this.onPose,
     required this.onLean,
     required this.onSpin,
     required this.onDepth,
-    required this.onUndo,
-    required this.onDone,
     this.bookKey,
-    this.onSkin,
-    this.onMove,
-    this.canMove = (left: false, right: false),
-    this.place,
   });
 
-  final String? title;
+  final String title;
   final Pose? pose;
   final int lean;
   final ({bool left, bool right}) canLean;
@@ -60,106 +225,31 @@ class DecoratePanel extends StatelessWidget {
   final double spinMax;
   final ({double lo, double hi})? spinRange;
   final ({double lo, double hi, double z, double back})? depth;
-  final bool canUndo;
   final ValueChanged<Pose> onPose;
   final ValueChanged<int> onLean;
   final ValueChanged<double> onSpin;
   final ValueChanged<double> onDepth;
-  final VoidCallback onUndo;
-  final VoidCallback onDone;
 
   /// 고른 책이 바뀌면 막대 상태를 새로
   final Object? bookKey;
 
-  /// 선반·벽지 고르기(스토어) 열기
-  final VoidCallback? onSkin;
-
-  /// 고른 책을 같은 선반에서 왼쪽(-1)·오른쪽(1)으로 한 칸
-  final ValueChanged<int>? onMove;
-  final ({bool left, bool right}) canMove;
-
-  /// 고른 책 자리('1번째 선반 · 왼쪽에서 3번째'): 옮기면 화면 읽기가 새 자리를 읽는다
-  final String? place;
-
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.paddingOf(context).bottom;
     final turns = pose == Pose.horizontal || pose == Pose.front;
     final big = largeText(context);
-    final head = Text(
-      keepAll(title ?? '꾸밀 책을 눌러 고르세요'),
-      maxLines: big ? 2 : 1,
-      overflow: TextOverflow.ellipsis,
-      style: title != null ? AppType.pageTitle : AppType.row.copyWith(color: AppColors.inkSoft),
-    );
-    final actions = <Widget>[
-      // 선반·벽지(스토어): 2026-11-16 메뉴 구조 개편으로 책장 머리에서 빼고 꾸미기 안에서 연다
-      if (onSkin != null) ...[
-        Semantics(
-          button: true,
-          label: '선반, 벽지',
-          onTap: onSkin,
-          excludeSemantics: true,
-          child: Pressable(
-            onPress: onSkin,
-            child: SizedBox(height: 40, child: Center(child: Text('선반, 벽지', softWrap: false, style: AppType.caption))),
-          ),
-        ),
-        const SizedBox(width: 14),
-      ],
-      Semantics(
-        button: true,
-        enabled: canUndo,
-        label: '되돌리기',
-        onTap: canUndo ? onUndo : null,
-        excludeSemantics: true,
-        child: Opacity(
-          opacity: canUndo ? 1 : 0.35,
-          child: Pressable(onPress: canUndo ? onUndo : null, child: const SizedBox(width: 40, height: 40, child: Center(child: LucideIcon('Undo2', size: 22, stroke: 1.5)))),
-        ),
-      ),
-      const SizedBox(width: 10),
-      Semantics(
-        button: true,
-        label: '완료',
-        onTap: onDone,
-        excludeSemantics: true,
-        child: Pressable(
-          onPress: onDone,
-          child: SizedBox(height: 40, child: Center(child: Text('완료', softWrap: false, style: AppType.buttonSmall))),
-        ),
-      ),
-    ];
-    return Container(
-      // 큰 글씨에서도 책장이 위에 보이게 높이를 막고 안을 밀어 본다
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.62),
-      decoration: const BoxDecoration(
-        color: AppColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Shape.sheet)),
-        border: Border(top: BorderSide(color: AppColors.line, width: 0.5)),
-      ),
-      padding: EdgeInsets.fromLTRB(Space.page + 4, 0, Space.page + 4, bottom + 6),
+    return _Sheet(
+      top: 0,
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Center(
           child: Container(width: 38, height: 4.5, margin: const EdgeInsets.only(top: 10), decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3))),
         ),
-        // 큰 글씨: 단추 줄 아래에 제목을 두 줄까지(한 줄에 두면 제목·안내가 잘려 옆 단추에 붙었다)
+        // 큰 글씨: 제목 두 줄까지
         Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: big
-              ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
-                  Padding(padding: const EdgeInsets.only(top: Space.xs), child: head),
-                ])
-              : Row(children: [Expanded(child: head), ...actions]),
+          child: Text(keepAll(title), maxLines: big ? 2 : 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle),
         ),
-        // 처음 안내: 끌어서 자리를 옮기는 길(길게 눌러 끌기 말고는 알려 주지 않았다)
-        if (title == null)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xs),
-            child: WordText('책을 눌러 고르면 자세를 바꿀 수 있어요. 책을 끌어 자리를 옮겨요.', style: AppType.caption),
-          ),
-        if (msg != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(msg!, style: AppType.caption.copyWith(color: AppColors.danger))),
+        // 고른 뒤 놓지 못한 까닭: 오류 글(화면 읽기가 바로 읽는다)
+        if (msg != null) NoticeText(msg!, error: true),
         // 큰 글씨에서 조작부가 화면보다 길어지면 안에서 밀어 본다
         Flexible(
           child: SingleChildScrollView(
@@ -168,34 +258,18 @@ class DecoratePanel extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 18),
                 child: Row(children: [
                   for (final p in const [Pose.upright, Pose.front, Pose.horizontal])
-                    Expanded(child: _PoseTab(pose: p, on: title != null && pose == p, disabled: title == null, onPress: () => onPose(p))),
+                    Expanded(child: _PoseTab(pose: p, on: pose == p, onPress: () => onPose(p))),
                 ]),
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 14, bottom: 6),
                 child: Column(children: [
-                  if (title != null && onMove != null)
-                    _Row(
-                      label: '순서',
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        Row(children: [
-                          Expanded(child: _MoveChoice(dir: -1, disabled: !canMove.left, onPress: () => onMove!(-1))),
-                          const SizedBox(width: 6),
-                          Expanded(child: _MoveChoice(dir: 1, disabled: !canMove.right, onPress: () => onMove!(1))),
-                        ]),
-                        if (place != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: Space.xs),
-                            child: Semantics(liveRegion: true, child: Text(place!, style: AppType.caption)),
-                          ),
-                      ]),
-                    ),
                   if (depth != null)
                     // '위치'는 좌우로 읽혀 '앞뒤'로(2026-11-18 사용자: 옮기면 기대는 각이 바뀌어야 한다고 봄. 이 막대는 앞뒤만 옮긴다)
                     _Row(label: '앞뒤', child: _DepthSlider(key: ValueKey(('d', bookKey)), lo: depth!.lo, hi: depth!.hi, back: depth!.back, value: depth!.z, onChange: onDepth)),
-                  if (title != null && turns)
+                  if (turns)
                     _Row(label: '회전', child: _SpinSlider(key: ValueKey(('s', bookKey, pose)), value: spin, max: spinMax, range: spinRange, onChange: onSpin)),
-                  if (title != null && !turns)
+                  if (!turns)
                     _Row(
                       label: '기대기',
                       child: Row(children: [
@@ -255,9 +329,9 @@ class _Row extends StatelessWidget {
 const _poseNames = {Pose.upright: '책등', Pose.front: '표지', Pose.horizontal: '눕힘'};
 
 class _PoseTab extends StatelessWidget {
-  const _PoseTab({required this.pose, required this.on, required this.disabled, required this.onPress});
+  const _PoseTab({required this.pose, required this.on, required this.onPress});
   final Pose pose;
-  final bool on, disabled;
+  final bool on;
   final VoidCallback onPress;
 
   @override
@@ -266,25 +340,21 @@ class _PoseTab extends StatelessWidget {
     return Semantics(
       button: true,
       selected: on,
-      enabled: !disabled,
       label: _poseNames[pose],
-      onTap: disabled ? null : onPress,
+      onTap: onPress,
       excludeSemantics: true,
-      child: Opacity(
-        opacity: disabled ? 0.35 : 1,
-        child: Pressable(
-          onPress: disabled ? null : onPress,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: Space.touch),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const SizedBox(height: 2),
-              CustomPaint(size: const Size(30, 30), painter: _PoseIcon(pose, color)),
-              const SizedBox(height: 6),
-              Text(_poseNames[pose]!, style: (on ? AppType.labelStrong : AppType.bodySmall).copyWith(color: on ? AppColors.ink : AppColors.inkSoft)),
-              const SizedBox(height: 9),
-              Container(width: 52, height: 2.5, decoration: BoxDecoration(color: on ? AppColors.accent : Colors.transparent, borderRadius: BorderRadius.circular(2))),
-            ]),
-          ),
+      child: Pressable(
+        onPress: onPress,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: Space.hit),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: 2),
+            CustomPaint(size: const Size(30, 30), painter: _PoseIcon(pose, color)),
+            const SizedBox(height: 6),
+            Text(_poseNames[pose]!, style: (on ? AppType.labelStrong : AppType.bodySmall).copyWith(color: on ? AppColors.ink : AppColors.inkSoft)),
+            const SizedBox(height: 9),
+            Container(width: 52, height: 2.5, decoration: BoxDecoration(color: on ? AppColors.accent : Colors.transparent, borderRadius: BorderRadius.circular(2))),
+          ]),
         ),
       ),
     );
@@ -332,62 +402,30 @@ class _LeanChoice extends StatelessWidget {
         onTap: disabled ? null : onPress,
         excludeSemantics: true,
         child: Opacity(
-          opacity: disabled ? 0.3 : 1,
+          opacity: disabled ? disabledOpacity : 1,
           child: Pressable(
             onPress: disabled ? null : onPress,
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 44),
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: on ? Border.all(color: AppColors.inkFaint) : null),
-              child: Flex(
-                direction: largeText(context) ? Axis.vertical : Axis.horizontal,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomPaint(size: const Size(26, 26), painter: _LeanIcon(dir)),
-                  const SizedBox(width: 6),
-                  Text(_leanNames[dir]!, softWrap: false, style: AppType.micro.copyWith(color: AppColors.ink)),
-                ],
+            // 누르는 자리는 48(Space.hit): 보이는 칸(44)은 그대로 두고 위아래 빈 자리까지 누른다
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: (Space.hit - Space.touch) / 2),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: Space.touch),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: on ? Border.all(color: AppColors.inkFaint) : null),
+                child: Flex(
+                  direction: largeText(context) ? Axis.vertical : Axis.horizontal,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CustomPaint(size: const Size(26, 26), painter: _LeanIcon(dir)),
+                    const SizedBox(width: 6),
+                    Text(_leanNames[dir]!, softWrap: false, style: AppType.micro.copyWith(color: AppColors.ink)),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       );
-}
-
-/// 순서 단추: 같은 선반에서 왼쪽·오른쪽으로 한 칸(끝이면 흐리게)
-class _MoveChoice extends StatelessWidget {
-  const _MoveChoice({required this.dir, required this.disabled, required this.onPress});
-  final int dir;
-  final bool disabled;
-  final VoidCallback onPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = dir < 0 ? '왼쪽으로' : '오른쪽으로';
-    return Semantics(
-      button: true,
-      enabled: !disabled,
-      label: '$name 한 칸 옮기기',
-      onTap: disabled ? null : onPress,
-      excludeSemantics: true,
-      child: Opacity(
-        opacity: disabled ? 0.3 : 1,
-        child: Pressable(
-          onPress: disabled ? null : onPress,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            padding: const EdgeInsets.symmetric(horizontal: Space.xs),
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: Border.all(color: AppColors.line)),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              if (dir < 0) const LucideIcon('ChevronLeft', size: 20),
-              Flexible(child: WordText(name, textAlign: TextAlign.center, style: AppType.micro.copyWith(color: AppColors.ink))),
-              if (dir > 0) const LucideIcon('ChevronRight', size: 20),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// 기대기 아이콘: 기대는 쪽 옆 책(옅게) + 기운 책
@@ -514,7 +552,7 @@ class _SpinSliderState extends State<_SpinSlider> {
               onTapUp: (e) => widget.onChange(toDeg(e.localPosition.dx - _inset)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _inset),
-                child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: band, fill: (math.min(zero, pos), math.max(zero, pos)), thumb: pos, tick: zero))),
+                child: SizedBox(height: Space.hit, child: CustomPaint(painter: _BarPainter(band: band, fill: (math.min(zero, pos), math.max(zero, pos)), thumb: pos, tick: zero))),
               ),
             ),
           );
@@ -522,7 +560,7 @@ class _SpinSliderState extends State<_SpinSlider> {
       ),
       ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 52),
-        child: Text('${shown.round() > 0 ? '+' : ''}${shown.round()}°', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink, fontFeatures: const [FontFeature.tabularFigures()])),
+        child: Text('${shown.round() > 0 ? '+' : ''}${shown.round()}°', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink).tnum),
       ),
     ]);
   }
@@ -575,7 +613,7 @@ class _DepthSliderState extends State<_DepthSlider> {
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _inset),
-                child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: (back, xOf(widget.lo)), fill: (wall, math.max(wall, pos)), thumb: pos))),
+                child: SizedBox(height: Space.hit, child: CustomPaint(painter: _BarPainter(band: (back, xOf(widget.lo)), fill: (wall, math.max(wall, pos)), thumb: pos))),
               ),
             ),
           );
@@ -584,7 +622,7 @@ class _DepthSliderState extends State<_DepthSlider> {
       // 글자를 키워도 '22 / mm'처럼 갈리지 않게 값 칸이 글자 폭만큼 넓어진다(2026-11-16 QA 영숙 F7)
       ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 52),
-        child: Text('${mmOf(shown)}mm', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink, fontFeatures: const [FontFeature.tabularFigures()])),
+        child: Text('${mmOf(shown)}mm', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink).tnum),
       ),
     ]);
   }

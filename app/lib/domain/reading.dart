@@ -109,7 +109,11 @@ String newId(String prefix) {
   final book = lib.books[myBookId];
   if (book == null) return (lib: lib, roundId: null);
   final last = currentRound(lib, myBookId);
-  if (last != null) return (lib: lib, roundId: last.id);
+  if (last != null) {
+    // 읽기 전으로 되돌린 책(회차는 남아 있음)도 기록을 저장하면 읽는 중(2026-11-19 타이머 점검 B5: 계속 '읽기 전'이었다)
+    if (book.status != ReadStatus.want) return (lib: lib, roundId: last.id);
+    return (lib: lib.copy(books: {...lib.books, myBookId: book.copyWith(status: ReadStatus.reading, updatedAt: now)}), roundId: last.id);
+  }
   final id = (roundId ?? () => newId('rd'))();
   final r = Round(id: id, myBookId: myBookId, index: 1, startedAt: day, createdAt: now, updatedAt: now, paused: book.status == ReadStatus.paused);
   final status = book.status == ReadStatus.want ? ReadStatus.reading : book.status;

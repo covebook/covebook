@@ -6,7 +6,7 @@
 |---|---|---|
 | `adr/` | 기술 결정 기록 | `번호-주제.md` |
 | `spec/` | 구현 지시서, 계획, 구조 설명 | 주제 이름 |
-| `design/` | 디자인 기준과 자산 규격. 시안 그림은 `design/mockups/` | 주제 이름 |
+| `design/` | 디자인 기준과 자산 규격. 시안 그림은 `design/mockups/`, 지난 기준·조사는 `design/history/` | 주제 이름 |
 | `release/` | 배포와 로그인 설정 방법 | 주제 이름 |
 | `legal/` | 약관·개인정보 처리방침 초안, 결제 고지 문구 | `주제-draft-날짜.md` |
 | `templates/` | 문서 양식 (ADR, 보고서) | |
@@ -23,9 +23,9 @@
 
 ## 지금 기준이 되는 문서
 
-- 디자인: [`design/DESIGN.md`](design/DESIGN.md), [`design/assets.md`](design/assets.md)
+- 디자인: [`design/DESIGN.md`](design/DESIGN.md)(화면 규칙·역할·예외·어디를 고치나), [`design/assets.md`](design/assets.md)
 - 지시서: [`spec/HOME_BRIEF.md`](spec/HOME_BRIEF.md)(홈), [`spec/SPEC.md`](spec/SPEC.md)(홈 외), [`spec/BOOKSHELF_ASSET_BRIEF.md`](spec/BOOKSHELF_ASSET_BRIEF.md)(선반·배경 자산)
-- 구조: [`spec/bookshelf-architecture.md`](spec/bookshelf-architecture.md)
+- 구조: [`spec/bookshelf-architecture.md`](spec/bookshelf-architecture.md)(옛 RN 앱 기록), 앱 폴더 안내 [`../app/README.md`](../app/README.md)
 - 계획: [`spec/PLAN-2026-11-flow.md`](spec/PLAN-2026-11-flow.md)
 - 배포: [`release/android-release.md`](release/android-release.md), [`release/ios-release.md`](release/ios-release.md)
 - 로그인 설정: [`release/social-login.md`](release/social-login.md)

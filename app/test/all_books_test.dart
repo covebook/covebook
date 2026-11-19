@@ -1,4 +1,5 @@
-// 전체 책 목록 거르기·정렬과 삭제 문구가 지금 앱(features/book/all-books.ts) 규칙대로인지 본다
+// 전체 책 목록 거르기·정렬과 삭제 문구가 옛 앱(RN)(features/book/all-books.ts) 규칙대로인지 본다
+// (옛 앱 시험을 옮겨 온 것이다. 지금은 이 Flutter 코드의 규칙 시험이다)
 import 'package:chaekjang/domain/layout.dart';
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/domain/types.dart';
@@ -38,18 +39,18 @@ void main() {
     expect(listAllBooks(lib, books, layout).firstWhere((r) => r.book.id == 'a').onShelf, isTrue);
   });
   test('삭제 문구: 0개인 것은 빼고 한 줄에 한 문장', () {
-    expect(deleteNote((rounds: 2, marks: 3, essays: 0, sessions: 1, ms: 137000)), '갈피 3개와 독서 회차 2회도 지워져요.\n독서 시간 2분은 책 없이 읽은 시간으로 통계에 남아요.\n되돌릴 수 없어요.');
-    expect(deleteNote((rounds: 1, marks: 0, essays: 0, sessions: 0, ms: 0)), '독서 회차 1회도 지워져요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 2, marks: 3, essays: 0, sessions: 1, ms: 137000)), '갈피 3개와 독서 회차 2회도 삭제돼요.\n독서 시간 2분은 책 없이 읽기 기록으로 통계에 남아요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 1, marks: 0, essays: 0, sessions: 0, ms: 0)), '독서 회차 1회도 삭제돼요.\n되돌릴 수 없어요.');
     expect(deleteNote((rounds: 0, marks: 0, essays: 0, sessions: 0, ms: 0)), '되돌릴 수 없어요.');
     // 긴 감상도 책과 함께 지워진다(2026-11-16 기록 > 감상). 조사는 받침대로
-    expect(deleteNote((rounds: 1, marks: 0, essays: 3, sessions: 0, ms: 0)), '감상 3편과 독서 회차 1회도 지워져요.\n되돌릴 수 없어요.');
-    expect(deleteNote((rounds: 1, marks: 2, essays: 1, sessions: 0, ms: 0)), '갈피 2개, 감상 1편과 독서 회차 1회도 지워져요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 1, marks: 0, essays: 3, sessions: 0, ms: 0)), '감상 3편과 독서 회차 1회도 삭제돼요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 1, marks: 2, essays: 1, sessions: 0, ms: 0)), '갈피 2개, 감상 1편과 독서 회차 1회도 삭제돼요.\n되돌릴 수 없어요.');
   });
 
   // 2026-11-16 QA 현우 F4: 남는 독서 시간을 얼마인지와 어떻게 남는지 함께(1분이 안 되면 초까지, 조사는 받침대로)
   test('삭제 문구: 남는 독서 시간', () {
-    expect(deleteNote((rounds: 0, marks: 0, essays: 0, sessions: 2, ms: 45000)), '독서 시간 45초는 책 없이 읽은 시간으로 통계에 남아요.\n되돌릴 수 없어요.');
-    expect(deleteNote((rounds: 0, marks: 0, essays: 0, sessions: 1, ms: 3900000)), '독서 시간 1시간 5분은 책 없이 읽은 시간으로 통계에 남아요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 0, marks: 0, essays: 0, sessions: 2, ms: 45000)), '독서 시간 45초는 책 없이 읽기 기록으로 통계에 남아요.\n되돌릴 수 없어요.');
+    expect(deleteNote((rounds: 0, marks: 0, essays: 0, sessions: 1, ms: 3900000)), '독서 시간 1시간 5분은 책 없이 읽기 기록으로 통계에 남아요.\n되돌릴 수 없어요.');
   });
 
   test('내 책 필터 조건 줄: 기본(모든 책·최근순)이면 비고, 건 조건만 이름으로', () {

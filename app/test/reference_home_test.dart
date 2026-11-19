@@ -1,4 +1,5 @@
-// 새 서재 예시 책장(지금 앱 home-reference): 18권·자리 18개·그림 표지 3권, 갈피 보이는 책, 배치 JSON이 읽힌다
+// 새 서재 예시 책장(옛 앱(RN) home-reference): 18권·자리 18개·그림 표지 3권, 갈피 보이는 책, 배치 JSON이 읽힌다
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 import 'dart:convert';
 import 'dart:io';
 

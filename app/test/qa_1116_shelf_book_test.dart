@@ -6,7 +6,8 @@ import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/domain/types.dart';
 import 'package:chaekjang/features/book/all_books.dart';
 import 'package:chaekjang/features/home/decorate_panel.dart';
-import 'package:chaekjang/store/backup.dart' show backupFileName, backupTimeLabel;
+import 'package:chaekjang/scene_config/skin.dart';
+import 'package:chaekjang/scene_config/spine_look.dart';
 import 'package:chaekjang/ui/keep_all.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,22 +66,6 @@ void main() {
     });
   });
 
-  group('백업 파일 이름·시각은 기기 시각(현우 F6)', () {
-    test('파일 이름은 현지 시각', () {
-      final local = DateTime.parse(t1).toLocal();
-      String p2(int n) => n.toString().padLeft(2, '0');
-      expect(backupFileName(t1), 'chaekjang-backup-${local.year}-${p2(local.month)}-${p2(local.day)}-${p2(local.hour)}-${p2(local.minute)}-00.json');
-    });
-
-    test('복원 확인에 시각까지, 올해가 아니면 해도', () {
-      final local = DateTime.parse(t1).toLocal();
-      final hm = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-      expect(backupTimeLabel(t1, now: DateTime(local.year, 12, 1)), '${local.month}월 ${local.day}일 $hm');
-      expect(backupTimeLabel(t1, now: DateTime(local.year + 1, 1, 1)), '${local.year}년 ${local.month}월 ${local.day}일 $hm');
-      expect(backupTimeLabel('x'), '');
-    });
-  });
-
   test('삭제 요약: 남는 독서 시간 합(현우 F4)', () {
     final lib = Library(
       editions: {'e1': Edition(id: 'e1', title: '가호', authors: const [], source: 'manual', createdAt: t1, updatedAt: t1)},
@@ -97,69 +82,85 @@ void main() {
     final n = deleteSummary(lib, ['b1']);
     expect(n.sessions, 2);
     expect(n.ms, 137000);
-    expect(deleteNote(n), '독서 시간 2분은 책 없이 읽은 시간으로 통계에 남아요.\n되돌릴 수 없어요.');
+    expect(deleteNote(n), '독서 시간 2분은 책 없이 읽기 기록으로 통계에 남아요.\n되돌릴 수 없어요.');
   });
 
-  group('꾸미기 조작부(영숙 F7·F8)', () {
-    Widget panel({String? title, double scale = 1, ValueChanged<int>? onMove, ({bool left, bool right}) canMove = (left: true, right: true)}) => MaterialApp(
+  group('꾸미기(영숙 F7, 2026-11-19 사용자 시안: 위 탭 · 아래 칸)', () {
+    Widget host(Widget child, {double scale = 1}) => MaterialApp(
           home: MediaQuery(
             data: MediaQueryData(size: const Size(360, 640), textScaler: TextScaler.linear(scale)),
-            child: Scaffold(
-              body: Align(
-                alignment: Alignment.bottomCenter,
-                child: DecoratePanel(
-                  title: title,
-                  pose: title == null ? null : Pose.upright,
-                  lean: 0,
-                  canLean: (left: true, right: true),
-                  msg: null,
-                  spin: 0,
-                  spinMax: 30,
-                  spinRange: null,
-                  depth: title == null ? null : (lo: -20.0, hi: 20.0, z: 0.0, back: 20.0),
-                  canUndo: false,
-                  onPose: (_) {},
-                  onLean: (_) {},
-                  onSpin: (_) {},
-                  onDepth: (_) {},
-                  onUndo: () {},
-                  onDone: () {},
-                  onSkin: () {},
-                  onMove: onMove,
-                  canMove: canMove,
-                  place: '1번째 선반 · 왼쪽에서 2번째 / 3',
-                ),
-              ),
-            ),
+            child: Scaffold(body: Align(alignment: Alignment.bottomCenter, child: child)),
           ),
         );
+    Widget panel({double scale = 1}) => host(
+          DecoratePanel(
+            title: '작별하지 않는다',
+            pose: Pose.upright,
+            lean: 0,
+            canLean: (left: true, right: true),
+            msg: null,
+            spin: 0,
+            spinMax: 30,
+            spinRange: null,
+            depth: (lo: -20.0, hi: 20.0, z: 0.0, back: 20.0),
+            onPose: (_) {},
+            onLean: (_) {},
+            onSpin: (_) {},
+            onDepth: (_) {},
+          ),
+          scale: scale,
+        );
 
-    testWidgets('처음 안내에 끌어 옮기기, 2배 글자에서도 넘치지 않는다', (tester) async {
+    testWidgets('맨 위 줄: 책 배치·선반·벽지 탭과 되돌리기·완료, 탭을 누르면 바뀐다', (tester) async {
+      final tabs = <DecorateTab>[];
+      var done = 0;
+      await tester.pumpWidget(host(DecorateBar(tab: DecorateTab.books, onTab: tabs.add, canUndo: false, onUndo: () {}, onDone: () => done++)));
+      expect(tester.takeException(), isNull);
+      for (final t in ['책 배치', '선반', '벽지', '되돌리기', '완료']) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+      // 탭 글자와 완료 글자가 같은 줄 높이(밑줄 몫 때문에 탭 글자가 떠 보이지 않게)
+      expect((tester.getCenter(find.text('책 배치')).dy - tester.getCenter(find.text('완료')).dy).abs(), lessThan(4));
+      await tester.tap(find.text('벽지'));
+      await tester.tap(find.text('완료'));
+      expect(tabs, [DecorateTab.wall]);
+      expect(done, 1);
+    });
+
+    testWidgets('책 고르기 전: 떠 있는 안내와 책 측면 고르기, 2배 글자에서도 넘치지 않는다', (tester) async {
+      final picked = <SpineLook>[];
+      await tester.pumpWidget(host(DecorateHint(msg: null, spine: SpineLook.color, onSpine: picked.add), scale: 2));
+      expect(tester.takeException(), isNull);
+      expect(find.text('책을 누르거나 끌어보세요'), findsOneWidget);
+      expect(find.text('책등'), findsNothing);
+      await tester.tap(find.text('실물 측면'));
+      expect(picked, [SpineLook.photo]);
+    });
+
+    testWidgets('선반 탭은 선반·벽(틀), 벽지 탭은 벽지만. 고르면 그 조합을 넘긴다', (tester) async {
+      final picked = <SkinChoice>[];
+      await tester.pumpWidget(host(SkinSheet(tab: DecorateTab.shelf, choice: defaultSkin, onPick: picked.add)));
+      expect(tester.takeException(), isNull);
+      expect(find.text('선반'), findsOneWidget);
+      expect(find.text('벽'), findsOneWidget);
+      expect(find.text('벽지'), findsNothing);
+      await tester.tap(find.text(plankSkins['walnut']!.name));
+      expect(picked.single, defaultSkin.copyWith(plank: 'walnut'));
+      await tester.pumpWidget(host(SkinSheet(tab: DecorateTab.wall, choice: defaultSkin, onPick: picked.add)));
+      expect(find.text('벽지'), findsOneWidget);
+      expect(find.text('선반'), findsNothing);
+    });
+
+    testWidgets('고른 책: 순서 줄·자리 표시 없이 앞뒤·기대기, 2배 글자에서 라벨이 넘치지 않는다', (tester) async {
       await tester.pumpWidget(panel(scale: 2));
       expect(tester.takeException(), isNull);
-      expect(find.textContaining('끌어'), findsOneWidget); // WordText: 찾기·화면 읽기는 원문
-      expect(find.textContaining(keepAll('꾸밀')), findsOneWidget);
-    });
-
-    testWidgets('고른 책: 순서 단추가 한 칸씩 옮기고, 2배 글자에서 라벨이 넘치지 않는다', (tester) async {
-      final moved = <int>[];
-      await tester.pumpWidget(panel(title: '작별하지 않는다', scale: 2, onMove: moved.add, canMove: (left: false, right: true)));
-      expect(tester.takeException(), isNull);
+      expect(find.text(keepAll('작별하지 않는다')), findsOneWidget);
+      expect(find.text('책등'), findsOneWidget);
       expect(find.text('앞뒤'), findsOneWidget);
       expect(find.text('기대기'), findsOneWidget);
-      // 왼쪽 끝이면 왼쪽 단추는 꺼져 있다
-      await tester.tap(find.bySemanticsLabel('왼쪽으로 한 칸 옮기기'), warnIfMissed: false);
-      await tester.ensureVisible(find.bySemanticsLabel('오른쪽으로 한 칸 옮기기'));
-      await tester.tap(find.bySemanticsLabel('오른쪽으로 한 칸 옮기기'));
-      expect(moved, [1]);
-    });
-
-    testWidgets('1배 글자: 제목과 단추가 한 줄', (tester) async {
-      await tester.pumpWidget(panel(title: '작별하지 않는다', onMove: (_) {}));
-      expect(tester.takeException(), isNull);
-      final title = tester.getCenter(find.text(keepAll('작별하지 않는다')));
-      final done = tester.getCenter(find.text('완료'));
-      expect((title.dy - done.dy).abs(), lessThan(12));
+      expect(find.text('순서'), findsNothing);
+      expect(find.textContaining('번째 선반'), findsNothing);
+      expect(find.bySemanticsLabel('왼쪽으로 한 칸 옮기기'), findsNothing);
     });
   });
 }

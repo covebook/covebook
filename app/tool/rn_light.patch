@@ -241,7 +241,7 @@
    }
    half4 main(float2 p) {
      float w = dot(Hw, float3(p, 1.0));
-@@ -1369,8 +1444,16 @@
+@@ -1369,8 +1444,19 @@
      float b1 = slope(arc(bev1.w - dot(P, bev1.xyz), PLANKR));
      // 판 앞면 양 끝: 윤곽(PLANK_END_R)과 같은 반지름으로 법선이 옆으로 돈다. 윤곽만 둥글고 빛이 평면이면 곡면으로 보이지 않는다(2026-11-05 사용자 '선반 끝 곡선')
      float be = endR > 0.0 ? slope(arc(${f(SHELF_X1)} - P.x, endR)) - slope(arc(P.x - ${f(SHELF_X0)}, endR)) : 0.0;
@@ -249,7 +249,10 @@
 -    float rimLoss = 0.0;
 +    // 점 → 눈(곡면 몫과 반사광이 함께 쓴다)
 +    float3 V = normalize(float3(cam4.x, cam4.y, cam4.z - cam4.w) - P);
-+    float3 cv = coveOf(P, V);
++    // 뒷벽 뒤로 늘려 그린 틀 면(뒷벽 둥근 꼭지점 밑으로 비치는 자리)은 실제로 없는 면이라 뒷벽 끝 자리로 곡면·가림을 잰다:
++    // 그 자리에서 재면 법선이 뒷벽 쪽으로 다 꺾여 꼭지점 밑이 어두운 쐐기로 보였다(Flutter 2026-11-19 사용자 '뒷라인도 앞이랑 똑같이 곡선')
++    float3 Pc = env.x > 1.5 && abs(tN.z) < 0.5 && P.z > DEPTH ? float3(P.x, P.y, DEPTH) : P;
++    float3 cv = coveOf(Pc, V);
 +    float3 n = normalize(tN + bev0.xyz * b0 + bev1.xyz * b1 + cv + float3(be, 0.0, 0.0));
 +    // 휜 법선(안쪽 모서리 곡면·구멍 테)과 그 가림을 잴 자리. 테는 구멍 가장자리 바로 안쪽 점에서 잰다(앞 벽 평면 위 점은 안쪽 면을 앞에 둔 가리개로 본다)
 +    float3 nB = normalize(tN + cv);
@@ -260,7 +263,7 @@
      // 구멍 앞 끝 둥근 테(반지름 RIMR): 구멍(둥근 사각형, 모서리 RIMC)까지 거리 d로 벽 법선이 구멍 안쪽 면 법선 쪽으로 돈다
      if (rim.x < rim.y) {
        float2 c = float2(rim.x + rim.y, rim.z + rim.w) * 0.5;
-@@ -1382,12 +1465,19 @@
+@@ -1382,12 +1468,19 @@
        if (d < RIMR) {
          float2 g = length(qp) > 1e-4 ? qp / length(qp) : (q.x > q.y ? float2(1.0, 0.0) : float2(0.0, 1.0));
          // 원호 단면(앞에서 본 자리 sin θ = t): 벽 쪽은 천천히, 안쪽 끝에서 빠르게 돌아 테가 또렷하게 꺾인다(2026-11-05 사용자 사진, 제곱근으로 돌리면 넓게 번져 흐릿했다).
@@ -284,7 +287,7 @@
        }
      }
      // 면 좌표: u = 판 길이 방향(x, 옆을 향한 틀 안쪽 면은 세로: 결이 틀 길이로 난다), v = 면 안의 다른 방향
-@@ -1402,12 +1492,31 @@
+@@ -1402,12 +1495,31 @@
      bool beyond = env.x > 1.5 && abs(tN.z) < 0.5 && tN.y < 0.5 && (P.z > DEPTH + 0.01 || P.z < -FFRONT - 0.01 || (abs(tN.x) > 0.5 && P.y > env.z + 0.01));
      float3 Pb = beyond ? float3(P.x, abs(tN.x) > 0.5 ? min(P.y, env.z - ${f(BAKE_HALF)}) : P.y, clamp(P.z, -FFRONT + ${f(DEEP_HALF)}, DEPTH - ${f(DEEP_HALF)})) : P;
      float2 pb = beyond && liveEnv < 0.5 ? pxOf(Pb, Au, Av) : p;
@@ -305,10 +308,10 @@
 +      // 안쪽 모서리 곡면도 테와 같은 식: 휜 법선이 보는 둘레(벽·판·틀·되비침)의 가림을 그 자리에서 잰다(Flutter 2026-11-18).
 +      // 예전에는 '평평한 면보다 빛을 더 받지 않는다'로 잘라 맞닿은 두 면이 모서리 선에서 다른 빛이 되었다
 +      // 구운 가림(하늘 가림 + 그늘 몫/OCC)은 그릴 때 OCC를 곱한다: 휜 법선의 하늘 가림도 구운 하늘 가림과 같은 세기로 더한다(OCC로 나누면 곡면만 덜 가려져 밝은 띠가 된다)
-+      loss += envLoss(P, nB) - envLoss(P, tN);
++      loss += envLoss(Pc, nB) - envLoss(Pc, tN);
 +      // 모서리 그늘은 받는 빛의 몫이다: 굽기는 평평한 면 법선의 빛에 곱해 담았으므로 휜 법선의 빛으로 바꾼다
 +      if (liveEnv < 0.5) {
-+        float jf = jointShade(P, tN);
++        float jf = jointShade(Pc, tN);
 +        loss += jf * ((skyIrr(nB) - skyIrr(tN)) + KEYC * (DIFF * (max(0.0, dot(nB, LU)) - max(0.0, dot(tN, LU))))) / OCC;
 +      }
 +      nfF = nB;

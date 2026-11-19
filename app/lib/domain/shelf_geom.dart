@@ -1,5 +1,5 @@
 // 선반 판 모양: 3D 판 꼭짓점을 책과 같은 투영으로 옮겨 보이는 면을 만든다.
-// app/src/domain/shelf-geom.ts를 옮긴 것. 선반 공간: x 오른쪽, y 위(판 윗면 y=0), z 벽 쪽
+// 옛 RN 앱(커밋 4f9e1d9) app/src/domain/shelf-geom.ts를 옮긴 것. 선반 공간: x 오른쪽, y 위(판 윗면 y=0), z 벽 쪽
 library;
 
 import 'dart:ui' as ui;

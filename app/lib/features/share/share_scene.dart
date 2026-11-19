@@ -147,7 +147,8 @@ ShareLayout layoutShareScene(ShareSceneInput input) {
   final metaText = [if (input.rating != null && input.rating != 0) input.rating!.toStringAsFixed(1), ...input.extra].join('   ');
   final meta = metaText.isNotEmpty ? _para(metaText, shareFonts.ui, 36, _ink.meta) : null;
   final foot = _para('책장 한켠', shareFonts.ui, 33, _ink.foot);
-  final hasMeta = (input.rating != null && input.rating != 0) || meta != null;
+  // 별점이 있으면 meta에 이미 들어 있다(앞 조건이 겹쳤다)
+  final hasMeta = meta != null;
   // 세로 흐름(시안에서 잰 간격, 글자 문단 위 끝): 제목 1017 → 12 → 저자 → 47 → 감상 → 60 → 별점 줄 → '책장 한켠'(1551 고정).
   // 카드는 늘 9:16이라 '책장 한켠' 위로 넘치면 간격 → 감상 글자 크기 → 감상 줄 수 차례로 줄인다
   const yTitle = 1017.0;

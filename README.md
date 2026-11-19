@@ -8,16 +8,18 @@
 - 서버: `server/` (Go, PostgreSQL)
 - 문서: `docs/` ([색인](docs/README.md))
 - 작업 규칙: [`AGENTS.md`](AGENTS.md)
+- 화면 디자인 규칙: [`docs/design/DESIGN.md`](docs/design/DESIGN.md)
 
 ## 실행
 
 ```bash
-cd flutter
+cd app
 flutter pub get
 flutter run
-flutter test
+flutter analyze --no-fatal-infos   # 경로에 한글이 있어 분석 서버가 멈추면: dart analyze
+flutter test                       # 디자인 토큰 검사 포함(값을 바꿨으면 DESIGN_TOKENS_UPDATE=1로 다시 만든다)
 
-cd server
+cd ../server
 go test ./...                     # PostgreSQL 통합 시험은 별도 테스트 DB 필요
 DATABASE_URL='postgres://user:pass@localhost:5432/chaekjang?sslmode=disable' go run ./cmd/server # 기본 포트 8080
 ```
@@ -36,7 +38,7 @@ DATABASE_URL='postgres://user:pass@localhost:5432/chaekjang?sslmode=disable' go 
 | `app/lib/services/` | 서버 동기화 등 바깥 연동 |
 | `app/lib/features/` | 화면(홈, 책, 갈피, 읽기, 기록, 통계, 공유, 설정, 계정 등) |
 | `app/lib/ui/`, `app/lib/app/` | 공통 부품, 앱 뼈대와 탭 이동 |
-| `app/design-system/` | 디자인 시스템 문서 |
+| `app/design-system/` | 시안용 디자인 토큰(`tokens.json`·`web/`, Flutter 값에서 `app/test/design_tokens_test.dart`가 만든다)과 홈 위젯 규격 |
 | `server/internal/server/` | 계정, 동기화, 파일, 도서 API와 DB 마이그레이션 |
 | `server/internal/llm/` | Gemini·GPT 키 관리 게이트웨이 |
 | `server/internal/appleauth/` | Apple 로그인 검증 |
@@ -45,7 +47,7 @@ DATABASE_URL='postgres://user:pass@localhost:5432/chaekjang?sslmode=disable' go 
 
 | 대상 | 방법 | 문서 |
 |---|---|---|
-| Android (Play) | Actions에서 "CD: Android Flutter AAB"를 손으로 실행 | [`docs/release/android-release.md`](docs/release/android-release.md) |
+| Android (Play) | main에 `app/**` 변경이 푸시되면 비공개 테스트(alpha)에 자동 업로드. 다른 트랙은 Actions에서 "CD: Android Flutter AAB"를 손으로 실행 | [`docs/release/android-release.md`](docs/release/android-release.md) |
 | iOS (TestFlight) | main에 `app/**` 변경이 푸시되면 자동 실행 | [`docs/release/ios-release.md`](docs/release/ios-release.md) |
 | 서버 | KoDeploy에서 손으로 재배포 | [`server/README.md`](server/README.md) |
 

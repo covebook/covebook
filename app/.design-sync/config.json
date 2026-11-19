@@ -8,8 +8,7 @@
     "fonts.css"
   ],
   "guidelinesGlob": [
-    "../components.md",
-    "../drift.md",
+    "../../../docs/design/DESIGN.md",
     "../platform-widgets.md"
   ],
   "readmeHeader": ".design-sync/conventions.md"

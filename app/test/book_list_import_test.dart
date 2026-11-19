@@ -130,4 +130,29 @@ void main() {
       expect(publisherLine(_c('a')), isNull);
     });
   });
+
+  group('읽기 상태 글자(2026-11-19: 예시 파일 첫 줄 \'읽은 책\'이 읽기 전으로 들어갔다)', () {
+    test('읽은 책 · 읽은책 · 읽음은 완독', () {
+      expect(statusOf('읽은 책'), ReadStatus.read);
+      expect(statusOf('읽은책'), ReadStatus.read);
+      expect(statusOf('읽음'), ReadStatus.read);
+      expect(statusOf('완독'), ReadStatus.read);
+    });
+    test('안 읽은 책 · 아직 안 읽음 · unread는 읽기 전', () {
+      expect(statusOf('안 읽은 책'), ReadStatus.want);
+      expect(statusOf('아직 안 읽음'), ReadStatus.want);
+      expect(statusOf('unread'), ReadStatus.want);
+      expect(statusOf('읽고 싶은'), ReadStatus.want);
+      expect(statusOf('읽는 중'), ReadStatus.reading);
+    });
+    test('예시 CSV 세 줄은 완독 · 읽는 중 · 읽기 전', () {
+      final rows = parseTable([
+        ['제목', '저자', 'ISBN', '읽기 상태'],
+        ['소년이 온다', '한강', '9788936434120', '읽은 책'],
+        ['데미안', '헤르만 헤세', '', '읽는 중'],
+        ['모순', '양귀자', '', '읽고 싶은'],
+      ]).rows;
+      expect([for (final r in rows) r.status], [ReadStatus.read, ReadStatus.reading, ReadStatus.want]);
+    });
+  });
 }

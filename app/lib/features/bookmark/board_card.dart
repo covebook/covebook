@@ -1,6 +1,7 @@
 // 갈피 보드의 카드 한 장(지금 앱 BoardCard.tsx, 2026-11-02 사용자 시안): 글은 종이 + 테이프 + 명조 문장, 사진은 인화지 + 테이프.
 // 테이프는 왼쪽 위(사진 카드와 같은 쪽), 쪽수는 색 막대 없이 오른쪽 맨 아래. 누르기는 보드가 맡는다(여기서는 터치를 받지 않는다).
 // 폭과 최소 높이는 보드가 바깥에서 정한다(손잡이로 끄는 동안 글이 바로 다시 줄 바꿈된다)
+// 카드의 글자·색·여백 숫자는 옛 앱 화소 값 그대로(docs/design/DESIGN.md 16장 예외)
 library;
 
 import 'dart:math' as math;
@@ -11,12 +12,14 @@ import '../../domain/bookmark_board.dart' show boardMaxLines, boardPhotoRatio;
 import '../../domain/color.dart' show paperColors;
 import '../../domain/library.dart' show Bookmark;
 import '../../ui/theme.dart';
-import 'bookmark_card.dart' show cardPaper, hexColor;
+import 'bookmark_card.dart' show cardPaper;
 import 'bookmark_paper.dart';
 import 'bookmark_tape.dart';
+import 'mark_text.dart' show isPhotoMark, pageLabel;
 import 'photo_plate.dart' show BookmarkPhoto;
 
-final _soft = AppType.micro;
+// 쪽수 글자: 그릴 때마다 읽는다(모듈 값으로 한 번 읽어 두면 화소 맞춤이 꺼진다, theme.dart rnPx)
+TextStyle get _soft => AppType.micro;
 const _quote = TextStyle(fontFamily: AppFonts.reading, fontSize: 18, height: 29 / 18, color: AppColors.ink, letterSpacing: -0.3);
 
 List<BoxShadow> _shadow(double a1, double a2, double y2, double b2) => [
@@ -34,9 +37,10 @@ class BoardCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
     final tone = paperColors(color, mark.myBookId);
-    final page = mark.page != null && mark.page != 0 ? 'p. ${mark.page}' : null;
+    // 쪽 표기 · 사진 갈피 판정은 갈피 카드와 같은 것(2026-11-19: 'p. N'을 따로 만들고, 사진이 있으면 글이 있어도 사진 카드였다)
+    final page = mark.page != null && mark.page != 0 ? pageLabel(mark.page!) : null;
     final border = Border.all(color: AppColors.line, width: hair);
-    if (mark.photoUri != null) {
+    if (isPhotoMark(mark.text, mark.photoUri)) {
       return Stack(clipBehavior: Clip.none, children: [
         Container(
           constraints: BoxConstraints(minHeight: minHeight),
@@ -49,7 +53,7 @@ class BoardCard extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(page ?? mark.text.trim(), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: page != null ? TextAlign.right : TextAlign.left, style: _soft),
+              child: Text(page ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: page != null ? TextAlign.right : TextAlign.left, style: _soft),
             ),
           ]),
         ),

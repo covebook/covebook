@@ -23,6 +23,34 @@ Future<void> saveFinishedReading(FinishDraft draft, {num? startPage, num? pagesR
   await ReadingStore.instance.clearPending();
 }
 
+/// 멈춰 둔 독서를 이어 읽기. 시작한 날이 오늘이 아니면 지난 몫은 그날(멈춘 때 끝난) 기록으로 저장하고 같은 책으로 오늘 새로 시작한다
+/// (2026-11-19 타이머 점검 B1: 어제 멈춘 독서를 오늘 이어 읽으면 오늘 읽은 시간까지 어제 기록이 되고 읽기 탭은 00:00이었다).
+/// 이어 읽기 단추(장면 · 작은 타이머 · 읽기 시작 · 멈춰 둔 독서 창)가 모두 이것을 쓴다.
+/// 지난 몫을 저장하지 못하면 그 예외를 돌려준다(부른 화면이 알린다: 실패는 조용히 끝나지 않는다, docs/design/DESIGN.md 11장). 아니면 null
+Future<Object?> resumeReading() async {
+  final rs = ReadingStore.instance;
+  final a = rs.active;
+  if (a == null || a.runningSince != null) return null;
+  if (today(DateTime.parse(a.startedAt)) == today()) {
+    rs.resume();
+    return null;
+  }
+  final draft = rs.finish(a.lastBeat);
+  try {
+    if (draft != null && draft.durationMs >= 1000) {
+      await saveFinishedReading(draft, startPage: draft.startPage);
+    } else {
+      await rs.clearPending();
+    }
+  } catch (e) {
+    // 저장하지 못하면 지난 몫은 저장 전 초안으로 남는다(다음 '읽기 시작'이 독서 끝 화면으로 간다). 새로 시작하지 않는다
+    return e;
+  }
+  final page = a.myBookId == null ? null : LibraryModel.instance.lib.books[a.myBookId]?.currentPage;
+  rs.start(a.myBookId, page);
+  return null;
+}
+
 /// 다른 책 읽기: 지금까지의 독서를 그 책(또는 책 없음)의 기록으로 저장하고, 새 책으로 타이머를 새로 시작한다
 Future<String?> saveAndStartOther(String? nextBookId) async {
   final rs = ReadingStore.instance;

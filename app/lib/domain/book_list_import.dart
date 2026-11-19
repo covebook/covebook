@@ -90,15 +90,17 @@ int? _find(List<String> head, List<String> names, Set<int> taken) {
   return null;
 }
 
-/// 읽기 상태 글자 → 상태(모르면 null: 가져올 때 '읽고 싶은'으로)
+/// 읽기 상태 글자 → 상태(모르면 null: 가져올 때 '읽기 전'으로)
 ReadStatus? statusOf(String s) {
   final t = _norm(s);
   if (t.isEmpty) return null;
-  // 'reading'·'to-read'가 'read'에 걸리지 않게 읽는 중·읽고 싶은을 먼저
+  // 'reading'·'to-read'가 'read'에 걸리지 않게 읽는 중·읽고 싶은을 먼저.
+  // '안 읽은 책'·'아직 안 읽음'·'unread'가 '읽은'·'읽음'에 걸리지 않게 아직 안 읽은 것도 먼저
   if (RegExp('읽는중|읽고있|reading|current').hasMatch(t)) return ReadStatus.reading;
-  if (RegExp('읽고싶|찜|want|toread|wish').hasMatch(t)) return ReadStatus.want;
+  if (RegExp('읽고싶|찜|want|toread|wish|안읽|아직|unread').hasMatch(t)) return ReadStatus.want;
   if (RegExp('멈춤|중단|쉬는|보류|paused|abandon|dnf').hasMatch(t)) return ReadStatus.paused;
-  if (RegExp(r'다읽|읽었|읽음|완독|^read$|finished|done').hasMatch(t)) return ReadStatus.read;
+  // '읽은 책'(가져오기 안내 · 예시 파일에 쓰는 말): 2026-11-19 '읽은'이 없어 예시 파일 첫 줄이 '읽기 전'으로 들어갔다
+  if (RegExp(r'다읽|읽었|읽음|읽은|완독|^read$|finished|done').hasMatch(t)) return ReadStatus.read;
   return null;
 }
 

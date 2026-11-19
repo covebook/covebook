@@ -1,4 +1,5 @@
-// 책 그림 규칙(제목 조판·제목 색·재질 색·갈피 색)이 지금 앱 함수 결과와 같은지 본다.
+// 책 그림 규칙(제목 조판·제목 색·재질 색·갈피 색)이 옛 앱(RN) 함수 결과와 같은지 본다.
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 // test/fixtures/book_art_cases.json 은 tool/gen_shaders.sh 가 커밋된 지금 앱 함수로 뽑는다.
 import 'dart:convert';
 import 'dart:io';

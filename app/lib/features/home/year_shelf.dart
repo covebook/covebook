@@ -24,6 +24,8 @@ import '../../ui/bake.dart';
 import '../../ui/book_key.dart';
 import '../../ui/cover_photo.dart';
 import '../../ui/engraved_year.dart';
+import '../../ui/feedback.dart' show errorText;
+import '../../ui/kit.dart' show Pressable, metaSep;
 import '../../ui/metrics.dart';
 import '../../ui/plane_key.dart';
 import '../../ui/row_bake.dart';
@@ -163,7 +165,7 @@ class _YearShelfState extends State<YearShelf> {
     final mine = view.books[best];
     if (mine == null) return;
     setState(() => _sel = best);
-    await showBookSheet(context, best, view: view, status: '${widget.bookcase.year}년 | ${statusLabel[mine.status]}', readOnly: true);
+    await showBookSheet(context, best, view: view, status: '${widget.bookcase.year}년$metaSep${statusLabel[mine.status]}', readOnly: true);
     if (mounted) setState(() => _sel = null);
   }
 
@@ -184,7 +186,8 @@ class _YearShelfState extends State<YearShelf> {
       if (mounted) setState(() => _shooting = false);
       await sharePng(png, name: 'bookcase_${widget.bookcase.year}', title: '${widget.bookcase.year}년 책장');
     } catch (e) {
-      if (mounted) appAlert(context, shareErrorTitle(e), '$e');
+      // 본문은 앱이 만든 안내(ShareImageError) 그대로, 그 밖 예외는 사람 문장으로(원문은 로그로)
+      if (mounted) appAlert(context, shareErrorTitle(e), e is ShareImageError ? e.message : errorText(e));
     } finally {
       if (mounted) setState(() => _shooting = false);
     }
@@ -247,9 +250,9 @@ class _YearShelfState extends State<YearShelf> {
                   label: '$year년 책장 공유',
                   onTap: _share,
                   excludeSemantics: true,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _shooting ? null : _share,
+                  // 눌리는 동안 옅어진다(홈 머리 아이콘과 같게, pressOpacity)
+                  child: Pressable(
+                    onPress: _shooting ? null : _share,
                     // 사용자가 준 입체 공유 아이콘(2026-11-17, tool/gen_header_art_icons.py)
                     child: const SizedBox(width: 48, height: 48, child: Center(child: Image(image: AssetImage('assets/header/share.png'), width: headerArtSize, height: headerArtSize))),
                   ),

@@ -11,6 +11,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/bookcase.dart';
+import '../../store/settings_store.dart' show SettingsStore;
 import '../../ui/engraved_year.dart';
 import '../../ui/theme.dart';
 import 'home_screen.dart' show homeHeaderHeight;
@@ -84,7 +85,11 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
     super.dispose();
   }
 
-  bool get _reduce => MediaQuery.of(context).disableAnimations;
+  // 움직임 줄이기: 앱 설정(내 정보 › 움직임 줄이기: 기기 설정 · 켜기 · 끄기)을 따른다(홈 _reduceMotion과 같은 판단)
+  bool get _reduce {
+    final m = SettingsStore.instance.reduceMotion;
+    return m == 'on' || (m == 'system' && MediaQuery.disableAnimationsOf(context));
+  }
 
   void _animate(double at, double zoom) {
     _anim.stop();

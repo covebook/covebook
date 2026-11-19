@@ -4,6 +4,7 @@ library;
 
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -44,12 +45,18 @@ Future<PhotoResult> pickPhoto(String from, {bool crop = false}) async {
     return PhotoOk(Uri.file(path).toString(), width: w, height: h);
   } on PlatformException catch (e) {
     if (e.code.contains('denied') || e.code.contains('access')) return const PhotoFail('denied');
-    return PhotoFail('error', e.message);
+    debugPrint('[photo] ${e.code} ${e.message}');
+    return const PhotoFail('error', _failMessage);
   } catch (e) {
-    return PhotoFail('error', '$e');
+    debugPrint('[photo] $e');
+    return const PhotoFail('error', _failMessage);
   }
 }
 
+/// 사진을 못 읽었을 때(권한 말고) 사람이 읽는 문장(예외 원문은 로그로, DESIGN 9장)
+const _failMessage = '사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요.';
+
+/// 권한 거부 안내(회색 안내 글, DESIGN 11장: 사용자가 고른 것이라 오류 빨강이 아니다)
 String deniedMessage(String from) => from == 'camera'
-    ? '카메라 권한이 없어 사진을 찍을 수 없어요. 설정에서 허용하거나, 사진 보관함에서 고르거나, 직접 입력해 주세요.'
-    : '사진 보관함 권한이 없어요. 설정에서 허용하거나 직접 입력해 주세요.';
+    ? '카메라 권한이 꺼져 있어요. 기기 설정에서 켜거나, 사진 보관함에서 고르거나, 직접 입력해 주세요.'
+    : '사진 보관함 권한이 꺼져 있어요. 기기 설정에서 켜 주세요.';

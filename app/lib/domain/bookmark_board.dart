@@ -86,9 +86,13 @@ class BoardMark {
   bool get hasSpot => boardX != null && boardY != null;
 }
 
+/// 사진 갈피 = 사진만 남긴 갈피(글 없음). 글이 있으면 사진은 원본으로 곁들인 문장 갈피다
+bool isPhotoMark(String text, String? photoUri) => (photoUri ?? '').isNotEmpty && text.trim().isEmpty;
+
 ({double w, double h}) boardCardSize({required String text, String? photoUri, num? photoRatio, num? boardW}) {
   final w = math.max(boardMinW, math.min(boardMaxW, (boardW ?? boardCardW).toDouble()));
-  return (w: w, h: boardHeightAt(w, boardTextChars(text), photoUri != null ? boardPhotoRatio(photoRatio) : 0));
+  // 사진 칸은 사진 갈피(글 없음)만: 카드가 그리는 규칙과 같게(글과 사진이 함께인 갈피는 문장 카드)
+  return (w: w, h: boardHeightAt(w, boardTextChars(text), isPhotoMark(text, photoUri) ? boardPhotoRatio(photoRatio) : 0));
 }
 
 ({double w, double h}) _sizeOf(BoardMark m) => boardCardSize(text: m.text, photoUri: m.photoUri, photoRatio: m.photoRatio, boardW: m.boardW);

@@ -1,6 +1,7 @@
 // 책장에서 책을 짧게 누르면 아래에서 올라오는 책 정보 시트(지금 앱 features/home/BookSheet.tsx, 2026-10-31 책장 시안).
 // 왼쪽 작은 표지(실제 표지 사진, 없거나 못 읽으면 이 책의 장정 정면 + '꾸민 표지'), 오른쪽 제목·읽기 상태·한 줄 감상·최근 메모,
-// 아래 '책 정보 보기'(회색 테두리 큰 단추)와 '읽기 시작 | 갈피 남기기'(글자만). 선반은 그대로 보이게 바탕을 어둡게 덮지 않는다.
+// 아래 '책 정보 보기'(주요 큰 단추)와 보조 셋 '읽기 시작(이어서 읽기) | 갈피 남기기 | 책장에서 빼기'(글자만, 옛 시안 그대로).
+// 선반은 그대로 보이게 바탕을 어둡게 덮지 않는다.
 // 배치 조작은 꾹 눌러 꾸미기에서
 library;
 
@@ -14,7 +15,9 @@ import '../../ui/standalone_book.dart' show StandaloneBook;
 import '../book/add_book_screen.dart' show openAddBook;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
+import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../book/book_screen.dart' show openBook;
@@ -43,7 +46,7 @@ String? latestMemo(Library lib, String bookId) {
   return best?.text;
 }
 
-/// view·status·readOnly: 지난 연도 책장(보기 전용)에서 그해 기록(그해 서재·'2025년 · 완독')으로 연다. 읽기·갈피 단추가 없고,
+/// view·status·readOnly: 지난 연도 책장(보기 전용)에서 그해 기록(그해 서재·'2025년 | 완독', metaSep으로 이은 것)으로 연다. 읽기·갈피 단추가 없고,
 /// 지금 서재에 보이지 않는 책(숨긴 책)은 '책 정보 보기'도 없다(지금 앱 BookSheet readOnly)
 Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, String? status, bool readOnly = false}) async {
   final model = LibraryModel.instance;
@@ -53,7 +56,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
   final canOpen = model.lib.books.containsKey(bookId) && model.lib.books[bookId]!.hiddenAt == null;
   final b = lib.books[bookId];
   final e = b == null ? null : lib.editions[b.editionId];
-  // 새 서재 예시 책(표시 전용, 서재에 없음): 읽기·갈피 대신 '이 책을 내 서재에 추가'(지금 앱 BookSheet sample)
+  // 새 서재 예시 책(표시 전용, 서재에 없음): 읽기·갈피 대신 '이 책을 내 책에 추가'(지금 앱 BookSheet sample)
   if (b == null && view == null && referenceBooks[bookId] != null) return _sampleSheet(context, referenceBooks[bookId]!);
   if (b == null || e == null) return;
   await showModalBottomSheet<void>(
@@ -98,7 +101,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                                 color: AppColors.input,
                                 width: _coverW,
                                 height: (_coverW * ratio).roundToDouble(),
-                                radius: 3,
+                                radius: Shape.cover,
                               ),
                             )
                           : Column(children: [
@@ -109,13 +112,15 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                     const SizedBox(width: 18),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        // 시트 머리 책 제목은 bookTitle(DESIGN 3-1)
                         Semantics(
                           header: true,
-                          child: Text(e.title, style: AppType.section),
+                          child: Text(e.title, style: AppType.bookTitle),
                         ),
+                        // 지난 책장은 '2025년 | 완독': 세로줄은 옅게, 화면 읽기는 쉼표로(MetaText)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
-                          child: Text(status ?? statusLabel[b.status]!, style: AppType.caption),
+                          child: MetaText(status ?? statusLabel[b.status]!, style: AppType.caption),
                         ),
                         if ((b.note ?? '').isNotEmpty)
                           Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(b.note!, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink))),
@@ -141,6 +146,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                   padding: const EdgeInsets.only(top: 22),
                   child: Btn(
                     label: '책 정보 보기',
+                    size: 'l',
                     onPress: () {
                       Navigator.pop(ctx);
                       openBook(context, bookId);
@@ -150,7 +156,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                 if (!readOnly)
                   Padding(
                   padding: const EdgeInsets.only(top: 10),
-                  // 보조 행동 두 개(지금 앱 TextActions): 본문색 보통 글씨, 사이 얇은 세로선, 누르는 칸 48
+                  // 보조 행동(지금 앱 TextActions, 옛 시안 그대로 둔 의도된 예외, TextLink로 맞출지는 사용자 결정 대기): 본문색 보통 글씨, 사이 얇은 세로선, 누르는 칸 48
                   child: Row(children: [
                     // 누르면 그 책으로 바로 독서를 시작하고 읽기 화면을 연다(2026-11-16 QA 영숙 F2: 장면만 열리고 시계가 가지 않았다)
                     _textAction(b.status == ReadStatus.reading || b.status == ReadStatus.paused ? '이어서 읽기' : '읽기 시작', () {
@@ -168,15 +174,22 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                       _textAction('책장에서 빼기', () async {
                         Navigator.pop(ctx);
                         final place = PlacementStore.instance;
-                        await place.ensure();
-                        if (!await place.toDrawer(bookId) || !context.mounted) return;
-                        // 되돌리기가 달린 알림은 Flutter 기본값(persist)이면 시간이 지나도 남아 하단 탭을 막았다: 정한 시간 뒤 사라지게(2026-11-16 QA 현우 F1)
-                        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-                          content: const Text('책장에서 뺐어요. 내 책에 그대로 있어요.'),
-                          duration: const Duration(seconds: 4),
-                          persist: false,
-                          action: SnackBarAction(label: '되돌리기', onPressed: () => place.undo()),
-                        ));
+                        Object? err;
+                        var ok = false;
+                        try {
+                          await place.ensure();
+                          ok = await place.toDrawer(bookId);
+                        } catch (e) {
+                          err = e;
+                        }
+                        if (!context.mounted) return;
+                        // 실패는 늘 알린다(DESIGN 11장): 책은 책장에 그대로 있다
+                        if (!ok) {
+                          appAlert(context, '책장에서 빼지 못했어요', '책은 책장에 그대로 있어요. ${err == null ? '잠시 뒤 다시 시도해 주세요.' : errorText(err)}');
+                          return;
+                        }
+                        // 책장에서 사라지는 일이라 토스트 + 되돌리기(DESIGN 14장)
+                        showToast(context, '책장에서 뺐어요. 내 책에 그대로 있어요.', action: '되돌리기', onAction: () => place.undo());
                       }),
                     ],
                   ]),
@@ -190,7 +203,7 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
   );
 }
 
-/// 예시 책 시트: 책장과 같은 그림의 앞모습, 제목, '예시 책이에요 / 내 서재에는 없어요', 같은 제목으로 책 추가
+/// 예시 책 시트: 책장과 같은 그림의 앞모습, 제목, '예시 책이에요 / 내 책에는 없어요', 같은 제목으로 책 추가
 Future<void> _sampleSheet(BuildContext context, Book sample) => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -228,11 +241,11 @@ Future<void> _sampleSheet(BuildContext context, Book sample) => showModalBottomS
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Semantics(
                       header: true,
-                      child: Text(sample.title, style: AppType.section),
+                      child: Text(sample.title, style: AppType.bookTitle),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text('예시 책이에요\n내 서재에는 없어요', style: AppType.caption),
+                      child: Text('예시 책이에요\n내 책에는 없어요', style: AppType.caption),
                     ),
                   ]),
                 ),
@@ -241,7 +254,8 @@ Future<void> _sampleSheet(BuildContext context, Book sample) => showModalBottomS
             Padding(
               padding: const EdgeInsets.only(top: 22),
               child: Btn(
-                label: '이 책을 내 서재에 추가',
+                label: '이 책을 내 책에 추가',
+                size: 'l',
                 onPress: () {
                   Navigator.pop(ctx);
                   openAddBook(context, q: sample.title);

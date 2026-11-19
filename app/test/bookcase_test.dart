@@ -1,4 +1,5 @@
-// 지금 앱 domain/__tests__/bookcase.test.ts와 같은 시험(전송 형식은 동기화를 옮길 때)
+// 옛 앱(RN) domain/__tests__/bookcase.test.ts와 같은 시험(전송 형식은 동기화를 옮길 때)
+// (옛 앱 시험을 옮겨 온 것이다. 지금은 이 Flutter 코드의 규칙 시험이다)
 import 'package:chaekjang/domain/bookcase.dart';
 import 'package:chaekjang/domain/layout.dart' show ShelfLayout;
 import 'package:chaekjang/domain/library.dart';
