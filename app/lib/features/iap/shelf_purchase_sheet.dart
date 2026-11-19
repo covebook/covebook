@@ -38,11 +38,16 @@ class _ShelfPurchase extends StatefulWidget {
 class _ShelfPurchaseState extends State<_ShelfPurchase> {
   final _iap = IapService.instance;
   final _e = EntitlementStore.instance;
-  late final int _before = _e.shelves;
+  int _before = 0;
+
+  /// 상품이 여럿일 때 고른 것. 미리 골라 두지 않는다
+  IapProduct? _picked;
 
   @override
   void initState() {
     super.initState();
+    // late 초기화는 처음 읽을 때 계산된다(구매가 끝난 뒤의 값이 들어가 시트가 닫히지 않았다). 여기서 바로 적는다
+    _before = _e.shelves;
     _iap.addListener(_changed);
     _e.addListener(_changed);
     if (_iap.details.isEmpty) _iap.refresh();
@@ -69,28 +74,39 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
   Widget build(BuildContext context) {
     final products = shelfProducts();
     final store = storeName(iapRoute);
+    if (products.isEmpty && _iap.loading) return const Padding(padding: EdgeInsets.symmetric(vertical: Space.item), child: Loading());
     if (products.isEmpty) {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
         WordText('지금은 선반을 구매할 수 없어요. 잠시 뒤 다시 시도해 주세요.', style: AppType.body),
         Padding(padding: const EdgeInsets.only(top: Space.item), child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(context))),
       ]);
     }
-    final p = products.first;
-    final price = _iap.details[p.productId]!.price;
+    // 상품이 하나면 그것, 여럿이면 고른 것(고르기 전에는 살 수 없다)
+    final p = products.length == 1 ? products.first : _picked;
+    final price = p == null ? null : _iap.details[p.productId]!.price;
     final failed = _iap.lastResult == IapResult.retryLater || _iap.lastResult == IapResult.rejected ? _iap.lastMessage : null;
     // 가운데 점을 쓰지 않는다(앱 규칙, 2026-11-18): 줄마다 문장 하나
     Widget line(String t) => Padding(padding: const EdgeInsets.only(bottom: 6), child: WordText(t, style: AppType.sub));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      if (products.length > 1)
+        for (final o in products)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Space.s),
+            child: Choice(label: '추가 선반 ${o.shelves}칸', sub: _iap.details[o.productId]!.price, selected: identical(o, p), onPress: _iap.busy ? () {} : () => setState(() => _picked = o)),
+          ),
       // 상품과 가격을 버튼 바로 위에, 같은 크기의 글자로
-      MetaText('추가 선반 ${p.shelves}칸$metaSep$price', style: AppType.rowStrong),
+      if (p != null) MetaText('추가 선반 ${p.shelves}칸$metaSep$price', style: AppType.rowStrong),
       const SizedBox(height: Space.s),
       line('한 번 결제하면 계속 쓸 수 있습니다.'),
       line('구매한 선반은 계정에 기록됩니다. 로그인해 두면 기기를 바꿔도 유지됩니다.'),
       line('환불은 $store의 환불 절차를 따릅니다.'),
       if (failed != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(failed, style: AppType.sub.copyWith(color: AppColors.danger))),
+      if (_iap.lastResult == IapResult.pending && _iap.lastMessage != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(_iap.lastMessage!, style: AppType.body)),
       Padding(
         padding: const EdgeInsets.only(top: Space.s),
-        child: Btn(label: _iap.busy ? '결제 확인 중' : '구매하기', size: 'l', busy: _iap.busy, disabled: _iap.busy, onPress: () => _iap.buy(p)),
+        child: Btn(label: _iap.busy ? '결제 확인 중' : '구매하기', size: 'l', busy: _iap.busy, disabled: _iap.busy || p == null, onPress: () {
+          if (p != null) _iap.buy(p);
+        }),
       ),
     ]);
   }

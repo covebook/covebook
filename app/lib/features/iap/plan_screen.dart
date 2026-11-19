@@ -14,6 +14,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../settings/settings_screen.dart' show privacyUrl;
 import '../settings/terms.dart' show showTermsSheet;
+import 'notice.dart' show showPurchaseDone;
 import 'subscription_screen.dart' show openSubscription, showRefundSheet, storeName;
 
 Future<void> openPlans(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -33,9 +34,14 @@ class _PlanScreenState extends State<PlanScreen> {
   /// 고른 요금제. 처음에는 아무것도 고르지 않은 상태다
   IapPlan? _picked;
 
+  /// 이 화면을 열었을 때 이미 구독 중이었는지(여기서 결제가 끝난 순간을 알아보려고)
+  bool _wasActive = false;
+
   @override
   void initState() {
     super.initState();
+    // late 초기화는 처음 읽을 때 계산돼서, 결제가 끝난 뒤의 값이 들어간다. 여기서 바로 적는다
+    _wasActive = _e.subscription?.active ?? false;
     _e.addListener(_changed);
     _iap.addListener(_changed);
     if (_iap.plans.isEmpty) _iap.refresh();
@@ -49,7 +55,14 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   void _changed() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // 이 화면에서 결제가 끝났다: 결제 완료를 알린다(T3)
+    final sub = _e.subscription;
+    if (!_wasActive && sub != null && sub.active && _iap.lastResult == IapResult.granted) {
+      _wasActive = true;
+      showPurchaseDone(context, sub, price: _picked?.price);
+    }
   }
 
   IapProduct? _productOf(IapPlan plan) => _e.products.where((p) => p.kind == 'subscription' && p.productId == plan.details.id).firstOrNull;
@@ -74,6 +87,9 @@ class _PlanScreenState extends State<PlanScreen> {
       ]);
     }
     final plans = _iap.plans;
+    if (plans.isEmpty && _iap.loading) {
+      return const Screen(title: '책장 한켠 플러스', children: [Padding(padding: EdgeInsets.only(top: Space.section), child: Loading())]);
+    }
     if (plans.isEmpty) {
       return Screen(title: '책장 한켠 플러스', children: [
         Padding(padding: const EdgeInsets.only(top: Space.s, bottom: Space.item), child: WordText('지금은 구독할 수 없어요. 잠시 뒤 다시 시도해 주세요.', style: AppType.body)),
@@ -106,6 +122,8 @@ class _PlanScreenState extends State<PlanScreen> {
       ] else
         line('요금제를 고르면 결제 조건을 보여 드려요.'),
       if (failed != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(failed, style: AppType.sub.copyWith(color: AppColors.danger))),
+      // 결제 대기(편의점 결제, 보호자 승인 등): 실패가 아니라 기다리는 중이라고 알린다
+      if (_iap.lastResult == IapResult.pending && _iap.lastMessage != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(_iap.lastMessage!, style: AppType.body)),
       Padding(
         padding: const EdgeInsets.only(top: Space.s),
         child: Btn(

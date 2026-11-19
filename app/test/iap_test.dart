@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:chaekjang/features/home/locked_rows.dart';
+import 'package:chaekjang/features/iap/notice.dart';
 import 'package:chaekjang/features/iap/plan_screen.dart';
 import 'package:chaekjang/features/iap/purchase_history_screen.dart';
 import 'package:chaekjang/features/iap/seller_sheet.dart';
@@ -70,6 +71,7 @@ void _reset() {
   IapService.instance
     ..details = const {}
     ..plans = const []
+    ..loading = false
     ..busy = false
     ..lastResult = null
     ..lastMessage = null;
@@ -374,5 +376,132 @@ void main() {
     await t.pumpAndSettle();
     expect(continued, 1);
     expect(find.text('탈퇴 계속'), findsNothing);
+  });
+
+  test('상태 변화 알림: 지난번과 달라진 것만, 처음 보는 계정은 알리지 않는다', () {
+    const none = IapSnapshot(plus: false, shelves: 0);
+    const plus = IapSnapshot(plus: true, shelves: 0);
+    expect(iapNoticeFor(null, plus), isNull);
+    expect(iapNoticeFor(plus, plus), isNull);
+    expect(iapNoticeFor(none, plus), isNull); // 새로 구독한 것은 결제한 화면에서 알린다
+    expect(iapNoticeFor(plus, none, subState: 'inactive'), IapNoticeKind.expired);
+    expect(iapNoticeFor(plus, none, subState: 'revoked'), IapNoticeKind.subscriptionRefunded);
+    expect(iapNoticeFor(const IapSnapshot(plus: false, shelves: 2), const IapSnapshot(plus: false, shelves: 1)), IapNoticeKind.shelfRefunded);
+    // 결제 실패 유예: 같은 유예는 한 번만
+    const grace = IapSnapshot(plus: true, shelves: 0, grace: '2027-02-03T03:00:00.000Z');
+    expect(iapNoticeFor(plus, grace), IapNoticeKind.paymentFailed);
+    expect(iapNoticeFor(grace, grace), isNull);
+    // 남겼다가 다시 읽어도 같다. 깨진 값은 없는 것으로 본다
+    final back = IapSnapshot.parse(grace.encode())!;
+    expect((back.plus, back.shelves, back.grace), (true, 0, grace.grace));
+    expect(IapSnapshot.parse('깨짐'), isNull);
+  });
+
+  final noticeSub = IapSubscription(route: iapRoute, productId: 'plus', state: 'paid', active: true, autoRenew: true, expiresAt: DateTime.utc(2027, 1, 18, 3), graceUntil: DateTime.utc(2027, 2, 3, 3));
+  for (final (kind, shot, texts) in [
+    (IapNoticeKind.paymentFailed, '13-notice-payment-failed', ['결제가 이뤄지지 않았습니다', '2027년 2월 3일까지는 계속 이용할 수 있습니다.', '결제 수단 확인하기']),
+    (IapNoticeKind.expired, '14-notice-expired', ['구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다.']),
+    (IapNoticeKind.subscriptionRefunded, '15-notice-subscription-refunded', ['환불 처리됐습니다', '구독이 종료됐습니다.']),
+    (IapNoticeKind.shelfRefunded, '16-notice-shelf-refunded', ['추가 선반 결제가 환불 처리됐습니다', '꽂힌 책은 그대로 있습니다.']),
+  ]) {
+    testWidgets('상태 변화 알림 화면: ${kind.name}', (t) async {
+      await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showIapNotice(ctx, kind, noticeSub))))));
+      await t.tap(find.text('열기'));
+      await t.pumpAndSettle();
+      for (final text in texts) {
+        expect(find.textContaining(text), findsOneWidget, reason: text);
+      }
+      // 거래 고지에 권유 문장을 넣지 않는다
+      expect(find.textContaining('다시 구독'), findsNothing);
+      expect(find.textContaining('·'), findsNothing);
+      await _shot(t, shot);
+      await t.tap(find.text('확인'));
+      await t.pumpAndSettle();
+      expect(find.text('확인'), findsNothing);
+    });
+  }
+
+  testWidgets('결제 완료: 결제한 화면에서 금액, 다음 결제일, 해지하는 곳을 알린다', (t) async {
+    plans();
+    await _pump(t, const PlanScreen());
+    await t.tap(find.bySemanticsLabel('월간, 월 스토어 가격 / 매월'));
+    await t.pumpAndSettle();
+    // 서버가 지급했다고 답한 순간
+    IapService.instance.lastResult = IapResult.granted;
+    EntitlementStore.instance.apply({
+      'plus': true,
+      'subscription': {'route': iapRoute, 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true, 'expiresAt': '2027-01-18T03:00:00Z'},
+    }, save: false);
+    await t.pumpAndSettle();
+    expect(find.textContaining('결제가 완료됐습니다'), findsOneWidget);
+    expect(find.text('월 스토어 가격'), findsOneWidget);
+    expect(find.text('2027년 1월 18일'), findsOneWidget);
+    expect(find.text('내 정보의 구독 관리'), findsOneWidget);
+    await _shot(t, '12-purchase-done');
+  });
+
+  testWidgets('결제 대기: 실패가 아니라 기다리는 중이라고 알리고 버튼을 잠그지 않는다', (t) async {
+    plans();
+    IapService.instance
+      ..lastResult = IapResult.pending
+      ..lastMessage = '결제가 끝나면 자동으로 반영돼요. 이 화면을 닫아도 돼요.';
+    await _pump(t, const PlanScreen());
+    await t.tap(find.bySemanticsLabel('월간, 월 스토어 가격 / 매월'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('결제가 끝나면 자동으로 반영돼요'), findsOneWidget);
+    expect(t.widget<Btn>(find.widgetWithText(Btn, '구독하기')).disabled, isFalse);
+    await _shot(t, '17-plans-pending');
+  });
+
+  testWidgets('불러오는 중: 요금제를 받는 동안은 구독할 수 없다고 하지 않는다', (t) async {
+    IapService.instance.loading = true;
+    t.view.physicalSize = const Size(1080, 2340);
+    t.view.devicePixelRatio = 2.625;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(const MaterialApp(home: PlanScreen()));
+    await t.pump();
+    expect(find.byType(Loading), findsOneWidget);
+    expect(find.textContaining('지금은 구독할 수 없어요'), findsNothing);
+  });
+
+  testWidgets('선반 구매 시트: 상품이 여럿이면 고르게 하고, 미리 골라 두지 않는다', (t) async {
+    EntitlementStore.instance.apply({
+      'accountToken': 'a-token',
+      'products': [
+        {'route': iapRoute, 'productId': 'shelf2', 'kind': 'product', 'shelves': 2},
+        {'route': iapRoute, 'productId': 'shelf1', 'kind': 'product', 'shelves': 1},
+      ],
+    }, save: false);
+    IapService.instance.details = {'shelf1': _detail('shelf1', '추가 선반', '한 칸 스토어 가격'), 'shelf2': _detail('shelf2', '추가 선반', '두 칸 스토어 가격')};
+    await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showShelfPurchase(ctx))))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(t.widgetList<Choice>(find.byType(Choice)).map((c) => (c.label, c.selected)), [('추가 선반 1칸', false), ('추가 선반 2칸', false)]);
+    expect(t.widget<Btn>(find.widgetWithText(Btn, '구매하기')).disabled, isTrue);
+    await t.tap(find.bySemanticsLabel('추가 선반 2칸, 두 칸 스토어 가격'));
+    await t.pumpAndSettle();
+    expect(find.bySemanticsLabel('추가 선반 2칸, 두 칸 스토어 가격'), findsNWidgets(2)); // 고른 칸과, 버튼 위의 상품·가격 줄
+    expect(t.widget<Btn>(find.widgetWithText(Btn, '구매하기')).disabled, isFalse);
+    await _shot(t, '18-shelf-purchase-options');
+  });
+
+  testWidgets('선반 구매 시트: 구매가 끝나 칸이 늘면 닫히고, 샀다고 알려 준다', (t) async {
+    EntitlementStore.instance.apply({
+      'accountToken': 'a-token',
+      'shelves': 0,
+      'products': [
+        {'route': iapRoute, 'productId': 'shelf', 'kind': 'product', 'shelves': 1},
+      ],
+    }, save: false);
+    IapService.instance.details = {'shelf': _detail('shelf', '추가 선반', '스토어 가격')};
+    bool? bought;
+    await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () async => bought = await showShelfPurchase(ctx))))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(find.text('구매하기'), findsOneWidget);
+    EntitlementStore.instance.apply({'status': 'granted', 'shelves': 1}, save: false);
+    await t.pumpAndSettle();
+    expect(find.text('구매하기'), findsNothing);
+    expect(bought, isTrue);
   });
 }

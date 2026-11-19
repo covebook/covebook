@@ -14,6 +14,9 @@ const iapOn = bool.fromEnvironment('IAP');
 
 const _cacheKey = 'iap-status:v1';
 
+/// 상태 변화 알림이 지난번에 본 상태를 남기는 자리(features/iap/notice.dart). 계정을 바꾸면 같이 지운다
+const iapSeenKey = 'iap-seen:v1';
+
 class IapSubscription {
   const IapSubscription({
     required this.route,
@@ -156,6 +159,7 @@ class EntitlementStore extends ChangeNotifier {
     products = const [];
     loaded = false;
     await KvStore.remove(_cacheKey).catchError((_) {});
+    await KvStore.remove(iapSeenKey).catchError((_) {});
     notifyListeners();
   }
 }

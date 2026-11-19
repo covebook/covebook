@@ -103,6 +103,12 @@ class IapService extends ChangeNotifier {
   /// 결제·복원이 진행 중인지(버튼을 잠근다. 연타와 결제 중 계정 전환을 막는다)
   bool busy = false;
 
+  /// 스토어에서 상품과 가격을 받는 중인지(화면이 '살 수 없어요'를 먼저 보이지 않게)
+  bool loading = false;
+
+  /// 이번 실행에서 서버 상태를 받았는지(기기에 남긴 지난번 값이 아니라)
+  bool synced = false;
+
   /// 마지막 결과와 사용자에게 보일 말
   IapResult? lastResult;
   String? lastMessage;
@@ -124,26 +130,35 @@ class IapService extends ChangeNotifier {
 
   /// 서버에서 내 상태와 상품 목록을 받고, 스토어에서 그 상품의 가격을 받는다
   Future<void> refresh() async {
-    if (!iapOn) return;
-    final token = await KvStore.get(syncTokenKey);
-    if (token == null) return;
+    if (!iapOn || loading) return;
+    loading = true; // 여기서는 알리지 않는다(화면의 initState 안에서 불린다). 끝날 때 알린다
     try {
-      final me = await api('GET', '/iap/me', token);
-      if (me is Map<String, dynamic>) EntitlementStore.instance.apply(me);
+      final token = await KvStore.get(syncTokenKey);
+      if (token == null) return;
+      try {
+        final me = await api('GET', '/iap/me', token);
+        if (me is Map<String, dynamic>) {
+          EntitlementStore.instance.apply(me);
+          synced = true;
+        }
+      } catch (_) {
+        return; // 서버에 닿지 못하면 지난번 값으로 둔다
+      }
+      final ids = {for (final p in EntitlementStore.instance.products) if (p.route == iapRoute) p.productId};
+      if (ids.isEmpty || !await _store.isAvailable()) return;
+      final res = await _store.queryProductDetails(ids);
+      // 구글은 구독 하나에 요금제마다 한 줄씩 온다(상품 ID가 같다). 상품 ID로는 첫 줄만 남기고, 요금제는 따로 모은다
+      details = {for (final d in res.productDetails.reversed) d.id: d};
+      final subs = {for (final p in EntitlementStore.instance.products) if (p.kind == 'subscription') p.productId};
+      plans = [for (final d in res.productDetails) if (subs.contains(d.id)) ?iapPlanOf(d)]..sort((a, b) => a.period.compareTo(b.period));
     } catch (_) {
-      return; // 서버에 닿지 못하면 지난번 값으로 둔다
+      // 스토어에 닿지 못했다: 상품 없이 둔다
+    } finally {
+      loading = false;
+      notifyListeners();
     }
-    final ids = {for (final p in EntitlementStore.instance.products) if (p.route == iapRoute) p.productId};
-    if (ids.isEmpty || !await _store.isAvailable()) return;
-    final res = await _store.queryProductDetails(ids);
-    // 구글은 구독 하나에 요금제마다 한 줄씩 온다(상품 ID가 같다). 상품 ID로는 첫 줄만 남기고, 요금제는 따로 모은다
-    details = {for (final d in res.productDetails.reversed) d.id: d};
-    final subs = {for (final p in EntitlementStore.instance.products) if (p.kind == 'subscription') p.productId};
-    plans = [for (final d in res.productDetails) if (subs.contains(d.id)) ?iapPlanOf(d)]..sort((a, b) => a.period.compareTo(b.period));
-    notifyListeners();
   }
 
-  /// 구매를 시작한다. 결과는 purchaseStream으로 온다
   /// plan: 구독은 고른 요금제를 넘긴다(구글은 요금제마다 스토어 상품 줄이 다르다)
   Future<void> buy(IapProduct product, {IapPlan? plan}) async {
     final d = plan?.details ?? details[product.productId];
@@ -190,7 +205,9 @@ class IapService extends ChangeNotifier {
   Future<void> _handle(PurchaseDetails d) async {
     switch (d.status) {
       case PurchaseStatus.pending:
-        _busy(true);
+        // 결제가 아직 끝나지 않았다(편의점 결제, 보호자 승인 등). 끝나면 스토어가 다시 알려 주고 그때 서버에 낸다.
+        // 버튼을 풀어 화면을 떠날 수 있게 한다
+        _done(IapResult.pending, '결제가 끝나면 자동으로 반영돼요. 이 화면을 닫아도 돼요.');
         return;
       case PurchaseStatus.canceled:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
