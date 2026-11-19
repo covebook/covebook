@@ -425,6 +425,22 @@ return tx.Commit(ctx)
 - **자주 돌 필요가 없는 일**: 1분마다 도는 대조 안에 있지만 6시간에 한 번만 함(`iapRenewalDue`, 10-7의 메우기와 같은 방식). 결과가 같아서 서버를 다시 켜면 한 번 더 돌아도 괜찮음
 - **환경 변수 숫자 읽기**: `strconv.Atoi(os.Getenv(...))`가 실패하거나 범위 밖이면 기본값 14. Java의 `Integer.parseInt`는 예외를 던지지만 Go는 `err`를 돌려주니 if 하나로 기본값 처리
 
+### 10-10. 추가 선반을 연도 책장마다: 스토어가 모르는 값을 거래에 붙이기 (D1, V21)
+
+- **문제**: 2026-11-19 결정으로 선반은 연도 책장마다 따로 삼(책장 6칸 중 3칸 무료, 유료는 해마다 최대 3칸). 그런데 스토어 거래에는 "몇 년 책장"이 없음. 앱이 제출할 때 연도를 같이 보내면 될 것 같지만, 앱이 결제 중 꺼지거나 스토어 알림이 먼저 오면 연도가 사라짐
+- **풀이: 계정 연결 값을 연도마다 따로 발급**: 스토어는 결제 때 넘긴 값(애플 `appAccountToken`, 구글 `obfuscatedAccountId`)을 거래에 그대로 붙여 돌려줌. 그래서 값을 "계정 × 연도"마다 하나씩 만들고(`iap_account_tokens.year`), 돌아온 값으로 연도를 찾음. 구독용 값은 `year`가 NULL인 줄
+  - 앱 흐름: `POST /iap/shelf-token {"year":2026}` → 받은 값을 결제에 넘김 → 제출
+  - 이미 다 연 해(3칸)에는 409 `iap_shelf_full`을 줘서 결제창이 뜨기 전에 막음
+- **연도는 거래 줄에 복사해 둠**: `iap_purchases.shelf_year`. 넣는 SQL 안에서 `(SELECT year FROM iap_account_tokens WHERE token=...)`로 채움. 탈퇴하면 값 표는 CASCADE로 지워지지만 거래 원장은 남으니, 연도도 원장에 있어야 함
+- **연도 하나에 값 하나: 부분 유일 색인**: `CREATE UNIQUE INDEX ... (user_id, year) WHERE year IS NOT NULL`. 구독용 값(NULL)은 이 색인에 안 걸림. 만들 때 `INSERT ... ON CONFLICT (user_id, year) WHERE year IS NOT NULL DO NOTHING` 뒤 다시 읽음. 부분 색인을 `ON CONFLICT`로 쓰려면 같은 `WHERE`를 적어야 PostgreSQL이 그 색인을 찾음
+  - Java·JPA로 치면 `@Table(uniqueConstraints=...)`로는 조건부 유일을 못 적음. DDL을 직접 써야 하는 자리
+- **3칸 상한은 읽을 때 자름**: `least(sum(p.shelves), 3)`(`iapEntitlements`). 두 기기에서 동시에 사면 넘을 수 있는데, 저장할 때 막으려면 잠금이 늘어남. 원장은 사실대로 두고 읽을 때 자르면 환불이 들어와도 다시 계산할 게 없음(D5와 같은 생각). 상한은 `iapPaidShelfMax` 한 곳
+  - 넘은 거래는 제출 응답의 `overCap`, 결제 완료 고지의 `overCap`, `/admin/iap/stats`의 `shelfOverCap`으로 보임. 환불은 운영자가 함
+- **넘은 거래 세기: 윈도 함수**: `sum(shelves) OVER (PARTITION BY user_id, shelf_year ORDER BY purchased_at, id)`로 "그 거래까지 산 칸"을 구하고 3을 넘는 줄을 셈. Java로 하면 줄을 다 가져와 누적합을 돌렸을 일을 SQL 한 문장으로 함
+- **연도를 모르는 거래**: 앱 밖에서 산 구매(프로모션 코드)는 계정 연결 값이 비어 있음. 이때만 제출 본문의 `year`를 씀. 값이 연도를 알면 본문은 무시함(값이 결제 때의 뜻이라). 둘 다 없으면 거래는 기록하고(돈은 받았으니) 칸은 주지 않고 422 `iap_shelf_year_missing`. 같은 거래를 연도와 함께 다시 내면 그때 채우고 결제 완료를 알림(`iapSetShelfYear`가 "이번에 채웠는지"를 돌려줌)
+- **고치기 전 값과 고친 값을 한 문장에서**: `WITH old AS (SELECT ... FOR UPDATE) UPDATE ... FROM old RETURNING b.shelf_year, old.shelf_year IS NULL`. CTE의 `old`는 고치기 전 값이라 "채웠는지"를 바로 앎(10-8의 `RETURNING`과 같은 수법)
+- **Java와 다른 점: JSON의 숫자 키**: Go의 `map[int]int`를 `encoding/json`으로 내보내면 키가 문자열이 됨(`{"2026":3}`). JSON 객체 키는 문자열뿐이라 그렇고, Jackson의 `Map<Integer,Integer>`도 같음. 앱은 키를 문자열로 읽음
+
 ## 진행 기록
 
 | 날짜 | 이슈 | 한 것 | 배운 것 |
@@ -439,3 +455,4 @@ return tx.Commit(ctx)
 | 2026-11-19 | #26, #39, L14, L17 | 구매 내역, 사업자 정보, 애플 알림 이력·구글 무효 구매 목록으로 메우기, 밀린 일 숫자 | 10-5, 10-6, 10-7 |
 | 2026-11-19 | L8, L11, L18 | 알림함: 고지 표(V22), 바뀐 순간에 한 번 쓰기, 목록·읽음 API | 10-8 |
 | 2026-11-19 | L9, L11 | 고지 기록 탈퇴 뒤 보존, 갱신 예정 고지(V23 `iap_plans`), `/iap/me`의 `period` | 10-9 |
+| 2026-11-19 | #6, D1 | 추가 선반 연도 책장마다(유료 최대 3칸): 연도별 계정 연결 값, `shelf_year`, `POST /iap/shelf-token`, `shelvesByYear`, 넘은 거래 세기 | 10-10 |
