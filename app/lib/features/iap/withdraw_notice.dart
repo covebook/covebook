@@ -6,35 +6,22 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../store/entitlement_store.dart';
-import '../../ui/kit.dart';
-import '../../ui/theme.dart';
+import '../../ui/alert.dart';
 import 'subscription_screen.dart' show storeManageUrl, storeName;
 
+/// 가운데 확인창으로 알린다(이어지는 탈퇴 확인도 가운데 창이다)
 Future<void> showWithdrawNotice(BuildContext context, IapSubscription sub, {required VoidCallback onContinue}) {
   final store = storeName(sub.route);
-  return showSheet<void>(
+  return appAlert(
     context,
-    title: '지금 책장 한켠 플러스를 구독하고 있습니다',
-    builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-      WordText('탈퇴해도 $store 구독은 자동으로 해지되지 않습니다.', style: AppType.body),
-      const SizedBox(height: 6),
-      WordText('먼저 $store에서 구독을 해지해 주세요.', style: AppType.body),
-      Padding(
-        padding: const EdgeInsets.only(top: Space.item),
-        child: Btn(label: '$store에서 해지하기', size: 'l', onPress: () => launchUrl(storeManageUrl(sub.route, sub.productId), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(top: Space.s),
-        child: Btn(
-          label: '탈퇴 계속',
-          kind: 'secondary',
-          size: 'l',
-          onPress: () {
-            Navigator.pop(ctx);
-            onContinue();
-          },
-        ),
-      ),
-    ]),
+    '지금 책장 한켠 플러스를 구독하고 있습니다',
+    '탈퇴해도 $store 구독은 자동으로 해지되지 않습니다. 먼저 $store에서 구독을 해지해 주세요.',
+    [
+      AlertButton('$store에서 해지하기', onPress: () => launchUrl(storeManageUrl(sub.route, sub.productId), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
+      AlertButton('탈퇴 계속', onPress: onContinue),
+      const AlertButton('취소', style: AlertStyle.cancel),
+    ],
+    true,
+    true,
   );
 }

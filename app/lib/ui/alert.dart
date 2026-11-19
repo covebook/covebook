@@ -18,7 +18,8 @@ class AlertButton {
 }
 
 /// stacked: 버튼을 늘 세로로 쌓는다(지금 앱 Dialog처럼: 주요 → 보조 → 맨 아래 글자 버튼)
-Future<void> appAlert(BuildContext context, String title, [String? message, List<AlertButton>? buttons, bool cancelable = true, bool stacked = false]) async {
+/// top: 제목 위에 두는 작은 그림(결제 완료의 체크 표시). 화면 읽기는 건너뛴다
+Future<void> appAlert(BuildContext context, String title, [String? message, List<AlertButton>? buttons, bool cancelable = true, bool stacked = false, Widget? top]) async {
   final list = buttons == null || buttons.isEmpty ? const [AlertButton('확인')] : buttons;
   final cancel = list.where((b) => b.style == AlertStyle.cancel).firstOrNull;
   final dismissTo = cancel ?? (list.length == 1 ? list.first : null);
@@ -68,6 +69,7 @@ Future<void> appAlert(BuildContext context, String title, [String? message, List
                       Flexible(
                         child: SingleChildScrollView(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            if (top != null) Padding(padding: const EdgeInsets.only(bottom: Space.item), child: ExcludeSemantics(child: top)),
                             Semantics(header: true, child: Text(keepAll(title), style: AppType.heading, semanticsLabel: title)),
                             if (message != null && message.isNotEmpty)
                               Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(keepAll(message), style: AppType.body.copyWith(color: AppColors.inkSoft), semanticsLabel: message)),

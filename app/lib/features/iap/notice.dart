@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../db/kv_store.dart';
 import '../../store/entitlement_store.dart';
+import '../../ui/alert.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'subscription_screen.dart' show iapDate, storeManageUrl, storeName;
@@ -67,44 +68,39 @@ Future<void> checkIapNotice(BuildContext context) async {
   if (kind != null && context.mounted) await showIapNotice(context, kind, e.subscription);
 }
 
+/// 가운데 확인창으로 알린다(꼭 읽어야 하는 알림이고, 뒤 화면과 관계가 없다. 아래 시트는 뒤 화면을 보며 고르는 일에 쓴다)
 Future<void> showIapNotice(BuildContext context, IapNoticeKind kind, IapSubscription? sub) {
   final store = storeName(sub?.route ?? '');
   const name = '책장 한켠 플러스';
   final grace = sub?.graceUntil;
-  final (title, lines) = switch (kind) {
-    IapNoticeKind.paymentFailed => (
-        '$name 결제가 이뤄지지 않았습니다',
-        [if (grace != null) '${iapDate(grace)}까지는 계속 이용할 수 있습니다.', '$store 계정의 결제 수단을 확인해 주세요.', '그때까지 결제되지 않으면 구독이 끝납니다.'],
-      ),
-    IapNoticeKind.expired => ('$name 구독이 끝났습니다', ['만든 책장과 기록은 그대로 있습니다.', '유료 벽지와 선반 색은 기본 모양으로 보입니다. 고른 설정은 저장돼 있습니다.']),
-    IapNoticeKind.subscriptionRefunded => ('$name 결제가 환불 처리됐습니다', ['구독이 종료됐습니다.', '환불 금액과 시기는 $store에서 확인할 수 있습니다.']),
-    IapNoticeKind.shelfRefunded => ('추가 선반 결제가 환불 처리됐습니다', ['해당 선반이 잠겼습니다. 꽂힌 책은 그대로 있습니다.', '환불 금액과 시기는 결제한 스토어에서 확인할 수 있습니다.']),
+  final (title, message) = switch (kind) {
+    IapNoticeKind.paymentFailed => ('$name 결제가 이뤄지지 않았습니다', '${grace == null ? '' : '${iapDate(grace)}까지는 계속 이용할 수 있습니다. '}그때까지 결제되지 않으면 구독이 끝납니다.'),
+    IapNoticeKind.expired => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
+    IapNoticeKind.subscriptionRefunded => ('$name 결제가 환불 처리됐습니다', '구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+    IapNoticeKind.shelfRefunded => ('추가 선반 결제가 환불 처리됐습니다', '해당 선반이 잠겼습니다. 꽂힌 책은 그대로 있습니다. 환불 금액과 시기는 결제한 스토어에서 확인할 수 있습니다.'),
   };
-  return showSheet<void>(
-    context,
-    title: title,
-    builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-      for (final l in lines) Padding(padding: const EdgeInsets.only(bottom: 6), child: WordText(l, style: AppType.body)),
-      if (kind == IapNoticeKind.paymentFailed && sub != null)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.s),
-          child: Btn(label: '$store에서 결제 수단 확인하기', kind: 'secondary', size: 'l', onPress: () => launchUrl(storeManageUrl(sub.route, sub.productId), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
-        ),
-      Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx))),
-    ]),
-  );
+  // 결제 실패만 할 일이 있다: 결제 수단 확인을 주 버튼으로, 닫기는 아래 글자 버튼으로
+  if (kind == IapNoticeKind.paymentFailed && sub != null) {
+    return appAlert(context, title, message, [
+      AlertButton('$store에서 결제 수단 확인하기', onPress: () => launchUrl(storeManageUrl(sub.route, sub.productId), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
+      const AlertButton('닫기', style: AlertStyle.cancel),
+    ], true, true);
+  }
+  return appAlert(context, title, message);
 }
 
 /// 결제 완료(T3): 결제한 화면에서 바로 알린다. price: 스토어가 준 가격 문자열(모르면 줄을 내지 않는다)
-Future<void> showPurchaseDone(BuildContext context, IapSubscription sub, {String? price}) => showSheet<void>(
+Future<void> showPurchaseDone(BuildContext context, IapSubscription sub, {String? price}) => appAlert(
       context,
-      title: '책장 한켠 플러스 결제가 완료됐습니다',
-      builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        ListGroup(children: [
-          if (price != null) ListItem(label: '결제 금액', value: price),
-          ListItem(label: '다음 결제일', value: iapDate(sub.expiresAt)),
-          const ListItem(label: '해지', value: '내 정보의 구독 관리'),
-        ]),
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx))),
-      ]),
+      '결제가 완료됐습니다',
+      ['책장 한켠 플러스', if (price != null) '결제 금액 $price', '다음 결제일 ${iapDate(sub.expiresAt)}', '해지는 내 정보의 구독 관리에서 할 수 있습니다.'].join('\n'),
+      null,
+      true,
+      false,
+      Container(
+        width: 44,
+        height: 44,
+        decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+        child: const Center(child: LucideIcon('Check', size: 24, color: AppColors.onAccent, stroke: 3)),
+      ),
     );

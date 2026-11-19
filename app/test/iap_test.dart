@@ -37,6 +37,9 @@ Future<void> _fonts() async {
 
 final _root = GlobalKey();
 
+/// 확인창의 글은 낱말 단위 줄바꿈 처리로 글자 사이에 보이지 않는 문자가 들어간다. 화면 읽기 이름으로 찾는다
+Finder _says(String text) => find.bySemanticsLabel(RegExp(RegExp.escape(text)));
+
 Future<void> _pump(WidgetTester t, Widget home) async {
   t.view.physicalSize = const Size(1080, 2340);
   t.view.devicePixelRatio = 2.625;
@@ -369,7 +372,7 @@ void main() {
     await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showWithdrawNotice(ctx, sub, onContinue: () => continued++))))));
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
-    expect(find.textContaining('구독은 자동으로 해지되지 않습니다'), findsOneWidget);
+    expect(_says('구독은 자동으로 해지되지 않습니다'), findsOneWidget);
     expect(find.textContaining('에서 해지하기'), findsOneWidget);
     await _shot(t, '11-withdraw-notice');
     await t.tap(find.text('탈퇴 계속'));
@@ -399,25 +402,28 @@ void main() {
 
   final noticeSub = IapSubscription(route: iapRoute, productId: 'plus', state: 'paid', active: true, autoRenew: true, expiresAt: DateTime.utc(2027, 1, 18, 3), graceUntil: DateTime.utc(2027, 2, 3, 3));
   for (final (kind, shot, texts) in [
-    (IapNoticeKind.paymentFailed, '13-notice-payment-failed', ['결제가 이뤄지지 않았습니다', '2027년 2월 3일까지는 계속 이용할 수 있습니다.', '결제 수단 확인하기']),
-    (IapNoticeKind.expired, '14-notice-expired', ['구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다.']),
-    (IapNoticeKind.subscriptionRefunded, '15-notice-subscription-refunded', ['환불 처리됐습니다', '구독이 종료됐습니다.']),
-    (IapNoticeKind.shelfRefunded, '16-notice-shelf-refunded', ['추가 선반 결제가 환불 처리됐습니다', '꽂힌 책은 그대로 있습니다.']),
+    (IapNoticeKind.paymentFailed, '13-notice-payment-failed', ['결제가 이뤄지지 않았습니다', '2027년 2월 3일까지는 계속 이용할 수 있습니다.', '결제 수단 확인하기', '닫기']),
+    (IapNoticeKind.expired, '14-notice-expired', ['구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다.', '확인']),
+    (IapNoticeKind.subscriptionRefunded, '15-notice-subscription-refunded', ['환불 처리됐습니다', '구독이 종료됐습니다.', '확인']),
+    (IapNoticeKind.shelfRefunded, '16-notice-shelf-refunded', ['추가 선반 결제가 환불 처리됐습니다', '꽂힌 책은 그대로 있습니다.', '확인']),
   ]) {
     testWidgets('상태 변화 알림 화면: ${kind.name}', (t) async {
       await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showIapNotice(ctx, kind, noticeSub))))));
       await t.tap(find.text('열기'));
       await t.pumpAndSettle();
       for (final text in texts) {
-        expect(find.textContaining(text), findsOneWidget, reason: text);
+        expect(_says(text), findsWidgets, reason: text);
       }
       // 거래 고지에 권유 문장을 넣지 않는다
-      expect(find.textContaining('다시 구독'), findsNothing);
-      expect(find.textContaining('·'), findsNothing);
+      expect(_says('다시 구독'), findsNothing);
+      expect(_says('·'), findsNothing);
       await _shot(t, shot);
-      await t.tap(find.text('확인'));
+      // 아래 시트가 아니라 가운데 창이다
+      final box = t.getRect(_says(texts.first).first);
+      expect(box.center.dy, lessThan(t.view.physicalSize.height / t.view.devicePixelRatio * 0.6));
+      await t.tap(find.text(texts.last));
       await t.pumpAndSettle();
-      expect(find.text('확인'), findsNothing);
+      expect(_says(texts.first), findsNothing);
     });
   }
 
@@ -433,10 +439,10 @@ void main() {
       'subscription': {'route': iapRoute, 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true, 'expiresAt': '2027-01-18T03:00:00Z'},
     }, save: false);
     await t.pumpAndSettle();
-    expect(find.textContaining('결제가 완료됐습니다'), findsOneWidget);
-    expect(find.text('월 스토어 가격'), findsOneWidget);
-    expect(find.text('2027년 1월 18일'), findsOneWidget);
-    expect(find.text('내 정보의 구독 관리'), findsOneWidget);
+    expect(_says('결제가 완료됐습니다'), findsOneWidget);
+    expect(_says('결제 금액 월 스토어 가격'), findsOneWidget);
+    expect(_says('다음 결제일 2027년 1월 18일'), findsOneWidget);
+    expect(_says('해지는 내 정보의 구독 관리에서'), findsOneWidget);
     await _shot(t, '12-purchase-done');
   });
 
