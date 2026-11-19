@@ -22,8 +22,14 @@ type dbtx interface {
 }
 
 // iapPaidShelfMax는 연도 책장 하나에서 돈을 내고 여는 칸의 최대 수다. 책장 6칸 중 3칸은 무료다(D1).
-// 이 수를 넘게 산 거래도 원장에는 남기고, 칸 수만 여기서 자른다. 넘은 거래는 운영자가 환불한다.
+// 두 겹으로 지킨다
+//   - 결제 전: 결제 중 예약(iap_shelf_reservations)으로 두 기기가 동시에 3칸을 넘게 사지 못하게 막는다
+//   - 결제 뒤: 그래도 넘은 거래는 over_cap으로 표시해 칸을 주지 않고 환불한다. 칸 수를 셀 때도 3에서 한 번 더 자른다
 const iapPaidShelfMax = 3
+
+// iapShelfHold는 선반 결제 중 예약이 살아 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다.
+// 앱이 결제 중에 꺼지면 이 시간이 지나야 다른 기기가 그 해 선반을 살 수 있다.
+const iapShelfHold = 5 * time.Minute
 
 // iapAccountToken은 유저의 구독용 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
 // 여러 개면 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
@@ -79,13 +85,52 @@ func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKe
 	return *got, err
 }
 
-// iapShelfPaid는 그 해 책장에서 환불되지 않은 선반 거래가 준 칸 수의 합이다. iapPaidShelfMax에서 자르지 않는다(넘었는지 볼 때 쓴다).
+// iapShelfPaid는 그 해 책장에서 환불되지 않은 선반 거래가 준 칸 수의 합이다. 3칸을 넘게 산 거래(over_cap)는 세지 않는다.
 func iapShelfPaid(ctx context.Context, q dbtx, user int64, year int, allowSandbox bool) (int, error) {
 	var n int
 	err := q.QueryRow(ctx, `SELECT coalesce(sum(p.shelves),0)::int
 		FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND b.shelf_year=$2 AND ($3 OR b.env='production')`, user, year, allowSandbox).Scan(&n)
+		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND b.shelf_year=$2 AND NOT b.over_cap
+			AND ($3 OR b.env='production')`, user, year, allowSandbox).Scan(&n)
 	return n, err
+}
+
+// iapSettleShelf는 연도가 정해진 선반 거래가 그 해 유료 칸(3칸)을 넘는지 정하고 over_cap을 돌려준다(D1).
+// 다른 거래(넘지 않은 것)의 칸 합 + 이 거래의 칸이 3을 넘으면 over_cap=true로 바꾼다. 거래를 통째로 넘은 것으로 본다
+// (3칸 묶음의 일부만 인정하지 않는다. 넘은 거래는 통째로 환불하므로).
+// 한 번 true가 되면 false로 돌리지 않는다. 앞선 거래가 나중에 환불돼도 이미 환불을 요청한 거래에 칸을 주지 않게.
+// 유저 줄을 잠그고 센다. 같은 유저의 두 거래가 동시에 정해지면 나중 것이 앞의 것을 보고 정한다.
+func iapSettleShelf(ctx context.Context, tx pgx.Tx, user int64, route iap.Route, transactionKey string, allowSandbox bool) (overCap bool, err error) {
+	var locked int64
+	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+		return
+	}
+	err = tx.QueryRow(ctx, `WITH me AS (
+			SELECT b.id, b.shelf_year, b.over_cap, p.shelves FROM iap_purchases b
+			JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
+			WHERE b.route=$1 AND b.transaction_id=$2 AND b.kind='product' AND b.shelf_year IS NOT NULL AND b.user_id=$3
+		), others AS (
+			SELECT coalesce(sum(p.shelves),0) AS n FROM iap_purchases b
+			JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id, me
+			WHERE b.user_id=$3 AND b.kind='product' AND b.state='paid' AND b.shelf_year=me.shelf_year AND NOT b.over_cap
+				AND b.id<>me.id AND ($4 OR b.env='production')
+		)
+		UPDATE iap_purchases b SET over_cap = me.over_cap OR others.n + me.shelves > $5,
+			updated_at = CASE WHEN NOT me.over_cap AND others.n + me.shelves > $5 THEN now() ELSE b.updated_at END
+		FROM me, others WHERE b.id=me.id RETURNING b.over_cap`,
+		string(route), transactionKey, user, allowSandbox, iapPaidShelfMax).Scan(&overCap)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return
+}
+
+// iapNoteRefundAttempt는 넘게 산 거래의 환불 요청을 시도했다고 남긴다. ok면 요청한 시각도 적는다.
+func iapNoteRefundAttempt(ctx context.Context, q dbtx, route iap.Route, transactionKey string, ok bool) error {
+	_, err := q.Exec(ctx, `UPDATE iap_purchases SET refund_attempts=refund_attempts+1,
+		refund_requested_at=CASE WHEN $3 THEN coalesce(refund_requested_at, now()) ELSE refund_requested_at END, updated_at=now()
+		WHERE route=$1 AND transaction_id=$2 AND over_cap`, string(route), transactionKey, ok)
+	return err
 }
 
 // iapOwnsToken은 그 계정 연결 값이 이 유저의 것인지 알려 준다. UUID 모양이 아니면 false다.
@@ -212,7 +257,7 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 
 // iapEntitlements는 유저가 지금 가진 것을 계산한다. 따로 저장한 값이 없고 매번 표에서 센다(D5).
 //   - plus: 결제된 구독이 있고, 만료 전이거나 유예 기간 안이다(D11). 만료 판단은 DB 서버 시계다(D23).
-//   - shelves: 연도 책장마다, 환불되지 않은 선반 거래가 준 칸 수의 합. iapPaidShelfMax에서 자른다(D1).
+//   - shelves: 연도 책장마다, 환불되지 않은 선반 거래가 준 칸 수의 합. 3칸을 넘게 산 거래(over_cap)는 세지 않고, iapPaidShelfMax에서 한 번 더 자른다(D1).
 //     산 칸이 없는 연도는 들어 있지 않다. 연도를 모르는 거래는 어느 책장에도 세지 않는다.
 //
 // allowSandbox가 false면 샌드박스(시험) 거래는 세지 않는다. 스위치를 끄면 전에 준 샌드박스 권한도 함께 사라진다.
@@ -226,7 +271,7 @@ func iapEntitlements(ctx context.Context, q dbtx, user int64, allowSandbox bool)
 	}
 	rows, err := q.Query(ctx, `SELECT b.shelf_year, least(sum(p.shelves), $3)::int
 		FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND ($2 OR b.env='production') AND b.shelf_year IS NOT NULL
+		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND ($2 OR b.env='production') AND b.shelf_year IS NOT NULL AND NOT b.over_cap
 		GROUP BY b.shelf_year`, user, allowSandbox, iapPaidShelfMax)
 	if err != nil {
 		return
@@ -553,5 +598,53 @@ func iapLockLine(ctx context.Context, tx pgx.Tx, route iap.Route, originalID str
 // 대조 작업의 맨 앞에 매번 다시 뽑혀 다른 구독의 차례를 막지 않게 한다.
 func iapBumpSubscription(ctx context.Context, q dbtx, route iap.Route, originalID string) error {
 	_, err := q.Exec(ctx, "UPDATE iap_subscriptions SET updated_at=now() WHERE route=$1 AND original_id=$2", string(route), originalID)
+	return err
+}
+
+// iapReservation은 선반 결제 중 예약 하나다.
+type iapReservation struct {
+	ID        string
+	ExpiresAt time.Time
+}
+
+// iapReserveShelf는 그 해 책장에 shelves칸 결제 중 예약을 잡는다. paid는 그 해에 이미 산 칸 수다.
+// 산 칸 + 살아 있는 예약 칸 + 이번 칸이 iapPaidShelfMax를 넘으면 잡지 않고, 가장 먼저 끝나는 예약까지 남은 시간(wait)을 준다.
+// 부르는 쪽이 유저 줄을 잠근 트랜잭션 안에서 부른다(두 기기가 동시에 잡지 못하게). 시각은 DB 시계다(D23).
+func iapReserveShelf(ctx context.Context, tx pgx.Tx, user int64, year, shelves, paid int) (r iapReservation, wait time.Duration, err error) {
+	// 끝난 예약은 지운다. 남아 있어도 세지 않지만 표가 쌓이지 않게
+	if _, err = tx.Exec(ctx, "DELETE FROM iap_shelf_reservations WHERE user_id=$1 AND expires_at <= now()", user); err != nil {
+		return
+	}
+	var held int
+	var waitSecs float64
+	if err = tx.QueryRow(ctx, `SELECT coalesce(sum(shelves),0)::int, coalesce(extract(epoch FROM min(expires_at) - now()),0)::float8
+		FROM iap_shelf_reservations WHERE user_id=$1 AND year=$2 AND expires_at > now()`, user, year).Scan(&held, &waitSecs); err != nil {
+		return
+	}
+	if paid+held+shelves > iapPaidShelfMax {
+		wait = time.Duration(waitSecs * float64(time.Second))
+		if wait < time.Second {
+			wait = time.Second
+		}
+		return
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO iap_shelf_reservations(user_id, year, shelves, expires_at)
+		VALUES($1,$2,$3, now() + make_interval(secs => $4)) RETURNING id::text, expires_at`,
+		user, year, shelves, iapShelfHold.Seconds()).Scan(&r.ID, &r.ExpiresAt)
+	return
+}
+
+// iapReleaseReservation은 이 유저의 예약 하나를 푼다. 없거나 남의 예약이거나 UUID 모양이 아니면 아무 일도 하지 않는다.
+func iapReleaseReservation(ctx context.Context, q dbtx, user int64, id string) error {
+	_, err := q.Exec(ctx, "DELETE FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=lower($2)", user, id)
+	return err
+}
+
+// iapReleaseOldestReservation은 그 해 책장의 살아 있는 예약 중 가장 먼저 잡은 것 하나를 푼다.
+// 어느 예약의 결제인지 모를 때 쓴다(스토어 알림으로 지급될 때, 앱이 예약 번호를 보내지 않았을 때).
+func iapReleaseOldestReservation(ctx context.Context, q dbtx, user int64, year int) error {
+	_, err := q.Exec(ctx, `DELETE FROM iap_shelf_reservations WHERE id = (
+		SELECT id FROM iap_shelf_reservations WHERE user_id=$1 AND year=$2 AND expires_at > now()
+		ORDER BY created_at, id LIMIT 1)`, user, year)
 	return err
 }

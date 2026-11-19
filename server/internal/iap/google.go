@@ -23,6 +23,7 @@ type googleAPI interface {
 	AcknowledgeSubscription(ctx context.Context, packageName, subscriptionID, token string, req *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error
 	AcknowledgeProduct(ctx context.Context, packageName, productID, token, developerPayload string) error
 	ConsumeProduct(ctx context.Context, packageName, productID, token string) error
+	Refund(ctx context.Context, packageName, orderID string) error
 }
 
 type Google struct {
@@ -42,6 +43,18 @@ func NewGoogle(serviceAccountJSON []byte, packageName string) (*Google, error) {
 
 func (g *Google) Route() Route  { return RouteGoogle }
 func (g *Google) AppID() string { return g.packageName }
+
+// Refund는 주문을 환불한다(orders.refund). go-iap는 revoke 인자를 주지 않는다.
+// 선반은 소비(consume)하는 상품이라 스토어 쪽에서 거둘 권한이 없고, 칸은 우리 서버가 주지 않았으므로 상관없다.
+func (g *Google) Refund(ctx context.Context, orderID string) error {
+	if orderID == "" {
+		return errors.New("google: 주문 ID가 없는 구매는 환불할 수 없다")
+	}
+	if err := g.api.Refund(ctx, g.packageName, orderID); err != nil {
+		return fmt.Errorf("google 환불 %s: %w", orderID, err)
+	}
+	return nil
+}
 
 const googleAcknowledged = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
 

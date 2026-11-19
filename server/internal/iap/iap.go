@@ -104,6 +104,14 @@ type Store interface {
 	Confirm(ctx context.Context, ref Ref, productID string, consume bool) error
 }
 
+// Refunder는 개발자가 거래를 환불할 수 있는 스토어다. 구글만 된다(Play Developer API orders.refund).
+// 애플은 개발자가 환불하는 API가 없다. 사용자가 애플에 직접 요청해야 한다.
+// 쓰는 곳: 두 기기에서 동시에 사서 그 해 책장의 유료 칸(3칸)을 넘은 선반 거래(ADR-0002 D1).
+type Refunder interface {
+	// Refund는 주문을 환불한다. orderID는 Purchase.TransactionID다(구글 주문 ID). 비어 있으면 오류다(프로모션 코드 구매 등).
+	Refund(ctx context.Context, orderID string) error
+}
+
 // Notice는 스토어가 보낸 알림에서 꺼낸 것이다. 알림 내용으로 상태를 판단하지 않는다.
 // "이 거래를 다시 물어보라"는 신호로만 쓰고, 상태는 Lookup·Subscription의 답으로 정한다.
 type Notice struct {

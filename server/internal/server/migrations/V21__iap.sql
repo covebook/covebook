@@ -23,6 +23,19 @@ CREATE INDEX iap_account_tokens_user_idx ON iap_account_tokens (user_id, created
 -- 연도 하나에 값 하나. 두 기기가 동시에 받아도 같은 값이 나온다
 CREATE UNIQUE INDEX iap_account_tokens_year_idx ON iap_account_tokens (user_id, year) WHERE year IS NOT NULL;
 
+-- 선반 결제 중 예약. 한 기기가 결제창을 띄우면 몇 분 동안 그 해 책장의 칸을 잡아 둔다.
+-- 두 기기에서 동시에 사서 3칸을 넘는 일을 결제 전에 막는다(D1). 결제가 끝나거나 취소되면 지우고, 앱이 꺼져 남은 줄은 expires_at이 지나면 무시한다.
+-- 원장이 아니라서 지워도 된다
+CREATE TABLE iap_shelf_reservations (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    year       INT NOT NULL CHECK (year BETWEEN 2000 AND 9999),
+    shelves    INT NOT NULL CHECK (shelves > 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX iap_shelf_reservations_user_idx ON iap_shelf_reservations (user_id, year, expires_at);
+
 -- 파는 상품. "어떤 상품이 무엇을 주는가"를 코드가 아니라 여기에 둔다(D21). 가격은 두지 않는다(스토어가 정한다, D22).
 CREATE TABLE iap_products (
     route       TEXT NOT NULL,
@@ -47,6 +60,10 @@ CREATE TABLE iap_purchases (
     user_id        BIGINT REFERENCES users(id) ON DELETE SET NULL,
     account_token  UUID,              -- 스토어가 돌려준 계정 연결 값. 없는 구매도 있다
     shelf_year     INT,               -- 추가 선반이 열린 연도 책장. 넣을 때 계정 연결 값에서 찾아 적는다(값을 지워도 남게). 구독·연도 모름은 NULL
+    -- 그 해 책장의 유료 칸(3칸)을 넘게 산 선반 거래. 연도가 정해질 때 한 번 정한다. 칸을 주지 않고 환불한다(D1)
+    over_cap       BOOLEAN NOT NULL DEFAULT false,
+    refund_requested_at TIMESTAMPTZ,  -- 넘게 산 거래의 환불을 스토어에 요청한 시각(구글). 애플은 개발자가 환불할 수 없어 비어 있다
+    refund_attempts INT NOT NULL DEFAULT 0,  -- 환불 요청을 시도한 횟수. 실패하면 정기 처리가 다시 시도한다
     product_id     TEXT   NOT NULL,
     kind           TEXT   NOT NULL CHECK (kind IN ('subscription', 'product')),
     env            TEXT   NOT NULL CHECK (env IN ('production', 'sandbox')),  -- 샌드박스도 받되 매출 집계에서 뺀다(D15)
@@ -63,6 +80,8 @@ CREATE TABLE iap_purchases (
 );
 CREATE INDEX iap_purchases_user_idx ON iap_purchases (user_id, kind);
 CREATE INDEX iap_purchases_original_idx ON iap_purchases (route, original_id);
+-- 넘게 산 구글 거래 중 환불을 아직 요청하지 못한 것을 다시 시도할 때 찾는다
+CREATE INDEX iap_purchases_over_cap_idx ON iap_purchases (created_at) WHERE over_cap AND refund_requested_at IS NULL AND state = 'paid';
 -- 확인을 못 마친 거래를 다시 시도할 때 찾는다
 CREATE INDEX iap_purchases_unconfirmed_idx ON iap_purchases (created_at) WHERE confirmed_at IS NULL AND state = 'paid';
 
