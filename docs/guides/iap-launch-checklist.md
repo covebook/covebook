@@ -1,0 +1,98 @@
+# 인앱결제 출시 점검표
+
+- 결제를 실제로 켤 때 무엇을 어떤 순서로 하는지 적은 표. 조사·설계는 `docs/reports/2026-11-19-iap-pitfalls.md`, ADR-0001~0003
+- 가격, 사업자 정보, 스토어 키 값은 여기에도 적지 않는다(공개 저장소). 이름만 적는다
+- 화면 번호(결제 1~24)는 `docs/screenshots/2026-11-19-iap/`의 그림 번호
+
+## 0. 먼저 정해야 하는 것
+
+- [ ] 구독이 여는 것: 유료 벽지·선반 색 목록 (정환)
+- [ ] 정책 이슈: #6 소모성, #31 샌드박스, #32 환불 회수, #33 월↔연, #34 유예
+- [ ] 청약철회 제한을 적용할지, 적용하면 구매 화면(T1·T2) 문구 (약관 초안의 확인 필요 항목)
+- [ ] 문의 처리 기한(약관 초안은 3영업일)
+- [ ] 개인정보 국외 이전 해당 여부 (처리방침 초안의 확인 필요 항목)
+
+## 1. 30일 전: 약관과 처리방침
+
+- [ ] 약관 유료 조항 확정 (`docs/legal/terms-draft-2026-11-18.md`의 "유료 서비스 조항")
+- [ ] 바뀐 약관을 앱에 공지. 회원에게 불리할 수 있는 변경이라 시행 30일 전 (약관 제3조)
+- [ ] 처리방침 결제 부분 확정 (`docs/legal/privacy-iap-draft-2026-11-19.md`). 웹 전문 반영은 결제를 켜는 날
+- [ ] 통신판매업 신고, 사업자 정보 확정 (앱에 보일 값은 서버 환경 변수로)
+
+## 2. 스토어 콘솔
+
+### App Store Connect
+
+- [ ] 유료 앱 계약, 세금, 은행 정보
+- [ ] 구독 그룹 하나에 월간·연간 구독 상품
+- [ ] 추가 선반 상품 (소모성/비소모성은 #6 결정에 따름)
+- [ ] App Store Server Notifications V2 주소: 운영 `…/iap/notifications/apple`, 샌드박스도 같은 주소
+- [ ] In-App Purchase 키(.p8) 발급 → 서버 환경 변수
+- [ ] 샌드박스 테스터 계정
+- [ ] 앱 개인정보: "구매 항목 › 구매 내역" 추가
+- [ ] 심사 메모: 결제 화면 가는 길, 시험 계정
+
+### Play Console
+
+- [ ] 판매자 계정(결제 프로필)
+- [ ] 구독 상품 하나에 요금제(base plan) 월간·연간. 할인·체험 제안은 만들지 않는다(앱이 제외하지만 혼란 방지)
+- [ ] 추가 선반 인앱 상품
+- [ ] 실시간 개발자 알림: Pub/Sub 주제 → 푸시 구독, 주소 `…/iap/notifications/google`, 인증 켬
+- [ ] 서비스 계정에 Play Console 권한(재무 데이터 보기, 주문·구독 관리) → 키 JSON
+- [ ] 라이선스 테스터
+- [ ] 데이터 보안: "금융 정보 › 구매 기록" 추가
+
+## 3. 서버
+
+- [ ] PR 머지 순서: #21 → #43·#44 → #46 → #47 → (갱신 예정 고지 PR). 머지 직전 마이그레이션 번호를 main과 맞춘다
+- [ ] 보관 기간이 지난 결제 기록 삭제 작업 (아직 없음. 처리방침 초안의 5년·3년)
+- [ ] 운영 DB `iap_products`에 상품 줄 넣기: `route`, `product_id`, `kind`, 구독은 `entitlement='plus'`, 선반은 `shelves`, `consume`
+- [ ] KoDeploy 환경 변수 (이름만)
+
+| 이름 | 무엇 |
+|---|---|
+| `IAP_ENABLED` | 1이면 결제 API를 연다 |
+| `IAP_ALLOW_SANDBOX` | 1이면 샌드박스 구매도 지급(TestFlight·심사). 끄면 준 권한도 사라짐 |
+| `IAP_APPLE_KEY_P8`, `IAP_APPLE_KEY_ID`, `IAP_APPLE_ISSUER_ID`, `IAP_APPLE_BUNDLE_ID` | 애플 키. 넷 다 넣거나 다 비운다 |
+| `IAP_GOOGLE_KEY_JSON`, `IAP_GOOGLE_PACKAGE` | 구글 키 |
+| `IAP_GOOGLE_PUSH_AUDIENCE`, `IAP_GOOGLE_PUSH_EMAIL` | 구글 알림 인증. 없으면 구글 알림 주소가 닫힘 |
+| `IAP_SELLER_JSON` | 앱에 보일 사업자 정보 |
+| `IAP_RENEWAL_NOTICE_DAYS` | 연 구독 갱신 예정 고지 며칠 전(기본 14) |
+| `ADMIN_TOKEN` | `GET /admin/iap/stats` |
+
+- [ ] KoDeploy 재배포 (push만으로는 반영 안 됨)
+- [ ] `/healthz`의 `iap`가 true인지
+- [ ] `GET /admin/iap/stats`로 숫자가 나오는지
+
+## 4. 샌드박스 시험
+
+- 앱: `--dart-define=IAP=true` 빌드, 서버: `IAP_ALLOW_SANDBOX=1`
+- 각 줄에서 화면과 서버 둘 다 확인. 서버는 `iap sweep:` 로그와 `/admin/iap/stats`
+
+| 할 일 | 떠야 하는 화면 | 서버에서 볼 것 |
+|---|---|---|
+| 요금제 화면 열기 | 결제 6 (미리 고른 것 없음) | |
+| 월간 고르고 구독 | 결제 7 → 결제 12 결제 완료 | 거래 줄, 구독 줄, `purchase_done` 고지 |
+| 결제 대기(구글 느린 카드) | 결제 17 | 대기 뒤 지급 |
+| 구독 관리 | 결제 1 | |
+| 스토어에서 해지 | 결제 2, 알림함에 해지 접수 | `auto_renew=false`, `cancel_scheduled` 고지 |
+| 결제 실패(샌드박스 갱신 실패) | 결제 3, 앱 열 때 결제 13 창 | `grace_until`, `payment_failed` 고지 |
+| 만료 | 앱 열 때 결제 14 창 | `state=inactive`, `expired` 고지 |
+| 연간 구독, 갱신 14일 전 | 기기 예약 알림, 알림함 갱신 예정 | `renewal_upcoming` 고지 (샌드박스는 시간이 빨라 확인 방법 따로) |
+| 구독 환불 | 앱 열 때 결제 15 창 | `state=revoked`, `subscription_refunded` 고지 |
+| 추가 선반 구매 | 결제 5 → 칸이 늘고 시트 닫힘 | 거래 줄, 확인(acknowledge·consume) 시각 |
+| 추가 선반 환불 | 앱 열 때 결제 16 창, 그 칸의 책이 내 책으로, 칸이 잠긴 모양 | `shelf_refunded` 고지 |
+| 구매 복원(다른 회원 계정) | 구독이 새 계정으로 옮겨짐 | 구독 줄 `user_id` 변경 |
+| 다른 기기 같은 계정 | 같은 상태, 알림 창은 한 기기에서만 한 번 | |
+| 구매 내역 | 결제 9 | `GET /iap/purchases` |
+| 사업자 정보 | 결제 10 | `IAP_SELLER_JSON` |
+| 구독 중 회원탈퇴 | 결제 11 안내 → 탈퇴 | 결제 기록 줄이 남고 `user_id`가 NULL |
+| 알림함 | 결제 23 점 → 결제 24 → 결제 21 | 읽음 처리 뒤 `unreadNotices=0` |
+| 서버를 잠시 끄고 구매 | 앱이 나중에 다시 보내 지급 | 끝내지 않은 거래가 다음 실행에 다시 옴 |
+
+## 5. 켜는 날
+
+- [ ] 처리방침 웹 전문 반영 (서버 재배포)
+- [ ] 앱 `IAP=true`로 빌드하는 설정을 CI에 반영 (TestFlight·Play 워크플로)
+- [ ] 심사 제출. 심사 기간에는 `IAP_ALLOW_SANDBOX=1`, 끝나면 정책(#31)에 따라
+- [ ] 첫 주는 매일 `/admin/iap/stats`: 대기·실패 알림, 확인 못 한 구매(구글 3일)
