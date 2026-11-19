@@ -29,6 +29,10 @@ func (f fakeGoogleAPI) ConsumeProduct(_ context.Context, pkg, id, token string) 
 	*f.calls = append(*f.calls, "consume "+pkg+" "+id+" "+token)
 	return f.err
 }
+func (f fakeGoogleAPI) Refund(_ context.Context, pkg, order string) error {
+	*f.calls = append(*f.calls, "refund "+pkg+" "+order)
+	return f.err
+}
 
 func (f fakeGoogleAPI) VerifySubscriptionV2(context.Context, string, string) (*androidpublisher.SubscriptionPurchaseV2, error) {
 	return f.sub, f.err
@@ -255,5 +259,17 @@ func TestGoogleVerify(t *testing.T) {
 	}
 	if _, err := g.Verify(KindProduct, ""); !errors.Is(err, ErrBadProof) {
 		t.Fatalf("빈 토큰: %v", err)
+	}
+}
+
+func TestGoogleRefund(t *testing.T) {
+	var calls []string
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{calls: &calls}}
+	if err := g.Refund(context.Background(), "GPA.1"); err != nil || len(calls) != 1 || calls[0] != "refund app.covebook GPA.1" {
+		t.Fatalf("환불 요청: %v %v", calls, err)
+	}
+	// 주문 ID가 없으면(프로모션 코드 구매) 부르지 않는다
+	if err := g.Refund(context.Background(), ""); err == nil || len(calls) != 1 {
+		t.Fatalf("주문 ID 없으면 오류: %v %v", calls, err)
 	}
 }
