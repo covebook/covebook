@@ -68,6 +68,7 @@
 - [ ] KoDeploy 재배포 (push만으로는 반영 안 됨)
 - [ ] `/healthz`의 `iap`가 true인지
 - [ ] `GET /admin/iap/stats`로 숫자가 나오는지
+- [ ] 선반 숫자: `shelfOverCap`(3칸을 넘은 거래), `shelfOverCapRefunded`(구글 자동 환불 요청), `shelfOverCapApple`(애플, 사용자 환불 요청 안내), `shelfNoYear`(연도를 모르는 거래). 0이 아니면 거래를 확인
 
 ## 4. 샌드박스 시험
 
