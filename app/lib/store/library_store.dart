@@ -1,4 +1,4 @@
-// 서재를 읽고 쓴다(DB → 책·자리). app/src/store의 library-store·placement-store가 하던 일 가운데
+// 서재를 읽고 쓴다(DB → 책·자리). 옛 RN 앱(커밋 4f9e1d9) app/src/store의 library-store·placement-store가 하던 일 가운데
 // 책장을 그리는 데 필요한 읽기만 먼저 옮긴 것. 숨긴 책(hidden_at: 지웠지만 연도 책장에 남긴 책)은 화면용 서재에서 뺀다. 쓰기·동기화는 아직
 library;
 

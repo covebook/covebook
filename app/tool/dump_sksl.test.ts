@@ -130,7 +130,7 @@ import '../scene_config/skin.dart' show skinLight;
 ${calDart}
 `);
   const caseJson = {
-    note: '지금 앱의 빛 모델에서 뽑은 줄 여섯의 굽기 입력(flutter/tool/dump_sksl.test.ts). 손으로 고치지 말 것',
+    note: '옛 RN 앱 빛 모델(+ tool/rn_light.patch)에서 뽑은 줄 여섯의 굽기 입력(app/tool/dump_sksl.test.ts). 손으로 고치지 말 것',
     gridPasses: GRID_PASSES,
     gridN: GRID_N,
     envNx: ENV_NX,

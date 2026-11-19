@@ -1,5 +1,5 @@
 // 책을 빛 계산용 상자로 바꾸고 셰이더가 읽을 숫자 묶음으로 담는다.
-// app/src/domain/light-model.ts의 Box·boxOf·withCovers·packBoxes를 옮긴 것(식 그대로).
+// 옛 RN 앱(커밋 4f9e1d9) app/src/domain/light-model.ts의 Box·boxOf·withCovers·packBoxes를 옮긴 것(식 그대로).
 library;
 
 import 'dart:math' as math;

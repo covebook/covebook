@@ -1,5 +1,5 @@
 #version 460 core
-// 이 파일은 tool/gen_shaders.sh 가 만든다. 손으로 고치지 말 것(출처: ../app/src/ui/scene-light-sksl.ts)
+// 이 파일은 tool/gen_shaders.sh 가 만든다. 손으로 고치지 말 것(출처: 옛 RN 앱 커밋 4f9e1d9의 app/src/ui/scene-light-sksl.ts + tool/rn_light.patch, tool/README.md)
 #include <flutter/runtime_effect.glsl>
 
 precision highp float;

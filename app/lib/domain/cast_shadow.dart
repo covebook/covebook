@@ -1,5 +1,5 @@
 // 실제 그림자: 창빛 방향으로 3D 점을 받는 면(벽 z = shelfDepth, 판 윗면 y = 0, 판 앞면 z = −shelfFront)에 떨어뜨린다.
-// app/src/domain/cast-shadow.ts를 옮긴 것. 광원은 면 밝기와 같은 방향이고, 면광원이라 가리는 물체에서 멀수록 번진다.
+// 옛 RN 앱(커밋 4f9e1d9) app/src/domain/cast-shadow.ts를 옮긴 것. 광원은 면 밝기와 같은 방향이고, 면광원이라 가리는 물체에서 멀수록 번진다.
 // 연속 흐림을 빛 길이 구간(bands)으로 나눠 구간마다 가운데 거리로 번지게 그린다
 library;
 

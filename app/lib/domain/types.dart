@@ -1,4 +1,4 @@
-// 서재의 값들(책·자리). app/src/domain/types.ts에서 책장을 그리는 데 쓰는 것만 옮긴 것.
+// 서재의 값들(책·자리). 옛 RN 앱(커밋 4f9e1d9) app/src/domain/types.ts에서 책장을 그리는 데 쓰는 것만 옮긴 것.
 library;
 
 /// 책 높이 등급

@@ -1,4 +1,4 @@
-// 보기 구도(원근 카메라). app/src/domain/camera.ts·ui/shelf/metrics.ts에서 빛·굽기에 쓰는 값만 먼저 옮긴 것.
+// 보기 구도(원근 카메라). 옛 RN 앱(커밋 4f9e1d9) app/src/domain/camera.ts·ui/shelf/metrics.ts에서 빛·굽기에 쓰는 값만 먼저 옮긴 것.
 // 줄마다 원근: 눈은 줄 앞 viewDist만큼 떨어져 있고, 보기 각(아래로 내려다보는 각)은 viewPitchMin~Max.
 library;
 
