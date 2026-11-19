@@ -4,7 +4,6 @@
 // 장면은 옆으로 밀어 바꾼다(접었을 때 아래 점이 지금 장면). 소리만 듣기(soundOnly)는 타이머 없이 소리만: 독서 시간으로 기록하지 않는다
 library;
 
-import '../../store/finish_reading.dart' show resumeReading;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -24,7 +23,7 @@ import '../bookmark/book_picker.dart';
 import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';
 import 'play_icons.dart';
-import 'start_book.dart' show startNewReading;
+import 'start_book.dart' show resumeReadingOrTell, startNewReading;
 import 'switch_book.dart';
 
 const _light = NightColors.ink;
@@ -188,7 +187,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     } else if (_reading.active == null) {
       _start();
     } else {
-      _reading.running ? _reading.pause() : unawaited(resumeReading());
+      _reading.running ? _reading.pause() : unawaited(resumeReadingOrTell(context));
     }
   }
 
@@ -220,13 +219,14 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   }
 
   String get _volumeText => _settings.muted && _dragVolume == null ? '음소거' : '${((_dragVolume ?? _settings.volume) * 100).round()}%';
+  // 일시정지에서 이어 가는 것은 '이어서 읽기'('다시 읽기'는 완독한 책 재독에만, DESIGN 9장), 시작은 앱 공통 '읽기 시작'
   String get _playLabel => widget.soundOnly
       ? (_audio.playing ? '소리 멈추기' : '소리 재생')
       : _reading.active == null
-          ? '독서 시작'
+          ? '읽기 시작'
           : _reading.running
               ? '일시정지'
-              : '다시 읽기';
+              : '이어서 읽기';
 
   Future<void> _pickBook() async {
     final r = await pickBook(context, lib, allowNone: true);
@@ -257,7 +257,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           // 직접 정하기(2026-11-16 사용자 '사용자가 시간 지정은 못 하나'): 15·30·60분 밖의 목표면 이 칸이 골라진 상태로 그 시간을 보인다
           final custom = goal != null && !_goals.contains(goal);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            Choice(label: '목표 없이 읽기', selected: goal == null, onPress: () => pick(null)),
+            // 목표가 없는 상태는 조작부 칸 · 화면 읽기와 같은 말 '목표 없음'
+            Choice(label: '목표 없음', selected: goal == null, onPress: () => pick(null)),
             const SizedBox(height: Space.s),
             if (big)
               for (final (i, t) in tiles.indexed) ...[if (i > 0) const SizedBox(height: Space.s), t]
@@ -293,7 +294,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           builder: (ctx, _) {
             final size = MediaQuery.sizeOf(ctx);
             final oneColumn = size.width < 340 || MediaQuery.textScalerOf(ctx).scale(10) >= 15;
-            final tileW = oneColumn ? size.width - 48 : (size.width - 48 - 12) / 2;
+            final tileW = oneColumn ? size.width - 2 * Space.page : (size.width - 2 * Space.page - Space.m) / 2;
             return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
               if (oneColumn)
                 for (final (i, sc) in scenes.indexed) ...[if (i > 0) const SizedBox(height: Space.m), _sceneTile(sc, tileW, oneColumn)]
@@ -310,10 +311,13 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   Widget _sceneTile(SceneInfo sc, double tileW, bool oneColumn) {
     final on = _settings.scene == sc.id;
     final posterW = tileW - 16 - 3;
+    // 화면 읽기는 칸 이름 한 번(안쪽 같은 이름 글자는 뺀다)
     return Semantics(
       selected: on,
       button: true,
       label: sceneName(sc.id),
+      onTap: () => _chooseScene(sc.id),
+      excludeSemantics: true,
       child: GestureDetector(
         onTap: () => _chooseScene(sc.id),
         child: Container(
@@ -321,7 +325,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           padding: const EdgeInsets.fromLTRB(Space.s, Space.s, Space.s, Space.m),
           decoration: BoxDecoration(
             color: AppColors.bg,
-            borderRadius: BorderRadius.circular(14),
+            // 고르는 큰 칸 모서리(Choice와 같은 14)
+            borderRadius: BorderRadius.circular(Shape.choice),
             border: Border.all(color: on ? AppColors.accent : AppColors.line, width: 1.5),
           ),
           child: Stack(children: [
@@ -340,17 +345,18 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     );
   }
 
-  /// 소리 크기: 이름과 % 한 줄, 아래 음소거 원 + 막대
+  /// 소리 크기: 이름과 % 한 줄, 아래 음소거 원 + 막대.
+  /// 이름은 시트 안 묶음 이름(SheetLabel과 같은 rowStrong · 머리 · 아래 12, 2026-11-19 공통 규칙). 오른쪽 % 자리가 있어 SheetLabel을 바로 쓰지 못한다
   List<Widget> _volumeRows() => [
         Padding(
           padding: const EdgeInsets.only(top: Space.xl),
           child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-            Expanded(child: Text('소리 크기', style: AppType.label)),
+            Expanded(child: Semantics(header: true, child: Text('소리 크기', style: AppType.rowStrong))),
             Text(_volumeText, style: AppType.sub.tnum),
           ]),
         ),
         Padding(
-          padding: const EdgeInsets.only(top: Space.xs),
+          padding: const EdgeInsets.only(top: Space.m),
           child: Row(children: [
             Semantics(
               button: true,
@@ -401,11 +407,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
         padding: const EdgeInsets.only(top: Space.xl),
         decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.line, width: Hairline.of(ctx)))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(active ? '소리' : '소리만 듣기', style: AppType.label),
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xs),
-            child: Text(active ? '소리는 독서 타이머와 따로 켜고 꺼요. 읽은 시간은 그대로예요.' : '시간을 재지 않고 소리만 들어요. 독서 시간에는 쌓이지 않아요.', style: AppType.sub),
-          ),
+          // 시트 안 묶음 이름(2026-11-19 공통 규칙: label 16이었다)
+          SheetLabel(active ? '소리' : '소리만 듣기'),
+          WordText(active ? '소리는 독서 타이머와 따로 켜고 꺼요. 읽은 시간은 그대로예요.' : '시간을 재지 않고 소리만 들어요. 독서 시간에는 쌓이지 않아요.', style: AppType.sub),
           Padding(
             padding: const EdgeInsets.only(top: Space.m),
             // 시트 안 단추는 l(2026-11-19 공통 규칙)
@@ -491,7 +495,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           Semantics(
             container: true,
             button: true,
-            label: active ? '나가기(독서는 계속)' : '책장으로',
+            // 장면은 읽기 탭 위에 열린다: 읽는 중이 아니면 앱 공통 뒤로 이름
+            label: active ? '나가기(독서는 계속)' : '뒤로',
             onTap: _leave,
             excludeSemantics: true,
             child: Pressable(onPress: _leave, child: const SizedBox(width: 52, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: 28, color: _light)))),
@@ -556,7 +561,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                       : _Side(icon: 'Timer', text: goalMin != null ? '목표 ${minutesLabel(goalMin)}' : '목표 없음', label: '목표 시간, ${goalMin != null ? minutesLabel(goalMin) : '목표 없음'}', onPress: _goalSheet),
                 ),
               ]),
-              if (_audio.error != null) Padding(padding: const EdgeInsets.only(top: Space.m), child: Text(_audio.error!, style: AppType.sub.copyWith(color: AppColors.danger))),
+              // 소리 재생 실패: 예외 원문(Ambient.error) 대신 사람 말과 다시 할 곳(DESIGN 9장 실패 알림, 원문은 로그로)
+              if (_audio.error != null) const NoticeText('소리를 재생하지 못했어요. 분위기에서 다시 켜 주세요.', error: true),
               // 소리만 듣다가 기록 시작: 같은 장면에 타이머를 띄운다
               if (soundOnly)
                 Padding(
@@ -582,9 +588,13 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     final bookId = _bookId;
     return Row(children: [
       Expanded(
+        // 화면 읽기는 줄 하나로 한 번(안쪽 제목 · 저자를 '책 변경' 뒤에 따로 또 읽었다)
         child: Semantics(
+          container: true,
           button: true,
-          label: bookId != null ? '책 변경' : '책 연결하기',
+          label: bookId != null ? '책 변경, ${bookTitle(lib, bookId) ?? ''}' : '책 연결하기',
+          onTap: _pickBook,
+          excludeSemantics: true,
           child: Pressable(
             onPress: _pickBook,
             child: ConstrainedBox(
@@ -640,7 +650,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     return Semantics(
       container: true,
       button: true,
-      label: '목표 시간 설정, ${goalMin != null ? minutesLabel(goalMin) : '자유롭게 시간 재기'}',
+      label: '목표 시간 설정, ${goalMin != null ? minutesLabel(goalMin) : '목표 없음'}',
       onTap: _goalSheet,
       child: GestureDetector(
         excludeFromSemantics: true,
@@ -670,9 +680,12 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
               ]),
             ),
-            // 오류 글은 sub 빨강(2026-11-19 공통 규칙: caption이었다)
+            // 오류 글은 앱 공통 안내 · 오류 글(NoticeText). 시간 아래 한 줄('일시정지' · '목표') 밑에서 시작한다(그 줄과 겹쳐 그려졌다)
             if (_reading.error != null)
-              Text('독서 시간을 기기에 저장하지 못했어요. 저장 공간을 확인해 주세요.', textAlign: TextAlign.center, style: AppType.sub.copyWith(color: AppColors.danger)),
+              Padding(
+                padding: EdgeInsets.only(top: _captionLine(context) - 2),
+                child: const NoticeText('독서 시간을 기기에 저장하지 못했어요. 저장 공간을 확인해 주세요.', error: true, center: true),
+              ),
           ]),
         ),
       ),
@@ -709,7 +722,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
         right: 0,
         bottom: insets.bottom + 18 - _hitPad,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          // 장면 점(지금 장면). 점을 눌러도 바뀐다
+          // 장면 점(지금 장면, 표시만). 바꾸기는 옆으로 밀기 · 화면 읽기 위아래 조절.
+          // 7 점을 누르던 것은 뺐다: 누르는 자리 48이 안 되고(DESIGN 15장) 앱의 다른 넘김 점(PageDots)도 표시만 한다
           Semantics(
             label: '장면, ${sceneName(scene)}',
             hint: '옆으로 밀어 장면을 바꿔요',
@@ -720,14 +734,10 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 for (final (i, sc) in scenes.indexed) ...[
                   if (i > 0) const SizedBox(width: 10),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _chooseScene(sc.id),
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: sc.id == scene ? NightColors.ink : const Color.fromRGBO(246, 239, 230, 0.42)),
-                    ),
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: sc.id == scene ? NightColors.ink : const Color.fromRGBO(246, 239, 230, 0.42)),
                   ),
                 ],
               ]),
@@ -816,7 +826,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   }
 }
 
-final _dockTime = AppType.clock.copyWith(color: NightColors.ink, shadows: _shade);
+/// 접은 장면 시간 글자(모듈 값은 getter: 글자 크기를 화소에 맞추는 값이 앱이 뜬 뒤 정해진다, theme.dart rnPx)
+TextStyle get _dockTime => AppType.clock.copyWith(color: NightColors.ink, shadows: _shade);
 
 /// 재는 동안 1초마다 builder만 다시 그린다(지금까지 잰 시간을 넘긴다). 읽기 장면 시간 · 읽기 탭 · 작은 타이머가 같이 쓴다
 /// (같은 1초 타이머가 세 벌 있었다, 2026-11-19). 다시 그릴 범위만 감싼다

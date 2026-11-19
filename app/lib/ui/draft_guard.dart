@@ -7,12 +7,13 @@ import 'alert.dart';
 /// 고치는 화면(갈피 · 감상 · 책 정보 · 장정 · 독서 기록 수정)은 [DraftGuard.edit]: '고친 내용을 버릴까요?' + '계속 수정'.
 /// onLeave가 없으면 화면(경로)을 닫고, 있으면(갈피 수정처럼 같은 화면 안 단계) 그것을 부른다
 class DraftGuard extends StatelessWidget {
-  const DraftGuard({super.key, required this.dirty, required this.child, this.title = '쓰던 내용을 버릴까요?', this.keep = '계속 쓰기', this.onLeave});
+  const DraftGuard({super.key, required this.dirty, required this.child, this.title = '쓰던 내용을 버릴까요?', this.keep = '계속 쓰기', this.body = '지금 나가면 저장되지 않아요.', this.onLeave});
 
   /// 고치는 화면
   const DraftGuard.edit({super.key, required this.dirty, required this.child, this.onLeave})
       : title = '고친 내용을 버릴까요?',
-        keep = '계속 수정';
+        keep = '계속 수정',
+        body = '지금 나가면 저장되지 않아요.';
 
   /// 나갈 때 물을지(지금 값을 읽는다: 칸을 고쳐도 화면을 다시 그리지 않는 곳이 있다)
   final bool Function() dirty;
@@ -20,6 +21,9 @@ class DraftGuard extends StatelessWidget {
 
   /// 머무는 쪽 단추 이름(취소 자리)
   final String keep;
+
+  /// 확인창 본문(찾아 둔 목록처럼 '저장'이 아닌 화면은 그에 맞게)
+  final String body;
   final VoidCallback? onLeave;
   final Widget child;
 
@@ -31,7 +35,7 @@ class DraftGuard extends StatelessWidget {
           // 저장 뒤 닫기·버리기는 Navigator.pop이라 여기를 지나지 않는다(pop은 canPop과 상관없이 닫는다)
           final leave = onLeave ?? () => Navigator.of(context).pop();
           if (!dirty()) return leave();
-          appAlert(context, title, '지금 나가면 저장되지 않아요.', [
+          appAlert(context, title, body, [
             AlertButton(keep, style: AlertStyle.cancel),
             AlertButton('버리기', style: AlertStyle.destructive, onPress: leave),
           ]);

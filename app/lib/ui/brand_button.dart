@@ -1,4 +1,4 @@
-// 로그인 단추(카카오·Apple·Google): 로그인 화면과 백업 및 복원 '계정 연결'이 함께 쓴다(2026-11-16)
+// 로그인 단추(카카오·Apple·Google): 로그인 화면이 쓴다(2026-11-16 시안, DESIGN 16장 예외)
 library;
 
 import 'package:flutter/material.dart';

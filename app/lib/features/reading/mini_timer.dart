@@ -13,10 +13,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../../db/kv_store.dart';
+import '../../domain/library.dart' show formatDurationPrecise;
 import '../../domain/reading.dart';
 import '../../store/mini_timer_store.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
+import '../../ui/alert.dart';
+import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'play_icons.dart';
@@ -29,11 +32,9 @@ const _tabs = ['/', '/books', '/records', '/stats'];
 
 bool miniTimerHidden(String path) => path == '/read' || path.startsWith('/reading');
 
-String _speak(num ms) {
-  final t = (ms / 1000).floor();
-  final h = t ~/ 3600, m = (t % 3600) ~/ 60, s = t % 60;
-  return '${h > 0 ? '$h시간 ' : ''}$m분 $s초';
-}
+/// 화면 읽기용 시간(초까지): 공용 formatDurationPrecise('20초' · '1분 20초' · '1시간 2분 3초', DESIGN 4장).
+/// 보이는 시계(clock)처럼 초 아래는 버린다(읽어 주는 값과 보이는 값이 1초 어긋나지 않게)
+String _speak(num ms) => formatDurationPrecise((ms / 1000).floor() * 1000);
 
 class MiniTimer extends StatefulWidget {
   const MiniTimer({super.key, required this.navigator});
@@ -81,7 +82,7 @@ class _MiniTimerState extends State<MiniTimer> {
     final mq = MediaQuery.of(context);
     final keyboard = mq.viewInsets.bottom > 0;
     final path = _place.path;
-    // hidden(책장 꾸미기 조작부)은 탭 화면이 맨 위일 때만: 꾸미기에서 연 선반·벽지 화면에서는 보인다(2026-11-16 QA 현우 F9)
+    // hidden(책장 꾸미기 조작부)은 탭 화면이 맨 위일 때만: 그 위에 밀어 넣은 화면에서는 보인다(2026-11-16 QA 현우 F9)
     final hidden = _reading.active == null || _reading.stale || miniTimerHidden(path) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
     // 화면이 바뀌거나 숨으면 접어 둔다(다시 나타날 때 늘 원)
     final key = '$path|$hidden';
@@ -115,7 +116,7 @@ class _MiniTimerState extends State<MiniTimer> {
     final speed = reduce ? Duration.zero : const Duration(milliseconds: 180);
     return Stack(children: [
       // 펼친 동안 바깥을 누르면 접는다(아래 화면은 눌리지 않는다)
-      if (_open) Positioned.fill(child: Semantics(label: '미니 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
+      if (_open) Positioned.fill(child: Semantics(button: true, label: '작은 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
       Positioned(
         right: right,
         bottom: bottom,
@@ -196,9 +197,10 @@ class _MiniTimerState extends State<MiniTimer> {
           divider(),
           Semantics(
             button: true,
-            label: running ? '독서 일시정지' : '독서 다시 시작',
+            // 다시 재기는 앱 공통 말 '이어서 읽기'(DESIGN 9장)
+            label: running ? '독서 일시정지' : '이어서 읽기',
             child: Pressable(
-              onPress: () => running ? _reading.pause() : unawaited(resumeReading()),
+              onPress: () => running ? _reading.pause() : unawaited(_resume()),
               child: SizedBox(
                 width: 52,
                 height: miniTimerSize,
@@ -214,6 +216,14 @@ class _MiniTimerState extends State<MiniTimer> {
     );
   }
 
+  /// 이어서 읽기. 지난 몫(어제 멈춘 독서)을 저장하지 못하면 확인창으로 알린다(2026-11-19 공통 규칙: 눌러도 아무 일 없었다)
+  Future<void> _resume() async {
+    final e = await resumeReading();
+    final ctx = widget.navigator.currentContext;
+    if (e == null || ctx == null || !ctx.mounted) return;
+    appAlert(ctx, '이어서 읽지 못했어요', '지난 독서 기록은 그대로 있어요. 다음에 읽기를 시작하면 그 기록부터 저장해요. ${errorText(e)}');
+  }
+
   /// 오른쪽 시간(원): 누르면 펼치고 접는다
   Widget _timeButton(String label, num ms, bool running, double timeW, double hair) => Semantics(
         container: true,
@@ -222,9 +232,9 @@ class _MiniTimerState extends State<MiniTimer> {
         label: '독서 시간 ${_speak(ms)}${running ? '' : ', 일시정지'}. 눌러서 ${_open ? '접기' : '펼치기'}',
         onTap: () => setState(() => _open = !_open),
         excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _open = !_open),
+        // 누르는 동안 옅어진다(펼친 단추와 같은 Pressable, 2026-11-19 공통 규칙: 눌림 표시가 없었다)
+        child: Pressable(
+          onPress: () => setState(() => _open = !_open),
           child: SizedBox(
             width: timeW - hair * 2,
             height: miniTimerSize - hair * 2,

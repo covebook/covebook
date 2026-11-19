@@ -99,7 +99,7 @@ void main() {
     final n = deleteSummary(lib, ['b1']);
     expect(n.sessions, 2);
     expect(n.ms, 137000);
-    expect(deleteNote(n), '독서 시간 2분은 책 없이 읽은 시간으로 통계에 남아요.\n되돌릴 수 없어요.');
+    expect(deleteNote(n), '독서 시간 2분은 책 없이 읽기 기록으로 통계에 남아요.\n되돌릴 수 없어요.');
   });
 
   group('꾸미기(영숙 F7, 2026-11-19 사용자 시안: 위 탭 · 아래 칸)', () {

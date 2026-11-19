@@ -92,7 +92,7 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('저장했어요 창: 사용자 시안 그대로(표지 72 · 제목 · 저자, \'N분 기록했어요\'는 표지 아래 끝), 책 없는 기록은 \'책 없이 읽은 시간\'', (t) async {
+  testWidgets('저장했어요 창: 사용자 시안 그대로(표지 72 · 제목 · 저자, \'N분 기록했어요\'는 표지 아래 끝), 책 없는 기록은 \'책 없이 읽기\'(DESIGN 3-1)', (t) async {
     await pump(t, Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showSavedDialog(c, bookId: 'bk1', sessionId: 's1'), child: const Text('열기')))));
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
@@ -109,7 +109,7 @@ void main() {
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
     expect(plainStarts('45초'), findsOneWidget);
-    expect(find.text('책 없이 읽은 시간'), findsOneWidget);
+    expect(find.text('책 없이 읽기'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 }

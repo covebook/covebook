@@ -65,7 +65,7 @@ String hourLabel(int h) {
   return h < 12 ? '오전 $h시' : '오후 ${h - 12}시';
 }
 
-/// 요일 이름(일요일 시작). 앱 안 요일 글자는 모두 이것('일요일'은 뒤에 '요일'을 붙인다)
+// 요일 이름(일요일 시작)은 kit weekdays 하나('일요일'은 뒤에 '요일'을 붙인다)
 
 /// 요일별 읽은 시간(일~토, 시작한 날 기준)
 List<num> weekdayBars(List<Session> sessions) {
@@ -220,6 +220,9 @@ String tickLabel(int min) => min >= 60 && min % 60 == 0 ? '${min ~/ 60}시간' :
 
 /// 가로 글자: 월 보기 1·5·10·15·20·25·마지막 날, 연도 보기 1·3·5·7·9·11·12월
 List<int> xLabels(int count) => count == 12 ? const [1, 3, 5, 7, 9, 11, 12] : [1, 5, 10, 15, 20, 25, count];
+
+/// 달 이름 '2026년 11월'(통계 달 넘기기 · 연도 보기에서 고른 달. 화면에서 따로 조립하지 않는다, 공통 규칙 4장)
+String monthTitle(int y, int m) => '$y년 $m월';
 
 /// '2026-10-31' → '10월 31일 토요일'(요일 이름은 [weekdays] 하나)
 String dayTitle(String day) {

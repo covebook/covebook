@@ -15,11 +15,12 @@ import 'package:flutter/material.dart';
 import '../../services/qa_probe.dart';
 import '../../domain/library.dart' show authorLine;
 import '../../domain/ocr_text.dart';
-import '../../services/photos.dart' show PhotoFail, PhotoOk, deniedMessage;
+import '../../services/photos.dart' show PhotoFail, PhotoOk;
 import '../../services/text_recognition.dart';
 import '../../store/files.dart' show keepImage;
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
+import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'book_picker.dart' show pickBook;
@@ -68,7 +69,8 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
   String? _generated;
   bool _modeNote = false; // 고친 글이 있는데 방식을 바꿨다: '그대로 둬요·다시 나누기' 안내
   int? _photoPage; // 사진에서 찾아 쪽수 칸에 넣은 쪽번호
-  String? _msg, _saveError;
+  ({String text, bool error})? _msg; // 사진을 넣지 못한 이유(권한 거부 · 자르기 취소는 회색 안내, 오류는 빨강)
+  String? _saveError;
   bool _saving = false;
 
   /// 문장 칸(인식 결과로 채울 때 바꾼다)
@@ -90,7 +92,7 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
     setState(() => _recog = (uri: p.uri, state: 'running', result: null, empty: false));
     try {
       final r = await recognizeText(p.uri.startsWith('file://') ? Uri.parse(p.uri).toFilePath() : p.uri);
-      // '다시 읽기'가 눌린 게 보이게 읽는 중 표시를 잠깐은 둔다(QA F15: 같은 결과가 바로 떠 눌렸는지 몰랐다)
+      // '다시 인식'이 눌린 게 보이게 읽는 중 표시를 잠깐은 둔다(QA F15: 같은 결과가 바로 떠 눌렸는지 몰랐다)
       final wait = const Duration(milliseconds: 700) - DateTime.now().difference(started);
       if (wait > Duration.zero) await Future<void>.delayed(wait);
       if (!mounted || _recog?.uri != p.uri) return;
@@ -125,9 +127,8 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
     if (!mounted) return;
     switch (r) {
       case PhotoFail(:final reason, :final message):
-        if (reason == 'denied') setState(() => _msg = deniedMessage(from));
-        if (reason == 'error') setState(() => _msg = '사진을 가져오지 못했어요. ${message ?? ''}');
-        if (reason == 'crop') setState(() => _msg = cropCanceledMessage);
+        final notice = photoFailNotice(from, reason, message);
+        if (notice != null) setState(() => _msg = notice);
       case PhotoOk(:final uri, :final width, :final height):
         final p = (uri: uri, ratio: width != null && height != null && height > 0 ? width / height : null);
         setState(() {
@@ -210,9 +211,10 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
       Navigator.of(context).pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/bookmark'), builder: (_) => BookmarkDetailScreen(id: id)));
     } catch (e) {
       // 적은 글·사진은 이 화면에 그대로 있다
+      // 공통 규칙 11장: 예외 원문 대신 errorText(다시 시도 안내가 들어 있다)
       if (mounted) {
         setState(() {
-          _saveError = '저장하지 못했어요. 적은 내용과 사진은 그대로 있어요. 다시 시도해 주세요. ($e)';
+          _saveError = '갈피를 저장하지 못했어요. 적은 내용과 사진은 그대로 있어요. ${errorText(e)}';
           _saving = false;
         });
       }
@@ -233,9 +235,9 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
       dirty: () => _dirty,
       child: Screen(
         title: '갈피 남기기',
-        // 책을 안 골라 저장이 꺼졌으면 이유를 보인다(QA F15)
+        // 책을 안 골라 저장이 꺼졌으면 단추 바로 위에 이유를 보인다(QA F15, 공통 규칙 9장 NoticeText · 마침표)
         footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (_bookId == null) Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('책을 골라야 저장할 수 있어요', textAlign: TextAlign.center, style: AppType.sub)),
+          if (_bookId == null) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('책을 골라야 저장할 수 있어요.', center: true)),
           Btn(label: '갈피 저장', size: 'l', onPress: _save, busy: _saving, disabled: !_canSave),
         ]),
         children: [
@@ -246,7 +248,7 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             sub: e != null && e.authors.isNotEmpty ? authorLine(e.authors) : null,
             placeholder: '책을 골라 주세요',
             onPress: () async {
-              final r = await pickBook(context, lib, addNew: true);
+              final r = await pickBook(context, lib, addNew: true, current: (id: _bookId));
               if (r.picked && r.id != null && mounted) setState(() => _bookId = r.id);
             },
           ),
@@ -254,29 +256,30 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: Space.l),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Padding(padding: const EdgeInsets.only(bottom: Space.s), child: Text('사진을 찍으면 글자를 바로 읽어 아래에 채워요', style: AppType.sub)),
+                Padding(padding: const EdgeInsets.only(bottom: Space.s), child: WordText('사진을 찍으면 글자를 바로 읽어 아래에 채워요.', style: AppType.sub)),
                 Row(children: [
                   Expanded(child: Btn(label: '페이지 찍기', kind: 'secondary', size: 's', onPress: () => _fromPhoto('camera'))),
                   const SizedBox(width: Space.s),
                   Expanded(child: Btn(label: '사진 고르기', kind: 'secondary', size: 's', onPress: () => _fromPhoto('library'))),
                 ]),
-                if (_msg != null) NoticeText(_msg!, error: true),
+                if (_msg case final msg?) NoticeText(msg.text, error: msg.error),
               ]),
             )
           else
             _photoSection(context, photo),
           if (!_asPhoto)
+            // 갈피 수정과 같은 칸(form_parts)
             Field(
               key: ValueKey(('text', _textVersion)),
-              label: '문장',
+              label: markTextLabel,
               value: _text,
               onChange: (t) {
                 _text = t;
                 setState(() {});
               },
-              placeholder: '마음에 남은 문장을 옮겨 적어 주세요',
+              placeholder: markTextHint,
               multiline: true,
-              minHeight: 160,
+              minHeight: markTextHeight,
             ),
           if (photo != null && !_photoOnly) ListItem(label: '원본 사진도 보관', right: Toggle(label: '원본 사진도 보관', value: _keepPhoto, onChange: (v) => setState(() => _keepPhoto = v))),
           Field(
@@ -287,7 +290,7 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             number: true,
             hint: _photoPage != null && _page.trim() == '$_photoPage' ? '사진의 쪽번호를 넣었어요' : null,
           ),
-          Field(label: '한 줄 메모 (선택)', value: _memo, onChange: (t) => setState(() => _memo = t), placeholder: '나만 보는 메모예요. 공유 이미지에는 넣지 않아요', multiline: true, minHeight: 80),
+          Field(label: markMemoLabel, value: _memo, onChange: (t) => setState(() => _memo = t), placeholder: markMemoHint, multiline: true, minHeight: markMemoHeight),
           if (_saveError != null) NoticeText(_saveError!, error: true),
         ],
       ),
@@ -311,14 +314,14 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             _modeNote = false;
           }),
         ),
-        if (_msg != null) NoticeText(_msg!, error: true, center: true),
+        if (_msg case final msg?) NoticeText(msg.text, error: msg.error, center: true),
         ListItem(label: '사진만 저장', sub: '글자 없이 사진 그대로 남겨요', right: Toggle(label: '사진만 저장', value: _photoOnly, onChange: _choosePhotoOnly)),
         if (!_photoOnly) ..._recogParts(photo),
       ]),
     );
   }
 
-  /// 글자 읽기: 읽는 중 · 실패(다시 읽기) · 빈 결과(사진만 저장) · 읽은 결과와 줄 나누기 방식
+  /// 글자 읽기: 읽는 중 · 실패(다시 인식) · 빈 결과(사진만 저장) · 읽은 결과와 줄 나누기 방식
   List<Widget> _recogParts(_Photo photo) {
     final recog = _recog;
     final empty = recog?.state == 'done' && recog!.empty;
@@ -330,12 +333,13 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
         Padding(
           padding: const EdgeInsets.only(top: Space.s),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const NoticeText('글자를 읽지 못했어요. 다시 읽거나, 직접 적거나, 사진만 저장할 수 있어요.', error: true),
+            // 공통 규칙 9장: 글자 인식을 다시 하는 것은 '다시 인식'('다시 읽기'는 재독)
+            const NoticeText('글자를 읽지 못했어요. 다시 인식하거나, 직접 적거나, 사진만 저장할 수 있어요.', error: true),
             const SizedBox(height: Space.s),
-            Btn(label: '다시 읽기', kind: 'secondary', size: 's', onPress: () => _runOcr(photo)),
+            Btn(label: '다시 인식', kind: 'secondary', size: 's', onPress: () => _runOcr(photo)),
           ]),
         ),
-      // 빈 결과는 같은 사진을 다시 읽어도 같다: 다시 읽기 대신 사진만 저장(다시 찍기·다른 사진은 사진 아래 칩, QA F15)
+      // 빈 결과는 같은 사진을 다시 읽어도 같다: 다시 인식 대신 사진만 저장(다시 찍기·다른 사진은 사진 아래 칩, QA F15)
       if (empty)
         Padding(
           padding: const EdgeInsets.only(top: Space.s),

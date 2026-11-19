@@ -10,9 +10,13 @@ import '../../domain/reading.dart' show newId;
 import '../../services/community.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
+import '../../ui/draft_guard.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../book/add_book_screen.dart' show openAddBook;
+import '../book/labels.dart' show dateShort;
+import 'book_reviews.dart' show reviewStarSize;
 import '../settings/backup_screen.dart' show openBackup;
 import '../stats/session_edit_screen.dart' show openSessionEdit;
 import 'community_widgets.dart';
@@ -137,10 +141,11 @@ class _CommunityTabState extends State<CommunityTab> {
   @override
   Widget build(BuildContext context) {
     final a = _avail;
-    // 머리줄 오른쪽: 기록 공유하기(글쓰기) · 내 공개 프로필
+    // 머리줄 오른쪽: 기록 공유하기(글쓰기) · 내 공개 프로필. 머리줄 아이콘은 공용 HeadIcon(회색 · 사이 4, docs/design/DESIGN.md 6장)
     final right = Row(mainAxisSize: MainAxisSize.min, children: [
-      IconBtn(label: '독서 기록 공유하기', onPress: () => _go(() => openCommunityCompose(context)), child: const LucideIcon('PenLine')),
-      IconBtn(label: '내 공개 프로필', onPress: () => _go(() => openCommunityProfile(context)), child: const LucideIcon('UserRound')),
+      IconBtn(label: '독서 기록 공유하기', onPress: () => _go(() => openCommunityCompose(context)), child: const HeadIcon('PenLine')),
+      const SizedBox(width: headIconGap),
+      IconBtn(label: '내 공개 프로필', onPress: () => _go(() => openCommunityProfile(context)), child: const HeadIcon('UserRound')),
     ]);
     if (a == null) return const Screen(title: '커뮤니티', back: false, scroll: false, children: [Loading()]);
     if (!a.ok) {
@@ -184,12 +189,13 @@ class _CommunityTabState extends State<CommunityTab> {
                   itemCount: _items.length + 1,
                   separatorBuilder: (_, i) => i < _items.length - 1 ? _divider : const SizedBox.shrink(),
                   itemBuilder: (_, i) {
+                    // 목록 끝 더 받기: 작은 원, 실패는 구역 빈 줄 + '다시 시도'(docs/design/DESIGN.md 11장)
                     if (i == _items.length) {
-                      if (_more == 'loading') return const Padding(padding: EdgeInsets.symmetric(vertical: Space.group), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
+                      if (_more == 'loading') return const Padding(padding: EdgeInsets.symmetric(vertical: Space.group), child: Center(child: Spinner(label: '더 불러오는 중')));
                       if (_more == 'error') {
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: Space.item),
-                          child: Column(children: [Text('더 불러오지 못했어요', style: AppType.sub), TextLink(label: '다시 시도', onPress: _loadMore)]),
+                          padding: const EdgeInsets.fromLTRB(Space.page, 0, Space.page, Space.item),
+                          child: EmptyLine('더 불러오지 못했어요', action: '다시 시도', onAction: _loadMore),
                         );
                       }
                       return const SizedBox.shrink();
@@ -223,10 +229,6 @@ class ComposeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final lib = LibraryModel.instance.lib;
     final rows = ([for (final s in lib.sessions.values) if (s.myBookId != null && lib.books.containsKey(s.myBookId)) s]..sort((a, b) => b.startedAt.compareTo(a.startedAt))).take(50).toList();
-    String day(String iso) {
-      final d = DateTime.parse(iso).toLocal();
-      return '${d.month}월 ${d.day}일';
-    }
 
     return Screen(
       title: '기록 공유하기',
@@ -240,10 +242,12 @@ class ComposeScreen extends StatelessWidget {
             () {
               final ed = lib.editions[lib.books[s.myBookId]!.editionId];
               final pages = sessionPages(s.startPage, s.pagesRead);
-              final meta = [day(s.startedAt), formatDurationPrecise(s.durationMs), if (pages != null) '$pages쪽'].join(' | ');
+              // 날짜는 앱 목록 날짜(dateShort), 사이는 옅은 세로줄 · 화면 읽기는 쉼표(2026-11-19 공통 규칙)
+              final parts = [dateShort(s.startedAt), formatDurationPrecise(s.durationMs), if (pages != null) '$pages쪽'];
+              final meta = parts.join(metaSep);
               return Semantics(
                 button: true,
-                label: '${ed?.title ?? '책'}, $meta',
+                label: '${ed?.title ?? '책'}, ${parts.join(', ')}',
                 excludeSemantics: true,
                 child: Pressable(
                   onPress: () => openCommunityShare(context, s.id),
@@ -258,7 +262,7 @@ class ComposeScreen extends StatelessWidget {
                             Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta, style: AppType.caption)),
                           ]),
                         ),
-                        const LucideIcon('ChevronRight', size: 18, color: AppColors.inkSoft),
+                        const Chevron(),
                       ]),
                     ),
                   ),
@@ -324,12 +328,16 @@ class _ShareDraftScreenState extends State<ShareDraftScreen> {
       ]);
     }
     final src = shareSourceOf(LibraryModel.instance.lib, widget.sessionId);
-    if (src == null) return const Screen(title: title, children: [Empty(title: '기록을 찾을 수 없어요')]);
+    if (src == null) {
+      return Screen(title: title, children: [
+        Empty(title: '기록을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+      ]);
+    }
     final choice = _choice ?? defaultChoice(src);
     final payload = sharePayload(src, choice);
     if (payload == null) {
       return Screen(title: title, children: [
-        Empty(title: '책과 연결된 기록만 공유할 수 있어요', body: '기록 수정에서 책을 연결한 뒤 다시 시도해 주세요.', action: '기록 고치기', actionKind: 'secondary', onAction: () => openSessionEdit(context, src.session.id)),
+        Empty(title: '책과 연결된 기록만 공유할 수 있어요', body: '기록 수정에서 책을 연결한 뒤 다시 시도해 주세요.', action: '기록 수정', actionKind: 'secondary', onAction: () => openSessionEdit(context, src.session.id)),
       ]);
     }
     void set({bool? duration, bool? pages, Object? quoteId = _keep, String? body}) => setState(() => _choice = (
@@ -349,47 +357,52 @@ class _ShareDraftScreenState extends State<ShareDraftScreen> {
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       ...payload,
     });
-    return Screen(
-      title: title,
-      footer: Btn(
-        label: '게시하기',
-        size: 'l',
-        busy: _posting,
-        onPress: () => appAlert(context, '이 내용으로 게시할까요?', '다른 독자가 볼 수 있어요. 게시물은 언제든 지울 수 있고, 지워도 내 서재 기록은 그대로예요.', [
-          const AlertButton('취소', style: AlertStyle.cancel),
-          AlertButton('게시', onPress: () => _post(payload)),
-        ]),
-      ),
-      children: [
-        Padding(padding: const EdgeInsets.only(top: Space.tight), child: Text('공개할 것만 골라 주세요. 메모와 날짜는 공유되지 않아요.', style: AppType.sub)),
-        Padding(padding: const EdgeInsets.only(top: Space.group), child: Text('책', style: AppType.section)),
-        Padding(padding: const EdgeInsets.only(top: 4), child: Text(payload['bookTitle']! as String, style: AppType.bookTitle)),
-        if (payload['bookAuthor'] case final String author) Text(author, style: AppType.bookAuthor),
-        Padding(
-          padding: const EdgeInsets.only(top: Space.item),
-          child: ListGroup(children: [
-            ListItem(label: '읽은 시간', sub: formatDurationPrecise(src.durationMs), right: Toggle(label: '읽은 시간 공개', value: choice.duration, onChange: (v) => set(duration: v))),
-            if (src.pagesRead != null) ListItem(label: '읽은 분량', sub: '${src.pagesRead}쪽', right: Toggle(label: '읽은 분량 공개', value: choice.pages, onChange: (v) => set(pages: v))),
+    // 쓰던 글 · 고른 것이 있으면 나갈 때 묻는다(공용 DraftGuard, 2026-11-19 공통 규칙: 말없이 버려졌다). 게시하면 게시물 화면으로 바꿔 넣는다(묻지 않음)
+    return DraftGuard(
+      dirty: () => !_posting && _choice != null && _choice != defaultChoice(src),
+      child: Screen(
+        title: title,
+        footer: Btn(
+          label: '게시하기',
+          size: 'l',
+          busy: _posting,
+          onPress: () => appAlert(context, '이 내용으로 게시할까요?', '다른 독자가 볼 수 있어요. 게시물은 언제든 삭제할 수 있고, 삭제해도 내 책 기록은 그대로예요.', [
+            const AlertButton('취소', style: AlertStyle.cancel),
+            AlertButton('게시', onPress: () => _post(payload)),
           ]),
         ),
-        if (src.quotes.isNotEmpty) ...[
-          Padding(padding: const EdgeInsets.only(top: Space.group, bottom: 8), child: Text('함께 올릴 갈피 문장 (선택)', style: AppType.section)),
-          Choice(label: '문장 없이', selected: choice.quoteId == null, compact: true, onPress: () => set(quoteId: null)),
-          for (final q in src.quotes.take(6))
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Choice(
-                label: q.text.length > 80 ? '${q.text.substring(0, 80)}…' : q.text,
-                sub: [if (q.page != null) '${q.page}쪽', if (q.sessionId == src.session.id) '이번 독서에서 남긴 갈피'].join(' | ').ifEmptyNull,
-                selected: choice.quoteId == q.id,
-                onPress: () => set(quoteId: q.id),
+        children: [
+          Padding(padding: const EdgeInsets.only(top: Space.tight), child: WordText('공개할 것만 골라 주세요. 메모와 날짜는 공유되지 않아요.', style: AppType.sub)),
+          // 구역 제목은 공용 H2(화면 읽기 머리, 2026-11-19 공통 규칙: 머리가 아닌 글자였다)
+          const H2('책'),
+          Text(payload['bookTitle']! as String, style: AppType.bookTitle),
+          if (payload['bookAuthor'] case final String author) Text(author, style: AppType.bookAuthor),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.item),
+            child: ListGroup(children: [
+              ListItem(label: '읽은 시간', sub: formatDurationPrecise(src.durationMs), right: Toggle(label: '읽은 시간 공개', value: choice.duration, onChange: (v) => set(duration: v))),
+              if (src.pagesRead != null) ListItem(label: '읽은 분량', sub: '${src.pagesRead}쪽', right: Toggle(label: '읽은 분량 공개', value: choice.pages, onChange: (v) => set(pages: v))),
+            ]),
+          ),
+          if (src.quotes.isNotEmpty) ...[
+            const H2('함께 올릴 갈피 문장 (선택)'),
+            Choice(label: '문장 없이', selected: choice.quoteId == null, compact: true, onPress: () => set(quoteId: null)),
+            for (final q in src.quotes.take(6))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Choice(
+                  label: q.text.length > 80 ? '${q.text.substring(0, 80)}…' : q.text,
+                  sub: [if (q.page != null) '${q.page}쪽', if (q.sessionId == src.session.id) '이번 독서에서 남긴 갈피'].join(metaSep).ifEmptyNull,
+                  selected: choice.quoteId == q.id,
+                  onPress: () => set(quoteId: q.id),
+                ),
               ),
-            ),
+          ],
+          Field(label: '한 줄 남기기 (선택)', value: choice.body, multiline: true, placeholder: '공개로 보이는 글이에요', onChange: (v) => set(body: v.length > 1000 ? v.substring(0, 1000) : v)),
+          const H2('미리보기'),
+          Bleed(child: PostCard(post: preview, full: true)),
         ],
-        Field(label: '한 줄 남기기 (선택)', value: choice.body, multiline: true, placeholder: '공개로 보여질 글이에요', onChange: (v) => set(body: v.length > 1000 ? v.substring(0, 1000) : v)),
-        Padding(padding: const EdgeInsets.only(top: Space.section), child: Text('미리보기', style: AppType.section)),
-        Bleed(child: PostCard(post: preview, full: true)),
-      ],
+      ),
     );
   }
 }
@@ -487,11 +500,12 @@ class _PostScreenState extends State<PostScreen> {
     }
   }
 
+  // 댓글 메뉴: 내 댓글은 삭제 확인창, 남의 댓글은 게시물 더보기와 같은 메뉴 시트(2026-11-19 공통 규칙: 확인창을 메뉴로 썼다)
   void _commentMenu(Comment c) {
     if (c.mine) {
-      appAlert(context, '댓글을 지울까요?', null, [
+      appAlert(context, '댓글을 삭제할까요?', null, [
         const AlertButton('취소', style: AlertStyle.cancel),
-        AlertButton('지우기', style: AlertStyle.destructive, onPress: () {
+        AlertButton('삭제', style: AlertStyle.destructive, onPress: () {
           Community.deleteComment(c.id).then((_) {
             if (!mounted) return;
             setState(() {
@@ -500,15 +514,22 @@ class _PostScreenState extends State<PostScreen> {
               if (p != null) _post = p.copyWith(comments: (p.comments - 1).clamp(0, 1 << 30));
             });
           }, onError: (Object e) {
-            if (mounted) explainWriteError(context, e, '지우지 못했어요');
+            if (mounted) explainWriteError(context, e, '댓글을 삭제하지 못했어요');
           });
         }),
       ]);
     } else {
-      appAlert(context, '${c.nickname}님의 댓글', null, [
-        const AlertButton('취소', style: AlertStyle.cancel),
-        AlertButton('신고', onPress: () => showReportSheet(context, kind: 'comment', id: c.id, label: '댓글')),
-      ]);
+      showSheet<void>(
+        context,
+        builder: (ctx) => ListGroup(children: [
+          ListItem(label: '댓글 신고', onPress: () {
+            Navigator.pop(ctx);
+            Future<void>.delayed(const Duration(milliseconds: 350), () {
+              if (mounted) showReportSheet(context, kind: 'comment', id: c.id, label: '댓글');
+            });
+          }),
+        ]),
+      );
     }
   }
 
@@ -518,17 +539,21 @@ class _PostScreenState extends State<PostScreen> {
     showSheet<void>(
       context,
       builder: (ctx) => ListGroup(children: [
+        // 보고 있던 게시물을 삭제 · 차단하면 화면을 닫고 토스트(docs/design/DESIGN.md 10장)
         if (p.mine)
           ListItem(
-            label: '게시물 지우기',
+            label: '게시물 삭제',
             danger: true,
             onPress: () {
               Navigator.pop(ctx);
-              appAlert(context, '게시물을 지울까요?', '커뮤니티에서만 지워져요. 내 서재의 독서 기록은 그대로예요.', [
+              appAlert(context, '게시물을 삭제할까요?', '커뮤니티에서만 삭제돼요. 내 책의 독서 기록은 그대로예요.', [
                 const AlertButton('취소', style: AlertStyle.cancel),
-                AlertButton('지우기', style: AlertStyle.destructive, onPress: () {
-                  Community.deletePost(p.id).then((_) => nav.maybePop(), onError: (Object e) {
-                    if (mounted) explainWriteError(context, e, '지우지 못했어요');
+                AlertButton('삭제', style: AlertStyle.destructive, onPress: () {
+                  Community.deletePost(p.id).then((_) {
+                    if (mounted) showToast(context, '게시물을 삭제했어요.');
+                    nav.maybePop();
+                  }, onError: (Object e) {
+                    if (mounted) explainWriteError(context, e, '게시물을 삭제하지 못했어요');
                   });
                 }),
               ]);
@@ -549,7 +574,10 @@ class _PostScreenState extends State<PostScreen> {
               appAlert(context, '${p.nickname}님을 차단할까요?', '서로의 게시물, 댓글, 후기가 보이지 않고 팔로우도 끊겨요. 내 공개 프로필의 차단 목록에서 풀 수 있어요.', [
                 const AlertButton('취소', style: AlertStyle.cancel),
                 AlertButton('차단', style: AlertStyle.destructive, onPress: () {
-                  Community.block(p.userId, true).then((_) => nav.maybePop(), onError: (Object e) {
+                  Community.block(p.userId, true).then((_) {
+                    if (mounted) showToast(context, '${p.nickname}님을 차단했어요.');
+                    nav.maybePop();
+                  }, onError: (Object e) {
                     if (mounted) explainWriteError(context, e, '차단하지 못했어요');
                   });
                 }),
@@ -565,11 +593,11 @@ class _PostScreenState extends State<PostScreen> {
   Widget build(BuildContext context) {
     const title = '독서 기록';
     if (_phase == 'loading') return const Screen(title: title, children: [Loading()]);
-    if (_phase == 'gone') return const Screen(title: title, children: [Empty(title: '볼 수 없는 게시물이에요', body: '지워졌거나 숨겨진 게시물이에요.')]);
+    if (_phase == 'gone') return const Screen(title: title, children: [Empty(title: '볼 수 없는 게시물이에요', body: '삭제됐거나 숨겨진 게시물이에요.')]);
     final p = _post;
     if (_phase == 'error' || p == null) {
       return Screen(title: title, children: [
-        Empty(title: '불러오지 못했어요', body: _error, action: '다시 시도', actionKind: 'secondary', onAction: () {
+        Empty(title: '게시물을 불러오지 못했어요', body: _error, action: '다시 시도', actionKind: 'secondary', onAction: () {
           setState(() => _phase = 'loading');
           _load();
         }),
@@ -615,13 +643,14 @@ class _PostScreenState extends State<PostScreen> {
             offset: const Offset(0, -8),
             child: Padding(
               padding: const EdgeInsets.only(left: 56, bottom: Space.tight),
-              child: TextLink(label: '이 책 내 서재에 추가', start: true, onPress: () => openAddBook(context, q: p.isbn13 ?? p.bookTitle)),
+              child: TextLink(label: '이 책 내 책에 추가', start: true, onPress: () => openAddBook(context, q: p.isbn13 ?? p.bookTitle)),
             ),
           ),
         const Bleed(child: _divider),
-        Padding(padding: const EdgeInsets.only(top: Space.group, bottom: Space.tight), child: Text('댓글 ${_comments.length}', style: AppType.section)),
+        // 구역 머리는 공용 SectionHead(제목 옆 개수), 빈 구역은 EmptyLine(2026-11-19 공통 규칙)
+        Padding(padding: const EdgeInsets.only(top: Space.group, bottom: Space.tight), child: SectionHead(title: '댓글', count: _comments.isEmpty ? null : '${_comments.length}개')),
         if (_comments.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(vertical: Space.item), child: Text('첫 댓글을 남겨 보세요.', style: AppType.sub))
+          const Padding(padding: EdgeInsets.only(bottom: Space.item), child: EmptyLine('첫 댓글을 남겨 보세요'))
         else
           for (final c in _comments)
             GestureDetector(
@@ -650,7 +679,7 @@ class _PostScreenState extends State<PostScreen> {
                         ),
                         MoreDots(label: '${c.nickname}님의 댓글 더보기', onPress: () => _commentMenu(c)),
                       ]),
-                      Padding(padding: const EdgeInsets.only(top: 2), child: Text(c.body, style: AppType.body)),
+                      Padding(padding: const EdgeInsets.only(top: 2), child: WordText(c.body, style: AppType.body)),
                     ]),
                   ),
                 ]),
@@ -714,9 +743,10 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         _nick = m.profile?.nickname ?? '';
         _bio = m.profile?.bio ?? '';
       });
-      appAlert(context, '공개 프로필을 저장했어요');
+      // 성공은 토스트(docs/design/DESIGN.md 14장: 확인창이었다)
+      showToast(context, '공개 프로필을 저장했어요.');
     } catch (e) {
-      if (mounted) explainWriteError(context, e, '저장하지 못했어요');
+      if (mounted) explainWriteError(context, e, '공개 프로필을 저장하지 못했어요');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -728,19 +758,23 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           Community.block(b.userId, false).then((_) {
             if (mounted) setState(() => _blocked = [for (final x in _blocked ?? const <({int userId, String nickname})>[]) if (x.userId != b.userId) x]);
           }, onError: (Object e) {
-            if (mounted) explainWriteError(context, e, '풀지 못했어요');
+            if (mounted) explainWriteError(context, e, '차단을 풀지 못했어요');
           });
         }),
       ]);
 
+  // 구역 제목 H2, 구역 안 불러오는 중은 작은 원, 없음은 EmptyLine, 줄 안 되돌리는 행동은 숨긴 책 '다시 보이기'와 같은 작은 보조 단추(2026-11-19 공통 규칙: 값 자리에 행동 이름이었다)
   List<Widget> _blockList() => [
-        Padding(padding: const EdgeInsets.only(top: Space.section), child: Text('차단한 사용자', style: AppType.section)),
+        const H2('차단한 사용자'),
         if (_blocked == null)
-          const Loading()
+          const Align(alignment: Alignment.centerLeft, child: Spinner(label: '불러오는 중'))
         else if (_blocked!.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(vertical: Space.item), child: Text('차단한 사용자가 없어요.', style: AppType.sub))
+          const EmptyLine('차단한 사용자가 없어요')
         else
-          ListGroup(children: [for (final b in _blocked!) ListItem(label: b.nickname.isEmpty ? '닉네임 없는 사용자' : b.nickname, value: '차단 풀기', onPress: () => _unblock(b))]),
+          ListGroup(children: [
+            for (final b in _blocked!)
+              ListItem(label: b.nickname.isEmpty ? '닉네임 없는 사용자' : b.nickname, right: Btn(label: '차단 풀기', kind: 'secondary', size: 's', onPress: () => _unblock(b))),
+          ]),
       ];
 
   @override
@@ -758,7 +792,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     }
     if (_error.isNotEmpty) {
       return Screen(title: title, children: [
-        Empty(title: '불러오지 못했어요', body: _error, action: '다시 시도', actionKind: 'secondary', onAction: () {
+        Empty(title: '공개 프로필을 불러오지 못했어요', body: _error, action: '다시 시도', actionKind: 'secondary', onAction: () {
           setState(() {
             _error = '';
             _me = null;
@@ -773,7 +807,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       return Screen(title: title, children: [
         Empty(
           title: '계정을 연결하면 공개 활동을 할 수 있어요',
-          body: '게시, 평가, 댓글, 팔로우는 Google이나 카카오 계정을 연결한 뒤 할 수 있어요. 연결 전에도 다른 독자의 공개 기록은 볼 수 있어요. 내 서재 기록은 직접 고른 것만 공개돼요.',
+          body: '게시, 평가, 댓글, 팔로우는 Google이나 카카오 계정을 연결한 뒤 할 수 있어요. 연결 전에도 다른 독자의 공개 기록은 볼 수 있어요. 내 책 기록은 직접 고른 것만 공개돼요.',
           action: '계정 연결하러 가기',
           onAction: () => openBackup(context),
         ),
@@ -782,23 +816,32 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     }
     final n = _nick.trim();
     final nickError = n.isNotEmpty && (n.length < 2 || n.length > 20) ? '닉네임은 2~20자로 정해 주세요' : null;
-    final changed = n != (me.profile?.nickname ?? '') || _bio.trim() != (me.profile?.bio ?? '');
-    return Screen(
+    final changed = _changed;
+    // 고친 닉네임 · 소개가 있으면 나갈 때 묻는다(공용 DraftGuard: 처음 만들기는 새로 쓰기, 있으면 고치기. 2026-11-19 공통 규칙: 말없이 버려졌다)
+    final screen = Screen(
       title: title,
-      footer: Btn(label: me.profile != null ? '저장' : '공개 프로필 만들기', size: 'l', disabled: !changed || n.isEmpty || nickError != null, busy: _saving, onPress: _save),
+      // 저장 단추 이름은 '○○ 저장'(docs/design/DESIGN.md 5장)
+      footer: Btn(label: me.profile != null ? '공개 프로필 저장' : '공개 프로필 만들기', size: 'l', disabled: !changed || n.isEmpty || nickError != null, busy: _saving, onPress: _save),
       children: [
-        Padding(padding: const EdgeInsets.only(bottom: Space.group), child: Text('공개 닉네임은 게시물, 후기, 댓글에 보여요. 로그인한 계정 이름이나 내 서재 기록은 공개되지 않아요.', style: AppType.sub)),
+        Padding(padding: const EdgeInsets.only(bottom: Space.group), child: WordText('공개 닉네임은 게시물, 후기, 댓글에 보여요. 로그인한 계정 이름이나 내 책 기록은 공개되지 않아요.', style: AppType.sub)),
         Field(label: '공개 닉네임', value: _nick, placeholder: '2~20자', error: nickError, onChange: (v) => setState(() => _nick = v.length > 20 ? v.substring(0, 20) : v)),
         Field(label: '소개 (선택)', value: _bio, multiline: true, placeholder: '어떤 책을 즐겨 읽는지 한두 줄로', onChange: (v) => setState(() => _bio = v.length > 200 ? v.substring(0, 200) : v)),
         if (me.profile case final pr?) ...[
-          Padding(padding: const EdgeInsets.only(top: Space.section), child: Text('내 공개 활동', style: AppType.section)),
+          const H2('내 공개 활동'),
           ListGroup(children: [
-            ListItem(label: '내 공개 페이지 보기', sub: '게시물 ${pr.posts} | 팔로워 ${pr.followers} | 팔로잉 ${pr.following}', chevron: true, onPress: () => openCommunityUser(context, pr.userId)),
+            ListItem(label: '내 공개 페이지 보기', sub: ['게시물 ${pr.posts}', '팔로워 ${pr.followers}', '팔로잉 ${pr.following}'].join(metaSep), chevron: true, onPress: () => openCommunityUser(context, pr.userId)),
           ]),
         ],
         ..._blockList(),
       ],
     );
+    return me.profile != null ? DraftGuard.edit(dirty: () => !_saving && _changed, child: screen) : DraftGuard(dirty: () => !_saving && _changed, child: screen);
+  }
+
+  /// 닉네임 · 소개를 저장된 값과 다르게 고쳤는지
+  bool get _changed {
+    final p = _me?.profile;
+    return _me != null && (_nick.trim() != (p?.nickname ?? '') || _bio.trim() != (p?.bio ?? ''));
   }
 }
 
@@ -880,7 +923,10 @@ class _UserScreenState extends State<UserScreen> {
             appAlert(context, '${p.nickname}님을 차단할까요?', '서로의 게시물, 댓글, 후기가 보이지 않고 팔로우도 끊겨요. 내 공개 프로필의 차단 목록에서 풀 수 있어요.', [
               const AlertButton('취소', style: AlertStyle.cancel),
               AlertButton('차단', style: AlertStyle.destructive, onPress: () {
-                Community.block(widget.id, true).then((_) => nav.maybePop(), onError: (Object e) {
+                Community.block(widget.id, true).then((_) {
+                  if (mounted) showToast(context, '${p.nickname}님을 차단했어요.');
+                  nav.maybePop();
+                }, onError: (Object e) {
                   if (mounted) explainWriteError(context, e, '차단하지 못했어요');
                 });
               }),
@@ -898,16 +944,17 @@ class _UserScreenState extends State<UserScreen> {
     final pg = _page;
     if (_phase == 'error' || pg == null) {
       return Screen(title: '독자', children: [
-        Empty(title: '불러오지 못했어요', body: _error, action: '다시 시도', actionKind: 'secondary', onAction: () {
+        Empty(title: '프로필을 불러오지 못했어요', body: _error, action: '다시 시도', actionKind: 'secondary', onAction: () {
           setState(() => _phase = 'loading');
           _load();
         }),
       ]);
     }
     final p = pg.profile;
+    // 위 줄 제목은 늘 '독자'(다 받으면 빈칸으로 바뀌었다), 머리줄 아이콘은 공용 HeadIcon(2026-11-19 공통 규칙)
     return Screen(
-      title: '',
-      right: pg.me ? null : IconBtn(label: '더보기', onPress: () => _menu(p), child: const LucideIcon('MoreHorizontal')),
+      title: '독자',
+      right: pg.me ? null : IconBtn(label: '더 보기', onPress: () => _menu(p), child: const HeadIcon('MoreHorizontal')),
       children: [
         // 스레드처럼: 이름 크게 + 오른쪽 프로필 동그라미, 소개, '팔로워 N · 팔로잉 N' 한 줄, 팔로우 단추, '독서 기록 | 평가' 탭
         Padding(
@@ -915,9 +962,10 @@ class _UserScreenState extends State<UserScreen> {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Semantics(header: true, child: Text(p.nickname, maxLines: 2, style: AppType.title)),
-                if (p.bio != null && p.bio!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: Space.tight), child: Text(p.bio!, style: AppType.body)),
-                Padding(padding: const EdgeInsets.only(top: Space.s), child: Text('팔로워 ${p.followers} | 팔로잉 ${p.following} | 기록 ${p.posts}', style: AppType.sub)),
+                // 사람 이름은 profileName 역할(탭 첫 화면 제목 title을 빌려 썼다), 정보 사이는 옅은 세로줄 MetaText
+                Semantics(header: true, child: Text(p.nickname, maxLines: 2, style: AppType.profileName)),
+                if (p.bio != null && p.bio!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: Space.tight), child: WordText(p.bio!, style: AppType.body)),
+                Padding(padding: const EdgeInsets.only(top: Space.s), child: MetaText(['팔로워 ${p.followers}', '팔로잉 ${p.following}', '기록 ${p.posts}'].join(metaSep), style: AppType.sub)),
               ]),
             ),
             const SizedBox(width: 16),
@@ -927,7 +975,7 @@ class _UserScreenState extends State<UserScreen> {
         Padding(
           padding: const EdgeInsets.only(top: Space.group),
           child: pg.me
-              ? Btn(label: '내 공개 프로필 고치기', kind: 'secondary', onPress: () => openCommunityProfile(context))
+              ? Btn(label: '내 공개 프로필 수정', kind: 'secondary', onPress: () => openCommunityProfile(context))
               : Btn(label: pg.followed ? '팔로잉' : '팔로우', kind: pg.followed ? 'secondary' : 'primary', busy: _busy, onPress: _follow),
         ),
         Bleed(
@@ -938,7 +986,7 @@ class _UserScreenState extends State<UserScreen> {
         ),
         if (_tab == 'posts')
           if (pg.posts.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: Space.group), child: Text('아직 공유한 독서 기록이 없어요.', style: AppType.sub))
+            const Padding(padding: EdgeInsets.only(top: Space.s), child: EmptyLine('아직 공유한 독서 기록이 없어요'))
           else
             Bleed(
               child: Column(children: [
@@ -949,7 +997,7 @@ class _UserScreenState extends State<UserScreen> {
               ]),
             )
         else if (pg.reviews.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(vertical: Space.group), child: Text('아직 남긴 공개 평가가 없어요.', style: AppType.sub))
+          const Padding(padding: EdgeInsets.only(top: Space.s), child: EmptyLine('아직 남긴 공개 평가가 없어요'))
         else
           for (final r in pg.reviews)
             Padding(
@@ -958,9 +1006,10 @@ class _UserScreenState extends State<UserScreen> {
                 Row(children: [
                   Flexible(child: Text(r.bookTitle ?? 'ISBN ${r.isbn13}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong)),
                   const SizedBox(width: 8),
-                  Stars(value: r.rating, size: 14),
+                  // 후기 한 줄 별은 책 정보 독자 후기와 같은 크기(14였다)
+                  Stars(value: r.rating, size: reviewStarSize),
                 ]),
-                if (r.body != null && r.body!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(r.body!, style: AppType.body)),
+                if (r.body != null && r.body!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: WordText(r.body!, style: AppType.body)),
               ]),
             ),
       ],

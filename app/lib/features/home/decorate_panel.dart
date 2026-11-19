@@ -21,7 +21,7 @@ import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 
-/// 막대 손잡이 원 지름(2026-11-18 사용자 '원 줄이기' 26 → 18). 잡는 칸은 막대 높이 44 그대로
+/// 막대 손잡이 원 지름(2026-11-18 사용자 '원 줄이기' 26 → 18). 잡는 칸은 막대 그림 칸 높이(누르는 자리 48, Space.hit)
 const _thumb = 18.0, _track = 4.0;
 
 /// 막대 양 끝 안쪽 여백 = 손잡이 반지름 + 2: 끝까지 가도 손잡이가 막대 밖 숫자('193mm')를 덮지 않는다(2026-11-18 사용자)
@@ -72,16 +72,8 @@ class DecorateBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: Space.l),
-        Semantics(
-          button: true,
-          label: '완료',
-          onTap: onDone,
-          excludeSemantics: true,
-          child: Pressable(
-            onPress: onDone,
-            child: SizedBox(height: Space.hit, child: Center(child: Text('완료', softWrap: false, style: AppType.buttonSmall))),
-          ),
-        ),
+        // 머리줄 '완료'는 본문색 글자 단추(DESIGN 5-1). 이 줄은 폭이 빠듯해 양옆 여백 없이 글자 폭만큼(start), 높이는 누르는 자리 48
+        SizedBox(height: Space.hit, child: TextLink(label: '완료', ink: true, start: true, onPress: onDone)),
       ]);
 }
 
@@ -121,7 +113,7 @@ class DecorateHint extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.s + 2),
               decoration: BoxDecoration(
                 color: AppColors.bg,
-                borderRadius: BorderRadius.circular(Space.hit),
+                borderRadius: BorderRadius.circular(Shape.pill),
                 border: Border.all(color: AppColors.line, width: Hairline.of(context)),
                 boxShadow: const [Shape.floatShadow],
               ),
@@ -132,6 +124,7 @@ class DecorateHint extends StatelessWidget {
         const SizedBox(height: Space.m),
         _Sheet(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // 묶음 이름은 꾸미기 시안 모양(본문색 16 보통, 1c111a7 사용자 시안) 그대로: DESIGN 16장 예외(시트 안 SheetLabel 18 굵게와 다름)
             Text('책 측면', style: AppType.sub.copyWith(color: AppColors.ink)),
             const SizedBox(height: Space.xs),
             Segmented<SpineLook>(
@@ -154,6 +147,7 @@ class SkinSheet extends StatelessWidget {
   Widget _section(BuildContext context, String label, Map<String, SkinPart?> table, String value, SkinChoice Function(String k) next) => Padding(
         padding: const EdgeInsets.only(bottom: Space.m),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // 묶음 이름은 꾸미기 시안 모양 그대로(DESIGN 16장 예외)
           Text(label, style: AppType.sub.copyWith(color: AppColors.ink)),
           const SizedBox(height: Space.s),
           // 한 줄 네 칸 폭(칸이 셋이어도 같은 폭으로 왼쪽부터)
@@ -254,7 +248,8 @@ class DecoratePanel extends StatelessWidget {
           padding: const EdgeInsets.only(top: 16),
           child: Text(keepAll(title), maxLines: big ? 2 : 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle),
         ),
-        if (msg != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(msg!, style: AppType.caption.copyWith(color: AppColors.danger))),
+        // 고른 뒤 놓지 못한 까닭: 오류 글(화면 읽기가 바로 읽는다)
+        if (msg != null) NoticeText(msg!, error: true),
         // 큰 글씨에서 조작부가 화면보다 길어지면 안에서 밀어 본다
         Flexible(
           child: SingleChildScrollView(
@@ -351,7 +346,7 @@ class _PoseTab extends StatelessWidget {
       child: Pressable(
         onPress: onPress,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Space.touch),
+          constraints: const BoxConstraints(minHeight: Space.hit),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const SizedBox(height: 2),
             CustomPaint(size: const Size(30, 30), painter: _PoseIcon(pose, color)),
@@ -407,21 +402,25 @@ class _LeanChoice extends StatelessWidget {
         onTap: disabled ? null : onPress,
         excludeSemantics: true,
         child: Opacity(
-          opacity: disabled ? 0.3 : 1,
+          opacity: disabled ? disabledOpacity : 1,
           child: Pressable(
             onPress: disabled ? null : onPress,
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 44),
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: on ? Border.all(color: AppColors.inkFaint) : null),
-              child: Flex(
-                direction: largeText(context) ? Axis.vertical : Axis.horizontal,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomPaint(size: const Size(26, 26), painter: _LeanIcon(dir)),
-                  const SizedBox(width: 6),
-                  Text(_leanNames[dir]!, softWrap: false, style: AppType.micro.copyWith(color: AppColors.ink)),
-                ],
+            // 누르는 자리는 48(Space.hit): 보이는 칸(44)은 그대로 두고 위아래 빈 자리까지 누른다
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: (Space.hit - Space.touch) / 2),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: Space.touch),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: on ? Border.all(color: AppColors.inkFaint) : null),
+                child: Flex(
+                  direction: largeText(context) ? Axis.vertical : Axis.horizontal,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CustomPaint(size: const Size(26, 26), painter: _LeanIcon(dir)),
+                    const SizedBox(width: 6),
+                    Text(_leanNames[dir]!, softWrap: false, style: AppType.micro.copyWith(color: AppColors.ink)),
+                  ],
+                ),
               ),
             ),
           ),
@@ -553,7 +552,7 @@ class _SpinSliderState extends State<_SpinSlider> {
               onTapUp: (e) => widget.onChange(toDeg(e.localPosition.dx - _inset)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _inset),
-                child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: band, fill: (math.min(zero, pos), math.max(zero, pos)), thumb: pos, tick: zero))),
+                child: SizedBox(height: Space.hit, child: CustomPaint(painter: _BarPainter(band: band, fill: (math.min(zero, pos), math.max(zero, pos)), thumb: pos, tick: zero))),
               ),
             ),
           );
@@ -561,7 +560,7 @@ class _SpinSliderState extends State<_SpinSlider> {
       ),
       ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 52),
-        child: Text('${shown.round() > 0 ? '+' : ''}${shown.round()}°', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink, fontFeatures: const [FontFeature.tabularFigures()])),
+        child: Text('${shown.round() > 0 ? '+' : ''}${shown.round()}°', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink).tnum),
       ),
     ]);
   }
@@ -614,7 +613,7 @@ class _DepthSliderState extends State<_DepthSlider> {
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _inset),
-                child: SizedBox(height: 44, child: CustomPaint(painter: _BarPainter(band: (back, xOf(widget.lo)), fill: (wall, math.max(wall, pos)), thumb: pos))),
+                child: SizedBox(height: Space.hit, child: CustomPaint(painter: _BarPainter(band: (back, xOf(widget.lo)), fill: (wall, math.max(wall, pos)), thumb: pos))),
               ),
             ),
           );
@@ -623,7 +622,7 @@ class _DepthSliderState extends State<_DepthSlider> {
       // 글자를 키워도 '22 / mm'처럼 갈리지 않게 값 칸이 글자 폭만큼 넓어진다(2026-11-16 QA 영숙 F7)
       ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 52),
-        child: Text('${mmOf(shown)}mm', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink, fontFeatures: const [FontFeature.tabularFigures()])),
+        child: Text('${mmOf(shown)}mm', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink).tnum),
       ),
     ]);
   }

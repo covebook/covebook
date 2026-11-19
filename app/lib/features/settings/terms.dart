@@ -62,7 +62,7 @@ Future<void> showTermsSheet(BuildContext context) => showSheet<void>(
         for (final (i, (title, paras)) in termsArticles.indexed) ...[
           Padding(
             padding: EdgeInsets.only(top: i == 0 ? 0 : Space.l, bottom: Space.xs),
-            child: Semantics(header: true, child: Text(title, style: AppType.labelStrong)),
+            child: Semantics(header: true, child: Text(title, style: AppType.legalHeading)),
           ),
           for (final p in paras) legalParagraph(p),
         ],

@@ -72,11 +72,11 @@ void main() {
     addTearDown(t.view.reset);
     await t.pumpWidget(const MaterialApp(home: NewBookmarkScreen()));
     await t.pump();
-    expect(find.text('책을 골라야 저장할 수 있어요'), findsOneWidget);
+    expect(find.text('책을 골라야 저장할 수 있어요.'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
     await t.pumpWidget(const MaterialApp(home: NewBookmarkScreen(book: 'bk1')));
     await t.pump();
-    expect(find.text('책을 골라야 저장할 수 있어요'), findsNothing);
+    expect(find.text('책을 골라야 저장할 수 있어요.'), findsNothing);
     expect(t.takeException(), isNull);
   });
 }

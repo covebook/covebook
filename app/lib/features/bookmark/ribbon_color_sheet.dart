@@ -16,7 +16,7 @@ Future<void> showRibbonColorSheet(BuildContext context, String bookId) => showSh
       context,
       title: '갈피 색',
       // 색은 갈피마다가 아니라 책에 하나라는 걸 분명히(2026-11-16 QA 현우 F8: 한 갈피만 바꾸려 했는데 다른 갈피도 바뀌었다)
-      description: '이 책의 갈피 모두가 같은 색으로 바뀌어요(책장 위 갈피 끈과 갈피 카드)',
+      description: '이 책의 갈피 모두가 같은 색으로 바뀌어요(책장 위 갈피 끈과 갈피 카드).',
       scroll: true,
       maxHeight: 0.85,
       builder: (ctx) => ListenableBuilder(listenable: LibraryModel.instance, builder: (ctx, _) => _Body(bookId)),
@@ -59,30 +59,38 @@ class _BodyState extends State<_Body> {
     final paper = paperColors(shown, bookId);
     final tabs = tabColors(shown, bookId);
     final hair = 1 / MediaQuery.devicePixelRatioOf(context);
-    Widget swatches(List<String> list) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.s),
-          child: Wrap(spacing: Space.m, runSpacing: Space.m, children: [
-            for (final c in list)
+    // 색 견본: 장정 편집 색과 같은 크기(원 40 · 누르는 칸 48, 2026-11-19 공통 규칙: 원 42가 그대로 누르는 칸이었다).
+    // 화면 읽기는 색 코드 대신 '갈피 색 N' · '표지 색 N'(docs/design/DESIGN.md 15장)
+    Widget swatches(List<String> list, String name) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: Space.xs),
+          child: Wrap(spacing: Space.s, runSpacing: Space.s, children: [
+            for (final (i, c) in list.indexed)
               Builder(builder: (_) {
                 final on = b.ribbonColor?.toLowerCase() == c.toLowerCase();
                 return Semantics(
                   button: true,
                   selected: on,
-                  label: '갈피 색 $c',
+                  label: '$name ${i + 1}',
                   onTap: () => pick(c),
                   excludeSemantics: true,
                   child: Pressable(
                     onPress: () => pick(c),
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: hexColor(paperColors(c, bookId).tape),
-                        // 공통 규칙: 고른 표시는 다른 고르기와 같은 갈색(2026-11-19. 검은 테두리·체크였다)
-                        border: Border.all(color: on ? AppColors.accent : AppColors.line, width: on ? 2 : hair * 2),
+                    child: SizedBox(
+                      width: Space.hit,
+                      height: Space.hit,
+                      child: Center(
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: hexColor(paperColors(c, bookId).tape),
+                            // 공통 규칙: 고른 표시는 다른 고르기와 같은 갈색(2026-11-19. 검은 테두리·체크였다)
+                            border: Border.all(color: on ? AppColors.accent : AppColors.line, width: on ? 2 : hair * 2),
+                          ),
+                          child: on ? const Center(child: LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2.4)) : null,
+                        ),
                       ),
-                      child: on ? const Center(child: LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2.4)) : null,
                     ),
                   ),
                 );
@@ -131,8 +139,8 @@ class _BodyState extends State<_Body> {
         ),
       ),
       FilterGroup(title: '자동', first: true, children: [FilterOption(label: '표지에서 고른 색', selected: b.ribbonColor == null, onPress: () => pick(null))]),
-      if (_fromCover.isNotEmpty) FilterGroup(title: '표지 색', children: [swatches(_fromCover)]),
-      FilterGroup(title: '다른 색', children: [swatches(ribbonPalette)]),
+      if (_fromCover.isNotEmpty) FilterGroup(title: '표지 색', children: [swatches(_fromCover, '표지 색')]),
+      FilterGroup(title: '다른 색', children: [swatches(ribbonPalette, '갈피 색')]),
     ]);
   }
 

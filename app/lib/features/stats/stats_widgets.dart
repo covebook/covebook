@@ -17,7 +17,8 @@ export '../../ui/book_cover.dart';
 import '../../ui/book_cover.dart';
 import '../book/labels.dart' show dateRange;
 
-final _small = AppType.micro;
+// 글자는 쓸 때마다 읽는다(모듈 final은 처음 한 번만 읽어 화소 맞춤 배율을 놓친다, theme.dart rnPx)
+TextStyle get _small => AppType.micro;
 
 
 // ---------- 달력 ----------
@@ -381,10 +382,13 @@ class StatNumber extends StatelessWidget {
   final String label;
   final String value;
 
+  // 화면 읽기는 '이름 값' 한 번(안쪽 글자까지 두 번 읽혔다)
   @override
   Widget build(BuildContext context) => Expanded(
         child: Semantics(
+          container: true,
           label: '$label $value',
+          excludeSemantics: true,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: AppType.caption),
             const SizedBox(height: Space.xs),

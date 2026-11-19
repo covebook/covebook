@@ -15,7 +15,9 @@ import 'package:flutter/semantics.dart' show CustomSemanticsAction, OrdinalSortK
 
 import '../../services/qa_probe.dart';
 import '../../services/cover_colors.dart';
-import '../../ui/kit.dart' show Btn, PullUp, Space, showSheet;
+import '../../ui/alert.dart' show appAlert;
+import '../../ui/feedback.dart' show errorText, showToast;
+import '../../ui/kit.dart' show Btn, Pressable, PullUp, Space, showSheet;
 import 'locked_rows.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
@@ -999,11 +1001,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     final now = DateTime.now();
     if (_pastHintAt != null && now.difference(_pastHintAt!).inSeconds < 10) return;
     _pastHintAt = now;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
-      content: Text('해가 바뀌면 올해 책장이 지난 책장으로 남아요. 그때부터 옆으로 넘겨 볼 수 있어요.'),
-      duration: Duration(seconds: 3),
-      persist: false, // 정한 시간 뒤 꼭 사라지게(2026-11-16 QA 현우 F1)
-    ));
+    showToast(context, '해가 바뀌면 올해 책장이 지난 책장으로 남아요. 그때부터 옆으로 넘겨 볼 수 있어요.');
   }
 
   /// 책장 그림(입력이 같으면 다시 쓰고, 바뀌면 다시 그린다)
@@ -1576,15 +1574,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     final shelves = PlacementStore.instance.layout?.shelves.length ?? _rowSpots.length - _lockedCount;
     final free = openableShelfCount(shelves);
     if (free == 0) {
-      showSheet<void>(
-        context,
-        title: '선반 더 열기',
-        description: '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.',
-        builder: (ctx) => Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Btn(label: '확인', size: 'l', onPress: () => Navigator.pop(ctx)),
-        ),
-      );
+      // 다음 행동이 없는 안내라 시트 대신 확인창(DESIGN 5-1). 문구는 그대로(결제 고지 기준 확인 필요)
+      appAlert(context, '선반 더 열기', '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.');
       return;
     }
     showSheet<void>(
@@ -1592,22 +1583,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       title: '선반 한 칸 더 열기',
       description: '책을 더 진열할 수 있는 선반이 한 칸 늘어나요. 앞으로 $free칸 더 열 수 있어요.',
       builder: (ctx) => Padding(
-        padding: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.only(top: Space.s),
         child: Btn(
           label: '선반 열기',
           size: 'l',
           onPress: () async {
             Navigator.pop(ctx);
-            final ok = await PlacementStore.instance.addShelf();
+            Object? err;
+            var ok = false;
+            try {
+              ok = await PlacementStore.instance.addShelf();
+            } catch (e) {
+              err = e;
+            }
             if (!mounted) return;
-            ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(ok ? '선반을 열었어요.' : '지금은 바꿀 수 없어요.'), duration: const Duration(seconds: 2), persist: false));
+            if (ok) {
+              showToast(context, '선반을 열었어요.');
+            } else {
+              appAlert(context, '선반을 열지 못했어요', err == null ? '잠시 뒤 다시 시도해 주세요.' : errorText(err));
+            }
           },
         ),
       ),
     );
   }
 
-  /// 책등 모양(스토어)이 바뀌었다: 표지 사진을 그 모양으로 다시 준비한다(실물 측면이면 책등 사진도 받는다). 오는 대로 바꿔 그린다
+  /// 책등 모양(꾸미기 '책 측면')이 바뀌었다: 표지 사진을 그 모양으로 다시 준비한다(실물 측면이면 책등 사진도 받는다). 오는 대로 바꿔 그린다
   void _spineLookChanged() {
     if (mounted) _loadCovers([for (final b in _libBooks) ?b.coverArtUri], again: true);
   }
@@ -1673,8 +1674,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       data: MediaQuery.of(context).copyWith(textScaler: scale),
       child: _Header(
         year: DateTime.now().year,
-        // 측정 메뉴: 제목을 길게 누르면 다시 굽고 시간을 알린다(지금 앱 측정 번들의 책장 메뉴 자리)
-        onLongPress: _busy ? null : _run,
+        // 측정 메뉴: 제목을 길게 누르면 다시 굽고 시간을 알린다(지금 앱 측정 번들의 책장 메뉴 자리). 시험 빌드(QA_FRAMES)에서만
+        onLongPress: !qaFrames || _busy ? null : _run,
         onDecorate: () => _enterDecorate(),
         icons: !_decorating,
         status: r == null ? _state : '굽기 ${r.bakeTotal}ms | 켠 뒤 ${r.sinceBoot}ms',
@@ -1864,7 +1865,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                   ),
                                 ),
                               ],
-                              // 머리줄(책장과 함께 스크롤: 지금 앱 2026-11-04 '상단 라인은 고정이 아니야'): 왼쪽 '나의 책장'과 그 밑 해, 오른쪽 스토어·꾸미기·전체 책·더하기
+                              // 머리줄(책장과 함께 스크롤: 지금 앱 2026-11-04 '상단 라인은 고정이 아니야'): 왼쪽 '나의 책장'과 그 밑 해, 오른쪽 꾸미기·책 추가·내 정보
                               // 자식 목록 자리는 그대로 둔다(있다 없다 하면 뒤의 누르기 층이 새로 만들어져 끌던 손가락이 끊긴다)
                               // 화면 읽기는 머리줄('나의 책장'·꾸미기·책 추가·내 정보)을 책보다 먼저 읽는다(2026-11-16 QA 영숙 F11: '내 정보'가 책 뒤로 밀렸다)
                               Positioned(
@@ -1889,8 +1890,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                     label: '잠긴 선반, 눌러서 열기',
                                     onTap: _openLocked,
                                     excludeSemantics: true,
-                                    child: _Pressable(
-                                      onTap: _openLocked,
+                                    child: Pressable(
+                                      onPress: _openLocked,
                                       child: const Center(child: _LockIcon()),
                                     ),
                                   ),
@@ -2244,12 +2245,12 @@ class _Header extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('나의 책장', style: AppType.title, maxLines: 1),
+                    // 굽기 시간 툴팁은 측정용이라 시험 빌드(QA_FRAMES)에서만: 출시 빌드 사용자에게 개발 숫자를 보이지 않는다
                     PullUp(
                       dy: 2,
-                      child: Tooltip(
-                        message: status,
-                        child: Text('$year', style: AppType.sub, maxLines: 1),
-                      ),
+                      child: qaFrames
+                          ? Tooltip(message: status, child: Text('$year', style: AppType.sub, maxLines: 1))
+                          : Text('$year', style: AppType.sub, maxLines: 1),
                     ),
                   ],
                 ),
@@ -2267,7 +2268,7 @@ class _Header extends StatelessWidget {
               ]),
             )
           else
-            const Padding(padding: EdgeInsets.only(top: 2.5), child: SizedBox(height: 44)),
+            const Padding(padding: EdgeInsets.only(top: 2.5), child: SizedBox(height: Space.touch)),
         ],
       ),
     );
@@ -2281,7 +2282,7 @@ class _HeaderIcons extends StatefulWidget {
   final List<(String, String, VoidCallback?)> items;
 
   /// 머리줄 높이(44) 밖으로 넓힌 누르는 자리(위아래)
-  static const slopY = (Space.hit - 44) / 2;
+  static const slopY = (Space.hit - Space.touch) / 2;
 
   @override
   State<_HeaderIcons> createState() => _HeaderIconsState();
@@ -2369,30 +2370,6 @@ class _LockPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LockPainter old) => false;
-}
-
-/// 눌리는 동안 옅어지는 단추(지금 앱 press 0.55)
-class _Pressable extends StatefulWidget {
-  const _Pressable({required this.child, this.onTap});
-  final Widget child;
-  final VoidCallback? onTap;
-
-  @override
-  State<_Pressable> createState() => _PressableState();
-}
-
-class _PressableState extends State<_Pressable> {
-  bool _down = false;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTapDown: (_) => setState(() => _down = true),
-    onTapCancel: () => setState(() => _down = false),
-    onTapUp: (_) => setState(() => _down = false),
-    onTap: widget.onTap,
-    child: Opacity(opacity: _down ? pressOpacity : 1, child: widget.child),
-  );
 }
 
 /// 바뀐 기둥 둘레 여유(설계 단위): 갈피 탭·윤곽 빛·둥근 모서리 몫

@@ -1,5 +1,6 @@
 // 갈피 탭 빈 화면(저장된 갈피가 하나도 없을 때만): 예시 갈피 한 장 + 안내 + '갈피 남기기'(지금 앱 BookmarkEmpty.tsx).
 // 예시 카드는 갈피 탭 목록과 같은 카드 부품이다. 예시 문장은 화면 표현용이다(사용자 데이터에 저장하지 않는다)
+// 예시 그림이 끼어 있어 Empty 대신 직접 짠다. 단추를 화면 폭으로 둔 것은 그림 있는 첫 화면 모양 그대로(공통 규칙 11장 Empty의 가운데 짧은 단추와 다른 예외)
 library;
 
 import 'dart:math' as math;
@@ -51,12 +52,12 @@ class BookmarkEmpty extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.only(top: Space.xs),
-              child: Semantics(header: true, child: Text('첫 갈피를 남겨보세요', textAlign: TextAlign.center, style: AppType.heading)),
+              child: Semantics(header: true, child: WordText('첫 갈피를 남겨 보세요', textAlign: TextAlign.center, style: AppType.heading)),
             ),
             // 공통 규칙: 빈 화면 안내 글은 Empty와 같은 sub · 위 8(2026-11-19. caption · 위 10이었다)
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
-              child: Text('문장이나 사진으로\n간직하고 싶은 순간을 모아요.', textAlign: TextAlign.center, style: AppType.sub),
+              child: WordText('문장이나 사진으로\n간직하고 싶은 순간을 모아요.', textAlign: TextAlign.center, style: AppType.sub),
             ),
             Padding(
               padding: const EdgeInsets.only(top: Space.xl),

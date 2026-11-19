@@ -11,6 +11,7 @@ import '../../store/finish_reading.dart';
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../ui/alert.dart';
+import '../../ui/feedback.dart';
 import '../stats/stats_widgets.dart' show bookTitle;
 
 /// 버튼에 넣을 책 이름(길면 줄인다)
@@ -31,8 +32,9 @@ Future<void> switchReadingBook(BuildContext context, String? nextId, {VoidCallba
     elapsedMs: reading.elapsed,
     onSaveNew: () {
       chosen?.call();
+      // 저장하지 못하면 지금까지 읽은 것은 저장 전 기록으로 남는다(읽기 탭 '저장하지 않은 독서 기록'). 예외 원문은 보이지 않는다
       saveAndStartOther(nextId).then((_) => then?.call(), onError: (Object e) {
-        if (context.mounted) appAlert(context, '저장하지 못했어요', '$e');
+        if (context.mounted) appAlert(context, '저장하지 못했어요', '지금까지 읽은 기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
       });
     },
     onMove: () {
@@ -57,7 +59,8 @@ Future<void> askSwitchBook(
   // 지금까지 시간(1분이 안 되면 초까지)
   final so = formatDurationShort(elapsedMs);
   final reading = cur != null ? '지금 ‘$cur’${josa(cur, '을', '를')} $so째 읽는 중이에요.' : '지금 책 없이 $so째 읽는 중이에요.';
-  final saved = cur != null ? '‘$cur’ 기록으로' : '책 없는 기록으로';
+  // 책을 고르지 않은 기록의 이름은 앱 어디서나 '책 없이 읽기'(DESIGN 9장)
+  final saved = cur != null ? '‘$cur’ 기록으로' : '책 없이 읽기 기록으로';
   return appAlert(
     context,
     '읽는 책을 바꿀까요?',
@@ -65,7 +68,7 @@ Future<void> askSwitchBook(
     [
       const AlertButton('계속 읽기', style: AlertStyle.cancel),
       AlertButton(next != null ? '저장하고 ‘${_short(next)}’ 새로 읽기' : '저장하고 책 없이 새로 읽기', onPress: onSaveNew),
-      AlertButton(next != null ? '${withJosa(so, '을', '를')} ‘${_short(next)}’ 기록으로 옮기기' : '${withJosa(so, '을', '를')} 책 없는 기록으로 옮기기', onPress: onMove),
+      AlertButton(next != null ? '${withJosa(so, '을', '를')} ‘${_short(next)}’ 기록으로 옮기기' : '${withJosa(so, '을', '를')} 책 없이 읽기 기록으로 옮기기', onPress: onMove),
     ],
     true,
     true,

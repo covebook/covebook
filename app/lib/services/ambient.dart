@@ -12,6 +12,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import '../store/settings_store.dart';
+import 'error_text.dart';
 
 const _app = MethodChannel('app.covebook/app');
 
@@ -115,7 +116,7 @@ class Ambient extends ChangeNotifier {
       error = null;
       notifyListeners();
     } catch (e) {
-      error = '소리를 재생하지 못했어요. $e';
+      error = '소리를 재생하지 못했어요. ${errorText(e)}';
       playing = false;
       notifyListeners();
     }

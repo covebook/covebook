@@ -860,12 +860,16 @@ class _ChipState extends State<AppChip> {
 /// 화면 전체가 빈 상태 · 불러오기 실패(docs/design/DESIGN.md 11장): 가운데 제목(heading, 마침표 없음) + 본문 한두 문장 + 다음 행동 단추 하나.
 /// 첫 사용은 만들 것을 권하는 primary, 실패의 '다시 시도'·조건 0건의 '조건 지우기'는 secondary. 한 구역만 빈 것은 [EmptyLine]
 class Empty extends StatelessWidget {
-  const Empty({super.key, required this.title, this.body, this.action, this.onAction, this.actionKind = 'primary'});
+  const Empty({super.key, required this.title, this.body, this.action, this.onAction, this.actionKind = 'primary', this.link, this.onLink});
   final String title;
   final String? body;
   final String? action;
   final VoidCallback? onAction;
   final String actionKind;
+
+  /// 단추 아래 보조 글자 단추 하나(검색 실패 뒤 '직접 등록'처럼 다른 길)
+  final String? link;
+  final VoidCallback? onLink;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -880,6 +884,7 @@ class Empty extends StatelessWidget {
                 padding: const EdgeInsets.only(top: Space.xl),
                 child: Center(child: ConstrainedBox(constraints: const BoxConstraints(minWidth: emptyActionMinWidth), child: Btn(label: action!, kind: actionKind, onPress: onAction!))),
               ),
+            if (link != null && onLink != null) Padding(padding: const EdgeInsets.only(top: Space.xs), child: Center(child: TextLink(label: link!, soft: true, onPress: onLink!))),
           ],
         ),
       );

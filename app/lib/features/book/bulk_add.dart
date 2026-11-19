@@ -5,13 +5,14 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../app/app_nav.dart' show AppNav;
+import '../../app/app_nav.dart' show AppNav, AppTab;
 import '../../domain/library.dart';
 import '../../domain/rebinding.dart';
 import '../../services/book_search.dart';
 import '../../services/cover_colors.dart' show coverDominantColor, coverPalette, measureCover;
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
+import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'all_books_screen.dart' show openAllBooks;
@@ -100,8 +101,8 @@ Future<String> addCandidateBook(BookCandidate picked, {ReadStatus status = ReadS
 /// 한 권 추가할 것
 typedef BulkPick = ({BookCandidate book, ReadStatus status});
 
-/// 여러 권 추가 결과: 새 책 id, 책장에 놓은 수, 내 책에만 보관한 수, 실패한 책 제목
-typedef BulkResult = ({List<String> ids, int placed, int kept, bool full, List<String> failed});
+/// 여러 권 추가 결과: 새 책 id, 책장에 놓은 수, 내 책에만 보관한 수, 실패한 책 제목, 실패 까닭(사람 문장, 처음 실패한 것)
+typedef BulkResult = ({List<String> ids, int placed, int kept, bool full, List<String> failed, String? error});
 
 /// 여러 권을 차례로 더하고(진행 창) 다 더한 뒤 한 번에 책장에 놓는다. 한 권이 실패해도 나머지는 더한다.
 /// 진행 창의 '그만하기'를 누르면 지금 책까지만 더하고 멈춘다(더한 책은 그대로 놓는다)
@@ -109,6 +110,7 @@ Future<BulkResult> addBooks(BuildContext context, List<BulkPick> picks) async {
   final done = ValueNotifier<int>(0);
   final stop = ValueNotifier<bool>(false);
   final ids = <String>[], failed = <String>[];
+  String? error;
   final nav = Navigator.of(context, rootNavigator: true);
   var open = true;
   showGeneralDialog<void>(
@@ -123,18 +125,25 @@ Future<BulkResult> addBooks(BuildContext context, List<BulkPick> picks) async {
       if (stop.value) break;
       try {
         ids.add(await addCandidateBook(p.book, status: p.status));
-      } catch (_) {
+      } catch (e) {
         failed.add(p.book.title);
+        error ??= errorText(e);
       }
       done.value++;
     }
-    await PlacementStore.instance.reload();
   } finally {
     if (open) nav.pop();
   }
-  if (ids.isEmpty || !context.mounted) return (ids: ids, placed: 0, kept: ids.length, full: false, failed: failed);
-  final r = await placeWithChoice(context, ids);
-  return (ids: ids, placed: r.placed, kept: ids.length - r.placed, full: r.full, failed: failed);
+  try {
+    await PlacementStore.instance.reload();
+    if (ids.isEmpty || !context.mounted) return (ids: ids, placed: 0, kept: ids.length, full: false, failed: failed, error: error);
+    final r = await placeWithChoice(context, ids);
+    return (ids: ids, placed: r.placed, kept: ids.length - r.placed, full: r.full, failed: failed, error: error);
+  } catch (e) {
+    // 서재에는 들어갔다: 책장에 놓지 못한 책은 내 책에 있다(결과 시트가 보관으로 알린다. 다시 넣어 두 권이 되지 않게)
+    debugPrint('[bulk] 책장에 놓지 못했어요: $e');
+    return (ids: ids, placed: 0, kept: ids.length, full: false, failed: failed, error: error);
+  }
 }
 
 /// 진행 창: 확인창(appAlert)과 같은 제목 21 · 안쪽 여백 · 폭(2026-11-19 공통 규칙: 제목 19 · 안쪽 28이었다)
@@ -194,13 +203,15 @@ Future<String?> showBulkDone(BuildContext context, BulkResult r) {
     if (r.placed > 0) '책장에 ${r.placed}권 진열했어요.',
     // 꽉 차서 보관했으면 사실대로(2026-11-15 QA 정우 F1)
     if (r.kept > 0) r.full ? '${r.kept}권은 책장이 꽉 차서 내 책에 보관했어요.' : '${r.kept}권은 내 책에만 보관했어요.',
-    if (r.failed.isNotEmpty) '${r.failed.length}권은 추가하지 못했어요: ${r.failed.take(3).join(', ')}${r.failed.length > 3 ? ' 외' : ''}',
+    // 책 이름은 ‘제목’, 실패 까닭은 사람 문장으로(DESIGN 9장 '실패 알림')
+    if (r.failed.isNotEmpty) '${r.failed.length}권은 추가하지 못했어요: ${r.failed.take(3).map((t) => '‘$t’').join(', ')}${r.failed.length > 3 ? ' 외' : ''}.',
+    if (r.failed.isNotEmpty && r.error != null) r.error!,
   ];
   return showSheet<void>(
     context,
     title: added > 0 ? '$added권을 추가했어요' : '추가하지 못했어요',
     builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-      for (final l in lines) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: Text(l, style: AppType.body)),
+      for (final l in lines) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: WordText(l, style: AppType.body)),
       const SizedBox(height: Space.l),
       // 시트 안 단추는 l(2026-11-19 공통 규칙)
       if (r.placed > 0)
@@ -224,6 +235,6 @@ void goAfterBulk(BuildContext context, String? next) {
   final nav = Navigator.of(context, rootNavigator: true);
   nav.popUntil((r) => r.isFirst);
   // 다른 탭에서 넣었어도 책장 탭으로
-  if (next == 'shelf') AppNav.instance.goTab(0);
+  if (next == 'shelf') AppNav.instance.goTab(AppTab.shelf);
   if (next == 'books' && nav.context.mounted) openAllBooks(nav.context, offShelf: true);
 }

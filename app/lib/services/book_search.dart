@@ -67,7 +67,10 @@ typedef SearchResult = ({bool ok, List<BookCandidate> items, String? provider, S
 SearchResult _ok(List<BookCandidate> items, [String? provider, String? diag]) => (ok: true, items: items, provider: provider, reason: null, message: null, diag: diag);
 SearchResult _fail(String reason, String message, String diag) => (ok: false, items: const [], provider: null, reason: reason, message: message, diag: diag);
 
-const _offline = '인터넷에 연결되지 않았어요. 직접 입력으로 추가할 수 있어요.';
+// 화면에 보이는 실패 문장(상태 번호 · 영어는 diag로만, docs/design/DESIGN.md 9장 '실패 알림'). 오프라인 문장은 errorText와 같다
+const _offline = '인터넷 연결을 확인하고 다시 시도해 주세요.';
+const _trouble = '검색에 잠시 문제가 있어요. 잠시 뒤 다시 시도해 주세요.';
+const _quota = '검색 사용량 한도가 찼어요. 잠시 뒤 다시 시도해 주세요.';
 const _providerName = {'yes24': 'YES24'};
 
 final _http = HttpClient()..connectionTimeout = const Duration(seconds: 12);
@@ -135,7 +138,7 @@ Future<List<BookCandidate>> popularBooks() async {
 Future<SearchResult> _searchServer(String q) async {
   try {
     final (status, json) = await _getJson('$apiUrl/books/search?q=${Uri.encodeQueryComponent(q)}');
-    if (status != 200) return _fail(status == 429 ? 'quota' : 'unknown', '검색하지 못했어요($status).', 'server $status');
+    if (status != 200) return _fail(status == 429 ? 'quota' : 'unknown', status == 429 ? _quota : _trouble, 'server $status');
     final items = _serverItems(json);
     return _ok(items, items.isNotEmpty ? items.first.sourceName : '서버');
   } catch (e) {
@@ -194,9 +197,9 @@ Future<SearchResult> _searchGoogle(String q) async {
       final err = (json as Map?)?['error'] as Map?;
       final reason = (((err?['errors'] as List?)?.firstOrNull as Map?)?['reason'] ?? err?['status'] ?? '') as String;
       final diag = 'Google Books $status $reason';
-      if (status == 429 || RegExp('rateLimit|quota', caseSensitive: false).hasMatch(reason)) return _fail('quota', '검색 사용량 한도가 찼어요. 다른 검색으로 찾아볼게요.', diag);
-      if (status == 400 || status == 401 || status == 403) return _fail('auth', '검색 설정(키)에 문제가 있어요. 다른 검색으로 찾아볼게요.', diag);
-      return _fail('unknown', '검색하지 못했어요($status).', diag);
+      if (status == 429 || RegExp('rateLimit|quota', caseSensitive: false).hasMatch(reason)) return _fail('quota', _quota, diag);
+      if (status == 400 || status == 401 || status == 403) return _fail('auth', _trouble, diag);
+      return _fail('unknown', _trouble, diag);
     }
     return _ok([for (final v in ((json as Map?)?['items'] as List?)?.cast<Map<String, Object?>>() ?? const <Map<String, Object?>>[]) _fromGoogle(v)], 'Google Books');
   } catch (e) {
@@ -208,7 +211,7 @@ Future<SearchResult> _searchOpenLibrary(String q) async {
   try {
     const fields = 'key,title,author_name,editions,editions.key,editions.title,editions.publisher,editions.publish_date,editions.isbn,editions.cover_i';
     final (status, json) = await _getJson('https://openlibrary.org/search.json?q=${Uri.encodeQueryComponent(q)}&limit=20&fields=$fields');
-    if (status != 200) return _fail('unknown', '검색하지 못했어요($status).', 'Open Library $status');
+    if (status != 200) return _fail('unknown', _trouble, 'Open Library $status');
     return _ok([
       for (final d in ((json as Map?)?['docs'] as List?)?.cast<Map<String, Object?>>() ?? const <Map<String, Object?>>[])
         () {

@@ -1,6 +1,6 @@
 // 읽기 탭(지금 앱 features/reading/ReadList.tsx): 맨 위 오늘 날짜와 오늘 읽은 시간, '최근 읽던 책' 큰 카드(표지 · 오늘 시간 · 이어서 읽기),
 // 아래 '내 읽기 목록'은 책마다 한 줄(표지 · 제목 · 저자 · 오늘 읽은 시간이나 ▶ 읽기). 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
-// 줄을 길게 누르면 메뉴(책 정보 · 이 책 독서 기록 · 목록에서 빼기). 장면에서 뒤로 나오면 이 목록이다(타이머는 계속 돈다).
+// 줄을 길게 누르면 메뉴(책 정보 · 독서 기록 · 목록에서 빼기). 장면에서 뒤로 나오면 이 목록이다(타이머는 계속 돈다).
 // 다른 책을 재는 중에 다른 책을 누르면 묻는다(앞 책 시간이 설명 없이 새 책으로 옮겨 가지 않게).
 // '내 읽기 목록' 오른쪽 +는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
 library;
@@ -15,11 +15,14 @@ import '../../domain/reading.dart';
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../../app/app_nav.dart';
+import '../book/add_book_screen.dart' show openAddBook;
 import '../book/book_screen.dart';
 import '../bookmark/book_picker.dart';
+import '../stats/chart_data.dart' show dayTitle;
 import '../stats/stats_screen.dart';
 import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';
@@ -104,7 +107,7 @@ class _ReadListState extends State<ReadList> {
   // 줄을 누르면: 재는 책은 장면으로 돌아가고, 아니면 그 책으로 읽기
   void _tapRow(String? id) => _reading.active != null && _reading.active!.myBookId == id ? _openScene() : _begin(id);
 
-  // 길게 누르기 메뉴: 메뉴 시트 줄에는 꺾쇠를 두지 않는다(2026-11-19 공통 규칙)
+  // 길게 누르기 메뉴: 메뉴 시트 줄에는 꺾쇠를 두지 않는다(2026-11-19 공통 규칙). 열리는 화면 이름과 같게 '독서 기록'
   void _menu(String id, String title, bool removable) => showSheet<void>(
         context,
         title: title,
@@ -114,16 +117,18 @@ class _ReadListState extends State<ReadList> {
               Navigator.pop(ctx);
               openBook(context, id);
             }),
-            ListItem(label: '이 책 독서 기록', onPress: () {
+            ListItem(label: '독서 기록', onPress: () {
               Navigator.pop(ctx);
               Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsScreen(tab: false, initialBook: id)));
             }),
           ],
+          // 줄이 목록에서 사라지는 일이라 토스트로 알린다(DESIGN 14장). 되돌리는 기능은 따로 없다(+로 다시 더한다)
           if (removable)
             ListItem(label: '목록에서 빼기', onPress: () {
               Navigator.pop(ctx);
               _settings.set({'readList': _settings.readList.where((x) => x != id).toList()});
               if (_focusId == id) setState(() => _focusId = null);
+              showToast(context, '읽기 목록에서 뺐어요.');
             }),
         ]),
       );
@@ -184,9 +189,9 @@ class _ReadListState extends State<ReadList> {
     );
   }
 
-  /// 오늘 날짜와 오늘 총 시간(제목 바로 아래 한 줄)
-  Widget _todayLine(DateTime now, _Today t) {
-    final day = '${now.month}월 ${now.day}일 ${weekdays[now.weekday % 7]}요일';
+  /// 오늘 날짜와 오늘 총 시간(제목 바로 아래 한 줄). 날짜 글자는 앱 공통 날짜 머리 함수(DESIGN 4장 dayTitle)
+  Widget _todayLine(String date, _Today t) {
+    final day = dayTitle(date);
     return Semantics(
       label: '$day, 오늘 총 ${formatDuration(t.total)}${t.active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}',
       excludeSemantics: true,
@@ -240,6 +245,8 @@ class _ReadListState extends State<ReadList> {
   Widget build(BuildContext context) => ElapsedTicker(running: _reading.running, builder: (_) => _screen(context));
 
   Widget _screen(BuildContext context) {
+    // 서재를 읽기 전에는 빈 목록 안내가 잠깐 보이지 않게 불러오는 중(DESIGN 11장)
+    if (!_lib.loaded) return const Screen(back: false, title: '읽기', children: [Loading()]);
     final lib = _lib.lib;
     final active = _reading.active;
     final added = _settings.readList;
@@ -253,6 +260,8 @@ class _ReadListState extends State<ReadList> {
     // 여기에 들어온다(2026-11-16 QA 현우 F4: 읽기 탭에 넣은 적 없는 '책 없이 읽기' 줄이 생겼다)
     final showNoBook = t.noBookActive || (saved.noBook > 0 && _settings.noBookDay == day) || added.contains(noBook);
     final hasRows = ids.isNotEmpty || showNoBook;
+    // 고를 책이 하나도 없으면(숨긴 책은 고르기에서 빠진다) 빈 안내 단추는 내 책에 책을 넣는 '책 추가'
+    final noBooks = !lib.books.values.any((b) => b.hiddenAt == null);
     Future<void> openPicker() async {
       final picked = await pickBooks(context, lib, MultiPick(fixed: showNoBook ? [...ids, noBook] : ids, none: noBook), allowNone: true);
       if (picked.isNotEmpty) _addToList(picked);
@@ -284,7 +293,7 @@ class _ReadListState extends State<ReadList> {
       title: '읽기',
       bottomPad: TabBarStyle.contentPad - Space.section,
       children: [
-        _todayLine(now, t),
+        _todayLine(day, t),
         // 끝냈지만 저장하지 않은 기록(독서 끝 화면에서 뒤로 나왔을 때 등): 여기서 다시 연다(2026-11-15 QA 민혁 F3)
         if (_reading.pending != null)
           Padding(
@@ -307,7 +316,7 @@ class _ReadListState extends State<ReadList> {
             // 26 그림(24칸에 획은 5~19)이 누르는 칸 48 가운데라 칸 끝까지 11, 그림 안 여백 5.4, 반 획 1을 빼 15.4만큼 민다
             Transform.translate(
               offset: const Offset(15.4, 0),
-              child: IconBtn(label: '읽기 목록에 책 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.inkSoft, stroke: 2)),
+              child: IconBtn(label: '읽기 목록에 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.inkSoft, stroke: 2)),
             ),
           ]),
         ),
@@ -317,16 +326,18 @@ class _ReadListState extends State<ReadList> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final id in rest) _row(lib, t, id), if (restNoBook) _row(lib, t, null)]),
           )
         else if (!hasRows)
+          // 첫 사용(2026-11-17 시안: 안내 한 줄 + 단추). 단추 이름은 하는 일대로: 읽기 목록에 고르기는 '읽기 목록에 추가'
+          // ('책 추가'는 내 책에 새 책을 넣는 일이라 이름이 같으면 헷갈린다), 고를 책이 없으면 내 책에 넣는 '책 추가'
           Padding(
             padding: const EdgeInsets.only(top: Space.l),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              WordText('읽을 책을 골라 두고 눌러서 시간을 재요', style: AppType.sub),
+              WordText(noBooks ? '책을 추가하면 읽기 목록에 골라 두고 시간을 잴 수 있어요' : '읽을 책을 골라 두고 눌러서 시간을 재요', style: AppType.sub),
               const SizedBox(height: Space.m),
-              Btn(label: '책 추가', onPress: openPicker),
+              noBooks ? Btn(label: '책 추가', onPress: () => openAddBook(context)) : Btn(label: '읽기 목록에 추가', onPress: openPicker),
             ]),
           )
         else
-          Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('+로 읽을 책을 더 골라 둘 수 있어요', style: AppType.sub)),
+          const EmptyLine('+로 읽을 책을 더 골라 둘 수 있어요'),
       ],
     );
   }

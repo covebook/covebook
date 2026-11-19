@@ -47,16 +47,17 @@ Future<void> main() async {
     // ignore: avoid_print
     print('환경음 배경 재생 준비 실패 $e');
   });
-  await initBake();
+  // 준비 하나가 실패해도 시작 그림에 멈추지 않고 기본값으로 연다(2026-11-19 규칙: 실패가 있으면 시작 그림에 영원히 머물렀다)
+  await _startStep('굽기 준비', initBake);
   // 기기에 재 둔 책등 비율·갈피 색(책장 책 크기·갈피 색)
-  await loadCoverMeasures();
+  await _startStep('책 크기', loadCoverMeasures);
   // 고른 스킨(선반·벽지·벽)·책 측면 모양: 책장을 굽기 전에
-  await loadSkin();
-  await loadSpineLook();
+  await _startStep('스킨', loadSkin);
+  await _startStep('책 측면', loadSpineLook);
   // 새 서재 예시 책장(표시 전용 예시 책): 책장을 읽기 전에
-  await loadReferenceHome();
+  await _startStep('예시 책장', loadReferenceHome);
   // 로그인 화면을 띄울지: 이 기기에 남긴 계정 사본을 먼저 읽는다(서버 있는 빌드만)
-  await SyncService.instance.loadLocalState();
+  await _startStep('계정', SyncService.instance.loadLocalState);
   startStep.value = 2;
   runApp(const ChaekjangApp());
 }
@@ -156,7 +157,7 @@ class ChaekjangApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: '책장한켠',
+        title: '책장 한켠',
         debugShowCheckedModeBanner: false,
         theme: appTheme,
         localizationsDelegates: const [KoMaterialLocalizations.delegate],
@@ -191,4 +192,13 @@ class ChaekjangApp extends StatelessWidget {
           );
         },
       );
+}
+
+/// 시작 준비 한 단계: 실패하면 기록만 남기고 기본값으로 계속한다
+Future<void> _startStep(String name, Future<void> Function() step) async {
+  try {
+    await step();
+  } catch (e) {
+    debugPrint('[start] $name 준비 실패, 기본값으로 계속: $e');
+  }
 }

@@ -15,6 +15,9 @@ const sortLabel = {AllBooksSort.recent: '최신순', AllBooksSort.title: '제목
 
 typedef AllBooksRow = ({Book book, bool onShelf});
 
+/// 숨긴 책을 되돌리는 곳(삭제 · 숨기기 확인 시트 · 숨긴 책의 책 정보가 같은 글, 단추 이름 '다시 보이기'와 같은 말)
+const hiddenWhere = '내 책 › 필터 › 숨긴 책 보기에서 다시 보이게 할 수 있어요.';
+
 /// 필터 시트에서 건 조건 이름(걸린 것만). 기본(모든 책·최근순)이면 빈 목록: 조건 줄을 보이지 않는다(2026-11-16 메뉴 개편 지시)
 List<String> filterConditions({bool offShelfOnly = false, int? year, AllBooksSort sort = AllBooksSort.recent}) => [
       if (offShelfOnly) '책장에 없는 책',
@@ -101,8 +104,8 @@ String deleteNote(DeleteSummary n) {
   final gone = parts.length <= 1 ? parts.join() : '${parts.sublist(0, parts.length - 1).join(', ')}${_wa(parts[parts.length - 2])} ${parts.last}';
   final kept = formatDurationShort(n.ms);
   return [
-    if (gone.isNotEmpty) '$gone도 지워져요.',
-    if (n.sessions > 0) '독서 시간 ${withJosa(kept, '은', '는')} 책 없이 읽은 시간으로 통계에 남아요.',
+    if (gone.isNotEmpty) '$gone도 삭제돼요.',
+    if (n.sessions > 0) '독서 시간 ${withJosa(kept, '은', '는')} 책 없이 읽기 기록으로 통계에 남아요.',
     '되돌릴 수 없어요.',
   ].join('\n');
 }

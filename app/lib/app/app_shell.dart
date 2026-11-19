@@ -3,7 +3,7 @@
 // 하단바는 화면 양옆·아래에서 띄운 흰 알약(옅은 그림자), 글자 없이 아이콘만: 고르지 않은 탭은 속이 빈 회색, 고른 탭은 검정으로 속이 찬 모양
 library;
 
-import '../store/finish_reading.dart' show resumeReading;
+import '../features/reading/start_book.dart' show resumeReadingOrTell;
 import 'dart:async';
 import 'dart:io';
 
@@ -19,7 +19,7 @@ import '../features/reading/finish_screen.dart';
 import '../features/reading/read_list.dart';
 import '../features/reading/reading_screen.dart';
 import '../features/record/record_tab.dart' show RecordTab;
-import '../features/stats/chart_data.dart' show timeLabel;
+import '../features/book/labels.dart' show dateTimeLabel, relativeDay;
 import '../features/stats/stats_screen.dart';
 import '../features/stats/stats_widgets.dart' show bookTitle;
 import '../services/ambient.dart';
@@ -229,18 +229,16 @@ class _AppShellState extends State<AppShell> {
     if (it == null && reading.stale && reading.active != null) {
       final a = reading.active!;
       final title = bookTitle(LibraryModel.instance.lib, a.myBookId);
-      // 달력 날짜로(12~24시간 전 어제를 '오늘'로 적었다, 점검 B12)
-      final d0 = DateTime.fromMillisecondsSinceEpoch(a.lastBeat.toInt()), n = DateTime.now();
-      final days = DateTime(n.year, n.month, n.day).difference(DateTime(d0.year, d0.month, d0.day)).inDays;
-      final when = days <= 0 ? '오늘' : days == 1 ? '어제' : '$days일 전';
+      // 달력 날짜로(12~24시간 전 어제를 '오늘'로 적었다, 점검 B12). 앱 공통 가까운 날 글자(relativeDay)
+      final when = relativeDay(DateTime.fromMillisecondsSinceEpoch(a.lastBeat.toInt()));
       appAlert(
         context,
         '멈춰 둔 독서가 있어요',
-        '$when ${title == null ? '' : '${withJosa('「$title」', '을', '를')} '}${formatDuration(a.accumulatedMs)} 읽다가 멈춰 뒀어요.',
+        '$when ${title == null ? '' : '${withJosa('‘$title’', '을', '를')} '}${formatDuration(a.accumulatedMs)} 읽다가 멈춰 뒀어요.',
         [
-          AlertButton('이어 읽기', onPress: () async {
+          AlertButton('이어서 읽기', onPress: () async {
             reading.clearStale();
-            await resumeReading();
+            if (!await resumeReadingOrTell(context)) return;
             // 이어 읽으면 소리도 함께(복구 창 이어 읽기와 같게, 점검 B14)
             Ambient.instance.resumeIfWanted();
             if (context.mounted) openReadingScene(context);
@@ -250,7 +248,15 @@ class _AppShellState extends State<AppShell> {
             reading.finish();
             openFinish(context);
           }),
-          AlertButton('기록 버리기', style: AlertStyle.destructive, onPress: () => reading.discardActive()),
+          // 지우는 일은 확인을 거친다(DESIGN 12장, 독서 끝 '이번 독서 기록을 버릴까요?'와 같은 창)
+          AlertButton('기록 버리기', style: AlertStyle.destructive, onPress: () {
+            appAlert(context, '이번 독서 기록을 버릴까요?', '${withJosa(formatDuration(a.accumulatedMs), '이', '가')} 저장되지 않아요.', [
+              const AlertButton('취소', style: AlertStyle.cancel),
+              AlertButton('버리기', style: AlertStyle.destructive, onPress: () => reading.discardActive()),
+            ]);
+          }),
+          // 다른 복구 창처럼 미룰 수 있게: 멈춘 채로 두고(작은 타이머) 다시 묻지 않는다
+          AlertButton('나중에', style: AlertStyle.cancel, onPress: reading.clearStale),
         ],
         true,
         true,
@@ -258,8 +264,8 @@ class _AppShellState extends State<AppShell> {
       return;
     }
     if (it == null) return;
-    // 시각은 앱 공통 '오후 9:05'(2026-11-19 공통 규칙: 여기만 24시간 '21:05'였다)
-    final hm = timeLabel(DateTime.fromMillisecondsSinceEpoch(it.lastBeat.toInt()));
+    // 날과 시각: 며칠 꺼져 있었어도 언제인지 보이게('어제 오후 9:05', DESIGN 4장 dateTimeLabel)
+    final hm = dateTimeLabel(DateTime.fromMillisecondsSinceEpoch(it.lastBeat.toInt()));
     // 1분 미만 꺼졌던 것은 묻지 않고 넣는다(읽던 중일 가능성이 크다)
     if (it.gapMs < askGapMs) {
       _askContinue(true, '지난 독서가 중간에 멈췄어요', '앱이 잠깐(1분 미만) 꺼져 있었어요. 그 시간도 읽은 시간에 넣었어요.');
@@ -295,10 +301,10 @@ class _AppShellState extends State<AppShell> {
     final total = it.countedMs + (includeGap ? now - it.lastBeat : now - it.reopenAt);
     appAlert(
       context,
-      title ?? '이어 읽을까요?',
+      title ?? '이어서 읽을까요?',
       message ?? '지금까지 ${withJosa(formatDuration(total), '을', '를')} 읽었어요.',
       [
-        AlertButton('이어 읽기', onPress: () {
+        AlertButton('이어서 읽기', onPress: () {
           reading.resumeInterrupted(includeGap: includeGap);
           // 소리를 켜 둔 채 꺼졌으면 다시 켠다(이어 읽기 뒤 빗소리가 꺼져 있었다, 2026-11-15 QA 수아 F2)
           Ambient.instance.resumeIfWanted();

@@ -4,6 +4,7 @@
 library;
 
 import 'sync.dart';
+import 'error_text.dart';
 
 class PublicProfile {
   PublicProfile.of(Map j)
@@ -153,11 +154,8 @@ bool needsSocial(Object e) => e is ApiError && e.code == 'needs_social_account';
 bool needsProfile(Object e) => e is ApiError && e.code == 'needs_profile';
 bool isNotFound(Object e) => e is ApiError && e.status == 404;
 
-String communityError(Object e) {
-  if (e is ApiError) return e.message;
-  final m = e is StateError ? e.message : '$e';
-  return RegExp('SocketException|Connection|HandshakeException', caseSensitive: false).hasMatch(m) ? '서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.' : m;
-}
+/// 커뮤니티 실패 문구: 앱 공통 실패 문구(errorText, DESIGN 9장)
+String communityError(Object e) => errorText(e);
 
 String _enc(String s) => Uri.encodeComponent(s);
 Map _m(Object? v) => (v as Map?) ?? const {};

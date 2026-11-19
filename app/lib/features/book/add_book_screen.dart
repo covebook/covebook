@@ -2,7 +2,7 @@
 // 저장한 뒤 다시 묻지 않는다. 자리가 모자랄 때만 새 선반 열기 / 보관만 하기를 고른다(place_books). 보관만 한 책도 전체 책에 있다.
 // 검색 결과·표지·쪽수가 없어도 직접 입력과 기본 장정으로 끝낼 수 있다. 추정 크기를 확인된 정보처럼 저장하지 않는다.
 // 2026-11-15 페르소나 QA·사용자 '다 넣어': '책 확인'에서 뒤로·'한 권 더 추가' 뒤에도 검색어와 결과가 남는다(_FindMemory),
-// 검색 결과에서 여러 권 고르기 → 한 번에 추가, 결과 줄에 출판사·연도와 '내 서재에 있음', 바코드 연속 스캔·목록 파일 가져오기 입구
+// 검색 결과에서 여러 권 고르기 → 한 번에 추가, 결과 줄에 출판사·연도와 '내 책에 있음', 바코드 연속 스캔·목록 파일 가져오기 입구
 library;
 
 import 'dart:math' as math;
@@ -10,6 +10,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../domain/book_list_import.dart' show isbn13Of;
 import '../../domain/library.dart';
 import '../../services/book_search.dart';
 import '../../store/files.dart' show keepImage;
@@ -17,6 +18,8 @@ import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
+import '../../ui/draft_guard.dart';
+import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../home/home_screen.dart' show showBookOnShelf;
@@ -31,9 +34,10 @@ import 'bulk_add.dart';
 import 'import_list_screen.dart' show openImportList;
 import 'place_books.dart';
 
-/// 책 추가 열기. q: 바로 검색, title: 직접 입력 확인 단계로. pick: 책 고르기에서 '새 책 등록'으로 왔다(추가한 책 id를 돌려준다)
-Future<String?> openAddBook(BuildContext context, {String? q, String? title, bool pick = false}) => Navigator.of(context, rootNavigator: true)
-    .push<String>(MaterialPageRoute(settings: const RouteSettings(name: '/book/add'), builder: (_) => AddBookScreen(q: q, title: title, pick: pick)));
+/// 책 추가 열기. q: 바로 검색, title: 직접 입력 확인 단계로. pick: 책 고르기에서 '새 책 등록'으로 왔다(추가한 책 id를 돌려준다).
+/// fromList: 바코드 · 목록 가져오기에서 못 찾은 한 권을 넣으러 왔다(한 권만 · 끝나면 그 목록으로 돌아가 id를 돌려준다: 찾아 둔 목록이 사라지지 않게)
+Future<String?> openAddBook(BuildContext context, {String? q, String? title, bool pick = false, bool fromList = false}) => Navigator.of(context, rootNavigator: true)
+    .push<String>(MaterialPageRoute(settings: const RouteSettings(name: '/book/add'), builder: (_) => AddBookScreen(q: q, title: title, pick: pick, fromList: fromList)));
 
 class _Draft {
   _Draft(this.source);
@@ -41,6 +45,19 @@ class _Draft {
   String? coverUri, coverSource, category, seriesTitle, sourceName, link, productId;
   final String source; // manual · search · photo
   ReadStatus status = ReadStatus.want;
+
+  /// 사람이 고칠 수 있는 값 전부(책 확인에 들어온 뒤 바꾼 것이 있는지 견준다)
+  String get sig => [title, authors, publisher, publishedAt, isbn, pages, width, height, coverUri, status.name].join('\u0000');
+
+  List<String> get authorList => [for (final a in authors.split(',')) if (a.trim().isNotEmpty) a.trim()];
+}
+
+/// 직접 등록: 검색어가 ISBN이면(바코드로 못 찾은 책) ISBN 칸에, 아니면 제목 칸에 넣고 연다
+_Draft _manualDraft(String q) {
+  final code = isbn13Of(q);
+  return _Draft('manual')
+    ..title = code == null ? q.trim() : ''
+    ..isbn = code ?? '';
 }
 
 /// 찾기 단계에서 남겨 두는 것: 확인 단계로 갔다 돌아와도·'한 권 더 추가' 뒤에도 검색어와 결과가 그대로(2026-11-15 QA 정우 F2·민혁 F4).
@@ -55,9 +72,9 @@ class _FindMemory {
 }
 
 class AddBookScreen extends StatefulWidget {
-  const AddBookScreen({super.key, this.q, this.title, this.pick = false});
+  const AddBookScreen({super.key, this.q, this.title, this.pick = false, this.fromList = false});
   final String? q, title;
-  final bool pick;
+  final bool pick, fromList;
 
   @override
   State<AddBookScreen> createState() => _AddBookScreenState();
@@ -69,9 +86,18 @@ class _AddBookScreenState extends State<AddBookScreen> {
   BookArtParams? _art;
   BindingDraft? _binding;
   late _Draft _draft = _Draft('manual')..title = widget.title ?? '';
+
+  /// 책 확인에 들어올 때의 값(나갈 때 바꾼 것이 있는지 견준다)
+  late String _base = _draft.sig;
   String? _notice;
+
+  /// 추가 · 장정 미리보기를 하지 못했을 때 화면 안 알림(적은 내용은 그대로)
+  String? _saveError;
   bool _saving = false, _more = false;
   final _find = _FindMemory();
+
+  /// 판본 상세를 읽는 차례(읽는 동안 다른 책을 누르면 마지막에 누른 책만)
+  int _detailRun = 0;
 
   /// 판형(가로·세로 mm): 둘 다 있을 때만
   ({int widthMm, int heightMm})? get _size {
@@ -81,15 +107,19 @@ class _AddBookScreenState extends State<AddBookScreen> {
 
   void _toConfirm(_Draft d, [String? msg]) => setState(() {
         _draft = d;
+        _base = d.sig;
         _notice = msg;
+        _saveError = null;
         _step = 'confirm';
       });
 
   /// 고르면 그 판본의 상세(쪽수·판형·ISBN)를 읽어 채운다(없으면 비워 둔 채로 확인 단계로)
   Future<void> _fromCandidate(BookCandidate picked) async {
-    setState(() => _notice = '판본 정보를 확인하는 중…');
+    final run = ++_detailRun;
+    setState(() => _notice = '판본 정보를 확인하는 중이에요.');
     final c = await candidateDetails(picked);
-    if (!mounted) return;
+    // 읽는 동안 다른 책을 눌렀거나 직접 등록으로 갔으면 늦게 온 결과로 덮지 않는다
+    if (!mounted || run != _detailRun || _step != 'find') return;
     final d = _Draft('search')
       ..title = c.title
       ..authors = authorLine(c.authors)
@@ -107,19 +137,20 @@ class _AddBookScreenState extends State<AddBookScreen> {
       ..link = c.link
       ..productId = c.productId;
     final missing = [if (c.pageCount == null) '쪽수', if (c.size == null) '판형'];
-    _toConfirm(d, missing.isEmpty ? null : '${c.sourceName} 판본 기록에 ${missing.join(', ')} 정보가 없어요. 알면 적고, 모르면 비워 두세요(장정은 흔한 크기로 만들고 ‘확인 전’으로 표시해요).');
+    _toConfirm(d, missing.isEmpty ? null : '${c.sourceName} 판본 기록에 ${missing.join(', ')} 정보가 없어요. 알면 적고, 모르면 비워 두세요(장정은 흔한 크기로 만들고 ‘미입력’으로 표시해요).');
   }
 
-  /// 같은 ISBN이 이미 서재에 있으면: 기존 책 보기 / 별도 소장본으로 추가. 다시 읽기는 재등록이 아니라 기존 책에서
+  /// 같은 책이 이미 내 책에 있으면: 기존 책 보기 / 별도 소장본으로 추가. 다시 읽기는 재등록이 아니라 기존 책에서.
+  /// 같은 책 판정은 검색 결과 줄의 '내 책에 있음'과 같은 것(ownedBookId: ISBN, 없으면 제목 · 첫 저자)
   void _confirmDuplicate(VoidCallback go) {
-    final code = cleanIsbn(_draft.isbn);
-    final lib = LibraryModel.instance.lib;
-    final dup = code.isEmpty ? null : lib.books.values.where((b) => b.hiddenAt == null && lib.editions[b.editionId]?.isbn13 == code).firstOrNull;
+    final d = _draft;
+    final code = cleanIsbn(d.isbn);
+    final dup = ownedBookId(LibraryModel.instance.lib, BookCandidate(key: '', title: d.title.trim(), authors: d.authorList, sourceName: '', isbn13: code.isEmpty ? null : code));
     if (dup == null) return go();
-    appAlert(context, '이미 내 서재에 있는 책이에요',
-        '같은 ISBN의 책이 있어요. 다시 읽으려면 그 책에서 ‘다시 읽기’를 하면 지난 기록이 그대로 이어져요. 같은 책을 한 권 더 가지고 있다면 별도 소장본으로 추가할 수 있어요.', [
+    appAlert(context, '이미 내 책에 있어요',
+        '같은 책이 있어요. 다시 읽으려면 그 책에서 ‘다시 읽기’를 하면 지난 기록이 그대로 이어져요. 같은 책을 한 권 더 가지고 있다면 별도 소장본으로 추가할 수 있어요.', [
       const AlertButton('취소', style: AlertStyle.cancel),
-      AlertButton('기존 책 보기', onPress: () => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book'), builder: (_) => BookScreen(id: dup.id)))),
+      AlertButton('기존 책 보기', onPress: () => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(settings: const RouteSettings(name: '/book'), builder: (_) => BookScreen(id: dup)))),
       AlertButton('별도 소장본으로 추가', onPress: go),
     ]);
   }
@@ -141,53 +172,74 @@ class _AddBookScreenState extends State<AddBookScreen> {
     );
   }
 
-  /// 등록 완료: shelf(기본)는 바로 책장에 놓고, keep은 책장에 없는 책으로 보관만 한다
+  /// 등록 완료: shelf(기본)는 바로 책장에 놓고, keep은 책장에 없는 책으로 보관만 한다.
+  /// 서재에 넣지 못하면 화면 안에 알린다(적은 내용은 그대로, docs/design/DESIGN.md 11장 '저장 실패')
   Future<void> _add({bool keep = false}) async {
     if (_saving) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    final String id;
     try {
-      final picked = _step == 'binding' ? _binding : null;
-      final art = picked != null && _art != null ? _art! : await _prepareArt();
-      final d = _draft;
-      var coverUri = d.coverUri;
-      if (coverUri != null && d.coverSource == 'photo') coverUri = await keepImage(coverUri, 'cover');
-      final isbn = cleanIsbn(d.isbn);
-      final id = await LibraryModel.instance.addBook(
-        title: d.title.trim(),
-        authors: [for (final a in d.authors.split(',')) if (a.trim().isNotEmpty) a.trim()],
-        publisher: d.publisher.trim().isEmpty ? null : d.publisher.trim(),
-        publishedAt: d.publishedAt.trim().isEmpty ? null : d.publishedAt.trim(),
-        isbn13: isbn.isEmpty ? null : isbn,
-        pageCount: numOf(d.pages),
-        widthMm: _size?.widthMm,
-        heightMm: _size?.heightMm,
-        category: d.category,
-        seriesTitle: d.seriesTitle,
-        art: art,
-        coverUri: coverUri,
-        coverSource: coverUri != null ? d.coverSource : null,
-        source: d.source,
-        sourceName: d.sourceName,
-        link: d.link,
-        productId: d.productId,
-        status: d.status,
-        binding: picked,
-      );
+      id = await _store();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError = '추가하지 못했어요. 적은 내용은 그대로 있어요. ${errorText(e)}';
+        });
+      }
+      return;
+    }
+    // 서재에는 들어갔다: 책장에 놓다가 실패해도 다시 추가하게 두지 않는다(두 권이 되지 않게). 못 놓은 책은 내 책에 있다
+    var placed = 'kept';
+    try {
       // 책장 쪽 책 목록에 새 책을 넣고 놓는다
       await PlacementStore.instance.reload();
       if (!mounted) return;
-      String placed;
       if (keep) {
         await PlacementStore.instance.addToDrawer(id);
-        placed = 'kept';
       } else {
         final r = await placeWithChoice(context, [id]);
         placed = r.placed > 0 ? 'shelf' : (r.full ? 'full' : 'kept');
       }
-      if (mounted) await _showDone(id, placed);
-    } finally {
-      if (mounted) setState(() => _saving = false);
+    } catch (e) {
+      debugPrint('[add] 책장에 놓지 못했어요: $e');
     }
+    if (mounted) await _showDone(id, placed);
+    if (mounted) setState(() => _saving = false);
+  }
+
+  /// 서재에 넣고 새 책 id(장정 직접 고르기에서 왔으면 고른 장정으로)
+  Future<String> _store() async {
+    final picked = _step == 'binding' ? _binding : null;
+    final art = picked != null && _art != null ? _art! : await _prepareArt();
+    final d = _draft;
+    var coverUri = d.coverUri;
+    if (coverUri != null && d.coverSource == 'photo') coverUri = await keepImage(coverUri, 'cover');
+    final isbn = cleanIsbn(d.isbn);
+    return LibraryModel.instance.addBook(
+      title: d.title.trim(),
+      authors: d.authorList,
+      publisher: d.publisher.trim().isEmpty ? null : d.publisher.trim(),
+      publishedAt: d.publishedAt.trim().isEmpty ? null : d.publishedAt.trim(),
+      isbn13: isbn.isEmpty ? null : isbn,
+      pageCount: numOf(d.pages),
+      widthMm: _size?.widthMm,
+      heightMm: _size?.heightMm,
+      category: d.category,
+      seriesTitle: d.seriesTitle,
+      art: art,
+      coverUri: coverUri,
+      coverSource: coverUri != null ? d.coverSource : null,
+      source: d.source,
+      sourceName: d.sourceName,
+      link: d.link,
+      productId: d.productId,
+      status: d.status,
+      binding: picked,
+    );
   }
 
   /// 추가 완료(결과만 알린다. 다시 묻지 않는다): 밑에서 올라오는 시트. 닫으면 책 추가를 부른 화면으로
@@ -206,9 +258,10 @@ class _AddBookScreenState extends State<AddBookScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(_draft.title, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
               if (_draft.authors.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(_draft.authors, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
+              // 결과 한 줄은 여러 권 추가 결과 시트와 같은 본문 글(2026-11-19 공통 규칙: 단추 글자 역할 · 갈색이었다)
               Padding(
                 padding: const EdgeInsets.only(top: Space.m),
-                child: Text(placed == 'shelf' ? '책장에 진열했어요' : keptTitle(full: placed == 'full'), style: AppType.button.copyWith(color: AppColors.accent)),
+                child: WordText(placed == 'shelf' ? '책장에 진열했어요.' : '${keptTitle(full: placed == 'full')}.', style: AppType.body),
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 2),
@@ -221,6 +274,9 @@ class _AddBookScreenState extends State<AddBookScreen> {
         // 시트 안 단추는 l(2026-11-19 공통 규칙: 확인 시트는 l, 결과 시트는 m이었다)
         if (widget.pick)
           Btn(label: '이 책으로 계속 쓰기', size: 'l', onPress: () => Navigator.pop(ctx))
+        // 바코드 · 목록 가져오기에서 왔으면 그 목록으로(여러 권 추가 결과의 '계속 추가'와 같은 뜻)
+        else if (widget.fromList)
+          Btn(label: '계속 추가', size: 'l', onPress: () => Navigator.pop(ctx))
         else ...[
           if (placed == 'shelf')
             Btn(label: '책장에서 보기', size: 'l', onPress: () {
@@ -265,6 +321,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
           _step = 'find';
           _draft = _Draft('manual');
           _notice = null;
+          _saveError = null;
           _art = null;
           _binding = null;
           _more = false;
@@ -277,7 +334,11 @@ class _AddBookScreenState extends State<AddBookScreen> {
 
   /// 장정 직접 고르기: 추천 장정을 계산해 두고 미리보기 단계로
   Future<void> _toBinding() async {
-    setState(() => _saving = true);
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     try {
       final art = await _prepareArt();
       if (!mounted) return;
@@ -286,24 +347,37 @@ class _AddBookScreenState extends State<AddBookScreen> {
         _binding = BindingDraft.of(art);
         _step = 'binding';
       });
+    } catch (e) {
+      if (mounted) setState(() => _saveError = '장정 미리보기를 열지 못했어요. 적은 내용은 그대로 있어요. ${errorText(e)}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  /// 장정 미리보기 → 책 확인(추가하는 중에는 그대로)
+  void _backToConfirm() {
+    if (_saving) return;
+    setState(() {
+      _step = 'confirm';
+      _saveError = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_step == 'binding' && _art != null && _binding != null) {
-      // 뒤로 가면 책 확인으로(고른 장정은 버린다)
-      return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && !_saving) setState(() => _step = 'confirm');
-        },
+      final recommended = BindingDraft.of(_art!);
+      // 뒤로 가면 책 확인으로. 장정을 바꿨으면 버릴지 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
+      return DraftGuard(
+        dirty: () => !_saving && _binding != recommended,
+        title: '고른 장정을 버릴까요?',
+        keep: '계속 고르기',
+        onLeave: _backToConfirm,
         child: Screen(
           title: '장정 미리보기',
+          // 화면 아래 주요 단추는 l(DESIGN 5-2)
           footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Btn(label: '추가하고 책장에 진열', busy: _saving, onPress: () => _add()),
+            Btn(label: '추가하고 책장에 진열', size: 'l', busy: _saving, onPress: () => _add()),
             SubAction(label: '보관만 하기', disabled: _saving, onPress: () => _add(keep: true)),
           ]),
           children: [
@@ -313,10 +387,11 @@ class _AddBookScreenState extends State<AddBookScreen> {
               size: _size,
               pages: numOf(_draft.pages),
               value: _binding!,
-              recommended: BindingDraft.of(_art!),
+              recommended: recommended,
               realCover: _draft.coverUri,
               onChange: (v) => setState(() => _binding = v),
             ),
+            if (_saveError != null) NoticeText(_saveError!, error: true),
           ],
         ),
       );
@@ -326,26 +401,31 @@ class _AddBookScreenState extends State<AddBookScreen> {
         memory: _find,
         initial: widget.q,
         notice: _notice,
-        pick: widget.pick,
+        // 바코드 · 목록 가져오기에서 한 권을 넣으러 왔을 때도 한 권만(여러 권 고르기 · 다른 입구 없음)
+        pick: widget.pick || widget.fromList,
         onPick: _fromCandidate,
-        onManual: (q) => _toConfirm(_Draft('manual')..title = q),
+        onManual: (q) => _toConfirm(_manualDraft(q)),
         onAddMany: _addMany,
       );
     }
     final d = _draft;
     final ready = d.title.trim().isNotEmpty && !_saving;
-    // 찾기에서 왔으면 뒤로 키·뒤로 화살표는 검색 결과로(2026-11-15 QA 민혁 F4: 책장까지 나가 검색어가 사라졌다). 직접 입력으로 바로 연 확인은 그대로 닫힌다
-    return PopScope(
-      canPop: widget.title != null,
-      onPopInvokedWithResult: (didPop, _) {
-        // 확인 단계 안내(판본 쪽수·판형 없음 등)는 그 책 이야기라 검색으로 돌아가면 지운다(2026-11-18: 검색 화면에 남아 있었다)
-        if (!didPop && !_saving) {
-          setState(() {
-            _step = 'find';
-            _notice = null;
-          });
-        }
-      },
+    // 찾기에서 왔으면 뒤로 키·뒤로 화살표는 검색 결과로(2026-11-15 QA 민혁 F4: 책장까지 나가 검색어가 사라졌다). 직접 입력으로 바로 연 확인은 그대로 닫힌다.
+    // 적거나 바꾼 것이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
+    return DraftGuard(
+      dirty: () => !_saving && _draft.sig != _base,
+      title: '적은 내용을 버릴까요?',
+      onLeave: widget.title != null
+          ? null
+          : () {
+              if (_saving) return;
+              // 확인 단계 안내(판본 쪽수·판형 없음 등)는 그 책 이야기라 검색으로 돌아가면 지운다(2026-11-18: 검색 화면에 남아 있었다)
+              setState(() {
+                _step = 'find';
+                _notice = null;
+                _saveError = null;
+              });
+            },
       child: _confirm(d, ready),
     );
   }
@@ -370,12 +450,14 @@ class _AddBookScreenState extends State<AddBookScreen> {
     return Screen(
       title: '책 확인',
       footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        // 주요 행동: 추천 장정으로 바로 추가(책장에 놓기). 장정은 고르고 싶을 때만(보조)
-        Btn(label: '추천 장정으로 추가', disabled: !ready, busy: _saving, onPress: () => _confirmDuplicate(() => _add())),
+        // 꺼진 주요 단추의 이유는 단추 바로 위 안내 글(DESIGN 9장)
+        if (d.title.trim().isEmpty) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('제목을 적어야 추가할 수 있어요.', center: true)),
+        // 주요 행동: 추천 장정으로 바로 추가(책장에 놓기). 장정은 고르고 싶을 때만(보조). 화면 아래 주요 단추는 l(DESIGN 5-2)
+        Btn(label: '추천 장정으로 추가', size: 'l', disabled: !ready, busy: _saving, onPress: () => _confirmDuplicate(() => _add())),
         SubAction(label: '장정 직접 고르기', disabled: !ready, onPress: () => _confirmDuplicate(_toBinding)),
       ]),
       children: [
-        if (_notice != null) Padding(padding: const EdgeInsets.only(top: Space.m, bottom: Space.l), child: _Notice(_notice!)),
+        if (_notice != null) Padding(padding: const EdgeInsets.only(top: Space.xs, bottom: Space.l), child: NoticeText(_notice!)),
         _coverBlock(d),
         Field(label: '제목 (필수)', value: d.title, onChange: (t) => setState(() => d.title = t), placeholder: '책 제목'),
         Field(label: '저자 (선택)', value: d.authors, onChange: (t) => setState(() => d.authors = t), placeholder: '여러 명은 쉼표로'),
@@ -398,7 +480,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                   const SizedBox(width: Space.m),
                   Expanded(child: Field(label: '판형 세로(mm)', value: d.height, onChange: (t) => setState(() => d.height = t), number: true)),
                 ]),
-                Text('쪽수, 판형을 모르면 비워 두세요. 책장에는 흔한 크기로 보이고, 상세에는 ‘확인 전’으로 표시돼요.', style: AppType.sub),
+                WordText('쪽수, 판형을 모르면 비워 두세요. 책장에는 흔한 크기로 보이고, 책 정보에는 ‘미입력’으로 표시돼요.', style: AppType.sub),
                 const H2('읽기 상태'),
                 Wrap(spacing: Space.s, runSpacing: Space.s, children: [
                   for (final s in bookStatuses) AppChip(label: statusLabel[s]!, on: d.status == s, onPress: () => setState(() => d.status = s)),
@@ -407,6 +489,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
             ),
           ),
         ),
+        // 추가하지 못했으면 단추 바로 위에(적은 내용은 그대로)
+        if (_saveError != null) NoticeText(_saveError!, error: true),
       ],
     );
   }
@@ -432,7 +516,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
         Padding(
           padding: const EdgeInsets.only(top: Space.s),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Flexible(child: WordText(d.coverUri != null ? (d.coverSource == 'photo' ? '내가 찍은 사진' : '${d.sourceName ?? '도서 정보'} 제공') : '표지가 없어요', style: AppType.caption)),
+            Flexible(child: WordText(d.coverUri != null ? (d.coverSource == 'photo' ? '내가 고른 사진' : '${d.sourceName ?? '도서 정보'} 제공') : '표지가 없어요', style: AppType.caption)),
             // 원문 보기는 밑줄 없는 글자 단추(2026-11-19 공통 규칙). 화면 읽기 이름은 '○○에서 원문 보기' 그대로
             if (link != null && d.coverSource != 'photo') ...[
               const MetaBar(),
@@ -453,7 +537,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
 
 /// 표지 그림자(책 확인 표지 · 검색 결과 표지): 모서리 3 · 옅은 그림자
 Widget _shadowed(Widget cover) => DecoratedBox(
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), boxShadow: [cssShadow(const Color(0x1A000000), 0, 2, 4)]),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.cover), boxShadow: [cssShadow(const Color(0x1A000000), 0, 2, 4)]),
       child: cover,
     );
 
@@ -486,6 +570,9 @@ class _FindStepState extends State<_FindStep> {
   bool _busy = false;
   int _run = 0;
 
+  /// 많이 찾는 책을 받는 중 · 받지 못함(서버에 닿지 않으면 빈 목록이 온다)
+  bool _popularLoading = false, _popularFailed = false;
+
   @override
   void initState() {
     super.initState();
@@ -493,11 +580,24 @@ class _FindStepState extends State<_FindStep> {
       _m.q = widget.initial!;
       _search(widget.initial!);
     }
-    if (_m.popular.isEmpty) {
-      popularBooks().then((list) {
-        if (mounted) setState(() => _m.popular = list);
-      });
-    }
+    if (_m.popular.isEmpty) _loadPopular();
+  }
+
+  Future<void> _loadPopular() async {
+    _popularLoading = true;
+    _popularFailed = false;
+    final list = await popularBooks();
+    if (!mounted) return;
+    setState(() {
+      _popularLoading = false;
+      _m.popular = list;
+      _popularFailed = list.isEmpty;
+    });
+  }
+
+  void _retryPopular() {
+    _loadPopular();
+    setState(() {});
   }
 
   Future<void> _search([String? text]) async {
@@ -568,7 +668,13 @@ class _FindStepState extends State<_FindStep> {
         left: _m.multi ? TextLink(label: '취소', ink: true, onPress: _endMulti) : null,
         // 엑셀·CSV 목록으로 여러 권(책 고르기에서 왔을 때는 한 권만 고르므로 없음)
         right: widget.pick || _m.multi ? null : TextLink(label: '목록 가져오기', soft: true, onPress: () => openImportList(context)),
-        footer: _m.multi ? Btn(label: n == 0 ? '추가할 책을 고르세요' : '$n권 추가', disabled: n == 0, onPress: () => widget.onAddMany(_m.picked.values.toList())) : null,
+        // 화면 아래 주요 단추 l. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
+        footer: _m.multi
+            ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                if (n == 0) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('추가할 책을 골라 주세요.', center: true)),
+                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'l', disabled: n == 0, onPress: () => widget.onAddMany(_m.picked.values.toList())),
+              ])
+            : null,
         children: [
           SearchField(
             value: q,
@@ -590,18 +696,14 @@ class _FindStepState extends State<_FindStep> {
             // 칸 안 아이콘은 돋보기와 같은 22(24였다)
             trailing: widget.pick || _m.multi ? null : IconBtn(label: '바코드로 찾기', onPress: () => openBarcodeScan(context), child: const LucideIcon('ScanBarcode', color: AppColors.inkSoft)),
           ),
-          if (widget.notice != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: _Notice(widget.notice!)),
+          if (widget.notice != null) NoticeText(widget.notice!),
           if (_busy && items == null) const Loading(label: '책을 찾는 중이에요'),
-          if (_m.err != null)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.xl),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                _Notice(_m.err!, error: true),
-                const SizedBox(height: Space.s),
-                Btn(label: '다시 시도', kind: 'secondary', size: 's', onPress: () => _search()),
-                _ManualLink(onPress: () => widget.onManual(q)),
-              ]),
-            ),
+          // 검색 실패: 검색 0건과 같은 자리 · 모양(DESIGN 11장). 인터넷이 없어도 직접 등록은 된다(기기 안에서 끝난다)
+          // (2026-11-19 공통 규칙: 왼쪽 빨간 글 + '다시 시도' + '원하는 책이 없나요?'였다)
+          if (_m.err != null) ...[
+            Empty(title: '검색하지 못했어요', body: _m.err, action: '다시 찾기', actionKind: 'secondary', onAction: () => _search()),
+            TextLink(label: '직접 등록', onPress: () => widget.onManual(q)),
+          ],
           if (items != null && items.isEmpty && !_busy)
             Empty(title: '‘${q.trim()}’에 맞는 책이 없어요', body: '제목이나 저자 이름을 짧게 줄여 찾거나, 직접 등록할 수 있어요.', action: '직접 등록', actionKind: 'secondary', onAction: () => widget.onManual(q)),
           // 검색 전: 많이 찾는 책(YES24 베스트셀러 순서 그대로). 출처 표시는 늘 보인다(YES24 약관)
@@ -612,6 +714,18 @@ class _FindStepState extends State<_FindStep> {
                 _section('많이 찾는 책', source: 'YES24 베스트셀러'),
                 const SizedBox(height: Space.s),
                 for (final c in _m.popular) _row(c, lib),
+              ]),
+            )
+          // 받는 중이면 구역 안 작은 원, 받지 못했으면 구역 실패 한 줄 + 다시 시도(DESIGN 11장. 2026-11-19 공통 규칙: 검색칸만 남고 까닭이 없었다)
+          else if (q.trim().isEmpty && items == null && !_busy && _m.err == null && (_popularLoading || _popularFailed))
+            Padding(
+              padding: const EdgeInsets.only(top: Space.xl),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const SectionHead(title: '많이 찾는 책'),
+                if (_popularLoading)
+                  const Padding(padding: EdgeInsets.only(top: Space.m), child: Align(alignment: Alignment.centerLeft, child: Spinner(label: '많이 찾는 책을 불러오는 중')))
+                else
+                  EmptyLine('목록을 불러오지 못했어요', action: '다시 시도', onAction: _retryPopular),
               ]),
             ),
           if (items != null && items.isNotEmpty)
@@ -637,7 +751,7 @@ bool _big(BuildContext context) => MediaQuery.textScalerOf(context).scale(10) >=
 
 /// 검색 결과·인기 책 한 줄(공용 책 줄 BookRow 보통, 2026-11-19 공통 규칙): 표지 · 제목 · 저자, 오른쪽 '추가'.
 /// 출판사 · 연도(판 구분, 2026-11-15 QA 지민 F12·정우 F7)는 화면 읽기 이름에만 둔다(2026-11-17 사용자 시안: 제목 밑에 저자만).
-/// 이미 서재에 있는 책은 '내 서재에 있음'(체크). 여러 권 고르기에서는 '추가' 대신 고르는 원(서재에 있는 책은 흐린 원, 고를 수 없음)
+/// 이미 내 책에 있는 책은 '내 책에 있음'(체크). 여러 권 고르기에서는 '추가' 대신 고르는 원(서재에 있는 책은 흐린 원, 고를 수 없음)
 class _ResultRow extends StatelessWidget {
   const _ResultRow({required this.c, required this.onPick, this.owned = false, this.multi = false, this.picked = false});
   final BookCandidate c;
@@ -649,9 +763,10 @@ class _ResultRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pub = publisherLine(c);
+    // 화면 읽기에는 세로줄 대신 쉼표(DESIGN 15장)
+    final pub = publisherLine(c)?.split(metaSep).join(', ');
     final tap = onPick == null ? null : () => onPick!(c);
-    final action = multi ? (owned ? '내 서재에 있음' : (picked ? '고름' : '고르기')) : '추가';
+    final action = multi ? (owned ? '내 책에 있음' : (picked ? '고름' : '고르기')) : '추가';
     const size = BookRowSize.medium;
     return BookRow(
       size: size,
@@ -672,9 +787,10 @@ class _ResultRow extends StatelessWidget {
               ),
             ),
       onPress: tap,
-      selected: multi && picked,
-      // 여러 권 고르기에서는 서재에 있는 책의 행동 이름이 '내 서재에 있음'이라 두 번 읽지 않는다(2026-11-18)
-      label: [c.title, if (c.authors.isNotEmpty) authorLine(c.authors), ?pub, if (owned && action != '내 서재에 있음') '내 서재에 있음', action].join(', '),
+      // 여러 권 고르기 줄은 화면 읽기 '선택됨/선택 안 됨'(DESIGN 13장). 이미 있는 책은 고를 수 없어 이름으로만 알린다
+      checked: multi && !owned ? picked : null,
+      // 여러 권 고르기에서는 내 책에 있는 책의 행동 이름이 '내 책에 있음'이라 두 번 읽지 않는다(2026-11-18)
+      label: [c.title, if (c.authors.isNotEmpty) authorLine(c.authors), ?pub, if (owned && action != '내 책에 있음') '내 책에 있음', action].join(', '),
     );
   }
 }
@@ -703,18 +819,5 @@ class _ManualLink extends StatelessWidget {
             ),
           ),
         ),
-      );
-}
-
-/// 안내 글(상자 없이: 흰 화면 안 회색 상자를 두지 않는다, 2026-11-19 공통 규칙). 안내는 sub, 오류는 sub 빨강
-class _Notice extends StatelessWidget {
-  const _Notice(this.text, {this.error = false});
-  final String text;
-  final bool error;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-        liveRegion: true,
-        child: WordText(text, style: error ? AppType.sub.copyWith(color: AppColors.danger) : AppType.sub),
       );
 }

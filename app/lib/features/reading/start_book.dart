@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../ui/alert.dart';
+import '../../ui/feedback.dart';
 
 
 
@@ -31,21 +32,28 @@ void startNewReading(String? bookId) {
 }
 
 /// 완독한 책을 새로 읽기 시작할 때: '다시 읽기를 시작할까요?'(새 회차). 모든 입구(책 정보 · 책장 시트 · 읽기 탭 · 공유)가 이 한 곳에서 묻는다
-/// (2026-11-19 타이머 점검 B6: 책 정보만 물어서, 다른 입구에서 시작하면 끝난 회차에 기록이 붙었다). 고르지 않으면 false
+/// (2026-11-19 타이머 점검 B6: 책 정보만 물어서, 다른 입구에서 시작하면 끝난 회차에 기록이 붙었다). 고르지 않거나 새 회차를 저장하지 못하면 false
 Future<bool> confirmReread(BuildContext context, String bookId) async {
   final model = LibraryModel.instance;
   final b = model.lib.books[bookId];
   final last = currentRound(model.lib, bookId);
   if (b == null || b.status != ReadStatus.read || last?.finishedAt == null) return true;
-  var ok = false;
+  // 창 단추는 창이 닫힐 때 불리고 기다려 주지 않는다: 고른 것만 적어 두고 새 회차 저장은 여기서 기다린다
+  // (단추 안에서 저장을 기다린 뒤 ok를 바꿔, 창이 먼저 끝나 '다시 읽기'를 골라도 시작하지 않았다)
+  Future<void>? reread;
   await appAlert(context, '다시 읽기를 시작할까요?', '${last!.index + 1}회차가 생기고 진도는 0쪽부터예요. 지난 회차의 완독일, 독서 기록, 갈피는 그대로 남아요.', [
     const AlertButton('취소', style: AlertStyle.cancel),
-    AlertButton('다시 읽기', onPress: () async {
-      await model.reread(bookId);
-      ok = true;
-    }),
+    AlertButton('다시 읽기', onPress: () => reread = model.reread(bookId)),
   ]);
-  return ok;
+  if (reread == null) return false;
+  try {
+    await reread;
+    return true;
+  } catch (e) {
+    // 실패는 늘 알린다(DESIGN 11장)
+    if (context.mounted) appAlert(context, '다시 읽기를 시작하지 못했어요', errorText(e));
+    return false;
+  }
 }
 
 /// 그 책(null은 책 없이)으로 읽기. 다 정한 뒤 [show]가 장면(finish: false)이나 독서 끝(finish: true)을 연다
@@ -61,7 +69,7 @@ Future<void> beginReading(BuildContext context, String? bookId, {required void F
     return show(finish: false);
   }
   if (cur.myBookId == bookId) {
-    if (cur.runningSince == null) await resumeReading();
+    if (cur.runningSince == null && !await resumeReadingOrTell(context)) return;
     return show(finish: false);
   }
   await switchReadingBook(context, bookId, then: () => show(finish: false));
@@ -84,4 +92,13 @@ Future<void> startReadingBook(BuildContext context, String bookId) async {
     AppNav.instance.goRead(bookId);
     nav.push(finish ? finishRoute() : readingSceneRoute());
   });
+}
+
+/// 이어서 읽기(멈춰 둔 독서). 지난 몫을 저장하지 못하면 확인창으로 알리고 false(실패는 조용히 끝나지 않는다, DESIGN 11장).
+/// 작은 타이머 · 장면 · 읽기 시작 · 멈춰 둔 독서 창이 같은 문구를 쓴다
+Future<bool> resumeReadingOrTell(BuildContext context) async {
+  final e = await resumeReading();
+  if (e == null) return true;
+  if (context.mounted) appAlert(context, '이어서 읽지 못했어요', '지난 독서 기록은 그대로 있어요. 다음에 읽기를 시작하면 그 기록부터 저장해요. ${errorText(e)}');
+  return false;
 }

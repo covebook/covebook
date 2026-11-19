@@ -17,6 +17,7 @@ import '../../store/library_store.dart' show archivedYears;
 import '../../store/placement_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/board_screen.dart' show openBookmarkBoard;
@@ -34,9 +35,9 @@ import '../record/essay_screens.dart' show EssayRow, openNewEssay;
 import '../stats/chart_data.dart' show timeLabel, timeRange;
 import '../stats/session_edit_screen.dart' show openSessionEdit;
 import '../stats/stats_screen.dart';
-import 'all_books.dart' show deleteNote, deleteSummary;
 import 'binding_screen.dart' show openBindingEditor;
 import 'book_share_screen.dart' show openBookShare;
+import 'book_widgets.dart' show confirmRemoveBooks, removeBooks, removedText, unhideBook, unhiddenText;
 import 'edit_book_screen.dart' show openEditBook;
 import 'labels.dart';
 import 'place_books.dart' show keptNote, keptTitle, placeWithChoice;
@@ -66,6 +67,7 @@ class _BookScreenState extends State<BookScreen> {
   bool _noteEdit = false; // 평가 탭 한줄평을 고치는 중
   bool _roundEdit = false; // 내 기록 탭 읽은 기간 날짜를 고치는 중
   Timer? _noteTimer;
+  Timer? _pageTimer;
   final _note = TextEditingController();
   final _page = TextEditingController();
   bool _noteLoaded = false;
@@ -96,10 +98,14 @@ class _BookScreenState extends State<BookScreen> {
   void dispose() {
     _model.removeListener(_changed);
     ReadingStore.instance.removeListener(_changed);
-    // 화면을 떠나도 적던 한 줄 감상은 남긴다
+    // 화면을 떠나도 적던 한 줄 감상 · 현재 쪽은 남긴다
     if (_noteTimer?.isActive ?? false) {
       _noteTimer!.cancel();
       _saveNote();
+    }
+    if (_pageTimer?.isActive ?? false) {
+      _pageTimer!.cancel();
+      _savePage();
     }
     _note.dispose();
     _page.dispose();
@@ -146,6 +152,13 @@ class _BookScreenState extends State<BookScreen> {
     _model.updateBook(id, note: t.isEmpty ? null : t);
   }
 
+  /// 현재 쪽 저장(0 · 빈 값은 없음). 한줄평처럼 적는 대로 잠깐 뒤 저장한다(2026-11-19 공통 규칙 12장: 한 칸짜리 값은 바로 저장. 키보드 '완료'를 눌러야만 저장됐다)
+  void _savePage() {
+    final n = num.tryParse(_page.text.trim());
+    final next = n != null && n > 0 ? n.round() : null;
+    if (next != _model.lib.books[id]?.currentPage) _model.updateBook(id, currentPage: next);
+  }
+
   void _chooseStatus(MyBook b, Round? last, ReadStatus s) {
     if (s == b.status) return;
     if ((s == ReadStatus.reading || s == ReadStatus.paused) && last?.finishedAt != null) {
@@ -167,17 +180,20 @@ class _BookScreenState extends State<BookScreen> {
     ]);
   }
 
-  /// 책 메뉴(지금 앱): 공유·정보 수정·장정 편집·책장에서 보기·책장에서 빼기/진열·숨기기/삭제
+  /// 책 메뉴(지금 앱): 공유·정보 수정·장정 편집·책장에서 보기·책장에서 빼기/진열·숨기기/삭제.
+  /// 숨긴 책(연도 책장에만 남은 책, 갈피 상세에서 들어올 수 있다)은 진열 · 숨기기 대신 '다시 보이기'(내 책 › 숨긴 책과 같은 일)
   Future<void> _menu() async {
     final place = PlacementStore.instance;
     await place.ensure();
     final years = (await archivedYears([id]))[id] ?? const <int>[];
     if (!mounted) return;
     final onShelf = place.layout != null && placementOf(place.layout!, id) != null;
+    final hidden = _model.lib.books[id]?.hiddenAt != null;
     showSheet<void>(
       context,
       builder: (ctx) => ListGroup(children: [
-        ListItem(label: '이미지로 공유', sub: '한줄평, 별점을 넣은 카드', onPress: () {
+        // 머리 공유 아이콘 · 공유 화면 제목과 같은 이름(2026-11-19 공통 규칙: '이미지로 공유'였다)
+        ListItem(label: '책 공유', sub: '한줄평, 별점을 넣은 카드', onPress: () {
           Navigator.pop(ctx);
           _share();
         }),
@@ -196,75 +212,80 @@ class _BookScreenState extends State<BookScreen> {
             showBookOnShelf(context, id);
           }),
         // 책장에서 빼기는 배치만 푼다(책 정보·장정·독서 기록·갈피 그대로). 삭제(빨간 글자)는 책 데이터 자체를 지운다
+        // 결과는 홈 책 시트와 같은 토스트 + 되돌리기(2026-11-19 공통 규칙: 확인창이었고 되돌릴 수 없었다)
         if (onShelf)
           ListItem(label: '책장에서 빼기', sub: '기록은 그대로, 내 책에 남아요', onPress: () async {
             Navigator.pop(ctx);
-            if (await place.toDrawer(id) && mounted) appAlert(context, '책장에서 뺐어요. 내 책에 그대로 있어요.');
+            final ok = await place.toDrawer(id);
+            if (!mounted) return;
+            if (!ok) {
+              appAlert(context, '책장에서 빼지 못했어요', '잠시 뒤 다시 시도해 주세요.');
+              return;
+            }
+            showToast(context, '책장에서 뺐어요. 내 책에 그대로 있어요.', action: '되돌리기', onAction: () => place.undo());
           })
-        else
+        else if (!hidden)
           ListItem(label: '책장에 진열', onPress: () async {
             Navigator.pop(ctx);
-            // 뺐던 책은 뺄 때 자리로 돌아간다(placement_store). 진열했는지·어디인지 알린다(2026-11-16 QA 현우 F12: 화면이 그대로라 됐는지 몰랐다)
+            // 뺐던 책은 뺄 때 자리로 돌아간다(placement_store). 진열했는지·어디인지 토스트로 알린다(2026-11-16 QA 현우 F12: 화면이 그대로라 됐는지 몰랐다).
+            // 한 권 진열은 바로 앞 배치 하나라 되돌릴 수 있다. 못 놓았으면(책장이 꽉 참 · 보관만 하기) 까닭과 할 일을 확인창으로
             final back = place.hadSpot(id);
             final r = await placeWithChoice(context, [id]);
             if (!mounted) return;
             if (r.placed > 0) {
               final spot = back && place.lastRestored == id;
-              appAlert(context, '책장에 진열했어요', spot ? '뺄 때 있던 자리에 다시 진열했어요.' : '빈 자리에 진열했어요. 꾸미기에서 자리를 옮길 수 있어요.', [
-                const AlertButton('확인', style: AlertStyle.cancel),
-                AlertButton('책장에서 보기', onPress: () => showBookOnShelf(context, id)),
-              ]);
+              showToast(context, spot ? '뺄 때 있던 자리에 다시 진열했어요.' : '책장 빈 자리에 진열했어요.', action: '되돌리기', onAction: () => place.undo());
             } else if (r.kept > 0) {
               appAlert(context, keptTitle(full: r.full), keptNote(full: r.full));
             }
           }),
-        if (years.isNotEmpty)
+        if (hidden)
+          ListItem(label: '다시 보이기', sub: '내 책 목록에 다시 보여요', onPress: () {
+            Navigator.pop(ctx);
+            _unhide();
+          })
+        else if (years.isNotEmpty)
           ListItem(label: '책 숨기기', sub: '${years.join(', ')}년 책장에는 남아요', onPress: () {
             Navigator.pop(ctx);
-            _confirmDelete(years);
+            _remove();
           })
         else
           ListItem(label: '책 삭제', sub: '갈피, 감상, 독서 회차까지 지워요', danger: true, onPress: () {
             Navigator.pop(ctx);
-            _confirmDelete(years);
+            _remove();
           }),
       ]),
     );
   }
 
-  /// 연도 책장에 있는 책은 지우지 않고 숨긴다(2026-11-06 사용자 '삭제 말고 숨기기로').
-  /// 여러 권 삭제(내 책 › 선택)와 같은 아래 시트: 표지와 제목, 무엇이 지워지고 남는지, 위 [삭제] 아래 '취소'
-  /// (2026-11-16 QA 현우 F5: 한 권 삭제만 가운데 창에 책 이름이 없고 버튼 자리가 달랐다)
-  Future<void> _confirmDelete(List<int> years) async {
-    final hide = years.isNotEmpty;
-    final lib = _model.lib;
-    final title = lib.editions[lib.books[id]?.editionId]?.title ?? '이 책';
-    final ok = await showSheet<bool>(
-      context,
-      title: hide ? '이 책을 숨길까요?' : '이 책을 삭제할까요?',
-      description: hide ? '지금 책장과 책 목록에서 빠지고, ${years.join(', ')}년 책장에는 그대로 남아요.' : null,
-      builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xs, bottom: Space.l),
-          child: Column(children: [
-            ExcludeSemantics(child: SizedBox(width: CoverSize.sheet, child: BookVisual(lib: lib, id: id, width: CoverSize.sheet))),
-            Padding(
-              padding: const EdgeInsets.only(top: Space.s),
-              child: WordText(title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
-            ),
-          ]),
-        ),
-        WordText(hide ? '내 책 › 필터 › 숨긴 책 보기에서 다시 꺼낼 수 있어요.' : deleteNote(deleteSummary(lib, [id])), style: AppType.sub),
-        const SizedBox(height: Space.l),
-        Btn(label: hide ? '숨기기' : '삭제', kind: hide ? 'primary' : 'danger', size: 'l', onPress: () => Navigator.pop(ctx, true)),
-        SubAction(label: '취소', onPress: () => Navigator.pop(ctx, false)),
-      ]),
-    );
-    if (ok != true || !mounted) return;
+  /// 숨긴 책 다시 보이기(내 책 › 숨긴 책과 같은 함수). 화면은 그대로 두고 토스트로 알린다
+  Future<void> _unhide() async {
+    final title = _model.lib.editions[_model.lib.books[id]?.editionId]?.title ?? '책';
+    try {
+      await unhideBook(id);
+    } catch (e) {
+      if (mounted) appAlert(context, '다시 보이게 하지 못했어요', errorText(e));
+      return;
+    }
+    if (mounted) showToast(context, unhiddenText(title));
+  }
+
+  /// 책 삭제 · 숨기기(연도 책장에 있는 책은 지우지 않고 숨긴다, 2026-11-06 사용자 '삭제 말고 숨기기로'). 확인은 내 책 여러 권과 같은 시트(confirmRemoveBooks).
+  /// 보고 있던 책이 사라지니 화면을 닫고 토스트로 알린다(2026-11-19 공통 규칙: 알림 없이 닫혔다). 탭 첫 화면까지 닫는다: 이 화면 아래에 지운 책의 갈피 · 감상이 열려 있을 수 있다
+  Future<void> _remove() async {
+    final title = _model.lib.editions[_model.lib.books[id]?.editionId]?.title;
+    final r = await confirmRemoveBooks(context, [id]);
+    if (r == null || !mounted) return;
     final nav = Navigator.of(context);
-    await _model.deleteBook(id, archived: hide);
-    await PlacementStore.instance.forget([id]);
-    nav.popUntil((r) => r.isFirst);
+    try {
+      await removeBooks(r);
+    } catch (e) {
+      if (mounted) appAlert(context, r.hidden.isNotEmpty ? '숨기지 못했어요' : '삭제하지 못했어요', errorText(e));
+      return;
+    }
+    if (!mounted) return;
+    showToast(context, removedText(r, title: title));
+    nav.popUntil((route) => route.isFirst);
   }
 
   // 2026-11-19 build(약 400줄)를 책 정보 · 평가 · 내 기록 칸과 그 안 구역, 아래 단추로 나눴다(화면은 그대로)
@@ -275,7 +296,8 @@ class _BookScreenState extends State<BookScreen> {
     final e = b == null ? null : lib.editions[b.editionId];
     if (!_model.loaded) return const Screen(children: [Loading()]);
     if (b == null || e == null) {
-      return Screen(title: '책 정보', children: [Empty(title: '책을 찾을 수 없어요', body: '삭제되었거나 예시 책장 책이에요.', action: '책장으로', onAction: () => Navigator.of(context).popUntil((r) => r.isFirst))]);
+      // 찾을 수 없음(docs/design/DESIGN.md 9장): 이유 + 나가는 단추 하나(뒤로와 같다. '책장으로'라 했지만 실제로는 이전 화면이었다)
+      return Screen(title: '책 정보', children: [Empty(title: '책을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop())]);
     }
     if (!_noteLoaded) {
       _note.text = b.note ?? '';
@@ -305,12 +327,15 @@ class _BookScreenState extends State<BookScreen> {
           padding: const EdgeInsets.only(top: Space.l + Space.s),
           child: Column(children: [
             BookVisual(lib: lib, id: id, width: CoverSize.head),
+            // 위 줄에 제목이 없는 화면이라 책 제목을 화면 읽기 머리로(docs/design/DESIGN.md 15장)
             Padding(
               padding: const EdgeInsets.only(top: Space.l),
-              child: Text(e.title, textAlign: TextAlign.center, style: AppType.bookHeadTitle),
+              child: Semantics(header: true, child: Text(e.title, textAlign: TextAlign.center, style: AppType.bookHeadTitle)),
             ),
             if (e.authors.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(authorLine(e.authors), textAlign: TextAlign.center, style: AppType.bookAuthor)),
+            // 숨긴 책이면 그렇다고 한 줄(메뉴에 '다시 보이기')
+            if (b.hiddenAt != null) const NoticeText('숨긴 책이라 내 책 목록에는 보이지 않아요.', center: true),
             ReaderRating(data: reviews.data),
           ]),
         ),
@@ -358,7 +383,8 @@ class _BookScreenState extends State<BookScreen> {
       ListItem(label: '출판', value: pub.isEmpty ? '미입력' : pub),
       ListItem(label: 'ISBN', value: e.isbn13 ?? '미입력'),
       ListItem(label: '쪽수', value: e.pageCount != null ? '${e.pageCount}쪽' : '미입력'),
-      ListItem(label: '판형', value: sized ? '${e.widthMm}×${e.heightMm}mm' : '확인 전', sub: sized ? null : '책장에는 기본 크기로 표시해요'),
+      // 비어 있는 서지 값은 모두 '미입력'(2026-11-19 공통 규칙: 판형만 '확인 전'이었다)
+      ListItem(label: '판형', value: sized ? '${e.widthMm}×${e.heightMm}mm' : '미입력', sub: sized ? null : '책장에는 기본 크기로 표시해요'),
       ListItem(label: '도서 정보', value: e.source == 'search' ? e.sourceName ?? '검색' : e.source == 'photo' ? '사진으로 추가' : '직접 입력'),
       ListItem(
         label: '갈피 색',
@@ -374,9 +400,19 @@ class _BookScreenState extends State<BookScreen> {
           ),
         ),
       ),
-      // 판매 페이지는 맨 아래(YES24 약관: 출처와 상품 링크를 함께 보인다)
-      if (e.link != null) ListItem(label: '${e.sourceName ?? '판매처'}에서 보기', onPress: () => launchUrl(Uri.parse(e.link!), mode: LaunchMode.externalApplication)),
+      // 판매 페이지는 맨 아래(YES24 약관: 출처와 상품 링크를 함께 보인다). 앱 밖으로 나가는 줄도 꺾쇠, 열지 못하면 확인창(docs/design/DESIGN.md 10장)
+      if (e.link != null) ListItem(label: '${e.sourceName ?? '판매처'}에서 보기', chevron: true, onPress: () => _openLink(e.link!)),
     ]);
+  }
+
+  Future<void> _openLink(String url) async {
+    var ok = false;
+    try {
+      ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[link] $e');
+    }
+    if (!ok && mounted) appAlert(context, '페이지를 열지 못했어요', '잠시 뒤 다시 시도해 주세요.');
   }
 
   void _endNote() {
@@ -401,7 +437,7 @@ class _BookScreenState extends State<BookScreen> {
     ValueChanged<String>? onSubmitted,
   }) =>
       Container(
-        constraints: const BoxConstraints(minHeight: 56),
+        constraints: const BoxConstraints(minHeight: ControlSize.field),
         decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
         child: Semantics(
           label: label,
@@ -452,30 +488,34 @@ class _BookScreenState extends State<BookScreen> {
           }
         },
       ),
-      const SizedBox(height: Space.s),
       if (_noteEdit)
         // 여러 줄로 다 보인다(2026-11-16 QA 영숙 F15). 줄바꿈은 넣지 않고 완료로 닫는다.
         // 적는 대로 잠깐 뒤 저장한다(입력 중에 칸을 바꾸거나 화면을 떠나도 남게)
-        _inlineInput(
-          label: '한줄평',
-          controller: _note,
-          hint: '이 책은 나에게…',
-          maxLength: 140,
-          maxLines: null,
-          onChanged: (_) {
-            _noteTimer?.cancel();
-            _noteTimer = Timer(const Duration(milliseconds: 600), _saveNote);
-          },
-          onEditingComplete: _endNote,
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: _inlineInput(
+            label: '한줄평',
+            controller: _note,
+            hint: '이 책은 나에게…',
+            maxLength: 140,
+            maxLines: null,
+            onChanged: (_) {
+              _noteTimer?.cancel();
+              _noteTimer = Timer(const Duration(milliseconds: 600), _saveNote);
+            },
+            onEditingComplete: _endNote,
+          ),
         )
+      else if (note.isEmpty)
+        // 빈 구역 한 줄은 공용 EmptyLine(docs/design/DESIGN.md 11장)
+        const EmptyLine('이 책을 한 줄로 남겨 보세요')
       else
-        // 빈 구역 한 줄은 sub(2026-11-19 공통 규칙: 여기만 옅은 회색이었다)
-        WordText(note.isEmpty ? '이 책을 한 줄로 남겨 보세요' : note, style: note.isEmpty ? AppType.sub : AppType.review),
+        Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText(note, style: AppType.review)),
       const SizedBox(height: Space.block),
       // 감상(기록 › 감상과 같은 데이터, 이 책 것만)
       SectionHead(title: '감상', count: essays.isEmpty ? null : '${essays.length}개', link: '쓰기', onLink: () => openNewEssay(context, book: id)),
       if (essays.isEmpty)
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('이 책을 읽고 든 생각을 길게 남겨요', style: AppType.sub))
+        const EmptyLine('이 책을 읽고 든 생각을 길게 남겨요')
       else
         for (final (i, x) in essays.indexed) ...[if (i > 0) const AppDivider(), EssayRow(key: ValueKey(x.id), lib: lib, essay: x, showBook: false, compact: true)],
       if (reviews.available) ...[
@@ -501,10 +541,21 @@ class _BookScreenState extends State<BookScreen> {
         ]),
       );
 
-  void _togglePage(MyBook b) => setState(() {
-        _pageEdit = !_pageEdit;
-        _page.text = b.currentPage != null && b.currentPage != 0 ? '${b.currentPage}' : '';
-      });
+  /// 쪽수 숫자를 누르면 칸을 열고, 다시 누르면 적던 값을 저장하고 닫는다(버려졌다)
+  void _togglePage(MyBook b) {
+    if (_pageEdit) return _endPage();
+    setState(() {
+      _pageEdit = true;
+      _page.text = b.currentPage != null && b.currentPage != 0 ? '${b.currentPage}' : '';
+    });
+  }
+
+  void _endPage() {
+    _pageTimer?.cancel();
+    _savePage();
+    FocusScope.of(context).unfocus();
+    setState(() => _pageEdit = false);
+  }
 
   // 내 기록 칸(2026-11-17 사용자 시안): 위에 읽기 상태(누르면 고르는 시트)와 쪽수, 진행 막대와 %,
   // 그 아래 최근 독서 기록(날짜·시간대·걸린 시간, 전체 보기는 통계). 읽은 기간(회차)과 남긴 갈피는 그 아래 그대로
@@ -550,12 +601,11 @@ class _BookScreenState extends State<BookScreen> {
         Expanded(
           child: Semantics(
             button: true,
-            label: '현재 쪽 $cur${pc != null ? ' / $pc쪽' : '쪽'}, 눌러서 고치기',
+            label: '현재 쪽 $cur${pc != null ? ' / $pc쪽' : '쪽'}, 눌러서 수정',
             onTap: toggle,
             excludeSemantics: true,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: toggle,
+            child: Pressable(
+              onPress: toggle,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: Space.hit),
                 child: Align(
@@ -595,11 +645,12 @@ class _BookScreenState extends State<BookScreen> {
             hint: '읽은 쪽수',
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
-            onSubmitted: (v) {
-              final n = num.tryParse(v);
-              _model.updateBook(id, currentPage: n != null && n > 0 ? n.round() : null);
-              setState(() => _pageEdit = false);
+            // 적는 대로 잠깐 뒤 저장(한줄평과 같은 방식). 키보드 '완료'는 저장하고 닫는다
+            onChanged: (_) {
+              _pageTimer?.cancel();
+              _pageTimer = Timer(const Duration(milliseconds: 600), _savePage);
             },
+            onSubmitted: (_) => _endPage(),
           ),
         ),
     ];
@@ -648,7 +699,7 @@ class _BookScreenState extends State<BookScreen> {
           ),
         ),
       if (recent.isEmpty && live == null)
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('타이머로 읽으면 여기에 쌓여요', style: AppType.sub))
+        const EmptyLine('타이머로 읽으면 여기에 쌓여요')
       else
         // 같은 날짜는 묶고(날짜 한 줄 아래 시간대는 연하게, 읽은 시간은 오른쪽에 진하게), 구분선 없이 날짜 사이 여백으로(2026-11-17 시안). 최근 5개
         for (final g in _byDay(recent.take(5).toList()))
@@ -660,7 +711,7 @@ class _BookScreenState extends State<BookScreen> {
               for (final x in g.items)
                 Semantics(
                   button: true,
-                  label: '${g.day}, ${timeRange(x.startedAt, x.endedAt)}, ${formatDuration(x.durationMs)}, 고치기',
+                  label: '${g.day}, ${timeRange(x.startedAt, x.endedAt)}, ${formatDuration(x.durationMs)}, 수정',
                   excludeSemantics: true,
                   onTap: () => openSessionEdit(context, x.id),
                   child: Pressable(
@@ -684,63 +735,75 @@ class _BookScreenState extends State<BookScreen> {
   /// 읽은 기간(회차, 2026-11-17 사용자 시안): 테두리 카드에 'N회차'·상태, 시작일·완독일. 오른쪽 '수정'을 누르면 그 자리에서 날짜를 고른다
   List<Widget> _rounds(List<Round> rounds) => [
         SectionHead(title: '읽은 기간', link: rounds.isEmpty ? null : (_roundEdit ? '완료' : '수정'), onLink: () => setState(() => _roundEdit = !_roundEdit)),
-        const SizedBox(height: Space.s),
         if (rounds.isNotEmpty)
-          Column(children: [
+          Padding(padding: const EdgeInsets.only(top: Space.s), child: Column(children: [
             for (final r in rounds)
               _roundEdit
                   ? _RoundCard(key: ValueKey('${r.id}|${r.startedAt}|${r.finishedAt}'), round: r, onSave: (s, f) => _model.updateRound(r.id, startedAt: s, finishedAt: f))
                   : _RoundView(round: r),
-          ])
+          ]))
         else
-          // 재는 중이면 저장할 때 1회차가 생긴다고 알려 준다(시작만 하고 버리면 회차를 남기지 않는다)
-          Text(ReadingStore.instance.active?.myBookId == id ? '지금 읽는 중이에요. 기록을 저장하면 1회차가 생겨요.' : '읽기 시작하면 회차가 생겨요. 날짜는 나중에 고칠 수 있어요.', style: AppType.sub),
+          // 재는 중이면 저장할 때 1회차가 생긴다고 알려 준다(시작만 하고 버리면 회차를 남기지 않는다). 빈 구역은 공용 EmptyLine(두 문장이라 마침표)
+          EmptyLine(ReadingStore.instance.active?.myBookId == id ? '지금 읽는 중이에요. 기록을 저장하면 1회차가 생겨요.' : '읽기 시작하면 회차가 생겨요. 날짜는 나중에 수정할 수 있어요.'),
       ];
 
-  /// 남긴 갈피: 제목 옆 작은 회색 개수(감상과 같은 모양). 없으면 다른 빈 구역과 같은 왼쪽 한 줄(2026-11-19 공통 규칙: 가운데 · 위아래 40이었다)
+  /// 남긴 갈피: 제목 옆 작은 회색 개수(감상과 같은 모양: 0이면 개수 없이). 없으면 다른 빈 구역과 같은 왼쪽 한 줄(2026-11-19 공통 규칙: 가운데 · 위아래 40이었다).
+  /// 전체는 '독서 기록'과 같은 구역 머리 링크 '전체 보기'(갈피 보드, 2026-11-19 공통 규칙: 아래 보조 단추였다)
   List<Widget> _marks(Library lib) {
     final marks = bookmarksOf(lib, id);
     return [
-      SectionHead(title: '남긴 갈피', count: '${marks.length}개'),
+      SectionHead(
+        title: '남긴 갈피',
+        count: marks.isEmpty ? null : '${marks.length}개',
+        link: marks.isNotEmpty ? '전체 보기' : null,
+        chevron: true,
+        linkLabel: '남긴 갈피 전체 보기, 갈피 보드',
+        onLink: () => openBookmarkBoard(context, id),
+      ),
       if (marks.isNotEmpty) ...[
         ListGroup(children: [
           for (final m in marks.take(5))
-            Pressable(
-              onPress: () => openBookmark(context, m.id),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Space.l),
-                // 글은 늘 왼쪽 끝에서 시작하고 사진은 오른쪽에, 한글은 낱말 단위로 줄을 바꾼다
-                // (2026-11-16 QA 은서 F12: 사진 갈피는 썸네일 오른쪽, 문장 갈피는 왼쪽 끝에서 시작해 들쭉날쭉했고 '앉/아'처럼 끊겼다)
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      // 사진만 남긴 갈피는 글이 없다: '사진 갈피'로 보인다
-                      if (m.text.trim().isNotEmpty)
-                        WordText(m.text, maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.quote)
-                      else
-                        Text('사진 갈피', style: AppType.row),
-                      Padding(
-                        padding: const EdgeInsets.only(top: Space.s),
-                        child: MetaText([if (m.page != null && m.page != 0) '${m.page}쪽', dateShort(m.createdAt)].where((x) => x.isNotEmpty).join(metaSep), style: AppType.caption),
-                      ),
-                    ]),
-                  ),
-                  if (m.photoUri != null && m.photoUri!.isNotEmpty) ...[
-                    const SizedBox(width: Space.m),
-                    ClipRRect(borderRadius: BorderRadius.circular(3), child: Container(width: 48, height: 64, color: AppColors.surface, child: BookmarkPhoto(uri: m.photoUri!))),
-                  ],
-                ]),
+            Semantics(
+              button: true,
+              label: [m.text.trim().isNotEmpty ? m.text.trim() : '사진 갈피', if (m.page != null && m.page != 0) '${m.page}쪽', dateShort(m.createdAt)].join(', '),
+              excludeSemantics: true,
+              onTap: () => openBookmark(context, m.id),
+              child: Pressable(
+                onPress: () => openBookmark(context, m.id),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Space.l),
+                  // 글은 늘 왼쪽 끝에서 시작하고 사진은 오른쪽에, 한글은 낱말 단위로 줄을 바꾼다
+                  // (2026-11-16 QA 은서 F12: 사진 갈피는 썸네일 오른쪽, 문장 갈피는 왼쪽 끝에서 시작해 들쭉날쭉했고 '앉/아'처럼 끊겼다)
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        // 사진만 남긴 갈피는 글이 없다: '사진 갈피'로 보인다
+                        if (m.text.trim().isNotEmpty)
+                          WordText(m.text, maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.quote)
+                        else
+                          Text('사진 갈피', style: AppType.row),
+                        Padding(
+                          padding: const EdgeInsets.only(top: Space.s),
+                          child: MetaText([if (m.page != null && m.page != 0) '${m.page}쪽', dateShort(m.createdAt)].where((x) => x.isNotEmpty).join(metaSep), style: AppType.caption),
+                        ),
+                      ]),
+                    ),
+                    if (m.photoUri != null && m.photoUri!.isNotEmpty) ...[
+                      const SizedBox(width: Space.m),
+                      ClipRRect(borderRadius: BorderRadius.circular(Shape.cover), child: Container(width: 48, height: 64, color: AppColors.surface, child: BookmarkPhoto(uri: m.photoUri!))),
+                    ],
+                  ]),
+                ),
               ),
             ),
         ]),
-        Padding(padding: const EdgeInsets.only(top: Space.m), child: Btn(label: '갈피 보드로 보기', kind: 'secondary', onPress: () => openBookmarkBoard(context, id))),
       ] else
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText('아직 남긴 갈피가 없어요', style: AppType.sub)),
+        const EmptyLine('아직 남긴 갈피가 없어요'),
     ];
   }
 }
 
-/// 회차 하나(보기): 테두리 카드 안 '1회차'·오른쪽 상태, 시작일·완독일(2026.11.14, 없으면 —)
+/// 회차 하나(보기): 테두리 카드 안 '1회차'·오른쪽 상태, 시작일·완독일(dateLong '2026년 11월 14일', 없으면 —)
 class _RoundView extends StatelessWidget {
   const _RoundView({required this.round});
   final Round round;

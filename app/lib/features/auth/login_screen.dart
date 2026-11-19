@@ -4,14 +4,13 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/sync.dart';
 import '../../ui/alert.dart';
 import '../../ui/brand_button.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../settings/settings_screen.dart' show privacyUrl;
+import '../settings/settings_screen.dart' show showPrivacySheet;
 import '../settings/terms.dart' show showTermsSheet;
 
 /// 로그인 화면 맨 위 책장 그림(우리 앱이 그린 책장 사진, tool/make_login_shelf.py). 이 파일만 바꾸면 그림이 바뀐다
@@ -95,18 +94,10 @@ class _LoginScreenState extends State<LoginScreen> {
         BrandButton.google(onPress: off ? null : () => _login('google')),
     ];
     if (_ready == null) {
+      // 앱 공통 작은 원(화면 읽기 이름 '로그인 방법을 불러오는 중', 2026-11-19 규칙)
       return const SizedBox(
         height: 54,
-        child: Center(
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.accent,
-            ),
-          ),
-        ),
+        child: Center(child: Spinner(color: AppColors.accent, label: '로그인 방법을 불러오는 중')),
       );
     }
     if (_ready == false || buttons.isEmpty) {
@@ -248,7 +239,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             _footLink('이용약관', () => showTermsSheet(context)),
                             const MetaBar(),
-                            _footLink('개인정보 처리방침', () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication)),
+                            // 내 정보와 같은 앱 안 안내 시트(전문은 시트 안 단추로 웹, DESIGN 9장 같은 일 같은 동작)
+                            _footLink('개인정보 처리방침', () => showPrivacySheet(context)),
                           ],
                         ),
                         const SizedBox(height: Space.s),

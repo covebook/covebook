@@ -1,7 +1,8 @@
 // 긴 감상(2026-11-16 기록 > 감상): 목록 줄 · 읽기 화면 · 쓰기/수정 화면.
 // 별점·한 줄 감상(책 정보 평가)·갈피 메모·독서 메모와 따로 저장한다(서재 essays). 책 정보 '평가'에서도 같은 감상을 그 책만 골라 본다.
 // 읽기 화면은 본문이 주인공: 입력 칸 테두리·키보드·저장 단추 없이 글만 보이고, 수정은 머리줄 단추로 따로 연다.
-// 2026-11-19 공통 규칙: 같은 동작은 갈피와 같은 이름('수정' · '삭제'), 책 줄은 BookRow, ' | '는 MetaText
+// 2026-11-19 공통 규칙: 같은 동작은 갈피와 같은 이름('수정' · '삭제'), 책 줄은 BookRow(누르면 책 정보), ' | '는 MetaText,
+// 삭제는 확인창 → 화면 닫고 토스트('삭제했어요.'), 저장 · 삭제 실패는 알린다(예외 원문 없이 errorText)
 library;
 
 import 'package:flutter/material.dart';
@@ -9,8 +10,10 @@ import 'package:flutter/material.dart';
 import '../../domain/library.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import '../book/book_screen.dart' show openBook;
 import '../book/labels.dart';
 import '../bookmark/book_picker.dart' show pickBook;
 import '../bookmark/form_parts.dart';
@@ -126,6 +129,10 @@ class EssayScreen extends StatefulWidget {
 class _EssayScreenState extends State<EssayScreen> {
   final _model = LibraryModel.instance;
 
+  /// 마지막으로 보인 감상(삭제하고 화면이 닫히는 동안 '찾을 수 없어요'로 바뀌지 않게 그대로 그린다)
+  Essay? _shown;
+  bool _deleted = false;
+
   @override
   void initState() {
     super.initState();
@@ -142,13 +149,20 @@ class _EssayScreenState extends State<EssayScreen> {
     if (mounted) setState(() {});
   }
 
-  // 공통 규칙: 갈피와 같은 말('삭제', 2026-11-19. '지우기'였다)
+  // 공통 규칙: 갈피와 같은 말('삭제', 2026-11-19. '지우기'였다). 보고 있던 것을 지우면 화면을 닫고 토스트, 실패는 확인창(실패 처리가 없었다)
   Future<void> _delete() => appAlert(context, '이 감상을 삭제할까요?', '되돌릴 수 없어요. 별점, 한줄평, 갈피는 그대로 남아요.', [
         const AlertButton('취소', style: AlertStyle.cancel),
         AlertButton('삭제', style: AlertStyle.destructive, onPress: () async {
           final nav = Navigator.of(context);
-          await _model.deleteEssay(widget.id);
+          setState(() => _deleted = true);
+          final wrote = _model.deleteEssay(widget.id);
           if (nav.canPop()) nav.pop();
+          try {
+            await wrote;
+            if (nav.mounted) showToast(nav.context, '삭제했어요.');
+          } catch (e) {
+            if (nav.mounted) appAlert(nav.context, '감상을 삭제하지 못했어요', errorText(e));
+          }
         }),
       ]);
 
@@ -177,9 +191,14 @@ class _EssayScreenState extends State<EssayScreen> {
   @override
   Widget build(BuildContext context) {
     final lib = _model.lib;
-    final essay = lib.essays[widget.id];
-    // 다른 곳에서 지웠으면 빈 화면(뒤로 가면 된다)
-    if (essay == null) return const Screen(children: [Empty(title: '지운 감상이에요')]);
+    final essay = lib.essays[widget.id] ?? (_deleted ? _shown : null);
+    // 다른 곳에서 지웠으면 찾을 수 없음(공통 규칙 9장 틀: '○○을 찾을 수 없어요' + '삭제됐을 수 있어요.' + 나가는 단추)
+    if (essay == null) {
+      return Screen(children: [
+        Empty(title: '감상을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+      ]);
+    }
+    _shown = essay;
     final b = lib.books[essay.myBookId];
     final e = b == null ? null : lib.editions[b.editionId];
     final title = essay.title?.trim() ?? '';
@@ -191,17 +210,19 @@ class _EssayScreenState extends State<EssayScreen> {
         IconBtn(label: '더 보기', onPress: _menu, child: const HeadIcon('MoreHorizontal')),
       ]),
       children: [
-        // 공통 규칙: 책 줄은 BookRow small(2026-11-19. 제목 16 · 저자 caption이었다)
+        // 공통 규칙: 책 줄은 BookRow small(2026-11-19. 제목 16 · 저자 caption이었다). 다른 책 줄처럼 누르면 책 정보(눌러도 아무 일 없었다)
         if (b != null && e != null)
           BookRow(
             cover: IgnorePointer(child: LinkedCover(lib: lib, id: b.id, width: BookRow.coverWidth(BookRowSize.small))),
             title: e.title,
             meta: authorLine(e.authors),
+            onPress: () => openBook(context, b.id),
           ),
         Padding(
           padding: const EdgeInsets.only(top: Space.xl),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (title.isNotEmpty) Semantics(header: true, child: Text(title, style: AppType.title)),
+            // 감상 제목 역할(탭 첫 화면 큰 제목 title과 따로, 값은 같은 26)
+            if (title.isNotEmpty) Semantics(header: true, child: Text(title, style: AppType.essayTitle)),
             Padding(padding: EdgeInsets.only(top: title.isNotEmpty ? Space.s : 0), child: MetaText(essayDateLine(essay, long: true), style: AppType.caption)),
           ]),
         ),
@@ -260,7 +281,8 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '감상을 저장하지 못했어요. 쓴 글은 그대로 있어요. ($e)');
+      // 공통 규칙 11장: 쓰던 글이 있는 화면의 실패는 화면 안 글(예외 원문 대신 errorText)
+      if (mounted) setState(() => _error = '감상을 저장하지 못했어요. 쓴 글은 그대로 있어요. ${errorText(e)}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -271,13 +293,15 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
     final lib = _model.lib;
     final b = _bookId == null ? null : lib.books[_bookId];
     final e = b == null ? null : lib.editions[b.editionId];
-    // 쓰던 글 지킴: 갈피 남기기 · 갈피 수정과 같은 부품(form_parts). 저장 뒤 닫기는 pop이라 묻지 않는다
-    return DraftGuard(
-      dirty: () => _dirty,
-      title: '쓰던 감상을 버릴까요?',
-      child: Screen(
+    // 쓰던 글 지킴: 갈피 남기기 · 갈피 수정과 같은 부품(form_parts). 새로 쓰기는 '쓰던 내용…', 수정은 '고친 내용…'(공통 규칙 12장).
+    // 저장 뒤 닫기는 pop이라 묻지 않는다
+    final screen = Screen(
         title: _old == null ? '감상 쓰기' : '감상 수정',
-        footer: Btn(label: '감상 저장', size: 'l', onPress: _save, busy: _saving, disabled: !_canSave),
+        // 책을 안 골라 저장이 꺼졌으면 단추 바로 위에 이유(갈피 남기기와 같게, 공통 규칙 9장)
+        footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (_bookId == null) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('책을 골라야 저장할 수 있어요.', center: true)),
+          Btn(label: '감상 저장', size: 'l', onPress: _save, busy: _saving, disabled: !_canSave),
+        ]),
         children: [
           const SizedBox(height: Space.m),
           SelectField(
@@ -288,7 +312,7 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
             // 쓴 감상의 책은 바꾸지 않는다(다른 책 감상이면 새로 쓴다)
             disabled: _old != null,
             onPress: () async {
-              final r = await pickBook(context, lib, addNew: true);
+              final r = await pickBook(context, lib, addNew: true, current: (id: _bookId));
               if (r.picked && r.id != null && mounted) setState(() => _bookId = r.id);
             },
           ),
@@ -303,7 +327,7 @@ class _EssayEditScreenState extends State<EssayEditScreen> {
           ),
           if (_error != null) NoticeText(_error!, error: true),
         ],
-      ),
-    );
+      );
+    return _old == null ? DraftGuard(dirty: () => _dirty, child: screen) : DraftGuard.edit(dirty: () => _dirty, child: screen);
   }
 }

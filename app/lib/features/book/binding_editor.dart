@@ -107,7 +107,7 @@ class _BindingEditorState extends State<BindingEditor> {
               RotatableBook(key: ValueKey(shown), book: shown, frontWidth: math.min(170, width * 0.39), initialSpin: 32, shadow: true),
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text('드래그해서 돌려보세요', style: AppType.caption),
+                child: Text('드래그해서 돌려 보세요', style: AppType.caption),
               ),
             ],
           ),
@@ -152,8 +152,10 @@ class _BindingEditorState extends State<BindingEditor> {
                       selected: v.coverArtId == a.id,
                       label: '표지 그림 ${a.name}',
                       excludeSemantics: true,
-                      child: GestureDetector(
-                        onTap: () => widget.onChange(v.custom(coverArtId: a.id)),
+                      onTap: () => widget.onChange(v.custom(coverArtId: a.id)),
+                      // 누르면 옅어지는 공용 눌림(2026-11-19 공통 규칙: 고르는 칸만 눌림 표시가 없었다)
+                      child: Pressable(
+                        onPress: () => widget.onChange(v.custom(coverArtId: a.id)),
                         child: SizedBox(
                           width: cell,
                           child: Column(
@@ -195,16 +197,18 @@ class _BindingEditorState extends State<BindingEditor> {
               selected: none,
               label: widget.realCover != null ? '실제 표지' : '그림 없음, 단색 정면',
               excludeSemantics: true,
-              child: GestureDetector(
-                onTap: () => widget.onChange(v.custom(coverArtId: null)),
+              onTap: () => widget.onChange(v.custom(coverArtId: null)),
+              child: Pressable(
+                onPress: () => widget.onChange(v.custom(coverArtId: null)),
+                // 흰 화면 안 회색 상자 대신 고르는 칸(ChoiceBox)과 같은 흰 바탕 · 옅은 선 · 고르면 갈색 선(docs/design/DESIGN.md 1장)
                 child: Container(
                   margin: const EdgeInsets.only(top: 18),
                   constraints: const BoxConstraints(minHeight: 50),
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: AppColors.input,
-                    borderRadius: BorderRadius.circular(Shape.input),
-                    border: Border.all(color: none ? AppColors.accent : AppColors.input),
+                    color: AppColors.bg,
+                    borderRadius: BorderRadius.circular(Shape.button),
+                    border: Border.all(color: none ? AppColors.accent : AppColors.line, width: none ? 1.5 : 1),
                   ),
                   child: Row(
                     children: [
@@ -260,8 +264,12 @@ class _BindingEditorState extends State<BindingEditor> {
         selected: on,
         label: '책 색 $name',
         excludeSemantics: true,
-        child: GestureDetector(
-          onTap: () {
+        onTap: () {
+          final t = tonesFor(hex);
+          widget.onChange(v.custom(spineColor: hex, inkColor: t.inkColor, accentColor: t.accentColor));
+        },
+        child: Pressable(
+          onPress: () {
             final t = tonesFor(hex);
             widget.onChange(v.custom(spineColor: hex, inkColor: t.inkColor, accentColor: t.accentColor));
           },
@@ -300,8 +308,9 @@ class _BindingEditorState extends State<BindingEditor> {
         Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final c in rest) swatch(c.hex, c.name)]),
         Padding(
           padding: const EdgeInsets.only(top: Space.group),
+          // 머리줄 '초기화'와 같은 일이라 같은 말(2026-11-19 공통 규칙: '되돌리기'는 토스트 단추 말)
           child: TextLink(
-            label: '추천 장정으로 되돌리기',
+            label: '추천 장정으로 초기화',
             soft: true,
             disabled: same && v.source != 'custom',
             onPress: () => widget.onChange(resetBinding(rec0, v.seed)),
@@ -358,8 +367,9 @@ class _BindingEditorState extends State<BindingEditor> {
                     selected: material == m,
                     label: '재질 ${_materialNames[m]}',
                     excludeSemantics: true,
-                    child: GestureDetector(
-                      onTap: () => widget.onChange(v.custom(material: m)),
+                    onTap: () => widget.onChange(v.custom(material: m)),
+                    child: Pressable(
+                      onPress: () => widget.onChange(v.custom(material: m)),
                       child: SizedBox(
                         width: swatchW,
                         child: Column(
@@ -392,8 +402,9 @@ class _BindingEditorState extends State<BindingEditor> {
                     selected: layout == l,
                     label: '책등 글자 ${_layoutNames[l]}',
                     excludeSemantics: true,
-                    child: GestureDetector(
-                      onTap: () => widget.onChange(v.custom(layout: l)),
+                    onTap: () => widget.onChange(v.custom(layout: l)),
+                    child: Pressable(
+                      onPress: () => widget.onChange(v.custom(layout: l)),
                       child: Column(
                         children: [
                           tileBox(

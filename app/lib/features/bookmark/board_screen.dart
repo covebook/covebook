@@ -20,6 +20,8 @@ import '../../db/kv_store.dart';
 import '../../domain/bookmark_board.dart';
 import '../../domain/library.dart';
 import '../../store/library_model.dart';
+import '../../ui/alert.dart';
+import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../stats/stats_widgets.dart' show LinkedCover;
@@ -29,7 +31,8 @@ import 'new_bookmark_screen.dart' show openNewBookmark;
 
 const _reach = 2600.0; // 옮겨 붙일 수 있는 범위
 const _liftScale = 1.04;
-const _handle = 44.0;
+// 폭 손잡이 누르는 자리(공통 규칙 15장 48, 44였다. 보이는 원은 26 그대로)
+const _handle = Space.hit;
 // 카드를 끌다 화면 끝에 닿으면 보드가 넓어진다: 끝에서 이만큼 안쪽, 1초에 이 배율로. 글이 보일 만큼까지만(더 줄이려면 두 손가락)
 const _edge = 44.0;
 const _edgeZoom = 0.85;
@@ -152,12 +155,17 @@ class _BoardScreenState extends State<BookmarkBoardScreen> with SingleTickerProv
     // 공통 규칙: 위 줄은 다른 밀어 넣은 화면과 같은 NavBar(줄 60 · 꺾쇠 28, 2026-11-19. 줄 56 · 꺾쇠 22였다)
     const head = NavBar(title: '갈피 보드');
     if (index < 0) {
-      // Material: 글자 기본 모양(없으면 제목·빈 화면 글에 노란 밑줄)
+      // Material: 글자 기본 모양(없으면 제목·빈 화면 글에 노란 밑줄). 찾을 수 없음 틀(공통 규칙 9장, '책을 찾지 못했어요'였다)
       return Material(
         color: AppColors.bg,
         child: Padding(
           padding: EdgeInsets.only(top: insets.top),
-          child: const Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [head, Expanded(child: Empty(title: '책을 찾지 못했어요'))]),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            head,
+            Expanded(
+              child: Empty(title: '책을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+            ),
+          ]),
         ),
       );
     }
@@ -553,6 +561,13 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
 
   List<({String id, double x, double y, double rot})> get _spotList => [for (final s in _spots) (id: s.id, x: s.x, y: s.y, rot: s.rot)];
 
+  /// 자리 · 폭 저장: 화면에는 바로 보이고, 기기에 저장하지 못하면 알린다(공통 규칙 11장: 결과를 기다리지 않고 실패를 버렸다)
+  void _saveSpot(String id, {required double x, required double y, required double rot, double? w}) {
+    _model.updateBoard(_spotList, id, x: x, y: y, rot: rot, w: w).catchError((Object e) {
+      if (mounted) appAlert(context, w != null ? '갈피 크기를 저장하지 못했어요' : '갈피 자리를 저장하지 못했어요', errorText(e));
+    });
+  }
+
   void _drop(bool ok) {
     _edgeTicker.stop();
     _lift.reverse();
@@ -561,7 +576,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
     if (ok && _dx.abs() + _dy.abs() >= 2) {
       final nx = math.max(-_reach, math.min(_reach, o.x + _dx)).roundToDouble();
       final ny = math.max(-_reach, math.min(_reach, o.y + _dy)).roundToDouble();
-      _model.updateBoard(_spotList, id, x: nx, y: ny, rot: o.rot);
+      _saveSpot(id, x: nx, y: ny, rot: o.rot);
     }
     setState(() {
       _held = null;
@@ -582,7 +597,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
 
   void _resize(Bookmark m, BoardSpot o, double width) {
     final r = boardResized(BoardMark.of(m), o, width);
-    _model.updateBoard(_spotList, m.id, x: r.boardX, y: r.boardY, rot: r.boardRot, w: r.boardW);
+    _saveSpot(m.id, x: r.boardX, y: r.boardY, rot: r.boardRot, w: r.boardW);
   }
 
   void _fit() {
@@ -766,7 +781,14 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
             padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 16),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Btn(label: '전체 보기', kind: 'secondary', size: 's', disabled: _marks.isEmpty, onPress: _fit),
-              Btn(label: '갈피', kind: 'secondary', size: 's', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
+              // 화면 읽기 이름은 '갈피 추가'(단추 글은 '+ 갈피'라 '갈피'로만 읽혔다. Btn에 이름을 따로 줄 길이 없어 바깥에서 준다)
+              Semantics(
+                button: true,
+                label: '갈피 추가',
+                onTap: _addHere,
+                excludeSemantics: true,
+                child: Btn(label: '갈피', kind: 'secondary', size: 's', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
+              ),
             ]),
           ),
         ),

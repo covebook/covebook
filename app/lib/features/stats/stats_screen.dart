@@ -1,6 +1,8 @@
 // 통계 탭(2026-11-16 메뉴 구조 개편 전 하단 '기록'): 캘린더(날마다 읽은 책) · 분석(기간 독서 시간·시간대·한 번 길이·요일·많이 읽은 책·완독·갈피).
 // 지금 앱 features/stats/StatsScreen.tsx를 옮긴 것. 안쪽 틀은 그대로, 화면 제목·메뉴 이름만 바꿨다.
 // 책을 고르면 달력·그래프·숫자가 그 책만으로 바뀐다. 오늘이 든 달(해) 다음으로는 가지 않는다
+// 2026-11-19 공통 규칙: 한 책으로 연 화면 이름 '독서 기록'('내 기록'은 책 정보 안 칸 이름과 겹쳤다), 책 고르기는 앱 공통 시트(book_picker),
+// 책 줄은 누르면 책 정보, 기록 줄 읽은 시간은 책 정보 독서 기록과 같은 recordDuration, 큰 숫자는 formatDuration('0분')
 library;
 
 import 'package:flutter/material.dart';
@@ -10,17 +12,20 @@ import '../../services/qa_probe.dart';
 import '../../store/library_model.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import '../book/book_screen.dart' show openBook;
+import '../bookmark/book_picker.dart' show pickBook;
 import 'chart_data.dart';
 import 'session_edit_screen.dart' show openSessionEdit;
 import 'stats_widgets.dart';
 
-/// 책 줄 오른쪽 읽은 시간: 책 정보 › 내 기록의 독서 기록 줄과 같은 크기(18), 숫자 폭 고정
-final _rowValue = AppType.rowStrong.tnum;
+/// 책 줄 오른쪽 읽은 시간: 책 정보 › 내 기록의 독서 기록 줄과 같은 역할(recordDuration 18 보통, 숫자 폭 고정. 굵은 rowStrong이었다).
+/// 쓸 때마다 읽는다(모듈 final은 화소 맞춤 배율을 놓친다)
+TextStyle get _rowValue => AppType.recordDuration;
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key, this.tab = true, this.initialBook});
 
-  /// 하단 '통계' 탭(뒤로 없음, 탭 바만큼 아래를 비운다). 아니면 책·독서 끝에서 여는 '내 기록'
+  /// 하단 '통계' 탭(뒤로 없음, 탭 바만큼 아래를 비운다). 아니면 책 정보 · 읽기 목록에서 한 책으로 여는 '독서 기록'
   final bool tab;
   final String? initialBook;
 
@@ -98,7 +103,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _qaBuild(BuildContext context) {
     final lib = _lib;
-    if (lib == null) return Screen(back: !widget.tab, title: widget.tab ? '통계' : '내 기록', children: const [Loading()]);
+    if (lib == null) return Screen(back: !widget.tab, title: widget.tab ? '통계' : '독서 기록', children: const [Loading()]);
     final now = DateTime.now();
     final monthly = _monthly;
     final book = _book != null && lib.books.containsKey(_book) ? _book : null;
@@ -151,12 +156,13 @@ class _StatsScreenState extends State<StatsScreen> {
         else
           Empty(
             title: '$periodName에는 독서 기록이 없어요',
-            body: bookName != null ? '$bookName 기준이에요.' : thisPeriod ? '책을 읽으면 그날이 달력에 칠해져요.' : null,
+            // 책 이름은 ‘…’로 감싼다(공통 규칙 9장)
+            body: bookName != null ? '‘$bookName’ 기준이에요.' : thisPeriod ? '책을 읽으면 그날이 달력에 칠해져요.' : null,
           ),
     ];
     return Screen(
       back: !widget.tab,
-      title: widget.tab ? '통계' : '내 기록',
+      title: widget.tab ? '통계' : '독서 기록',
       // 누르는 자리 48이 되며 위 빈 자리를 10 → 2로 줄여 글자 자리는 그대로
       right: Padding(
         padding: const EdgeInsets.only(top: Space.xs / 2, right: 10),
@@ -176,7 +182,7 @@ class _StatsScreenState extends State<StatsScreen> {
             offset: const Offset(-12, 0),
             child: IconBtn(label: monthly ? '이전 달' : '이전 해', onPress: () => _shift(-1), child: const LucideIcon('ChevronLeft')),
           ),
-          Semantics(header: true, child: Text(monthly ? '$_y년 $_m월' : '$_y년', style: AppType.heading.tnum)),
+          Semantics(header: true, child: Text(monthly ? monthTitle(_y, _m) : '$_y년', style: AppType.heading.tnum)),
           const SizedBox(width: 2),
           IconBtn(
             label: monthly ? '다음 달' : '다음 해',
@@ -199,25 +205,27 @@ class _StatsScreenState extends State<StatsScreen> {
   List<Widget> _dayRecords(Library lib, String selected, num selMs, List<Session> selSessions, bool monthly) => [
         // 선 없이 구역 간격만(달력 아래 선과 두 줄로 보였다, 2026-11-17 사용자 댓글)
         const SizedBox(height: Space.xl),
-        StatHead(title: monthly ? dayTitle(selected) : '$_y년 ${int.parse(selected.substring(5))}월', top: formatDuration(selMs)),
+        StatHead(title: monthly ? dayTitle(selected) : monthTitle(_y, int.parse(selected.substring(5))), top: formatDuration(selMs)),
         const SizedBox(height: Space.s),
         for (final s in selSessions) _sessionRow(lib, s),
         const SizedBox(height: Space.s),
       ];
 
-  /// 기록 한 줄(책 줄 BookRow 작게): 시간대 · 오른쪽 읽은 시간(일시정지가 있었으면 '실제 독서'). 누르면 기록 수정
+  /// 기록 한 줄(책 줄 BookRow 작게): 시간대 · 오른쪽 읽은 시간(일시정지가 있었으면 아래 '일시정지 시간 제외'). 누르면 기록 수정
   Widget _sessionRow(Library lib, Session s) {
     final name = bookTitle(lib, s.myBookId) ?? NoBookCover.name;
     final range = timeRange(s.startedAt, s.endedAt);
+    final pause = hasPause(s);
     return BookRow(
       cover: _cover(lib, s.myBookId),
       title: name,
       meta: range,
-      label: '$name, $range, ${formatDurationShort(s.durationMs)}',
+      label: [name, range, formatDurationShort(s.durationMs), if (pause) '일시정지 시간 제외'].join(', '),
       onPress: () => openSessionEdit(context, s.id),
       trailing: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
         Text(formatDurationShort(s.durationMs), style: _rowValue),
-        if (hasPause(s)) Text('실제 독서', style: AppType.caption),
+        // 공통 규칙 9장: 일시정지를 뺀 시간 표시는 '일시정지 시간 제외' 한 말('실제 독서'였다)
+        if (pause) Text('일시정지 시간 제외', style: AppType.caption),
       ]),
     );
   }
@@ -237,7 +245,8 @@ class _StatsScreenState extends State<StatsScreen> {
         child: IntrinsicHeight(
           child: Row(children: [
             StatNumber(label: '한 번에 평균', value: summary.count > 0 ? formatDurationShort(summary.averageMs) : '-'),
-            Container(width: 1, margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), color: AppColors.line),
+            // 가운데 세로선: 머리카락 선 두께(공통 규칙 7장 Hairline), 간격은 Space 이름으로
+            Container(width: Hairline.of(context), margin: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.xs), color: AppColors.line),
             StatNumber(label: '가장 오래 읽은 시간', value: summary.count > 0 ? formatDurationShort(summary.longestMs) : '-'),
           ]),
         ),
@@ -273,12 +282,14 @@ class _StatsScreenState extends State<StatsScreen> {
       if (top.isNotEmpty) ...[
         const SizedBox(height: _gap),
         const Padding(padding: EdgeInsets.only(bottom: Space.s), child: SectionHead(title: '많이 읽은 책')),
+        // 다른 책 줄처럼 누르면 책 정보(눌러도 아무 일 없었다)
         for (final r in top)
           BookRow(
             cover: _cover(lib, r.id),
             title: bookTitle(lib, r.id) ?? '',
-            label: '${bookTitle(lib, r.id)}, ${formatDuration(r.ms)}',
+            label: '${bookTitle(lib, r.id)}, ${formatDurationShort(r.ms)}',
             trailing: Text(formatDurationShort(r.ms), style: _rowValue),
+            onPress: () => openBook(context, r.id),
           ),
       ],
       const SizedBox(height: _gap - Space.l),
@@ -296,15 +307,11 @@ class _StatsScreenState extends State<StatsScreen> {
     ];
   }
 
-  // 큰 숫자: '이번 달 읽은 시간'과 '15시간 45분'(숫자 크게·단위 작게), 그 아래 읽은 날 · 독서 횟수(2026-11-17 시안)
+  // 큰 숫자: '이번 달 읽은 시간'과 '15시간 45분'(숫자 크게·단위 작게), 그 아래 읽은 날 · 독서 횟수(2026-11-17 시안).
+  // 글은 앱의 지난 시간 글자 formatDuration 하나에서 숫자와 단위를 나눈다(직접 시 · 분 · 초를 조립해 0이 '0 초'였다, 공통 규칙 4장)
   List<Widget> _summary(PeriodStats st0, List<Session> sessions, int activeDays, String periodName) {
     final ms = st0.readMs;
-    final h = ms ~/ 3600000, m = (ms % 3600000) ~/ 60000, s = (ms % 60000) ~/ 1000;
-    final parts = <(String, String)>[
-      if (h > 0) ('$h', '시간'),
-      if (m > 0 || (h == 0 && ms >= 60000)) ('$m', '분'),
-      if (ms < 60000) ('$s', '초'),
-    ];
+    final parts = [for (final m in RegExp(r'(\d+)([^\d]*)').allMatches(formatDuration(ms))) (m[1]!, m[2]!.trim())];
     final big = AppType.display;
     final unit = AppType.displayUnit;
     return [
@@ -353,38 +360,21 @@ class _StatsScreenState extends State<StatsScreen> {
         ]),
       );
 
-  // 책 고르기: '모든 책'은 하나 고르기 줄(FilterOption), 책은 앱 공통 책 줄(BookRow 작게) + 고르는 원(2026-11-19 공통 규칙: 여기만 표지 36 · 보통 글자 · 높이 60이었다)
+  // 책 고르기: 앱 공통 책 고르기 시트(book_picker, 2026-11-19 공통 규칙: 기록 탭과 따로 만들어 검색 · 높이 제한이 없었다).
+  // 기록이 있는 책만, '모든 책'은 맨 위 하나 고르기 줄, 지금 고른 책은 고르는 원. 고른 책이 기록이 없어도 목록에 남겨 고른 표시가 보이게
   Future<void> _pickBook(Library lib) async {
     final withSessions = <String>[];
     for (final s in lib.sessions.values) {
       final id = s.myBookId;
       if (id != null && lib.books.containsKey(id) && !withSessions.contains(id)) withSessions.add(id);
     }
-    void choose(String? id) {
-      setState(() {
-        _book = id;
-        _picked = null;
-      });
-      Navigator.pop(context);
-    }
-
-    await showSheet<void>(
-      context,
-      title: '책 고르기',
-      scroll: true,
-      builder: (_) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        FilterOption(label: '모든 책', selected: _book == null, onPress: () => choose(null)),
-        for (final id in withSessions)
-          BookRow(
-            cover: _cover(lib, id),
-            title: bookTitle(lib, id) ?? '',
-            meta: bookAuthor(lib, id),
-            label: bookTitle(lib, id) ?? '',
-            selected: _book == id,
-            trailing: RadioMark(on: _book == id),
-            onPress: () => choose(id),
-          ),
-      ]),
-    );
+    final cur = _book;
+    if (cur != null && lib.books.containsKey(cur) && !withSessions.contains(cur)) withSessions.insert(0, cur);
+    final r = await pickBook(context, lib, books: withSessions, meta: (id) => bookAuthor(lib, id), all: true, current: (id: cur));
+    if (!r.picked || !mounted) return;
+    setState(() {
+      _book = r.id;
+      _picked = null;
+    });
   }
 }
