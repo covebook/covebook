@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -90,7 +91,17 @@ func googleErr(err error) error {
 	if errors.As(err, &ge) && (ge.Code == http.StatusNotFound || ge.Code == http.StatusGone) {
 		return fmt.Errorf("google: %w", ErrNotFound)
 	}
-	return fmt.Errorf("google 구매 조회: %w", err)
+	return fmt.Errorf("google 구매 조회: %w", scrubURL(err))
+}
+
+// scrubURL은 통신 오류에서 요청 주소를 뺀다. 구글 API 주소에는 구매 토큰이 들어 있고,
+// 구매 토큰은 그 자체가 구매 증거라 로그나 DB에 남으면 안 된다(남의 구독을 복원으로 가져갈 수 있다).
+func scrubURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s 요청 실패: %w", ue.Op, ue.Err)
+	}
+	return err
 }
 
 func (g *Google) fromSubscription(token string, s *androidpublisher.SubscriptionPurchaseV2) (Purchase, error) {
@@ -115,6 +126,7 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 		ProductID:             item.ProductId,
 		State:                 subscriptionState(s.SubscriptionState),
 		Acknowledged:          s.AcknowledgementState == googleAcknowledged,
+		LinkedID:              s.LinkedPurchaseToken,
 		Env:                   EnvProduction,
 		PurchasedAt:           started,
 		ExpiresAt:             expires,
@@ -222,7 +234,7 @@ func (g *Google) Confirm(ctx context.Context, ref Ref, productID string, consume
 		return fmt.Errorf("google 확인: 종류 %q, 소비 %v는 맞지 않는 조합", ref.Kind, consume)
 	}
 	if err != nil {
-		return fmt.Errorf("google 확인 %s: %w", productID, err)
+		return fmt.Errorf("google 확인 %s: %w", productID, scrubURL(err))
 	}
 	return nil
 }
@@ -238,15 +250,15 @@ func (g *Google) ParseNotice(body []byte) (Notice, error) {
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(body, &push); err != nil || push.Message.MessageID == "" {
-		return Notice{}, errors.New("google 알림: 본문 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 본문: %w", ErrBadNotice)
 	}
 	raw, err := base64.StdEncoding.DecodeString(push.Message.Data)
 	if err != nil {
-		return Notice{}, errors.New("google 알림: data를 풀 수 없음")
+		return Notice{}, fmt.Errorf("google 알림 data: %w", ErrBadNotice)
 	}
 	var d playstore.DeveloperNotificationV2
 	if err = json.Unmarshal(raw, &d); err != nil {
-		return Notice{}, errors.New("google 알림: 내용 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 내용: %w", ErrBadNotice)
 	}
 	n := Notice{Route: RouteGoogle, ID: push.Message.MessageID}
 	if ms, e := strconv.ParseInt(d.EventTimeMillis, 10, 64); e == nil {

@@ -2,6 +2,7 @@ package iap
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -89,4 +90,25 @@ func (f *Fake) Confirm(_ context.Context, ref Ref, _ string, _ bool) error {
 	}
 	f.Confirmed = append(f.Confirmed, ref.ID)
 	return nil
+}
+
+// ParseNotice는 본문을 Notice의 JSON으로 읽는다. 시험에서 알림을 직접 만들어 넣을 때 쓴다.
+// {"bad":"signature"}는 서명 실패, 읽을 수 없는 본문은 형식 오류, {"app":"other"}는 다른 앱의 알림이다.
+func (f *Fake) ParseNotice(body []byte) (Notice, error) {
+	var probe struct{ Bad, App string }
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return Notice{}, fmt.Errorf("fake 알림: %w", ErrBadNotice)
+	}
+	if probe.Bad != "" {
+		return Notice{}, fmt.Errorf("fake 알림 서명 확인 실패")
+	}
+	if probe.App != "" {
+		return Notice{}, fmt.Errorf("fake 알림: %w", ErrWrongApp)
+	}
+	var n Notice
+	if err := json.Unmarshal(body, &n); err != nil || n.ID == "" {
+		return Notice{}, fmt.Errorf("fake 알림: %w", ErrBadNotice)
+	}
+	n.Route = f.R
+	return n, nil
 }

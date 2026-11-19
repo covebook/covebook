@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"net/url"
+	"strings"
 	"testing"
 
 	"google.golang.org/api/androidpublisher/v3"
@@ -259,6 +261,26 @@ func TestGoogleVerify(t *testing.T) {
 	}
 	if _, err := g.Verify(KindProduct, ""); !errors.Is(err, ErrBadProof) {
 		t.Fatalf("빈 토큰: %v", err)
+	}
+}
+
+// 통신 오류 메시지에 구매 토큰이 남지 않는다. 구글 API 주소에는 토큰이 들어 있고 토큰은 구매 증거다.
+func TestGoogleErrorsHideToken(t *testing.T) {
+	const token = "secret-purchase-token"
+	netErr := &url.Error{Op: "Get", URL: "https://androidpublisher.googleapis.com/x/tokens/" + token, Err: errors.New("context deadline exceeded")}
+	ctx := context.Background()
+	var calls []string
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{err: netErr, calls: &calls}}
+	_, lookupErr := g.Lookup(ctx, Ref{Kind: KindSubscription, ID: token})
+	_, productErr := g.Lookup(ctx, Ref{Kind: KindProduct, ID: token})
+	confirmErr := g.Confirm(ctx, Ref{Kind: KindProduct, ID: token}, "shelf", true)
+	for name, err := range map[string]error{"구독 조회": lookupErr, "상품 조회": productErr, "확인": confirmErr} {
+		if err == nil || strings.Contains(err.Error(), token) {
+			t.Errorf("%s 오류에 토큰이 남음: %v", name, err)
+		}
+		if err != nil && !strings.Contains(err.Error(), "deadline") {
+			t.Errorf("%s 오류에서 원인이 사라짐: %v", name, err)
+		}
 	}
 }
 

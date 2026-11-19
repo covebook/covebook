@@ -42,6 +42,13 @@ func newIAPEnv(t *testing.T) *iapEnv {
 	}
 	srv := New(db)
 	srv.IAP = map[iap.Route]iap.Store{iap.RouteApple: e.apple, iap.RouteGoogle: e.google}
+	// 구글 알림 요청의 인증: 시험에서는 "Bearer pubsub"만 통과시킨다
+	srv.iapPushAuth = func(_ context.Context, header string) error {
+		if header != "Bearer pubsub" {
+			return errors.New("bad token")
+		}
+		return nil
+	}
 	e.srv, e.h = srv, srv.Handler()
 	return e
 }
@@ -250,6 +257,12 @@ func TestIAPShelfPurchase(t *testing.T) {
 	e.google.Purchases[id2] = e.shelfPurchase(id2, account)
 	if code, body = e.submit(thief, "google", e.shelf, id2, false); code != 409 {
 		t.Fatalf("남의 값: %d %v", code, body)
+	}
+	// 계정 연결 값이 UUID 모양이 아닌 구매: 요청이 실패하지 않고, 남의 값으로 보아 거절한다
+	odd := iapTestID(t, "odd")
+	e.google.Purchases[odd] = e.shelfPurchase(odd, "uuid가-아닌-값")
+	if code, body = e.submit(thief, "google", e.shelf, odd, false); code != 409 || errCode(body) != "iap_other_account" {
+		t.Fatalf("UUID가 아닌 값: %d %v", code, body)
 	}
 	// 계정 연결 값이 빈 구매(앱 밖 구매)는 낸 사람에게, 앱이 보낸 연도 책장에 준다
 	id3 := iapTestID(t, "tok3")

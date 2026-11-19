@@ -31,6 +31,8 @@ type Server struct {
 	IAPSandbox        bool                    // 샌드박스 거래에도 지급할지 (IAP_ALLOW_SANDBOX)
 	iapMu             sync.Mutex
 	iapHits           map[int64]iapHit
+	iapWake           chan struct{}                                         // 새 알림이 오면 처리 작업을 깨운다
+	iapPushAuth       func(ctx context.Context, authorization string) error // 구글 알림 요청의 인증 확인. 없으면 구글 알림을 받지 않는다
 	ConfigError       error
 	searchMu          sync.Mutex
 	searchCache       map[string]searchEntry
@@ -231,6 +233,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /auth/kakao/claim", wrap(s.kakaoClaim))
 	s.routeCommunity(m)
 	s.routeIAP(m)
+	s.routeIAPNotify(m)
 	return m
 }
 func (s *Server) health(w http.ResponseWriter, r *http.Request) error {
@@ -240,5 +243,10 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) error {
 }
 func New(db *pgxpool.Pool) *Server {
 	gateway, err := llm.New(os.Getenv("LLM_KEYS"), os.Getenv("GEMINI_MODEL"), os.Getenv("OPENAI_MODEL"), nil)
-	return &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), IAPSandbox: iapSandboxAllowed(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
+	s := &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), IAPSandbox: iapSandboxAllowed(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
+	s.iapWake = make(chan struct{}, 1)
+	if s.IAP[iap.RouteGoogle] != nil {
+		s.iapPushAuth = s.iapGooglePushAuth()
+	}
+	return s
 }
