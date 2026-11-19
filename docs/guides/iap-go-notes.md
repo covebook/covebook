@@ -436,10 +436,30 @@ return tx.Commit(ctx)
   - Java·JPA로 치면 `@Table(uniqueConstraints=...)`로는 조건부 유일을 못 적음. DDL을 직접 써야 하는 자리
 - **3칸 상한은 읽을 때 자름**: `least(sum(p.shelves), 3)`(`iapEntitlements`). 두 기기에서 동시에 사면 넘을 수 있는데, 저장할 때 막으려면 잠금이 늘어남. 원장은 사실대로 두고 읽을 때 자르면 환불이 들어와도 다시 계산할 게 없음(D5와 같은 생각). 상한은 `iapPaidShelfMax` 한 곳
   - 넘은 거래는 제출 응답의 `overCap`, 결제 완료 고지의 `overCap`, `/admin/iap/stats`의 `shelfOverCap`으로 보임. 환불은 운영자가 함
-- **넘은 거래 세기: 윈도 함수**: `sum(shelves) OVER (PARTITION BY user_id, shelf_year ORDER BY purchased_at, id)`로 "그 거래까지 산 칸"을 구하고 3을 넘는 줄을 셈. Java로 하면 줄을 다 가져와 누적합을 돌렸을 일을 SQL 한 문장으로 함
+  - **10-11에서 바뀜**: 넘은 거래는 통째로 칸을 주지 않고(`over_cap`) 자동 환불. 결제 전 예약도 더함
+- **넘은 거래 세기: 윈도 함수**: `sum(shelves) OVER (PARTITION BY user_id, shelf_year ORDER BY purchased_at, id)`로 "그 거래까지 산 칸"을 구하고 3을 넘는 줄을 셈. Java로 하면 줄을 다 가져와 누적합을 돌렸을 일을 SQL 한 문장으로 함(10-11에서 `over_cap` 칸을 세는 것으로 바뀜)
 - **연도를 모르는 거래**: 앱 밖에서 산 구매(프로모션 코드)는 계정 연결 값이 비어 있음. 이때만 제출 본문의 `year`를 씀. 값이 연도를 알면 본문은 무시함(값이 결제 때의 뜻이라). 둘 다 없으면 거래는 기록하고(돈은 받았으니) 칸은 주지 않고 422 `iap_shelf_year_missing`. 같은 거래를 연도와 함께 다시 내면 그때 채우고 결제 완료를 알림(`iapSetShelfYear`가 "이번에 채웠는지"를 돌려줌)
 - **고치기 전 값과 고친 값을 한 문장에서**: `WITH old AS (SELECT ... FOR UPDATE) UPDATE ... FROM old RETURNING b.shelf_year, old.shelf_year IS NULL`. CTE의 `old`는 고치기 전 값이라 "채웠는지"를 바로 앎(10-8의 `RETURNING`과 같은 수법)
 - **Java와 다른 점: JSON의 숫자 키**: Go의 `map[int]int`를 `encoding/json`으로 내보내면 키가 문자열이 됨(`{"2026":3}`). JSON 객체 키는 문자열뿐이라 그렇고, Jackson의 `Map<Integer,Integer>`도 같음. 앱은 키를 문자열로 읽음
+
+### 10-11. 두 기기에서 동시에 살 때: 결제 전 예약 + 결제 뒤 자동 환불 (D1)
+
+- **문제**: 태블릿에서 결제창을 띄워 둔 채 휴대폰에서도 사면, 두 기기 모두 "산 칸 0"을 보고 결제가 시작됨. 둘 다 3칸 묶음이면 6칸. 10-10의 409는 계정 연결 값을 받는 순간에만 보므로 못 막음
+- **두 겹으로 지킴**
+  - **결제 전: 예약**(`iap_shelf_reservations`). `POST /iap/shelf-token {"year":2026,"shelves":3}`이 값을 주면서 "이 해 책장 3칸 결제 중"을 5분(`iapShelfHold`) 잡음. 산 칸 + 살아 있는 예약 칸 + 이번 칸 > 3이면 409 `iap_shelf_busy`와 `retryAfter`(가장 먼저 끝나는 예약까지 남은 초)
+    - 결제가 끝나면 제출(`reservation`)이 풀고, 취소하면 앱이 `POST /iap/shelf-token/release`로 풂. 앱이 꺼지면 `expires_at`이 지나 저절로 무시됨(지우는 일은 다음 예약 때)
+    - 예약 번호를 모르는 지급(스토어 알림이 먼저 옴, 옛 앱)은 그 해의 가장 오래된 예약 하나를 풂
+  - **결제 뒤: 넘은 거래는 칸을 주지 않고 환불**(`iap_purchases.over_cap`). 예약이 끝난 뒤 결제가 끝나는 등 예약을 지나친 경우를 받음
+- **왜 예약만으로 안 되나**: 예약은 "앱이 약속을 지킨다"는 가정 위에 있음. 5분을 넘긴 결제(구글 결제 대기, 느린 카드), 예약을 안 부르는 옛 앱, 앱 밖 구매는 예약을 지나침. 돈이 걸린 상한은 마지막에 서버가 원장으로 한 번 더 지켜야 함
+- **왜 "읽을 때 자르기"만으로 안 되나**: 10-10은 넘어도 3칸까지는 열어 줬음. 그런데 넘은 거래를 환불하면 그 거래의 칸도 빠져야 함. 3칸 묶음 일부만 인정하면 "환불은 통째, 칸은 일부"가 되어 셈이 꼬임. 그래서 넘은 거래는 통째로 넘은 것으로 보고(`iapSettleShelf`), 칸 수에서 뺌. `least(sum, 3)`은 마지막 안전장치로 남김
+- **한 번 넘은 거래는 되돌리지 않음**: 앞선 거래가 나중에 환불돼 자리가 생겨도 `over_cap`을 false로 돌리지 않음. 이미 환불을 요청한 거래에 칸을 주면 돈과 칸을 둘 다 주게 됨. SQL에서 `SET over_cap = me.over_cap OR (...)`로 true에서 false로 가는 길을 막음
+- **유저 줄 잠금으로 줄 세우기**: 예약과 판정 둘 다 `SELECT ... FROM users WHERE id=$1 FOR UPDATE` 뒤에 셈. 같은 유저의 두 요청이 차례로 보게 됨. Java의 `synchronized(user)`를 DB에서 하는 셈이고, 서버가 여러 대여도 통함
+- **환불: 구글만 서버가 할 수 있음**: Play Developer API `orders.refund`(`iap.Refunder`). 애플은 개발자가 환불하는 API가 없어 고지로 "애플에 환불 요청"을 안내(`autoRefund=false`)
+  - 소비(consume)를 먼저 하고 환불함. 구글은 3일 안에 확인하지 않으면 어차피 환불하지만, 그때는 사용자에게 알릴 길이 없음
+  - 실패하면 `refund_attempts`를 올리고 정기 처리(4단계)가 다시 요청. 주문 ID는 원장에 두지 않고 구매 토큰으로 다시 조회해 받음
+  - 다시 시도 목록은 환불할 수 있는 경로만 물음(`route = ANY($1)`). 애플의 넘은 거래가 목록 50줄을 차지해 구글 거래가 밀리는 일을 막음
+- **Go: 선택 기능은 작은 인터페이스로**: `Store`에 `Refund`를 넣지 않고 `Refunder`를 따로 둠. 쓰는 곳에서 `rf, ok := store.(iap.Refunder)`로 물어봄(타입 단언). Java로 치면 `if (store instanceof Refunder rf)`. 애플 구현이 "지원 안 함" 오류를 돌려주는 빈 메서드를 갖지 않아도 됨
+  - 시험 가짜도 `FakeRefunder{*Fake}`로 따로 둠. 구조체 포함(embedding)이라 `Fake`의 메서드를 그대로 가지면서 `Refund`만 더함. 애플 가짜가 환불을 흉내 내지 않게
 
 ## 진행 기록
 
@@ -456,3 +476,4 @@ return tx.Commit(ctx)
 | 2026-11-19 | L8, L11, L18 | 알림함: 고지 표(V22), 바뀐 순간에 한 번 쓰기, 목록·읽음 API | 10-8 |
 | 2026-11-19 | L9, L11 | 고지 기록 탈퇴 뒤 보존, 갱신 예정 고지(V23 `iap_plans`), `/iap/me`의 `period` | 10-9 |
 | 2026-11-19 | #6, D1 | 추가 선반 연도 책장마다(유료 최대 3칸): 연도별 계정 연결 값, `shelf_year`, `POST /iap/shelf-token`, `shelvesByYear`, 넘은 거래 세기 | 10-10 |
+| 2026-11-19 | D1 | 두 기기 동시 구매: 결제 중 예약 5분, 넘은 거래는 칸을 주지 않고 자동 환불(구글), 넘김 고지 | 10-11 |
