@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -473,5 +474,123 @@ func TestIAPSurvivesAccountDeletion(t *testing.T) {
 	}
 	if notices != 1 || noticeOwner != nil {
 		t.Fatalf("고지 %d줄, 유저 %v: 탈퇴해도 고지는 남고 주인만 비어야 한다", notices, noticeOwner)
+	}
+}
+
+// 선반 결제 중 예약: 산 칸 + 예약 칸 + 이번 칸이 3칸을 넘으면 잡지 않고 기다릴 시간을 준다(D1)
+func TestIAPShelfReservation(t *testing.T) {
+	ctx, db := iapTestDB(t)
+	user, other := iapTestUser(t, ctx, db), iapTestUser(t, ctx, db)
+	reserve := func(u int64, year, shelves, paid int) (iapReservation, time.Duration) {
+		t.Helper()
+		tx, err := db.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		r, wait, err := iapReserveShelf(ctx, tx, u, year, shelves, paid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		return r, wait
+	}
+
+	// 1칸씩 두 기기: 1+1 ≤ 3이라 둘 다 잡힌다
+	a, _ := reserve(user, 2026, 1, 0)
+	b, _ := reserve(user, 2026, 1, 0)
+	if a.ID == "" || b.ID == "" || a.ID == b.ID {
+		t.Fatalf("1칸 두 개가 따로 잡혀야 함: %q %q", a.ID, b.ID)
+	}
+	if left := time.Until(a.ExpiresAt); left < 4*time.Minute || left > 6*time.Minute {
+		t.Fatalf("예약은 5분: 남은 시간 %v", left)
+	}
+	// 3칸 묶음은 예약 2칸이 있어 막힌다. 기다릴 시간은 가장 먼저 끝나는 예약까지
+	if r, wait := reserve(user, 2026, 3, 0); r.ID != "" || wait < 4*time.Minute || wait > 6*time.Minute {
+		t.Fatalf("예약 때문에 막혀야 함: %+v wait=%v", r, wait)
+	}
+	// 다른 해 책장, 다른 유저는 상관없다
+	if r, _ := reserve(user, 2027, 3, 0); r.ID == "" {
+		t.Fatal("다른 해 책장은 따로")
+	}
+	if r, _ := reserve(other, 2026, 3, 0); r.ID == "" {
+		t.Fatal("다른 유저는 따로")
+	}
+	// 산 칸도 센다: 1칸 샀고 예약 2칸이면 1칸도 안 된다
+	if r, _ := reserve(user, 2026, 1, 1); r.ID != "" {
+		t.Fatal("산 1칸 + 예약 2칸 + 1칸 = 4칸")
+	}
+
+	// 남의 예약, 없는 예약, 모양이 틀린 값은 아무 일도 없다
+	for _, id := range []string{a.ID, "00000000-0000-0000-0000-000000000000", "x"} {
+		if err := iapReleaseReservation(ctx, db, other, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var n int
+	if err := db.QueryRow(ctx, "SELECT count(*) FROM iap_shelf_reservations WHERE user_id=$1 AND year=2026", user).Scan(&n); err != nil || n != 2 {
+		t.Fatalf("남이 푼 예약이 지워짐: %d %v", n, err)
+	}
+	// 내 예약을 풀면 그만큼 다시 잡힌다
+	if err := iapReleaseReservation(ctx, db, user, strings.ToUpper(a.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := reserve(user, 2026, 2, 0); r.ID == "" {
+		t.Fatal("예약 1칸을 풀었으니 1+2 ≤ 3")
+	}
+	// 가장 먼저 잡은 것부터 푼다
+	if err := iapReleaseOldestReservation(ctx, db, user, 2026); err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	rows, _ := db.Query(ctx, "SELECT id::text FROM iap_shelf_reservations WHERE user_id=$1 AND year=2026", user)
+	for rows.Next() {
+		var id string
+		_ = rows.Scan(&id)
+		left = append(left, id)
+	}
+	rows.Close()
+	if len(left) != 1 || left[0] == b.ID {
+		t.Fatalf("가장 먼저 잡은 b가 풀려야 함: %v", left)
+	}
+
+	// 끝난 예약은 세지 않는다
+	if _, err := db.Exec(ctx, "UPDATE iap_shelf_reservations SET expires_at = now() - interval '1 second' WHERE user_id=$1", user); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := reserve(user, 2026, 3, 0); r.ID == "" {
+		t.Fatal("끝난 예약은 세지 않아야 함")
+	}
+}
+
+// 3칸을 넘게 산 거래(over_cap)는 칸 수에 세지 않는다
+func TestIAPOverCapNotCounted(t *testing.T) {
+	ctx, db := iapTestDB(t)
+	user := iapTestUser(t, ctx, db)
+	one := iapTestID(t, "shelf1")
+	if _, err := db.Exec(ctx, "INSERT INTO iap_products(route,product_id,kind,shelves) VALUES('apple',$1,'product',1)", one); err != nil {
+		t.Fatal(err)
+	}
+	token, err := iapShelfToken(ctx, db, user, 2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 2 {
+		p := iap.Purchase{Route: iap.RouteApple, TransactionID: iapTestID(t, "tx") + string(rune('a'+i)), ProductID: one, AccountToken: token,
+			State: iap.StatePaid, Env: iap.EnvSandbox, PurchasedAt: time.Now().UTC()}
+		p.OriginalTransactionID = p.TransactionID
+		if _, err = iapRecordPurchase(ctx, db, user, iap.KindProduct, p); err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 {
+			if _, err = db.Exec(ctx, "UPDATE iap_purchases SET over_cap=true WHERE route='apple' AND transaction_id=$1", p.TransactionID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, shelves, err := iapEntitlements(ctx, db, user, true); err != nil || shelves[2026] != 1 {
+		t.Fatalf("넘게 산 거래는 세지 않음: %v %v", shelves, err)
 	}
 }

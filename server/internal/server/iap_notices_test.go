@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"reflect"
 	"sort"
@@ -370,7 +371,7 @@ func TestIAPAdminStatsNotices(t *testing.T) {
 }
 
 // 연도를 모르는 선반 거래는 칸을 주지 않았으니 결제 완료를 알리지 않는다. 연도를 채운 순간 한 번 알린다.
-// 한 책장에서 3칸을 넘게 산 거래의 결제 완료에는 overCap을 적는다(앱이 "넘은 칸은 환불" 안내를 붙인다).
+// 한 책장에서 3칸을 넘게 산 거래는 결제 완료 대신 넘김 고지(shelf_over_cap)를 쓴다.
 func TestIAPNoticeShelfYear(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
@@ -395,7 +396,60 @@ func TestIAPNoticeShelfYear(t *testing.T) {
 	if code, body := e.submit(token, "google", e.shelf, more, false); code != 200 || body["overCap"] != true {
 		t.Fatalf("넘는 구매: %d %v", code, body)
 	}
-	if p := e.notices(token)[0]["params"].(map[string]any); p["overCap"] != true || p["year"] != float64(2026) {
-		t.Fatalf("넘는 구매의 결제 완료 params: %v", p)
+	e.wantKinds(token, "넘는 구매 뒤", noticePurchaseDone, noticeShelfOverCap)
+	n := e.notices(token)[0]
+	if p := n["params"].(map[string]any); n["kind"] != noticeShelfOverCap || n["template"] != "T15" || p["year"] != float64(2026) || p["shelves"] != float64(2) || p["autoRefund"] != true || p["route"] != "google" {
+		t.Fatalf("넘김 고지: %v", n)
+	}
+	// 구글 환불이 처리돼 환불 알림이 와도 선반 환불 고지를 또 쓰지 않는다(닫을 칸이 없다)
+	e.notify("google", iap.Notice{ID: iapTestID(t, "r"), Type: "voided/2", Voided: true, Target: &iap.Ref{Kind: iap.KindProduct, ID: more}}, "Bearer pubsub")
+	e.sweep()
+	e.wantKinds(token, "넘은 거래 환불 뒤", noticePurchaseDone, noticeShelfOverCap)
+	if body := e.me(token); shelvesIn(body, 2026) != 2 {
+		t.Fatalf("넘은 거래가 환불돼도 칸 수는 그대로: %v", body)
+	}
+}
+
+// 넘김 고지의 autoRefund: 애플은 false(사용자가 애플에 요청). 구글은 처음 요청이 실패하면 false였다가 정기 처리가 요청하면 true
+func TestIAPNoticeShelfOverCapRefund(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	overCap := func(route string, year int) map[string]any {
+		t.Helper()
+		y := e.shelfToken(token, year)
+		for range 2 {
+			id := iapTestID(t, route)
+			p := e.shelfPurchase(id, y)
+			if route == "apple" {
+				p.Route, p.TransactionID, p.Acknowledged = iap.RouteApple, id, true
+				e.apple.Purchases[id] = p
+			} else {
+				e.google.Purchases[id] = p
+			}
+			e.submit(token, route, e.shelf, id, false)
+		}
+		for _, n := range e.notices(token) {
+			if n["kind"] == noticeShelfOverCap && n["params"].(map[string]any)["year"] == float64(year) {
+				return n["params"].(map[string]any)
+			}
+		}
+		t.Fatalf("%d년 넘김 고지가 없음", year)
+		return nil
+	}
+	if p := overCap("apple", 2026); p["autoRefund"] != false || p["route"] != "apple" {
+		t.Fatalf("애플 넘김 고지: %v", p)
+	}
+	e.google.RefundErr = errors.New("구글 장애")
+	if p := overCap("google", 2027); p["autoRefund"] != false {
+		t.Fatalf("구글 요청 실패: %v", p)
+	}
+	e.google.RefundErr = nil
+	if r := e.sweep(); r.Refunds != 1 {
+		t.Fatalf("다시 요청: %+v", r)
+	}
+	for _, n := range e.notices(token) {
+		if p := n["params"].(map[string]any); n["kind"] == noticeShelfOverCap && p["year"] == float64(2027) && p["autoRefund"] != true {
+			t.Fatalf("다시 요청한 뒤 넘김 고지: %v", p)
+		}
 	}
 }

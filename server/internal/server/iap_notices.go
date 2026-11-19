@@ -27,11 +27,12 @@ const (
 	noticeSubRefunded     = "subscription_refunded" // T9 환불(구독)
 	noticeShelfRefunded   = "shelf_refunded"        // T9 환불(선반)
 	noticeRenewalUpcoming = "renewal_upcoming"      // T4 갱신 예정(연 구독)
+	noticeShelfOverCap    = "shelf_over_cap"        // T15 그 해 책장의 유료 칸(3칸)을 넘게 사서 칸을 주지 않음, 환불(D1)
 )
 
 var iapNoticeTemplate = map[string]string{
 	noticePurchaseDone: "T3", noticePaymentFailed: "T7", noticeExpired: "T8",
-	noticeCancelScheduled: "T10", noticeSubRefunded: "T9", noticeShelfRefunded: "T9",
+	noticeCancelScheduled: "T10", noticeSubRefunded: "T9", noticeShelfRefunded: "T9", noticeShelfOverCap: "T15",
 	noticeRenewalUpcoming: "T4",
 }
 
@@ -59,7 +60,7 @@ func iapWriteNotice(ctx context.Context, q dbtx, user int64, kind string, env ia
 }
 
 // iapNotePurchaseDone은 새로 지급한 구매를 알린다(T3). 거래 키가 유일 키라 같은 거래는 한 번만 알린다.
-// 추가 선반은 칸이 열린 연도 책장(year)을 함께 적는다. 그 해에 3칸을 넘게 샀으면 overCap을 적는다(넘은 칸은 환불 대상, D1).
+// 추가 선반은 칸이 열린 연도 책장(year)을 함께 적는다. 3칸을 넘게 산 거래에는 쓰지 않는다(iapNoteShelfGrant).
 // 구독이면 shelf는 쓰지 않는다.
 func iapNotePurchaseDone(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, shelf iapShelfGrant) error {
 	params := map[string]any{"route": string(p.Route), "productId": p.ProductID, "kind": string(kind)}
@@ -67,9 +68,6 @@ func iapNotePurchaseDone(ctx context.Context, q dbtx, user int64, kind iap.Kind,
 		params["expiresAt"] = iapStamp(p.ExpiresAt)
 	} else {
 		params["shelves"], params["year"] = shelf.Shelves, shelf.Year
-		if shelf.OverCap {
-			params["overCap"] = true
-		}
 	}
 	return iapWriteNotice(ctx, q, user, noticePurchaseDone, p.Env, "purchase_done:"+string(p.Route)+":"+iapTransactionKey(kind, p), params)
 }
@@ -78,7 +76,25 @@ func iapNotePurchaseDone(ctx context.Context, q dbtx, user int64, kind iap.Kind,
 type iapShelfGrant struct {
 	Shelves int  // 상품이 주는 칸 수
 	Year    int  // 칸이 열린 연도 책장
-	OverCap bool // 그 해에 산 칸의 합이 iapPaidShelfMax를 넘었다
+	OverCap bool // 그 해 유료 칸(3칸)을 넘게 샀다. 칸을 주지 않았다
+}
+
+// iapNoteShelfGrant는 연도가 정해진 선반 구매를 알린다. 칸을 줬으면 결제 완료(T3), 3칸을 넘었으면 넘김 고지다.
+// 넘김 고지의 autoRefund는 처음에 false이고, 서버가 스토어에 환불을 요청하면 true로 바뀐다(iapRefundOverCap).
+// false면 앱이 "스토어에 환불을 요청해 주세요"(애플 등)를 안내한다.
+func iapNoteShelfGrant(ctx context.Context, q dbtx, user int64, p iap.Purchase, shelf iapShelfGrant) error {
+	if !shelf.OverCap {
+		return iapNotePurchaseDone(ctx, q, user, iap.KindProduct, p, shelf)
+	}
+	key := iapTransactionKey(iap.KindProduct, p)
+	return iapWriteNotice(ctx, q, user, noticeShelfOverCap, p.Env, iapOverCapDedupe(p.Route, key), map[string]any{
+		"route": string(p.Route), "productId": p.ProductID, "year": shelf.Year, "shelves": shelf.Shelves, "autoRefund": false,
+	})
+}
+
+// iapOverCapDedupe는 넘김 고지의 유일 키다. 거래마다 한 번이다.
+func iapOverCapDedupe(route iap.Route, key string) string {
+	return noticeShelfOverCap + ":" + string(route) + ":" + key
 }
 
 // iapSubBefore는 구독 줄을 고치기 전의 값이다. 고지는 이 값과 새 값이 달라진 순간에만 쓴다.

@@ -10,8 +10,8 @@
 CREATE TABLE iap_notices (
     id               BIGSERIAL PRIMARY KEY,
     user_id          BIGINT REFERENCES users(id) ON DELETE SET NULL,
-    kind             TEXT   NOT NULL,   -- purchase_done, payment_failed, expired, cancel_scheduled, subscription_refunded, shelf_refunded
-    template         TEXT   NOT NULL,   -- 고지 문구 번호: T3, T7, T8, T9, T10
+    kind             TEXT   NOT NULL,   -- purchase_done, payment_failed, expired, cancel_scheduled, subscription_refunded, shelf_refunded, shelf_over_cap
+    template         TEXT   NOT NULL,   -- 고지 문구 번호: T3, T7, T8, T9, T10, T15
     template_version INT    NOT NULL DEFAULT 1,
     params           JSONB  NOT NULL DEFAULT '{}',
     env              TEXT   NOT NULL DEFAULT 'production' CHECK (env IN ('production', 'sandbox')),  -- 샌드박스 거래의 고지는 스위치가 꺼지면 보이지 않는다(D15)
