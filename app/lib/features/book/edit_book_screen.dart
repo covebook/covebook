@@ -138,7 +138,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
     final b = _model.lib.books[widget.id];
     if (b == null || _model.lib.editions[b.editionId] == null) {
       return Screen(title: '책 정보 수정', children: [
-        Empty(title: '책을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+        Empty(title: '책을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     // 나가기 확인은 공용 DraftGuard.edit('고친 내용을 버릴까요?' · '계속 수정', 2026-11-19 공통 규칙: 직접 만든 PopScope에 '계속 쓰기'였다)

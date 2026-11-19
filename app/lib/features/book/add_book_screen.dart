@@ -705,7 +705,7 @@ class _FindStepState extends State<_FindStep> {
             TextLink(label: '직접 등록', onPress: () => widget.onManual(q)),
           ],
           if (items != null && items.isEmpty && !_busy)
-            Empty(title: '‘${q.trim()}’에 맞는 책이 없어요', body: '제목이나 저자 이름을 짧게 줄여 찾거나, 직접 등록할 수 있어요.', action: '직접 등록', actionKind: 'secondary', onAction: () => widget.onManual(q)),
+            Empty(title: '‘${q.trim()}’에 맞는 책이 없어요', body: '제목이나 저자 이름을 짧게 줄여 찾아보세요.', action: '직접 등록', actionKind: 'secondary', onAction: () => widget.onManual(q)),
           // 검색 전: 많이 찾는 책(YES24 베스트셀러 순서 그대로). 출처 표시는 늘 보인다(YES24 약관)
           if (q.trim().isEmpty && items == null && !_busy && _m.err == null && _m.popular.isNotEmpty)
             Padding(

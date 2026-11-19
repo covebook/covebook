@@ -163,7 +163,7 @@ class _BoardScreenState extends State<BookmarkBoardScreen> with SingleTickerProv
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             head,
             Expanded(
-              child: Empty(title: '책을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+              child: Empty(title: '책을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
             ),
           ]),
         ),
@@ -702,7 +702,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
               child: ClipRect(
                 child: Stack(children: [
                   if (_marks.isEmpty)
-                    const Center(child: Empty(title: '아직 남긴 갈피가 없어요', body: '이 책에 남긴 문장과 사진을 여기에 붙여 둘 수 있어요.'))
+                    const Center(child: Empty(title: '아직 남긴 갈피가 없어요'))
                   else
                     Positioned.fill(
                       child: Opacity(

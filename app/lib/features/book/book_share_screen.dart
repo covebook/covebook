@@ -180,7 +180,7 @@ class _BookShareScreenState extends State<BookShareScreen> {
     final d = _data;
     if (b == null || d == null) {
       return Screen(title: '책 공유', children: [
-        Empty(title: '책을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+        Empty(title: '책을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     final has = {'note': d.note != null, 'rating': d.rating != null && d.rating != 0, 'time': d.readTime != null, 'period': d.period != null};

@@ -192,10 +192,10 @@ class _EssayScreenState extends State<EssayScreen> {
   Widget build(BuildContext context) {
     final lib = _model.lib;
     final essay = lib.essays[widget.id] ?? (_deleted ? _shown : null);
-    // 다른 곳에서 지웠으면 찾을 수 없음(공통 규칙 9장 틀: '○○을 찾을 수 없어요' + '삭제됐을 수 있어요.' + 나가는 단추)
+    // 다른 곳에서 지웠으면 찾을 수 없음(공통 규칙 9장 틀: '○○을 찾을 수 없어요' + '돌아가기')
     if (essay == null) {
       return Screen(children: [
-        Empty(title: '감상을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+        Empty(title: '감상을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     _shown = essay;

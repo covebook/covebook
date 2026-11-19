@@ -63,7 +63,7 @@ class _BindingScreenState extends State<BindingScreen> {
     final e = _edition;
     if (_book == null || e == null) {
       return Screen(title: '장정 편집', children: [
-        Empty(title: '책을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+        Empty(title: '책을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     // 고른 장정이 있으면 나갈 때 묻는다(공용 DraftGuard.edit, 2026-11-19 공통 규칙: 말없이 버려졌다)

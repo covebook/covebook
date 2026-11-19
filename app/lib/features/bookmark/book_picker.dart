@@ -223,9 +223,9 @@ class _PickerState extends State<_Picker> {
           // 책 없이: 이름은 앱 어디서나 '책 없이 읽기', 표지 자리는 같은 회색 칸(공통 규칙 3장)
           if (widget.allowNone) _row(cover: NoBookCover(width: BookRow.coverWidth(BookRowSize.small)), title: NoBookCover.name, id: null, fixed: noneFixed),
           for (final id in list) _book(id),
-          // 공통 규칙 11장: 검색 0건은 검색어를 넣은 제목 + 다른 낱말 안내
+          // 공통 규칙 11장: 검색 0건은 검색어를 넣은 제목(다시 찾을 칸이 바로 위에 있어 본문 없음)
           if (list.isEmpty && t.isNotEmpty)
-            Empty(title: '‘$t’에 맞는 책이 없어요', body: '다른 낱말로 찾아보세요.')
+            Empty(title: '‘$t’에 맞는 책이 없어요')
           else if (ids.isEmpty && widget.books == null)
             const Empty(title: '내 책이 없어요', body: '먼저 책을 추가해 주세요.'),
         ]),

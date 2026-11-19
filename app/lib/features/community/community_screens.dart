@@ -180,8 +180,8 @@ class _CommunityTabState extends State<CommunityTab> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: Space.page),
                     child: _scope == 'following'
-                        ? Empty(title: '팔로우한 사람의 기록이 없어요', body: '발견에서 마음에 드는 독자를 찾아 팔로우해 보세요.', action: '발견 보기', actionKind: 'secondary', onAction: () => _setScope('discover'))
-                        : Empty(title: '아직 올라온 독서 기록이 없어요', body: '내 독서 기록 가운데 하나를 골라 첫 글을 남겨 보세요.', action: '기록 공유하기', actionKind: 'secondary', onAction: () => _go(() => openCommunityCompose(context))),
+                        ? Empty(title: '팔로우한 사람의 기록이 없어요', action: '발견 보기', actionKind: 'secondary', onAction: () => _setScope('discover'))
+                        : Empty(title: '아직 올라온 독서 기록이 없어요', action: '기록 공유하기', actionKind: 'secondary', onAction: () => _go(() => openCommunityCompose(context))),
                   ),
                 ])
               : ListView.separated(
@@ -330,14 +330,14 @@ class _ShareDraftScreenState extends State<ShareDraftScreen> {
     final src = shareSourceOf(LibraryModel.instance.lib, widget.sessionId);
     if (src == null) {
       return Screen(title: title, children: [
-        Empty(title: '기록을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+        Empty(title: '기록을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     final choice = _choice ?? defaultChoice(src);
     final payload = sharePayload(src, choice);
     if (payload == null) {
       return Screen(title: title, children: [
-        Empty(title: '책과 연결된 기록만 공유할 수 있어요', body: '기록 수정에서 책을 연결한 뒤 다시 시도해 주세요.', action: '기록 수정', actionKind: 'secondary', onAction: () => openSessionEdit(context, src.session.id)),
+        Empty(title: '책과 연결된 기록만 공유할 수 있어요', action: '기록 수정', actionKind: 'secondary', onAction: () => openSessionEdit(context, src.session.id)),
       ]);
     }
     void set({bool? duration, bool? pages, Object? quoteId = _keep, String? body}) => setState(() => _choice = (
@@ -593,7 +593,7 @@ class _PostScreenState extends State<PostScreen> {
   Widget build(BuildContext context) {
     const title = '독서 기록';
     if (_phase == 'loading') return const Screen(title: title, children: [Loading()]);
-    if (_phase == 'gone') return const Screen(title: title, children: [Empty(title: '볼 수 없는 게시물이에요', body: '삭제됐거나 숨겨진 게시물이에요.')]);
+    if (_phase == 'gone') return const Screen(title: title, children: [Empty(title: '볼 수 없는 게시물이에요')]);
     final p = _post;
     if (_phase == 'error' || p == null) {
       return Screen(title: title, children: [
@@ -807,7 +807,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       return Screen(title: title, children: [
         Empty(
           title: '계정을 연결하면 공개 활동을 할 수 있어요',
-          body: '게시, 평가, 댓글, 팔로우는 Google이나 카카오 계정을 연결한 뒤 할 수 있어요. 연결 전에도 다른 독자의 공개 기록은 볼 수 있어요. 내 책 기록은 직접 고른 것만 공개돼요.',
           action: '계정 연결하러 가기',
           onAction: () => openBackup(context),
         ),
@@ -940,7 +939,7 @@ class _UserScreenState extends State<UserScreen> {
   @override
   Widget build(BuildContext context) {
     if (_phase == 'loading') return const Screen(title: '독자', children: [Loading()]);
-    if (_phase == 'gone') return const Screen(title: '독자', children: [Empty(title: '볼 수 없는 프로필이에요', body: '공개 프로필이 없거나 볼 수 없는 사용자예요.')]);
+    if (_phase == 'gone') return const Screen(title: '독자', children: [Empty(title: '볼 수 없는 프로필이에요')]);
     final pg = _page;
     if (_phase == 'error' || pg == null) {
       return Screen(title: '독자', children: [

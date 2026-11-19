@@ -384,8 +384,9 @@ class _RecordTabState extends State<RecordTab> {
             : _kind == MarkKind.photo
                 ? '사진 갈피가 없어요'
                 : '조건에 맞는 갈피가 없어요';
+    // 본문은 단추 없이 할 일을 알려야 할 때만(DESIGN 11장): 검색 0건은 바로 위 검색칸이 할 일
     final emptyBody = q.isNotEmpty
-        ? '다른 낱말로 찾아보세요.'
+        ? null
         : plain
             ? '갈피 오른쪽 아래의 표시를 눌러 모아 보세요.'
             : _kind == MarkKind.photo
@@ -455,7 +456,6 @@ class _RecordTabState extends State<RecordTab> {
               container: true,
               child: Empty(
                 title: '아직 쓴 감상이 없어요',
-                body: '책을 읽고 든 생각을 길게 남기는 곳이에요.\n별점과 한줄평은 책 정보 › 평가에 있어요.',
                 action: '감상 쓰기',
                 onAction: () => openNewEssay(context),
               ),
@@ -481,7 +481,7 @@ class _RecordTabState extends State<RecordTab> {
             ? ListView(padding: EdgeInsets.only(bottom: bottomPad), children: [
                 // 공통 규칙 11장: 검색 0건 · 거르기 0건(갈피와 같은 말)
                 q.isNotEmpty
-                    ? Empty(title: '‘$q’에 맞는 감상이 없어요', body: '다른 낱말로 찾아보세요.')
+                    ? Empty(title: '‘$q’에 맞는 감상이 없어요')
                     : Empty(title: '조건에 맞는 감상이 없어요', action: '조건 지우기', actionKind: 'secondary', onAction: clear),
               ])
             // 목록 줄 사이에 선을 긋지 않는다(다른 책 목록과 같게, 0.5 선이었다)

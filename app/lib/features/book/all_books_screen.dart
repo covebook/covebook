@@ -317,12 +317,11 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: Space.xxl),
       child: total == 0
-          ? Empty(title: '아직 등록한 책이 없어요', body: '책을 추가하면 여기에서 모두 볼 수 있어요.', action: '책 추가', onAction: () => openAddBook(context))
+          ? Empty(title: '아직 등록한 책이 없어요', action: '책 추가', onAction: () => openAddBook(context))
           : q.isNotEmpty
-              ? Empty(title: '‘$q’에 맞는 책이 없어요', body: '다른 낱말로 찾아보세요.', action: '책 추가', onAction: () => openAddBook(context, q: q))
+              ? Empty(title: '‘$q’에 맞는 책이 없어요', action: '책 추가', onAction: () => openAddBook(context, q: q))
               : Empty(
                   title: '조건에 맞는 책이 없어요',
-                  body: '다른 읽기 상태를 고르거나 조건을 지워 보세요.',
                   action: '조건 지우기',
                   actionKind: 'secondary',
                   // 읽기 상태 · 책장에 없는 책 · 완독한 해를 모두 푼다(정렬은 거르기가 아니라 그대로)

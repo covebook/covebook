@@ -252,10 +252,10 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
     final lib = _model.lib;
     final list = _list();
     if (!_model.loaded || _pages == null) return const Screen(children: [Loading()]);
-    // 찾을 수 없음 틀(공통 규칙 9장): 제목 · '삭제됐을 수 있어요.' · 나가는 단추
+    // 찾을 수 없음 틀(공통 규칙 9장): 제목 + '돌아가기'
     if (list.isEmpty) {
       return Screen(title: '갈피', children: [
-        Empty(title: '갈피를 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+        Empty(title: '갈피를 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     if (_editing != null) return _EditBookmark(m: _editing!, onDone: _endEdit);

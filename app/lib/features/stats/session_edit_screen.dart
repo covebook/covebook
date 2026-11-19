@@ -104,7 +104,7 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
     if (s == null || initial == null) {
       // 찾을 수 없음 틀(공통 규칙 9장)
       return Screen(title: '독서 기록', children: [
-        Empty(title: '기록을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
+        Empty(title: '기록을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }
     final lib = _model.lib;

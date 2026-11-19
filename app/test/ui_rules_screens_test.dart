@@ -69,6 +69,7 @@ void main() {
       _use(_lib());
       await _push(t, BookScreen(id: 'nope', onRead: (_) {}));
       expect(find.text('책을 찾을 수 없어요'), findsOneWidget);
+      expect(find.textContaining('삭제됐을'), findsNothing, reason: '제목과 돌아가기로 충분하면 본문 없음(11장)');
       await t.tap(find.text('돌아가기'));
       await t.pumpAndSettle();
       expect(find.text('열기'), findsOneWidget);

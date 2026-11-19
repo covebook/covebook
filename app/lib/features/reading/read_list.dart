@@ -336,8 +336,6 @@ class _ReadListState extends State<ReadList> {
               noBooks ? Btn(label: '책 추가', onPress: () => openAddBook(context)) : Btn(label: '읽기 목록에 추가', onPress: openPicker),
             ]),
           )
-        else
-          const EmptyLine('+로 읽을 책을 더 골라 둘 수 있어요'),
       ],
     );
   }

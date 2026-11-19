@@ -297,7 +297,7 @@ class _BookScreenState extends State<BookScreen> {
     if (!_model.loaded) return const Screen(children: [Loading()]);
     if (b == null || e == null) {
       // 찾을 수 없음(docs/design/DESIGN.md 9장): 이유 + 나가는 단추 하나(뒤로와 같다. '책장으로'라 했지만 실제로는 이전 화면이었다)
-      return Screen(title: '책 정보', children: [Empty(title: '책을 찾을 수 없어요', body: '삭제됐을 수 있어요.', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop())]);
+      return Screen(title: '책 정보', children: [Empty(title: '책을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop())]);
     }
     if (!_noteLoaded) {
       _note.text = b.note ?? '';
@@ -506,17 +506,14 @@ class _BookScreenState extends State<BookScreen> {
             onEditingComplete: _endNote,
           ),
         )
-      else if (note.isEmpty)
-        // 빈 구역 한 줄은 공용 EmptyLine(docs/design/DESIGN.md 11장)
-        const EmptyLine('이 책을 한 줄로 남겨 보세요')
-      else
+      // 비어 있으면 안내 없이 머리 '쓰기'만(DESIGN 11장: 구역 머리에 할 일이 보이면 빈 줄을 두지 않는다)
+      else if (note.isNotEmpty)
         Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText(note, style: AppType.review)),
       const SizedBox(height: Space.block),
       // 감상(기록 › 감상과 같은 데이터, 이 책 것만)
       SectionHead(title: '감상', count: essays.isEmpty ? null : '${essays.length}개', link: '쓰기', onLink: () => openNewEssay(context, book: id)),
-      if (essays.isEmpty)
-        const EmptyLine('이 책을 읽고 든 생각을 길게 남겨요')
-      else
+      // 비어 있으면 머리 '쓰기'만(DESIGN 11장)
+      if (essays.isNotEmpty)
         for (final (i, x) in essays.indexed) ...[if (i > 0) const AppDivider(), EssayRow(key: ValueKey(x.id), lib: lib, essay: x, showBook: false, compact: true)],
       if (reviews.available) ...[
         const SectionBand(),
@@ -743,8 +740,8 @@ class _BookScreenState extends State<BookScreen> {
                   : _RoundView(round: r),
           ]))
         else
-          // 재는 중이면 저장할 때 1회차가 생긴다고 알려 준다(시작만 하고 버리면 회차를 남기지 않는다). 빈 구역은 공용 EmptyLine(두 문장이라 마침표)
-          EmptyLine(ReadingStore.instance.active?.myBookId == id ? '지금 읽는 중이에요. 기록을 저장하면 1회차가 생겨요.' : '읽기 시작하면 회차가 생겨요. 날짜는 나중에 수정할 수 있어요.'),
+          // 재는 중이면 저장할 때 1회차가 생긴다고 알려 준다(시작만 하고 버리면 회차를 남기지 않는다). 빈 구역은 공용 EmptyLine
+          EmptyLine(ReadingStore.instance.active?.myBookId == id ? '지금 읽는 중이에요. 기록을 저장하면 1회차가 생겨요.' : '읽기 시작하면 회차가 생겨요'),
       ];
 
   /// 남긴 갈피: 제목 옆 작은 회색 개수(감상과 같은 모양: 0이면 개수 없이). 없으면 다른 빈 구역과 같은 왼쪽 한 줄(2026-11-19 공통 규칙: 가운데 · 위아래 40이었다).
