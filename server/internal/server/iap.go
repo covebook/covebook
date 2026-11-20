@@ -302,8 +302,12 @@ func iapValidYear(year int) bool { return year >= 2000 && year <= 9999 }
 //
 // reservation은 POST /iap/shelf-token이 준 결제 중 예약이다. 처리한 뒤 푼다. 없으면 그 해의 가장 오래된 예약 하나를 푼다.
 //
-// year는 추가 선반에만 쓴다. 어느 해 책장의 칸인지는 거래에 돌아온 계정 연결 값(POST /iap/shelf-token)으로 정하고,
-// 그 값이 연도를 모를 때만(앱 밖에서 산 구매 등) year를 쓴다. 둘 다 없으면 거래는 기록하고 422 iap_shelf_year_missing이다.
+// year는 추가 선반에만 쓴다. 어느 해 책장의 칸인지는 이 순서로 정한다(POST /iap/shelf-token이 값과 예약을 함께 준다).
+//  1. reservation: 새로 넣은 거래이고 이 유저의 예약이면 그 연도
+//  2. 거래에 돌아온 계정 연결 값의 연도
+//  3. year: 위 둘이 연도를 모를 때(앱 밖에서 산 구매 등)
+//
+// 셋 다 없으면 거래는 기록하고 422 iap_shelf_year_missing이다.
 //
 // proof는 "내가 이 구매를 한 기기"라는 증거다. 애플 거래 ID(숫자)는 받지 않는다. 추측할 수 있어서
 // 남의 구매를 내거나 restore로 남의 구독을 가져갈 수 있기 때문이다. 서명된 거래는 구매한 기기만 가진다.
@@ -500,7 +504,26 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		if !inserted {
 			status = "already"
 		}
-		// 어느 해 책장의 칸인지(D1). 넣을 때 계정 연결 값으로 이미 적었다. 값이 연도를 몰랐으면 앱이 보낸 연도로 채운다
+		// 어느 해 책장의 칸인지(D1). 넣을 때 계정 연결 값으로 이미 적었다.
+		// 앱이 결제 전에 받은 예약이 있으면 그 연도를 먼저 쓴다. 애플이 새 계정 연결 값 대신 처음 값을 돌려준다는 보고가 있어서다
+		// (docs/spec/erd.md 3.7). 예약은 서버가 이 유저에게 준 것이고 3칸 상한은 아래 iapSettleShelf가 그대로 본다.
+		// 새로 넣은 거래만 바꾼다. 알림으로 먼저 들어와 이미 칸을 셈한 거래의 연도는 건드리지 않는다
+		if inserted && body.Reservation != "" {
+			resYear, e := iapReservationYear(ctx, tx, user, body.Reservation)
+			if e != nil {
+				return e
+			}
+			if resYear > 0 {
+				prev, changed, e := iapPreferShelfYear(ctx, tx, route, key, resYear)
+				if e != nil {
+					return e
+				}
+				if changed && prev > 0 {
+					log.Printf("iap shelf year from reservation: route=%s user=%d token_year=%d reservation_year=%d", route, user, prev, resYear)
+				}
+			}
+		}
+		// 값도 예약도 연도를 몰랐으면 앱이 보낸 연도로 채운다
 		filled := false
 		if shelfYear, filled, e = iapSetShelfYear(ctx, tx, route, key, body.Year); e != nil {
 			return e
