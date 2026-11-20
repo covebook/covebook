@@ -479,6 +479,7 @@ class Screen extends StatelessWidget {
     this.pinned,
     this.fixedHead = false,
     this.background = AppColors.bg,
+    this.pinFooter = false,
   });
   final List<Widget> children;
   final String? title;
@@ -488,6 +489,10 @@ class Screen extends StatelessWidget {
   final bool scroll;
   final double bottomPad;
   final Widget? footer;
+
+  /// 스크롤하는 화면에서도 아래 단추 줄을 화면 아래에 붙여 둔다(키보드가 열려 있을 때는 내용 끝으로).
+  /// 긴 목록에서 고르는 화면만(여러 권 고르기 'N권 추가'). 2026-11-19 '고정 다 없애'의 예외: 목록 끝까지 내려야 단추가 보였다(2026-11-20 QA)
+  final bool pinFooter;
 
   /// 뒤로 대신 왼쪽에 둘 것(예: 고르는 중 '취소')
   final Widget? left;
@@ -514,6 +519,8 @@ class Screen extends StatelessWidget {
     // 키보드가 열리면 아래 안전 여백 대신 키보드 높이만큼 비운다(키보드가 열리면 paddingOf 아래는 0이 된다)
     final insets = MediaQuery.paddingOf(context);
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    // 아래 단추 줄을 화면 아래에 붙이나: 스크롤하지 않는 화면, 또는 pinFooter이고 키보드가 닫혀 있을 때
+    final footerFixed = footer != null && (!scroll || (pinFooter && keyboard == 0));
     // 밀어 넣은 화면은 모두 가운데 작은 제목(2026-11-17 사용자: 가운데 제목이면 깔끔). 큰 왼쪽 제목은 탭 첫 화면에만 남긴다.
     // 부제목은 내용 맨 위 한 줄로 옮긴다
     final bar = topBar ?? back;
@@ -585,10 +592,11 @@ class Screen extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         content,
-        if (footer != null)
+        if (footer != null && !footerFixed)
           Padding(
             padding: const EdgeInsets.fromLTRB(Space.page, Space.xl, Space.page, 0),
-            child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer))),
+            // 내용 끝 단추 줄이 화면에 보이면 토스트가 그 위에 뜬다(ToastAvoid)
+            child: ToastAvoid(child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer)))),
           ),
       ],
     );
@@ -638,7 +646,7 @@ class Screen extends StatelessWidget {
             if (!scroll && fixedHead) head,
             if (!scroll && fixedHead && pinned != null) Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!)),
             Expanded(child: body),
-            if (footer != null && !scroll)
+            if (footerFixed)
               // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
               FooterReport(
                 child: Container(
@@ -678,6 +686,51 @@ class KeyboardRefocusGuard extends NavigatorObserver {
   }
 }
 
+/// 토스트가 가리면 안 되는 아래 단추 줄(Screen footer · FooterReport 줄). 맨 위 화면에서 이 줄이 화면에 보이면 토스트를 그 위에 띄운다
+/// (2026-11-20 QA: 책 공유 '사진첩에 저장했어요'가 아래 '사진 저장 · 공유' 단추를 덮었다. 토스트는 하단 탭 바 높이에만 맞춰 떠 있었다)
+class ToastAvoid extends StatefulWidget {
+  const ToastAvoid({super.key, required this.child});
+  final Widget child;
+
+  @override
+  State<ToastAvoid> createState() => _ToastAvoidState();
+}
+
+class _ToastAvoidState extends State<ToastAvoid> {
+  static final _all = <_ToastAvoidState>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _all.add(this);
+  }
+
+  @override
+  void dispose() {
+    _all.remove(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// 맨 위 화면(경로)에서 화면에 보이는 아래 단추 줄 윗변이 화면 아래 끝에서 떨어진 거리(보이는 줄이 없으면 0)
+double toastFloor(double screenHeight) {
+  var floor = 0.0;
+  for (final s in _ToastAvoidState._all) {
+    if (!s.mounted) continue;
+    final route = ModalRoute.of(s.context);
+    if (route != null && !route.isCurrent) continue;
+    final box = s.context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) continue;
+    final top = box.localToGlobal(Offset.zero).dy;
+    if (top >= screenHeight || top + box.size.height <= 0) continue;
+    floor = math.max(floor, screenHeight - top);
+  }
+  return floor;
+}
+
 /// 화면 아래 고정 버튼 줄의 높이를 그 화면(경로) 몫으로 작은 타이머에 알린다.
 /// Screen의 footer가 아닌 화면(갈피 상세·갈피 보드처럼 아래 줄을 직접 그리는 곳)도 화면 아래 끝에 붙은 줄을 이것으로 감싼다
 /// (2026-11-16: 작은 타이머가 갈피 상세 '공유'·보드 '+ 갈피'를 가렸다)
@@ -713,7 +766,8 @@ class _FooterReportState extends State<FooterReport> {
       final r = _route, h = mounted ? context.size?.height : null;
       if (r != null && h != null) MiniTimerPlace.instance.setFooter(r, h);
     });
-    return widget.child;
+    // 토스트도 이 줄 위에 뜬다
+    return ToastAvoid(child: widget.child);
   }
 }
 

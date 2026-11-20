@@ -1,5 +1,6 @@
 // 피드백 공용: 짧은 알림(토스트)과 실패 문구. 언제 무엇을 쓰는지는 docs/design/DESIGN.md '피드백' 장
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -88,8 +89,9 @@ class _ToastState extends State<_Toast> {
     return Positioned(
       left: TabBarStyle.side,
       right: TabBarStyle.side,
-      // 떠 있는 하단 탭 바 위(2026-11-16 QA 현우 F1: 바닥에 붙으면 탭을 막았다). 키보드가 열리면 키보드 위
-      bottom: (mq.viewInsets.bottom > 0 ? mq.viewInsets.bottom : mq.viewPadding.bottom + TabBarStyle.navHeight) + Space.s,
+      // 떠 있는 하단 탭 바 위(2026-11-16 QA 현우 F1: 바닥에 붙으면 탭을 막았다). 키보드가 열리면 키보드 위.
+      // 화면 아래 단추 줄이 보이면 그 위(ToastAvoid, 2026-11-20 책 공유 '사진 저장' 단추를 덮었다)
+      bottom: math.max((mq.viewInsets.bottom > 0 ? mq.viewInsets.bottom : mq.viewPadding.bottom + TabBarStyle.navHeight), toastFloor(mq.size.height)) + Space.s,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: sheetMax),

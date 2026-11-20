@@ -77,6 +77,24 @@ void main() {
       expect(find.text('책장에서 뺐어요.'), findsNothing);
     });
 
+    testWidgets('화면 아래 단추 줄(ToastAvoid)이 보이면 토스트는 그 위에 뜬다(책 공유 사진 저장, 2026-11-20)', (t) async {
+      late BuildContext ctx;
+      await t.pumpWidget(_app(Builder(builder: (c) {
+        ctx = c;
+        return Material(
+          child: Column(children: [
+            const Expanded(child: SizedBox()),
+            ToastAvoid(child: const SizedBox(height: 120, child: Center(child: Text('사진 저장')))),
+          ]),
+        );
+      })));
+      showToast(ctx, '사진첩에 저장했어요.');
+      await t.pump(const Duration(milliseconds: 300));
+      final toast = t.getRect(find.text('사진첩에 저장했어요.'));
+      final footer = t.getRect(find.byType(ToastAvoid));
+      expect(toast.bottom, lessThanOrEqualTo(footer.top));
+    });
+
     testWidgets('되돌리기 없는 토스트는 2.5초 뒤 사라지고, 새 토스트는 앞 것을 바로 걷는다', (t) async {
       late BuildContext ctx;
       await t.pumpWidget(_app(Builder(builder: (c) {
