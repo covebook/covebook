@@ -120,13 +120,20 @@ Future<BookRemoval?> confirmRemoveBooks(BuildContext context, List<String> ids) 
 /// 확인한 삭제 · 숨기기를 한다. 지운 책 · 숨긴 책은 책장 배치에서도 빠진다
 Future<void> removeBooks(BookRemoval r) async {
   final model = LibraryModel.instance;
-  for (final id in r.deleted) {
-    await model.deleteBook(id, archived: false);
+  // 여러 권 중 뒤 책에서 실패해도 이미 지우거나 숨긴 책은 책장 배치에서도 뺀다(2026-11-20: 실패하면 forget이 불리지 않았다)
+  final done = <String>[];
+  try {
+    for (final id in r.deleted) {
+      await model.deleteBook(id, archived: false);
+      done.add(id);
+    }
+    for (final id in r.hidden) {
+      await model.deleteBook(id, archived: true);
+      done.add(id);
+    }
+  } finally {
+    if (done.isNotEmpty) await PlacementStore.instance.forget(done);
   }
-  for (final id in r.hidden) {
-    await model.deleteBook(id, archived: true);
-  }
-  await PlacementStore.instance.forget([...r.deleted, ...r.hidden]);
 }
 
 /// 삭제 · 숨기기 결과 토스트 글(한 권이면 제목으로)

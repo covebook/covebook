@@ -62,10 +62,13 @@ class _ToastState extends State<_Toast> {
   @override
   void initState() {
     super.initState();
+    // 보이는 시간은 처음 그려진 뒤부터 센다: 무거운 프레임(책장 다시 굽기)과 겹치면 그려지기 전에 3초가 다 가
+    // 토스트가 한두 장면만 보였다(2026-11-20 QA: 내 책 고르기 삭제 · 진열 토스트가 안 보임, 토스트가 짧음)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() => _shown = true);
+      if (!mounted) return;
+      setState(() => _shown = true);
+      _timer = Timer(widget.action != null ? toastWithAction : toastShort, _hide);
     });
-    _timer = Timer(widget.action != null ? toastWithAction : toastShort, _hide);
   }
 
   @override

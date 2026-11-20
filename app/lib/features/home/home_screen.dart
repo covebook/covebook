@@ -430,7 +430,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       setState(() => _editMsg = r.reason == 'no-change' ? null : editFailText[r.reason] ?? editFailText['outside']);
       return false;
     }
-    final ok = await PlacementStore.instance.commit(r.layout!);
+    final bool ok;
+    try {
+      ok = await PlacementStore.instance.commit(r.layout!);
+    } catch (e) {
+      // 기기에 쓰지 못하면 배치는 앞으로 돌아가고(PlacementStore) 까닭을 알린다(2026-11-20: 알림 없이 처리 안 된 오류로 끝났다)
+      if (mounted) {
+        _computePanel();
+        appAlert(context, '배치를 저장하지 못했어요', errorText(e));
+      }
+      return false;
+    }
     if (ok && _decorating) _decoUndo.add(_placeUndo);
     if (!mounted) return ok;
     setState(() => _editMsg = ok ? note : editFailText['no-space']);

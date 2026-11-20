@@ -722,6 +722,8 @@ double toastFloor(double screenHeight) {
     if (!s.mounted) continue;
     final route = ModalRoute.of(s.context);
     if (route != null && !route.isCurrent) continue;
+    // 숨은 탭(IndexedStack에서 배치는 되지만 안 보이는 탭)의 단추 줄은 빼고
+    if (!Visibility.of(s.context)) continue;
     final box = s.context.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) continue;
     final top = box.localToGlobal(Offset.zero).dy;
