@@ -19,12 +19,11 @@ import '../../scene_config/spine_look.dart';
 import '../../services/share_image.dart';
 import '../../store/library_model.dart';
 import '../../store/library_store.dart';
-import '../../ui/alert.dart';
 import '../../ui/bake.dart';
 import '../../ui/book_key.dart';
 import '../../ui/cover_photo.dart';
 import '../../ui/engraved_year.dart';
-import '../../ui/feedback.dart' show errorText;
+import '../../ui/feedback.dart' show shareFailAlert;
 import '../../ui/kit.dart' show Pressable, metaSep;
 import '../../ui/metrics.dart';
 import '../../ui/plane_key.dart';
@@ -186,8 +185,8 @@ class _YearShelfState extends State<YearShelf> {
       if (mounted) setState(() => _shooting = false);
       await sharePng(png, name: 'bookcase_${widget.bookcase.year}', title: '${widget.bookcase.year}년 책장');
     } catch (e) {
-      // 본문은 앱이 만든 안내(ShareImageError) 그대로, 그 밖 예외는 사람 문장으로(원문은 로그로)
-      if (mounted) appAlert(context, shareErrorTitle(e), e is ShareImageError ? e.message : errorText(e));
+      // 책 공유와 같은 창: 앱이 만든 안내는 그대로, 그 밖 예외는 사람 문장. 취소 · 다시 시도
+      if (mounted) shareFailAlert(context, e, _share);
     } finally {
       if (mounted) setState(() => _shooting = false);
     }

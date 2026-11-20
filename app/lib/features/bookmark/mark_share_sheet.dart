@@ -11,8 +11,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../services/share_image.dart';
-import '../../ui/alert.dart';
-import '../../ui/feedback.dart' show errorText;
+import '../../ui/feedback.dart' show shareFailAlert;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../share/mark_scene.dart';
@@ -81,9 +80,8 @@ class _MarkShareState extends State<_MarkShare> {
         if (mounted) nav.pop();
       }
     } catch (e) {
-      // 이미지 만들기 · 저장 못 하는 기기는 앱이 쓴 안내, 공유창 · 사진첩 실패는 플랫폼 원문이라 errorText로
-      final own = e is ShareImageError && (e.stage == 'image' || e.stage == 'unavailable');
-      if (mounted) appAlert(context, shareErrorTitle(e), own ? e.message : errorText(e));
+      // 책 공유와 같은 창: 앱이 쓴 안내는 그대로, 공유창 · 사진첩 실패는 사람 문장. 취소 · 다시 시도
+      if (mounted) shareFailAlert(context, e, () => _act(kind));
     } finally {
       if (mounted) setState(() => _busy = null);
     }

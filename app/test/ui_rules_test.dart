@@ -108,8 +108,29 @@ void main() {
       await t.pump(const Duration(milliseconds: 300));
       expect(find.text('삭제했어요.'), findsNothing);
       expect(find.text('복사했어요.'), findsOneWidget);
-      await t.pump(toastShort + const Duration(milliseconds: 400));
+      // 시간은 화면이 넘어간 프레임으로 센다(프레임마다 0.1초씩)
+      for (var i = 0; i < (toastShort.inMilliseconds + 400) ~/ 100; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
       expect(find.text('복사했어요.'), findsNothing);
+    });
+
+    testWidgets('화면이 몇 초 멈춘 동안은 토스트 시간에 넣지 않는다(책장 굽는 동안 그려지지도 않고 걷혔다)', (t) async {
+      late BuildContext ctx;
+      await t.pumpWidget(_app(Builder(builder: (c) {
+        ctx = c;
+        return const SizedBox();
+      })));
+      showToast(ctx, '2권을 책장에 진열했어요.');
+      await t.pump();
+      // 한 프레임이 5초 걸림(GPU가 책장을 굽는 동안)
+      await t.pump(const Duration(seconds: 5));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('2권을 책장에 진열했어요.'), findsOneWidget);
+      for (var i = 0; i < (toastShort.inMilliseconds + 400) ~/ 100; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('2권을 책장에 진열했어요.'), findsNothing);
     });
   });
 

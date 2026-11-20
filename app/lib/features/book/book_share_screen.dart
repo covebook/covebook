@@ -13,7 +13,6 @@ import '../../services/cover_cache.dart' show loadCover;
 import '../../services/share_image.dart';
 import '../../store/library_model.dart';
 import '../../store/placement_store.dart';
-import '../../ui/alert.dart';
 import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
@@ -134,15 +133,8 @@ class _BookShareScreenState extends State<BookShareScreen> {
         await sharePng(png, name: 'chaekjang_book', title: '책 공유');
       }
     } catch (e) {
-      // 예외 원문 대신 사람 문장(docs/design/DESIGN.md 9장). 앱이 만든 문장(이미지 · 기기 안 됨)은 그대로, 그 밖은 errorText. 다시 할 수 있으면 '다시 시도'
-      final again = !(e is ShareImageError && e.stage == 'unavailable');
-      final body = e is ShareImageError && (e.stage == 'image' || e.stage == 'unavailable') ? e.message : errorText(e);
-      if (mounted) {
-        appAlert(context, shareErrorTitle(e), body, [
-          if (again) const AlertButton('취소', style: AlertStyle.cancel),
-          AlertButton(again ? '다시 시도' : '확인', onPress: again ? () => _run(kind) : null),
-        ]);
-      }
+      // 예외 원문 대신 사람 문장, 다시 할 수 있으면 '다시 시도'(갈피 공유 · 지난 책장과 같은 창)
+      if (mounted) shareFailAlert(context, e, () => _run(kind));
     } finally {
       if (mounted) setState(() => _busy = null);
     }

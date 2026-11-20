@@ -70,6 +70,10 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
   final List<String> _picked = [];
   Set<String> _archived = const {};
 
+  /// 삭제 · 진열하는 동안 아래 단추 줄은 누른 때 모습 그대로 두고 누른 단추만 돌린다
+  /// (2026-11-20 에뮬: 한 권씩 지워지는 사이 '2권 삭제' → '1권 삭제' → 흐린 '삭제', 진열은 '고른 책은 모두 책장에 있어요'가 잠깐 보였다)
+  ({_FooterNow now, String kind})? _working;
+
   /// 다른 화면이 내 책 탭으로 보내며 '책장에 없는 책만'을 걸었으면 받는다(AppNav.goBooks)
   void _nav() {
     final nav = AppNav.instance;
@@ -124,8 +128,9 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
 
   /// 진열 결과는 토스트(2026-11-19 공통 규칙: 머리 아래 5초 안내 줄이었다. 여러 권이라 되돌리기는 없다).
   /// 못 놓은 책이 있으면 까닭까지(2026-11-15 QA: 꽉 찬 책장에서 진열을 누르면 아무 말 없이 끝났다). 한 권도 못 놓고 책장이 꽉 찼으면 할 일을 확인창으로
-  Future<void> _placeNow(List<String> ids) async {
-    final r = await placeWithChoice(context, ids);
+  Future<void> _placeNow(_FooterNow now) async {
+    final ids = now.chosen;
+    final r = await _hold('place', now, () => placeWithChoice(context, ids));
     if (!mounted) return;
     _stopSelecting();
     final why = r.full ? '책장이 꽉 차서' : '자리가 없어';
@@ -147,11 +152,11 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
   }
 
   /// 삭제 · 숨기기(확인은 책 정보와 같은 시트). 결과는 토스트, 실패하면 확인창
-  Future<void> _remove(List<String> ids) async {
-    final r = await confirmRemoveBooks(context, ids);
+  Future<void> _remove(_FooterNow now) async {
+    final r = await confirmRemoveBooks(context, now.picked);
     if (r == null || !mounted) return;
     try {
-      await removeBooks(r);
+      await _hold('remove', now, () => removeBooks(r));
     } catch (e) {
       if (mounted) appAlert(context, '삭제하지 못했어요', errorText(e));
       return;
@@ -159,6 +164,16 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     if (!mounted) return;
     _stopSelecting();
     _toastAfterFrame(removedText(r));
+  }
+
+  /// [act]가 끝날 때까지 아래 단추 줄을 누른 때 모습([now])으로 붙든다([_working])
+  Future<T> _hold<T>(String kind, _FooterNow now, Future<T> Function() act) async {
+    setState(() => _working = (now: now, kind: kind));
+    try {
+      return await act();
+    } finally {
+      if (mounted) setState(() => _working = null);
+    }
   }
 
   /// 줄 이름 · 고르는 줄 셋째 줄: 상태 | 소장본 | 책장
@@ -209,7 +224,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             ? SearchField(value: _q, onChange: (v) => setState(() => _q = v), autofocus: true, placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '내 책에서 찾기')
             : null,
         right: _selecting ? null : _headRight(),
-        footer: _selecting ? _selectFooter(pickedBooks, chosen, hideOnly) : null,
+        footer: _selecting ? _selectFooter(_working?.now ?? (picked: pickedBooks, chosen: chosen, hideOnly: hideOnly), busy: _working?.kind) : null,
         children: [
           Expanded(
             child: LayoutBuilder(builder: (_, box) {
@@ -237,7 +252,8 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
 
   /// 고르는 중 아래 단추 두 개: 삭제(또는 숨기기) · 진열. 단추 이름은 'N권 삭제'(다른 화면 'N권 추가'와 같은 어순).
   /// 고른 책이 모두 책장에 있어 진열이 꺼지면 까닭을 단추 바로 위에(2026-11-19 공통 규칙: 꺼진 까닭이 보이지 않았다)
-  Widget _selectFooter(List<String> picked, List<String> chosen, bool hideOnly) {
+  Widget _selectFooter(_FooterNow now, {String? busy}) {
+    final (:picked, :chosen, :hideOnly) = now;
     final verb = hideOnly ? '숨기기' : '삭제';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       if (picked.isNotEmpty && chosen.isEmpty) Padding(padding: const EdgeInsets.only(bottom: Space.s), child: NoticeText(picked.length == 1 ? '고른 책은 이미 책장에 있어요.' : '고른 책은 모두 책장에 있어요.')),
@@ -247,12 +263,21 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
             size: 'xlarge',
             kind: hideOnly ? 'secondary' : 'danger',
             label: picked.isNotEmpty ? '${picked.length}권 $verb' : verb,
-            disabled: picked.isEmpty,
-            onPress: () => _remove(picked),
+            disabled: picked.isEmpty || (busy != null && busy != 'remove'),
+            busy: busy == 'remove',
+            onPress: () => _remove(now),
           ),
         ),
         const SizedBox(width: Space.s),
-        Expanded(child: Btn(size: 'xlarge', label: chosen.isNotEmpty ? '${chosen.length}권 진열' : '진열', disabled: chosen.isEmpty, onPress: () => _placeNow(chosen))),
+        Expanded(
+          child: Btn(
+            size: 'xlarge',
+            label: chosen.isNotEmpty ? '${chosen.length}권 진열' : '진열',
+            disabled: chosen.isEmpty || (busy != null && busy != 'place'),
+            busy: busy == 'place',
+            onPress: () => _placeNow(now),
+          ),
+        ),
       ]),
     ]);
   }
@@ -784,3 +809,6 @@ Future<void> _showMemos(BuildContext iconContext, String bookId, List<BookMemo> 
     },
   );
 }
+
+/// 고르기 아래 단추 줄이 그리는 것: 고른 책 · 그중 진열할 책(책장에 없는 책) · 고른 책이 모두 보관한 책이라 숨기기만 되는지
+typedef _FooterNow = ({List<String> picked, List<String> chosen, bool hideOnly});

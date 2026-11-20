@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' show Material, MaterialType;
@@ -9,6 +10,8 @@ import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 export '../services/error_text.dart';
+import '../services/error_text.dart';
+import '../services/share_image.dart' show ShareImageError, shareErrorTitle;
 import '../store/settings_store.dart';
 import 'alert.dart';
 import 'josa.dart';
@@ -17,6 +20,9 @@ import 'theme.dart';
 
 /// 토스트를 얼마나 보이나 = TDS Toast duration: 짧은 확인은 기본 3초, 되돌리기(단추)가 있으면 5초(theme.dart Motion)
 const toastShort = Motion.toast, toastWithAction = Motion.toastAction;
+
+/// 토스트 시간을 셀 때 한 프레임으로 치는 가장 긴 시간(멈춘 화면은 시간에 넣지 않는다)
+const _frameCap = Duration(milliseconds: 100);
 
 _ToastHandle? _current;
 
@@ -55,25 +61,37 @@ class _Toast extends StatefulWidget {
   State<_Toast> createState() => _ToastState();
 }
 
-class _ToastState extends State<_Toast> {
+class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
   bool _shown = false;
-  Timer? _timer;
+  late final Ticker _clock = createTicker(_tick);
+  Duration _last = Duration.zero, _seen = Duration.zero;
 
   @override
   void initState() {
     super.initState();
-    // 보이는 시간은 처음 그려진 뒤부터 센다: 무거운 프레임(책장 다시 굽기)과 겹치면 그려지기 전에 3초가 다 가
-    // 토스트가 한두 장면만 보였다(2026-11-20 QA: 내 책 고르기 삭제 · 진열 토스트가 안 보임, 토스트가 짧음)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() => _shown = true);
-      _timer = Timer(widget.action != null ? toastWithAction : toastShort, _hide);
+      _clock.start();
     });
+  }
+
+  /// 보인 시간은 화면이 실제로 넘어간 프레임으로 센다(한 프레임은 최대 [_frameCap]). 시계 시간으로 세면 책장을 다시 굽는 동안
+  /// (GPU가 몇 초 바빠 화면이 멈춘 동안) 3초가 다 흘러, 토스트가 한 번도 그려지지 않고 걷혔다
+  /// (2026-11-20 에뮬: 내 책 고르기 2권 진열 · 삭제 토스트가 다섯 번 모두 안 보임. 첫 프레임 뒤부터 세도 같았다)
+  void _tick(Duration t) {
+    final dt = t - _last;
+    _last = t;
+    _seen += dt > _frameCap ? _frameCap : dt;
+    if (_seen >= (widget.action != null ? toastWithAction : toastShort)) {
+      _clock.stop();
+      _hide();
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _clock.dispose();
     super.dispose();
   }
 
@@ -123,7 +141,7 @@ class _ToastState extends State<_Toast> {
                           Pressable(
                             onPress: () {
                               widget.onAction?.call();
-                              _timer?.cancel();
+                              _clock.stop();
                               _hide();
                             },
                             child: Semantics(
@@ -157,4 +175,15 @@ Future<bool> openExternal(BuildContext context, String url, {String what = '페�
   // 조사는 이름 끝소리로('처리방침를'이었다, 2026-11-20)
   if (!ok && context.mounted) appAlert(context, '${eulReul(what)} 열 수 없어요', '인터넷 연결이나 기본 브라우저를 확인하고 다시 시도해 주세요.');
   return ok;
+}
+
+/// 공유 · 사진첩 저장 실패 창(책 공유 · 갈피 공유 · 지난 책장 공유가 같은 모양). 본문은 앱이 만든 안내(이미지 · 기기 안 됨)는 그대로,
+/// 그 밖 예외는 사람 문장(DESIGN 9장). 기기가 못 하는 경우 말고는 취소 · 다시 시도(2026-11-20 QA: 갈피 공유 시트 · 지난 책장은 '확인' 하나였다)
+void shareFailAlert(BuildContext context, Object e, VoidCallback retry) {
+  final again = !(e is ShareImageError && e.stage == 'unavailable');
+  final body = e is ShareImageError && (e.stage == 'image' || e.stage == 'unavailable') ? e.message : errorText(e);
+  appAlert(context, shareErrorTitle(e), body, [
+    if (again) const AlertButton('취소', style: AlertStyle.cancel),
+    AlertButton(again ? '다시 시도' : '확인', onPress: again ? retry : null),
+  ]);
 }
