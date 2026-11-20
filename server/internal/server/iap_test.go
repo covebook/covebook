@@ -736,6 +736,88 @@ func TestIAPShelfReservationAPI(t *testing.T) {
 }
 
 // 예약을 지나쳐 3칸을 넘은 거래: 칸을 주지 않고 환불한다. 구글은 서버가 요청하고, 애플은 사용자가 요청해야 한다
+// 애플이 새 계정 연결 값 대신 처음 쓴 값을 돌려줘도(포럼 보고, docs/spec/erd.md 3.7) 결제 중 예약의 연도로 칸을 연다
+func TestIAPShelfYearFromReservation(t *testing.T) {
+	e := newIAPEnv(t)
+	token, user := e.user()
+	other, _ := e.user()
+	one, three := e.shelfProduct(1), e.shelfProduct(3)
+	reserve := func(tok string, year, n int) map[string]any {
+		t.Helper()
+		code, body := e.call("POST", "/iap/shelf-token", tok, map[string]any{"year": year, "shelves": n})
+		if code != 200 {
+			t.Fatalf("%d년 예약: %d %v", year, code, body)
+		}
+		return body
+	}
+	// buy는 애플이 first(처음 쓴 계정 연결 값)를 돌려준 거래를 예약 번호와 함께 낸다. id가 비면 새 거래
+	first := ""
+	buy := func(product, id string, reservation any) (map[string]any, string) {
+		t.Helper()
+		if id == "" {
+			id = iapTestID(t, "a")
+			p := e.shelfPurchase(id, first)
+			p.Route, p.TransactionID, p.ProductID, p.Acknowledged = iap.RouteApple, id, product, true
+			e.apple.Purchases[id] = p
+		}
+		code, body := e.call("POST", "/iap/purchases", token, map[string]any{"route": "apple", "productId": product, "proof": id, "reservation": reservation})
+		if code != 200 {
+			t.Fatalf("제출: %d %v", code, body)
+		}
+		return body, id
+	}
+	held := func() int {
+		t.Helper()
+		var n int
+		if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_shelf_reservations WHERE user_id=$1", user).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	// 2026년 1칸: 값과 예약이 같은 해
+	r := reserve(token, 2026, 1)
+	first = r["token"].(string)
+	if body, _ := buy(one, "", r["reservation"]); body["year"] != float64(2026) || shelvesIn(body, 2026) != 1 {
+		t.Fatalf("2026년: %v", body)
+	}
+	// 바로 2027년 1칸. 애플이 2026년 값을 돌려줌 → 예약대로 2027년
+	r = reserve(token, 2027, 1)
+	if r["token"] == first {
+		t.Fatal("해마다 값이 달라야 시험이 됨")
+	}
+	body, moved := buy(one, "", r["reservation"])
+	if body["year"] != float64(2027) || shelvesIn(body, 2027) != 1 || shelvesIn(body, 2026) != 1 {
+		t.Fatalf("예약 연도가 먼저여야 함: %v", body)
+	}
+	// 3칸 묶음도. 값의 연도(2026, 1칸 있음)로 셌다면 3칸을 넘어 칸을 못 받았을 거래
+	r = reserve(token, 2028, 3)
+	if body, _ = buy(three, "", r["reservation"]); body["year"] != float64(2028) || shelvesIn(body, 2028) != 3 || body["overCap"] == true || shelvesIn(body, 2026) != 1 {
+		t.Fatalf("3칸 묶음: %v", body)
+	}
+	// 결제창에서 5분을 넘겨 예약이 끝났어도 지워지기 전이면 그 연도
+	r = reserve(token, 2029, 1)
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_shelf_reservations SET expires_at = now() - interval '1 second' WHERE id::text=$1", r["reservation"]); err != nil {
+		t.Fatal(err)
+	}
+	if body, _ = buy(one, "", r["reservation"]); body["year"] != float64(2029) {
+		t.Fatalf("끝난 예약: %v", body)
+	}
+	// 남의 예약 번호는 무시하고 값의 연도
+	r = reserve(other, 2030, 1)
+	if body, _ = buy(one, "", r["reservation"]); body["year"] != float64(2026) || shelvesIn(body, 2026) != 2 || shelvesIn(body, 2030) != 0 {
+		t.Fatalf("남의 예약: %v", body)
+	}
+	// 이미 넣은 거래를 다른 해 예약과 다시 내도 연도는 그대로. 예약은 풀린다
+	r = reserve(token, 2031, 1)
+	if body, _ = buy(one, moved, r["reservation"]); body["status"] != "already" || body["year"] != float64(2027) || shelvesIn(body, 2031) != 0 {
+		t.Fatalf("다시 낸 거래: %v", body)
+	}
+	if held() != 0 {
+		t.Fatalf("예약이 남음: %d", held())
+	}
+}
+
 func TestIAPOverCapRefund(t *testing.T) {
 	e := newIAPEnv(t)
 	token, _ := e.user()
