@@ -1358,7 +1358,6 @@ class Segmented<T> extends StatelessWidget {
                         child: Container(
                           constraints: BoxConstraints(minHeight: cell),
                           padding: const EdgeInsets.symmetric(horizontal: 4),
-                          alignment: Alignment.center,
                           decoration: id == value
                               ? BoxDecoration(
                                   color: AppColors.bg,
@@ -1366,12 +1365,17 @@ class Segmented<T> extends StatelessWidget {
                                   boxShadow: const [Shape.segmentShadow],
                                 )
                               : null,
-                          child: Text(label,
-                              maxLines: 1,
-                              style: AppType.bodySmall.copyWith(
-                                fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
-                                color: id == value ? AppColors.ink : AppColors.inkSoft,
-                              )),
+                          // 글자 가운데. heightFactor 1: 높이가 정해진 자리(꾸미기 머리줄 72)에서도 칸이 그 높이까지 늘지 않는다
+                          // (Container alignment는 늘어났다: 회색 칸 44가 68로 보였다, 2026-11-20 사용자 '세로 높이 좀 길지 않나')
+                          child: Center(
+                            heightFactor: 1,
+                            child: Text(label,
+                                maxLines: 1,
+                                style: AppType.bodySmall.copyWith(
+                                  fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
+                                  color: id == value ? AppColors.ink : AppColors.inkSoft,
+                                )),
+                          ),
                         ),
                       ),
                     ),
