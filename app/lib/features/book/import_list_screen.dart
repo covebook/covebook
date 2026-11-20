@@ -3,6 +3,7 @@
 // 못 찾은 줄은 목록에 남겨 알려 주고, 누르면 그 검색어로 책 추가를 연다(넣고 오면 '추가한 책'으로). 읽기 상태 열이 있으면 그대로 옮긴다
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -18,6 +19,7 @@ import '../../store/library_model.dart';
 import '../../ui/alert.dart';
 import '../../ui/draft_guard.dart';
 import '../../ui/feedback.dart' show errorText;
+import '../../ui/josa.dart' show eulReul;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'add_book_screen.dart' show openAddBook;
@@ -55,7 +57,8 @@ class _ImportListScreenState extends State<ImportListScreen> {
   String? _file, _error;
   ImportParse? _parse;
   List<_Line> _lines = const [];
-  bool _reading = false, _searching = false, _stop = false, _saving = false;
+  bool _reading = false, _searching = false, _saving = false;
+  LineSearch<_Line, SearchResult>? _job;
 
   /// 찾아 본 줄 수(다시 찾는 줄은 찾기 전으로 돌려 세므로 전체를 넘지 않는다)
   int get _searched => _lines.where((l) => l.searched).length;
@@ -96,35 +99,42 @@ class _ImportListScreenState extends State<ImportListScreen> {
   /// 줄마다 찾는다(한 번에 세 줄씩). 아직 안 찾은 줄과 검색이 실패한 줄을 찾는다. '그만 찾기'면 남은 줄은 찾지 않은 줄로 둔다
   Future<void> _searchAll() async {
     final todo = [for (final l in _lines) if (!l.searched || l.fail != null) l];
+    _job?.stop();
+    final job = _job = LineSearch<_Line, SearchResult>(todo, (l) => searchBooks(l.row.query), (l, r) {
+      if (!mounted) return;
+      final c = r.ok ? matchCandidate(l.row, r.items) : null;
+      setState(() {
+        l.searched = true;
+        // 검색이 실패하면(인터넷 없음 · 서버 오류) 다시 찾을 줄로 둔다(2026-11-19 공통 규칙: 서버 오류는 그냥 '찾지 못한 책'이었다)
+        l.fail = r.ok ? null : (r.reason == 'network' ? 'network' : 'error');
+        l.book = c;
+        l.ownedId = c == null ? null : ownedBookId(LibraryModel.instance.lib, c);
+        l.picked = c != null && l.ownedId == null;
+      });
+    }, parallel: _parallel);
     setState(() {
       _searching = true;
-      _stop = false;
       // 다시 찾는 줄은 찾기 전으로(진행 수가 전체를 넘지 않게: 2026-11-19 '10권 중 12권'이 될 수 있었다)
       for (final l in todo) {
         l.searched = false;
         l.fail = null;
       }
     });
-    var next = 0;
-    Future<void> worker() async {
-      while (mounted && !_stop && next < todo.length) {
-        final l = todo[next++];
-        final r = await searchBooks(l.row.query);
-        if (!mounted) return;
-        final c = r.ok ? matchCandidate(l.row, r.items) : null;
-        setState(() {
-          l.searched = true;
-          // 검색이 실패하면(인터넷 없음 · 서버 오류) 다시 찾을 줄로 둔다(2026-11-19 공통 규칙: 서버 오류는 그냥 '찾지 못한 책'이었다)
-          l.fail = r.ok ? null : (r.reason == 'network' ? 'network' : 'error');
-          l.book = c;
-          l.ownedId = c == null ? null : ownedBookId(LibraryModel.instance.lib, c);
-          l.picked = c != null && l.ownedId == null;
-        });
-      }
-    }
+    await job.run();
+    if (mounted && identical(_job, job)) setState(() => _searching = false);
+  }
 
-    await Future.wait([for (var i = 0; i < _parallel; i++) worker()]);
-    if (mounted) setState(() => _searching = false);
+  /// '그만 찾기': 기다리던 검색은 버리고 바로 끝낸다(그 줄은 찾지 않은 줄로 남아 '이어서 찾기'로 다시 찾는다).
+  /// 2026-11-20 QA: 응답이 멈춘 검색이 하나라도 있으면 그 검색이 끝날 때까지 단추가 '그만 찾기'에 멈춰 있었다
+  void _stopSearch() {
+    _job?.stop();
+    setState(() => _searching = false);
+  }
+
+  @override
+  void dispose() {
+    _job?.stop();
+    super.dispose();
   }
 
   Future<void> _addAll() async {
@@ -185,7 +195,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
         title: '책 목록 가져오기',
         // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
         footer: _searching
-            ? Btn(label: '그만 찾기', kind: 'secondary', size: 'xlarge', onPress: () => setState(() => _stop = true))
+            ? Btn(label: '그만 찾기', kind: 'secondary', size: 'xlarge', onPress: _stopSearch)
             : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (n == 0)
                   Padding(
@@ -267,9 +277,9 @@ class _ImportListScreenState extends State<ImportListScreen> {
       final f = File('${dir.path}/$name');
       await f.writeAsString(csv);
       if (await _files.invokeMethod<bool>('canSaveDownload').catchError((_) => false) == true) {
-        await _files.invokeMethod<String>('saveDownload', {'path': f.path, 'name': name, 'mime': 'text/csv'});
+        final saved = await _files.invokeMethod<String>('saveDownload', {'path': f.path, 'name': name, 'mime': 'text/csv'});
         f.delete().ignore();
-        if (mounted) appAlert(context, '예시 파일을 저장했어요', '다운로드 › 책장한켠 폴더의 ‘$name’을 엑셀에서 열어 내 책으로 고친 뒤 여기서 골라 주세요.');
+        if (mounted) appAlert(context, '예시 파일을 저장했어요', sampleSavedText(saved, name));
       } else {
         await SharePlus.instance.share(ShareParams(files: [XFile(f.path, mimeType: 'text/csv')], title: name));
       }
@@ -309,6 +319,50 @@ class _ImportListScreenState extends State<ImportListScreen> {
           Text('XLSX, CSV 파일 지원', style: AppType.caption),
         ],
       );
+}
+
+/// 예시 파일 저장 안내 글. 같은 이름 파일이 이미 있으면 기기가 'name (1).csv'처럼 이름을 바꿔 저장하므로 저장한 이름(saveDownload가 돌려준 것)을 쓴다.
+/// 돌려준 값이 이름이 아니면(예전 앱의 content:// 주소) 고른 이름. 조사는 이름 끝소리로(2026-11-20 QA: ‘책장한켠 예시.csv’을, 실제 파일은 ‘책장한켠 예시 (4).csv’)
+String sampleSavedText(String? saved, String name) {
+  final shown = saved != null && saved.trim().isNotEmpty && !saved.contains('://') && !saved.contains('/') ? saved.trim() : name;
+  return '다운로드 › 책장한켠 폴더의 ${eulReul('‘$shown’')} 엑셀에서 열어 내 책으로 고친 뒤 여기서 골라 주세요.';
+}
+
+/// 줄 찾기 한 번(파일을 고를 때 · 이어서 찾기 · 다시 찾기마다 새로): 한 번에 [parallel]줄씩 찾아 줄마다 [onResult].
+/// [stop]을 부르면 남은 줄은 찾지 않고, 기다리던 검색의 결과도 버리며, [run]이 그 검색을 기다리지 않고 바로 끝난다
+class LineSearch<T, R> {
+  LineSearch(this.todo, this.search, this.onResult, {this.parallel = 3});
+  final List<T> todo;
+  final Future<R> Function(T item) search;
+  final void Function(T item, R result) onResult;
+  final int parallel;
+  final _stopped = Completer<void>();
+
+  bool get stopped => _stopped.isCompleted;
+
+  void stop() {
+    if (!stopped) _stopped.complete();
+  }
+
+  Future<void> run() async {
+    var next = 0;
+    Future<void> worker() async {
+      while (!stopped && next < todo.length) {
+        final item = todo[next++];
+        final R r;
+        try {
+          r = await search(item);
+        } catch (_) {
+          // 검색 함수는 실패를 결과로 돌려준다. 그래도 던지면 이 줄은 찾지 않은 줄로 두고 다음 줄로
+          continue;
+        }
+        if (stopped) return;
+        onResult(item, r);
+      }
+    }
+
+    await Future.any([Future.wait([for (var i = 0; i < parallel; i++) worker()]), _stopped.future]);
+  }
 }
 
 /// 안내 접는 줄 하나(책 확인 '추가 정보'와 같은 FoldRow, 2026-11-19 공통 규칙). 펼치면 점 붙은 안내 글
