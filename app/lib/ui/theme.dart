@@ -32,9 +32,6 @@ abstract final class AppColors {
   static const input = grey100;
   static const surface = grey100;
 
-  /// 회색 바탕 화면(통계) 위 전환 칸 바탕: surface(grey100)는 바탕과 같아 묻혀 한 단계 진하게 grey200
-  static const surfaceOnGrey = grey200;
-
   /// 로그인 화면 아래쪽 바탕(공식 없음 → 우리 값, 2026-11-18 사용자 '하단 그라데이션 좀 더 진하게')
   static const loginFloor = Color(0xFFE4E7EB);
   static const sectionLine = Color(0xFFEFF1F3);
@@ -88,7 +85,6 @@ abstract final class AppColors {
     'white': (white, '카드 위 흰색 · 전환 칸 고른 칸'),
     'input': (input, '입력칸 바탕'),
     'surface': (surface, '옅은 회색 면(전환 칸 · 표지 자리)'),
-    'surfaceOnGrey': (surfaceOnGrey, '회색 바탕 화면(통계) 위 전환 칸 바탕'),
     'loginFloor': (loginFloor, '로그인 화면 아래쪽'),
     'sectionLine': (sectionLine, '묶음 사이 띠'),
     'ink': (ink, '본문(grey900)'),

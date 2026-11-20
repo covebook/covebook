@@ -2,7 +2,7 @@
 // 맨 위 줄 DecorateBar('책 배치 | 선반 | 벽지' 탭, 되돌리기·완료), 아래는 탭마다
 //  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 누르거나 끌어보세요' + 책 측면 고르기), 고르면 DecoratePanel
 //  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
-// DecoratePanel: 고른 책 제목, 자세 탭(책등·표지·눕힘, 아이콘 + 밑줄), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
+// DecoratePanel: 고른 책 제목, 자세 단추(책등·표지·눕힘, 기대기와 같은 칸 단추: 아이콘 + 이름, 고른 칸만 테두리), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
 // 책등 책은 회전 대신 기대기(왼쪽·바로·오른쪽: 방향만 고르고 각도는 옆 책과의 틈으로). 막대에는 갈 수 있는 범위를 진한 띠로.
 // 막대는 놓을 때 확정한다(끄는 동안은 숫자와 손잡이만 따라간다).
 // 2026-11-16 QA 영숙 F7: 큰 글씨에서는 라벨을 따로 줄에 둔다(잘리거나 '위치기대기'로 세로로 섰다).
@@ -48,6 +48,8 @@ class DecorateBar extends StatelessWidget {
             items: const [(DecorateTab.books, '책 배치'), (DecorateTab.shelf, '선반'), (DecorateTab.wall, '벽지')],
             value: tab,
             onChange: onTab,
+            // 머리줄 안이라 낮은 칸(회색 칸 36): 옆 되돌리기 · 완료와 높이를 맞춘다(2026-11-20 사용자 '세로 높이 좀 길지 않나')
+            compact: true,
           ),
         ),
         const SizedBox(width: Space.l),
@@ -254,9 +256,12 @@ class DecoratePanel extends StatelessWidget {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Padding(
                 padding: const EdgeInsets.only(top: 18),
+                // 자세도 기대기와 같은 칸 단추(2026-11-20 사용자 '이것도 버튼으로, 책등 이런 거'). 칸 사이도 기대기와 같은 6
                 child: Row(children: [
-                  for (final p in const [Pose.upright, Pose.front, Pose.horizontal])
+                  for (final (i, p) in const [Pose.upright, Pose.front, Pose.horizontal].indexed) ...[
+                    if (i > 0) const SizedBox(width: 6),
                     Expanded(child: _PoseTab(pose: p, on: pose == p, onPress: () => onPose(p))),
+                  ],
                 ]),
               ),
               Padding(
@@ -332,31 +337,35 @@ class _PoseTab extends StatelessWidget {
   final bool on;
   final VoidCallback onPress;
 
+  // 겉모양은 기대기 칸 단추(_LeanChoice)와 같다: 보이는 칸 44 · 누르는 자리 48, 고른 칸만 회색 테두리, 아이콘 26 + 이름(가로, 큰 글씨면 세로)
   @override
-  Widget build(BuildContext context) {
-    final color = on ? AppColors.accent : AppColors.inkSoft;
-    return Semantics(
-      button: true,
-      selected: on,
-      label: _poseNames[pose],
-      onTap: onPress,
-      excludeSemantics: true,
-      child: Pressable(
-        onPress: onPress,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Space.hit),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const SizedBox(height: 2),
-            CustomPaint(size: const Size(30, 30), painter: _PoseIcon(pose, color)),
-            const SizedBox(height: 6),
-            Text(_poseNames[pose]!, style: (on ? AppType.labelStrong : AppType.bodySmall).copyWith(color: on ? AppColors.ink : AppColors.inkSoft)),
-            const SizedBox(height: 9),
-            Container(width: 52, height: 2.5, decoration: BoxDecoration(color: on ? AppColors.accent : Colors.transparent, borderRadius: BorderRadius.circular(2))),
-          ]),
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        selected: on,
+        label: _poseNames[pose],
+        onTap: onPress,
+        excludeSemantics: true,
+        child: Pressable(
+          onPress: onPress,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: (Space.hit - Space.touch) / 2),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: Space.touch),
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: on ? Border.all(color: AppColors.inkFaint) : null),
+              child: Flex(
+                direction: largeText(context) ? Axis.vertical : Axis.horizontal,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomPaint(size: const Size(26, 26), painter: _PoseIcon(pose, on ? AppColors.ink : AppColors.inkSoft)),
+                  const SizedBox(width: 6),
+                  Text(_poseNames[pose]!, softWrap: false, style: AppType.micro.copyWith(color: AppColors.ink)),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
-    );
-  }
+      );
 }
 
 /// 자세 아이콘(26 칸 viewBox를 30으로): 책등 세로 막대·표지 넓은 판·눕힘 가로 막대

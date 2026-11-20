@@ -113,17 +113,17 @@ class _StatsScreenState extends State<StatsScreen> {
     final bookName = bookTitle(lib, book);
 
     final children = <Widget>[
-      // 가운데 달 넘기기 → 그 아래 캘린더|분석(2026-11-20 사용자 '날짜는 위 가운데, 선택지 내리고'). 둘 다 회색 바탕 위
-      _periodBar(now),
+      // 캘린더|분석 → 그 아래 가운데 달 넘기기. 맨 위(제목 · 전환 칸 · 달)는 흰 바탕, 회색은 아래 띠 사이만
+      // (2026-11-20 사용자 '맨 위쪽 배경 회색 넣지 말고 전부 흰색, 날짜랑 버튼 위치 바꿔')
       Segmented<String>(
         items: const [('calendar', '캘린더'), ('records', '분석')],
         value: _view,
-        track: AppColors.surfaceOnGrey,
         onChange: (v) => setState(() {
           _view = v;
           _picked = null;
         }),
       ),
+      _periodBar(now),
       // 책 선택은 제목 줄 오른쪽(두 칸 모두 같은 자리: 달력·그래프·숫자가 함께 바뀐다, 2026-11-17 통계 시안)
       if (_view == 'records' && book != null) Band(children: [BookRecordView(lib: lib, id: book)]),
       if (_view == 'calendar') ...[
@@ -163,14 +163,15 @@ class _StatsScreenState extends State<StatsScreen> {
       ),
       // 떠 있는 하단바 아래까지 내용이 내려가게
       bottomPad: widget.tab ? TabBarStyle.contentPad - Space.section : 0,
-      background: AppColors.greyBackground,
+      // 바탕은 흰색. 띠 사이 회색은 띠(Band)가 위에 깐다
       children: children,
     );
   }
 
-  /// 달 넘기기: 가운데 '‹ 2026년 11월 ›'(날짜 고르기 시트 머리와 같은 모양, 2026-11-20 사용자 '날짜는 중앙'). 기간 고르기는 뺐다(늘 한 달)
+  /// 달 넘기기: 가운데 '‹ 2026년 11월 ›'(날짜 고르기 시트 머리와 같은 모양, 2026-11-20 사용자 '날짜는 중앙'). 기간 고르기는 뺐다(늘 한 달).
+  /// 전환 칸 바로 아래(위 Space.s), 아래는 첫 띠의 회색 칸
   Widget _periodBar(DateTime now) => Padding(
-        padding: const EdgeInsets.only(bottom: Space.s),
+        padding: const EdgeInsets.only(top: Space.s),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           IconBtn(label: '이전 달', onPress: () => _shift(-1), child: const LucideIcon('ChevronLeft')),
           Semantics(header: true, child: Text(monthTitle(_y, _m), style: AppType.heading.tnum)),

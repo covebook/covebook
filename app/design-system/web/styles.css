@@ -8,7 +8,6 @@
   --ck-white: #FFFFFF; /* 카드 위 흰색 · 전환 칸 고른 칸 */
   --ck-input: #F2F4F6; /* 입력칸 바탕 */
   --ck-surface: #F2F4F6; /* 옅은 회색 면(전환 칸 · 표지 자리) */
-  --ck-surface-on-grey: #E5E8EB; /* 회색 바탕 화면(통계) 위 전환 칸 바탕 */
   --ck-login-floor: #E4E7EB; /* 로그인 화면 아래쪽 */
   --ck-section-line: #EFF1F3; /* 묶음 사이 띠 */
   --ck-ink: #191F28; /* 본문(grey900) */
@@ -171,6 +170,9 @@
   --ck-segment: 38px;
   --ck-segment-pad: 7px;
   --ck-segment-inset: 4px;
+  --ck-segment-compact: 30px;
+  --ck-segment-compact-pad: 9px;
+  --ck-segment-compact-inset: 6px;
   --ck-toggle-width: 50px;
   --ck-toggle-height: 30px;
   --ck-toggle-knob: 24px;

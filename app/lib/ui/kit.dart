@@ -178,6 +178,10 @@ abstract final class ControlSize {
   /// 전환 칸(Segmented): 고른 칸 38 + 위아래 7 = 줄 52(누르는 자리), 회색 칸은 위아래 4를 뺀 44
   static const segment = 38.0, segmentPad = 7.0, segmentInset = 4.0;
 
+  /// 낮은 전환 칸(머리줄 안: 꾸미기 '책 배치 · 선반 · 벽지'): 고른 칸 30 + 위아래 9 = 줄 48(누르는 자리 그대로), 회색 칸은 위아래 6을 뺀 36
+  /// (2026-11-20 사용자 '여기 버튼 세로 높이 좀 길지 않나': 옆 되돌리기 · 완료 글자 줄보다 회색 칸이 두꺼웠다)
+  static const segmentCompact = 30.0, segmentCompactPad = 9.0, segmentCompactInset = 6.0;
+
   /// 스위치 50×30, 손잡이 24
   static const toggleWidth = 50.0, toggleHeight = 30.0, toggleKnob = 24.0;
 
@@ -189,7 +193,8 @@ abstract final class ControlSize {
 
   static const all = <String, double>{
     'buttonL': buttonL, 'buttonM': buttonM, 'buttonS': buttonS, 'field': field, 'fieldMultiline': fieldMultiline, 'search': search, 'choice': choice,
-    'segment': segment, 'segmentPad': segmentPad, 'segmentInset': segmentInset, 'toggleWidth': toggleWidth, 'toggleHeight': toggleHeight, 'toggleKnob': toggleKnob,
+    'segment': segment, 'segmentPad': segmentPad, 'segmentInset': segmentInset,
+    'segmentCompact': segmentCompact, 'segmentCompactPad': segmentCompactPad, 'segmentCompactInset': segmentCompactInset, 'toggleWidth': toggleWidth, 'toggleHeight': toggleHeight, 'toggleKnob': toggleKnob,
     'radio': radio, 'choiceBadge': choiceBadge, 'spinner': spinner, 'spinnerStroke': spinnerStroke,
   };
 }
@@ -727,7 +732,8 @@ class H2 extends StatelessWidget {
 
 /// 단추 = TDS Button. 크기 small · medium · large · xlarge(기본값 xlarge), 종류는 color × variant:
 ///  - 'primary'    primary fill(파랑 자리에 갈색 채움 · 흰 글자): 주요 행동
-///  - 'secondary'  dark weak(반투명 회색 바탕 · 진회색 글자): ConfirmDialog 취소 단추 · BottomCTA.Double 왼쪽 단추의 기본값. TDS에는 테두리 단추가 없다
+///  - 'secondary'  흰 바탕 + 회색 선(AppColors.line) · 진회색 글자: ConfirmDialog 취소 단추 · BottomCTA.Double 왼쪽 단추.
+///                 TDS dark weak(반투명 회색 바탕) 대신 원래 앱의 회색 선 단추(2026-11-20 사용자 '회색 배경 말고 지금까지 쓰던 회색 선으로 전부')
 ///  - 'danger'     danger weak(옅은 주의색 바탕 · 주의색 글자)
 ///  - 'dangerFill' danger fill(주의색 채움 · 흰 글자): 지우기를 확정하는 단추
 ///  - 'ghost'      글자 단추(TDS TextButton)
@@ -764,7 +770,7 @@ class _BtnState extends State<Btn> {
     final pressed = _down && !off;
     final (Color fill, Color ink) = switch (kind) {
       'primary' => (AppColors.accent, AppColors.onAccent),
-      'secondary' => (AppColors.greyOpacity100, AppColors.title),
+      'secondary' => (AppColors.bg, AppColors.title),
       'danger' => (AppColors.dangerWeak, AppColors.danger),
       'dangerFill' => (AppColors.danger, AppColors.onAccent),
       _ => (Colors.transparent, AppColors.inkSoft),
@@ -797,7 +803,7 @@ class _BtnState extends State<Btn> {
               constraints: BoxConstraints(minHeight: h),
               // 위아래 여백은 글자 줄(t5 25.5)이 보이는 높이(ControlSize)를 넘지 않게: large 48 = 10 + 25.5 + 10 안(12였으면 50으로 커진다)
               padding: EdgeInsets.symmetric(horizontal: pad, vertical: big ? 10 : 8),
-              decoration: BoxDecoration(color: fill, borderRadius: radius),
+              decoration: BoxDecoration(color: fill, borderRadius: radius, border: kind == 'secondary' ? Border.all(color: AppColors.line) : null),
               // 눌림: 바탕 위 딤 레이어(글자 단추는 옅어짐). 덧칠 칸은 늘 두고 색만 바꾼다(안쪽을 새로 만들지 않게)
               foregroundDecoration: BoxDecoration(color: pressed && !text ? AppColors.pressDim : const Color(0x00000000), borderRadius: radius),
               child: Stack(
@@ -1313,21 +1319,28 @@ Toggle? _rowToggle(VoidCallback? onPress, Widget? right) => onPress == null && r
 /// TDS에 칩이 없어 하나 고르는 칩 자리도 이것을 쓴다. 높이 · 모양 · 글자는 공식 글에 없음 → 지금 앱 모양(회색 칸 44 안 고른 칸만 흰 바탕),
 /// 글자는 t6 15(작은 본문): 고른 칸 SemiBold grey900, 나머지 Regular grey600. 화면 읽기는 라디오처럼 '선택됨'(role radio · aria-checked)
 class Segmented<T> extends StatelessWidget {
-  const Segmented({super.key, required this.items, required this.value, required this.onChange, this.track = AppColors.surface});
+  const Segmented({super.key, required this.items, required this.value, required this.onChange, this.track = AppColors.surface, this.compact = false});
   final List<(T, String)> items;
   final T value;
   final ValueChanged<T> onChange;
 
-  /// 칸 바탕. 회색 바탕 화면(통계)에서는 AppColors.surfaceOnGrey
+  /// 칸 바탕
   final Color track;
+
+  /// 낮은 칸(회색 칸 36): 머리줄 안처럼 옆 글자 줄과 높이를 맞출 때. 누르는 자리는 48 그대로
+  final bool compact;
 
   // 겉모양은 회색 칸 44(고른 칸 38): 2026-11-17 사용자 '책 정보·평가·내 기록 바가 두껍다'(예전 50) → 40은 너무 얇아 조금 키움(2026-11-18 사용자 '조금만 더 키우라고').
   // 누르는 자리는 위아래 빈 4까지 48 그대로(2026-11-16 QA 영숙 F12). 큰 글씨면 칸이 글자만큼 늘어난다
   @override
-  Widget build(BuildContext context) => Stack(children: [
+  Widget build(BuildContext context) {
+    final inset = compact ? ControlSize.segmentCompactInset : ControlSize.segmentInset;
+    final pad = compact ? ControlSize.segmentCompactPad : ControlSize.segmentPad;
+    final cell = compact ? ControlSize.segmentCompact : ControlSize.segment;
+    return Stack(children: [
         Positioned.fill(
-          top: ControlSize.segmentInset,
-          bottom: ControlSize.segmentInset,
+          top: inset,
+          bottom: inset,
           child: DecoratedBox(decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(Shape.segmented))),
         ),
         Padding(
@@ -1344,9 +1357,9 @@ class Segmented<T> extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: () => onChange(id),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: ControlSize.segmentPad),
+                        padding: EdgeInsets.symmetric(vertical: pad),
                         child: Container(
-                          constraints: const BoxConstraints(minHeight: ControlSize.segment),
+                          constraints: BoxConstraints(minHeight: cell),
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           alignment: Alignment.center,
                           decoration: id == value
@@ -1371,6 +1384,7 @@ class Segmented<T> extends StatelessWidget {
           ),
         ),
       ]);
+  }
 }
 
 /// 거르기 단추 = TDS Top.SubtitleSelector · ListHeader.TitleSelector(글자 + 아래 화살표, 누르면 고르는 시트): size 17 기본 = t5 Medium grey700,
@@ -1451,25 +1465,26 @@ class SectionBand extends StatelessWidget {
       );
 }
 
-/// 회색 바탕 화면(Screen background: greyBackground)의 흰 띠: 좌우는 화면 끝까지 붙이고 위아래로만 층을 나눈다.
-/// 띠 사이는 회색 Space.band, 띠 안 위아래 Space.bandPad, 좌우는 화면 여백 Space.page.
+/// 흰 띠: 좌우는 화면 끝까지 붙이고 위아래로만 층을 나눈다. 띠 위에 회색 칸(Space.band, greyBackground)을 화면 폭으로 깔아
+/// 바로 위 띠(또는 맨 위 흰 머리)와 나눈다. 띠 안 위아래 Space.bandPad, 좌우는 화면 여백 Space.page.
+/// 화면 바탕은 흰색 그대로라 맨 위(제목 · 전환 칸 · 달)도 흰색(2026-11-20 사용자 '맨 위쪽 배경 회색 넣지 말고 전부 흰색').
 /// 통계(캘린더 · 분석)에만 쓴다(2026-11-20 사용자 '박스인데 위아래 층만 나누고 좌우는 붙히자', '통계랑 캘린더에만 쓰라 했지')
 class Band extends StatelessWidget {
   const Band({super.key, required this.children});
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: Space.band),
-        child: Bleed(
-          child: ColoredBox(
+  Widget build(BuildContext context) => Bleed(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: Space.band, child: ColoredBox(color: AppColors.greyBackground)),
+          ColoredBox(
             color: AppColors.bg,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.page, vertical: Space.bandPad),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children),
             ),
           ),
-        ),
+        ]),
       );
 }
 
@@ -1647,6 +1662,8 @@ class Tabs<T> extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
+                  // 글자와 밑줄을 칸(48) 바닥에 붙인다: 고른 탭 밑줄이 탭 줄 아래 옅은 선과 같은 줄에 덮인다(2026-11-20 사용자 '1px 선이 선택 선이랑 같은 라인')
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Text(it.label, maxLines: 1, textAlign: TextAlign.center, style: text, textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.25)),
                     Container(
