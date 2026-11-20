@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
 	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/llm"
 )
 
@@ -26,6 +27,10 @@ type Server struct {
 	DB                *pgxpool.Pool
 	HTTP              *http.Client
 	LLM               *llm.Gateway
+	IAP               map[iap.Route]iap.Store // 결제 경로. 비어 있으면 결제 API가 없다
+	IAPSandbox        bool                    // 샌드박스 거래에도 지급할지 (IAP_ALLOW_SANDBOX)
+	iapMu             sync.Mutex
+	iapHits           map[int64]iapHit
 	ConfigError       error
 	searchMu          sync.Mutex
 	searchCache       map[string]searchEntry
@@ -225,14 +230,15 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /auth/kakao/callback", wrap(s.kakaoCallback))
 	m.HandleFunc("POST /auth/kakao/claim", wrap(s.kakaoClaim))
 	s.routeCommunity(m)
+	s.routeIAP(m)
 	return m
 }
 func (s *Server) health(w http.ResponseWriter, r *http.Request) error {
 	// community: 커뮤니티를 열어 두었다(앱은 이것으로 커뮤니티 화면을 켠다. 닫혀 있거나 예전 서버면 없음)
-	writeJSON(w, 200, map[string]any{"ok": true, "books": bookSource(), "llmKeys": s.LLM.Available(), "community": communityEnabled()})
+	writeJSON(w, 200, map[string]any{"ok": true, "books": bookSource(), "llmKeys": s.LLM.Available(), "community": communityEnabled(), "iap": len(s.IAP) > 0})
 	return nil
 }
 func New(db *pgxpool.Pool) *Server {
 	gateway, err := llm.New(os.Getenv("LLM_KEYS"), os.Getenv("GEMINI_MODEL"), os.Getenv("OPENAI_MODEL"), nil)
-	return &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
+	return &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), IAPSandbox: iapSandboxAllowed(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
 }

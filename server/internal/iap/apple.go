@@ -55,7 +55,21 @@ func NewApple(c AppleConfig) *Apple {
 	}
 }
 
-func (a *Apple) Route() Route { return RouteApple }
+func (a *Apple) Route() Route  { return RouteApple }
+func (a *Apple) AppID() string { return a.bundleID }
+
+// Verify는 앱이 낸 서명된 거래(JWS)의 서명과 인증서 사슬을 확인하고 거래 ID를 꺼낸다.
+// 여기서 꺼낸 값으로 지급하지 않는다. 지급 근거는 이 ID로 스토어에 다시 물어 받은 답이다.
+func (a *Apple) Verify(kind Kind, proof string) (Ref, error) {
+	t, err := a.api.ParseSignedTransaction(proof)
+	if err != nil || t == nil || t.TransactionID == "" {
+		return Ref{}, fmt.Errorf("apple: %w", ErrBadProof)
+	}
+	if t.BundleID != a.bundleID {
+		return Ref{}, fmt.Errorf("apple: %w", ErrWrongApp)
+	}
+	return Ref{Kind: kind, ID: t.TransactionID}, nil
+}
 
 // Lookup은 거래 ID로 묻는다. 애플은 종류와 상관없이 같은 주소라 ref.Kind는 쓰지 않는다.
 func (a *Apple) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
@@ -87,6 +101,7 @@ func fromApple(t *api.JWSTransaction) Purchase {
 	return Purchase{
 		Route:                 RouteApple,
 		State:                 state,
+		Acknowledged:          true,
 		TransactionID:         t.TransactionID,
 		OriginalTransactionID: t.OriginalTransactionId,
 		BundleID:              t.BundleID,

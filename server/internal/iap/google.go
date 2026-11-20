@@ -22,6 +22,7 @@ type googleAPI interface {
 	AcknowledgeSubscription(ctx context.Context, packageName, subscriptionID, token string, req *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error
 	AcknowledgeProduct(ctx context.Context, packageName, productID, token, developerPayload string) error
 	ConsumeProduct(ctx context.Context, packageName, productID, token string) error
+	Refund(ctx context.Context, packageName, orderID string) error
 }
 
 type Google struct {
@@ -39,7 +40,30 @@ func NewGoogle(serviceAccountJSON []byte, packageName string) (*Google, error) {
 	return &Google{api: c, packageName: packageName}, nil
 }
 
-func (g *Google) Route() Route { return RouteGoogle }
+func (g *Google) Route() Route  { return RouteGoogle }
+func (g *Google) AppID() string { return g.packageName }
+
+// Refund는 주문을 환불한다(orders.refund). go-iap는 revoke 인자를 주지 않는다.
+// 선반은 소비(consume)하는 상품이라 스토어 쪽에서 거둘 권한이 없고, 칸은 우리 서버가 주지 않았으므로 상관없다.
+func (g *Google) Refund(ctx context.Context, orderID string) error {
+	if orderID == "" {
+		return errors.New("google: 주문 ID가 없는 구매는 환불할 수 없다")
+	}
+	if err := g.api.Refund(ctx, g.packageName, orderID); err != nil {
+		return fmt.Errorf("google 환불 %s: %w", orderID, err)
+	}
+	return nil
+}
+
+const googleAcknowledged = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
+
+// Verify는 구매 토큰을 그대로 조회 대상으로 쓴다. 토큰이 비밀 값이라 따로 확인할 서명이 없다.
+func (g *Google) Verify(kind Kind, proof string) (Ref, error) {
+	if proof == "" {
+		return Ref{}, fmt.Errorf("google: %w", ErrBadProof)
+	}
+	return Ref{Kind: kind, ID: proof}, nil
+}
 
 // Lookup은 구매 토큰으로 묻는다. 구독과 한 번 사는 상품은 조회 주소가 달라 ref.Kind로 가른다.
 func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
@@ -90,6 +114,7 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 		BundleID:              g.packageName, // 응답에 패키지 이름이 없다. 우리 패키지로 물어서 받은 답이다
 		ProductID:             item.ProductId,
 		State:                 subscriptionState(s.SubscriptionState),
+		Acknowledged:          s.AcknowledgementState == googleAcknowledged,
 		Env:                   EnvProduction,
 		PurchasedAt:           started,
 		ExpiresAt:             expires,
@@ -141,6 +166,7 @@ func (g *Google) fromProduct(token string, r *androidpublisher.ProductPurchaseV2
 		ProductID:             r.ProductLineItem[0].ProductId,
 		AccountToken:          r.ObfuscatedExternalAccountId,
 		State:                 state,
+		Acknowledged:          r.AcknowledgementState == googleAcknowledged,
 		Env:                   EnvProduction,
 		PurchasedAt:           bought,
 		Country:               r.RegionCode,

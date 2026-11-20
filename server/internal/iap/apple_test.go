@@ -221,3 +221,26 @@ func TestAppleParseNotice(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAppleVerify(t *testing.T) {
+	a := &Apple{bundleID: "app.covebook", api: fakeAppleAPI{tx: &api.JWSTransaction{TransactionID: "200", BundleID: "app.covebook"}}}
+	ref, err := a.Verify(KindSubscription, "서명된 거래")
+	if err != nil || ref != (Ref{Kind: KindSubscription, ID: "200"}) {
+		t.Fatalf("정상: %+v %v", ref, err)
+	}
+	// 서명이 틀리면 거래 ID를 돌려주지 않는다
+	a = &Apple{bundleID: "app.covebook", api: fakeAppleAPI{tx: &api.JWSTransaction{TransactionID: "200", BundleID: "app.covebook"}, parseErr: errors.New("bad signature")}}
+	if ref, err = a.Verify(KindProduct, "위조"); !errors.Is(err, ErrBadProof) || ref.ID != "" {
+		t.Fatalf("서명 실패: %+v %v", ref, err)
+	}
+	// 서명은 맞지만 다른 앱의 거래
+	a = &Apple{bundleID: "app.covebook", api: fakeAppleAPI{tx: &api.JWSTransaction{TransactionID: "200", BundleID: "com.other"}}}
+	if _, err = a.Verify(KindProduct, "남의 앱"); !errors.Is(err, ErrWrongApp) {
+		t.Fatalf("다른 앱: %v", err)
+	}
+	// 거래 ID가 없는 내용
+	a = &Apple{bundleID: "app.covebook", api: fakeAppleAPI{tx: &api.JWSTransaction{BundleID: "app.covebook"}}}
+	if _, err = a.Verify(KindProduct, "빈 거래"); !errors.Is(err, ErrBadProof) {
+		t.Fatalf("거래 ID 없음: %v", err)
+	}
+}

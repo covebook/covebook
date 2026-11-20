@@ -29,6 +29,10 @@ func (f fakeGoogleAPI) ConsumeProduct(_ context.Context, pkg, id, token string) 
 	*f.calls = append(*f.calls, "consume "+pkg+" "+id+" "+token)
 	return f.err
 }
+func (f fakeGoogleAPI) Refund(_ context.Context, pkg, order string) error {
+	*f.calls = append(*f.calls, "refund "+pkg+" "+order)
+	return f.err
+}
 
 func (f fakeGoogleAPI) VerifySubscriptionV2(context.Context, string, string) (*androidpublisher.SubscriptionPurchaseV2, error) {
 	return f.sub, f.err
@@ -57,7 +61,7 @@ func TestGoogleSubscription(t *testing.T) {
 	if p.ProductID != "plus" || p.PlanID != "monthly" || p.AccountToken != "u-1" || p.Country != "KR" {
 		t.Fatalf("상품·계정 값이 다름: %+v", p)
 	}
-	if p.State != StatePaid || p.Env != EnvSandbox {
+	if p.State != StatePaid || p.Env != EnvSandbox || p.Acknowledged {
 		t.Fatalf("상태·환경이 다름: %+v", p)
 	}
 	// 다른 시간대로 와도 UTC로 맞춘다
@@ -147,6 +151,12 @@ func TestGoogleSubscriptionStatus(t *testing.T) {
 				AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: autoRenew}}}}
 	}
 	ctx := context.Background()
+	// 이미 확인된 구독은 그렇게 표시된다
+	acked := sub("SUBSCRIPTION_STATE_ACTIVE", true)
+	acked.AcknowledgementState = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
+	if p, _ := (&Google{api: fakeGoogleAPI{sub: acked}}).Subscription(ctx, "tok"); !p.Acknowledged {
+		t.Fatal("확인된 구독이 미확인으로 나옴")
+	}
 	// 유예 중: 구글이 늘려 준 만료 시각이 유예의 끝이다
 	p, err := (&Google{api: fakeGoogleAPI{sub: sub("SUBSCRIPTION_STATE_IN_GRACE_PERIOD", true)}}).Subscription(ctx, "tok")
 	if err != nil || p.State != StatePaid || !p.AutoRenew || !p.GraceUntil.Equal(p.ExpiresAt) || p.OriginalTransactionID != "tok" {
@@ -239,5 +249,27 @@ func TestGoogleParseNotice(t *testing.T) {
 		if _, err := g.ParseNotice([]byte(body)); err == nil {
 			t.Errorf("본문 %q가 통과", body)
 		}
+	}
+}
+
+func TestGoogleVerify(t *testing.T) {
+	g := &Google{packageName: "app.covebook"}
+	if ref, err := g.Verify(KindProduct, "tok"); err != nil || ref != (Ref{Kind: KindProduct, ID: "tok"}) {
+		t.Fatalf("%+v %v", ref, err)
+	}
+	if _, err := g.Verify(KindProduct, ""); !errors.Is(err, ErrBadProof) {
+		t.Fatalf("빈 토큰: %v", err)
+	}
+}
+
+func TestGoogleRefund(t *testing.T) {
+	var calls []string
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{calls: &calls}}
+	if err := g.Refund(context.Background(), "GPA.1"); err != nil || len(calls) != 1 || calls[0] != "refund app.covebook GPA.1" {
+		t.Fatalf("환불 요청: %v %v", calls, err)
+	}
+	// 주문 ID가 없으면(프로모션 코드 구매) 부르지 않는다
+	if err := g.Refund(context.Background(), ""); err == nil || len(calls) != 1 {
+		t.Fatalf("주문 ID 없으면 오류: %v %v", calls, err)
 	}
 }

@@ -202,7 +202,7 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	}
 	shelvesAre := func(want map[int]int) {
 		t.Helper()
-		_, got, err := iapEntitlements(ctx, db, user)
+		_, got, err := iapEntitlements(ctx, db, user, true)
 		if err != nil || len(got) != len(want) {
 			t.Fatalf("선반 %v %v (기대 %v)", got, err, want)
 		}
@@ -216,6 +216,10 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	var year *int
 	if err := db.QueryRow(ctx, "SELECT shelf_year FROM iap_purchases WHERE route='apple' AND transaction_id=$1", p.TransactionID).Scan(&year); err != nil || year == nil || *year != 2026 {
 		t.Fatalf("거래에 적힌 연도 %v %v", year, err)
+	}
+	// 이 거래는 샌드박스다. 샌드박스를 받지 않는 서버에서는 세지 않는다
+	if _, shelves, err := iapEntitlements(ctx, db, user, false); err != nil || len(shelves) != 0 {
+		t.Fatalf("샌드박스 거래가 세어짐: %v %v", shelves, err)
 	}
 
 	// 두 번째 거래는 더해지지만 한 책장에서 3칸을 넘지 않는다(넘은 거래도 원장에는 남는다)
@@ -335,7 +339,7 @@ func TestIAPSubscriptionAndPlus(t *testing.T) {
 	}
 	plus := func(u int64) bool {
 		t.Helper()
-		ok, _, err := iapEntitlements(ctx, db, u)
+		ok, _, err := iapEntitlements(ctx, db, u, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -574,7 +578,7 @@ func TestIAPOverCapNotCounted(t *testing.T) {
 			}
 		}
 	}
-	if _, shelves, err := iapEntitlements(ctx, db, user); err != nil || shelves[2026] != 1 {
+	if _, shelves, err := iapEntitlements(ctx, db, user, true); err != nil || shelves[2026] != 1 {
 		t.Fatalf("넘게 산 거래는 세지 않음: %v %v", shelves, err)
 	}
 }

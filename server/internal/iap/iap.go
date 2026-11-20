@@ -64,6 +64,7 @@ type Purchase struct {
 	RevokedAt             time.Time // 환불·취소된 시각. 애플만 준다
 	GraceUntil            time.Time // 결제 실패 유예가 끝나는 시각. 유예 중이 아니면 zero. Subscription으로 물었을 때만 채워진다
 	AutoRenew             bool      // 자동 갱신이 켜져 있는가. false면 해지 예약. Subscription으로 물었을 때만 믿는다
+	Acknowledged          bool      // 스토어에 확인(acknowledge)이 이미 된 거래인가. 애플은 확인이 없어 항상 true
 	Currency              string    // ISO 4217. 구글 구매 조회에는 없어서 비어 있다
 	PriceMilli            int64     // 금액 x 1000 (ADR-0002 D20). 구글은 0
 	Country               string    // 판매 국가. 스토어가 준 코드 그대로
@@ -72,10 +73,21 @@ type Purchase struct {
 // ErrNotFound는 스토어에 그 거래가 없다는 뜻이다. 통신 실패와 구분해서 다룬다.
 var ErrNotFound = errors.New("iap: 스토어에 없는 거래")
 
+// ErrBadProof는 앱이 낸 구매 증거가 스토어가 서명한 것이 아니거나 형식이 틀렸다는 뜻이다.
+var ErrBadProof = errors.New("iap: 구매 증거가 올바르지 않음")
+
 // Store는 결제 경로 하나다. 애플·구글 구현과 시험용 가짜가 이 모양을 따른다.
 // 메서드는 필요해질 때 늘린다(구독 상태 조회, 알림 해석, 확인은 이슈 #10~#12).
 type Store interface {
 	Route() Route
+	// AppID는 이 스토어에서 우리 앱을 가리키는 값이다(애플 번들 ID, 구글 패키지 이름). Check의 기준으로 쓴다.
+	AppID() string
+	// Verify는 앱이 낸 구매 증거에서 조회할 대상을 꺼낸다. 증거를 가졌다는 것이 "내가 산 사람"이라는 근거다.
+	//   - 애플: 스토어가 서명한 거래(JWS)여야 한다. 서명을 확인하고 거래 ID를 꺼낸다.
+	//     거래 ID만 받지 않는 이유: 숫자라서 추측할 수 있고, 추측한 번호로 남의 구매를 낼 수 있다.
+	//   - 구글: 구매 토큰 그대로다. 토큰 자체가 추측할 수 없는 비밀 값이다.
+	// 서명이 틀리면 ErrBadProof, 다른 앱의 거래면 ErrWrongApp이다.
+	Verify(kind Kind, proof string) (Ref, error)
 	// Lookup은 스토어에 다시 물어본다. 없으면 ErrNotFound를 감싼 오류를 돌려준다.
 	Lookup(ctx context.Context, ref Ref) (Purchase, error)
 	// Subscription은 구독 한 줄기의 지금 상태를 묻는다. 알림을 받았을 때와 정기 대조에서 쓴다.
@@ -86,6 +98,14 @@ type Store interface {
 	// consume이 true면 한 번 사는 상품을 소비 처리한다(같은 상품을 다시 살 수 있게 된다). 구독에는 쓰지 않는다.
 	// 애플은 앱이 거래를 끝내므로 아무 일도 하지 않는다.
 	Confirm(ctx context.Context, ref Ref, productID string, consume bool) error
+}
+
+// Refunder는 개발자가 거래를 환불할 수 있는 스토어다. 구글만 된다(Play Developer API orders.refund).
+// 애플은 개발자가 환불하는 API가 없다. 사용자가 애플에 직접 요청해야 한다.
+// 쓰는 곳: 두 기기에서 동시에 사서 그 해 책장의 유료 칸(3칸)을 넘은 선반 거래(ADR-0002 D1).
+type Refunder interface {
+	// Refund는 주문을 환불한다. orderID는 Purchase.TransactionID다(구글 주문 ID). 비어 있으면 오류다(프로모션 코드 구매 등).
+	Refund(ctx context.Context, orderID string) error
 }
 
 // Notice는 스토어가 보낸 알림에서 꺼낸 것이다. 알림 내용으로 상태를 판단하지 않는다.

@@ -3,18 +3,29 @@ package iap
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // Fake는 시험용 Store다. 스토어에 "있는" 거래를 미리 넣어 두고 쓴다.
 type Fake struct {
 	R          Route
+	App        string              // AppID가 돌려줄 값
 	Purchases  map[string]Purchase // Ref.ID → 거래
 	Err        error               // 값이 있으면 조회가 항상 이 오류로 실패한다(통신 장애 흉내)
 	Confirmed  []string            // Confirm이 불린 Ref.ID. 순서대로
 	ConfirmErr error               // 값이 있으면 Confirm이 실패한다
 }
 
-func (f *Fake) Route() Route { return f.R }
+func (f *Fake) Route() Route  { return f.R }
+func (f *Fake) AppID() string { return f.App }
+
+// Verify는 증거를 그대로 조회 대상으로 쓴다. "forged"로 시작하면 서명이 틀린 것으로 본다.
+func (f *Fake) Verify(kind Kind, proof string) (Ref, error) {
+	if proof == "" || strings.HasPrefix(proof, "forged") {
+		return Ref{}, fmt.Errorf("fake: %w", ErrBadProof)
+	}
+	return Ref{Kind: kind, ID: proof}, nil
+}
 
 func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
 	if f.Err != nil {
@@ -27,11 +38,31 @@ func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
 	return p, nil
 }
 
+// FakeRefunder는 환불할 수 있는 스토어(구글)를 흉내 낸다. Fake에는 Refund가 없어서 애플 시험에 끼어들지 않는다.
+type FakeRefunder struct {
+	*Fake
+	Refunded  []string // Refund가 불린 주문 ID. 순서대로
+	RefundErr error    // 값이 있으면 Refund가 실패한다
+}
+
+func (f *FakeRefunder) Refund(_ context.Context, orderID string) error {
+	if f.RefundErr != nil {
+		return f.RefundErr
+	}
+	if orderID == "" {
+		return fmt.Errorf("fake: 주문 ID 없음")
+	}
+	f.Refunded = append(f.Refunded, orderID)
+	return nil
+}
+
 // 컴파일할 때 "Store를 구현했는지" 확인한다. Java의 implements 자리.
 var (
-	_ Store = (*Apple)(nil)
-	_ Store = (*Google)(nil)
-	_ Store = (*Fake)(nil)
+	_ Store    = (*Apple)(nil)
+	_ Store    = (*Google)(nil)
+	_ Store    = (*Fake)(nil)
+	_ Refunder = (*Google)(nil)
+	_ Refunder = (*FakeRefunder)(nil)
 )
 
 // Subscription은 Purchases에서 원 거래 ID가 같은 것을 찾는다. 여러 개면 만료가 가장 늦은 것이다.
