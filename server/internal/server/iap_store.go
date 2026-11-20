@@ -81,6 +81,31 @@ func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKe
 	return *got, err
 }
 
+// iapReservationYear는 이 유저의 결제 중 예약이 어느 해 책장의 것인지 알려 준다.
+// 5분이 지난 예약도 아직 지워지지 않았으면 연도를 준다(결제창에서 오래 머문 경우). 없거나 남의 예약이거나 UUID 모양이 아니면 0이다.
+func iapReservationYear(ctx context.Context, q dbtx, user int64, id string) (int, error) {
+	var year int
+	err := q.QueryRow(ctx, "SELECT year FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=lower($2)", user, id).Scan(&year)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return year, err
+}
+
+// iapPreferShelfYear는 선반 거래의 연도를 year로 바꾼다(결제 중 예약의 연도를 계정 연결 값의 연도보다 먼저 쓸 때).
+// 바뀌었으면 원래 연도(몰랐으면 0)와 true를 돌려준다. 같으면 아무것도 하지 않는다.
+func iapPreferShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKey string, year int) (prev int, changed bool, err error) {
+	err = q.QueryRow(ctx, `WITH cur AS (
+			SELECT id, shelf_year FROM iap_purchases WHERE route=$1 AND transaction_id=$2 AND kind='product')
+		UPDATE iap_purchases b SET shelf_year=$3, updated_at=now() FROM cur
+		WHERE b.id=cur.id AND cur.shelf_year IS DISTINCT FROM $3 RETURNING coalesce(cur.shelf_year,0)`,
+		string(route), transactionKey, year).Scan(&prev)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	return prev, err == nil, err
+}
+
 // iapShelfPaid는 그 해 책장에서 환불되지 않은 선반 거래가 준 칸 수의 합이다. 3칸을 넘게 산 거래(over_cap)는 세지 않는다.
 func iapShelfPaid(ctx context.Context, q dbtx, user int64, year int, allowSandbox bool) (int, error) {
 	var n int
