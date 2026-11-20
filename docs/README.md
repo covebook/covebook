@@ -26,6 +26,7 @@
 - 디자인: [`design/DESIGN.md`](design/DESIGN.md)(화면 규칙·역할·예외·어디를 고치나), [`design/assets.md`](design/assets.md)
 - 지시서: [`spec/HOME_BRIEF.md`](spec/HOME_BRIEF.md)(홈), [`spec/SPEC.md`](spec/SPEC.md)(홈 외), [`spec/BOOKSHELF_ASSET_BRIEF.md`](spec/BOOKSHELF_ASSET_BRIEF.md)(선반·배경 자산)
 - DB 구조: [`spec/erd.md`](spec/erd.md)(지금은 결제 표 8개와 이유)
+- 결제 용어: [`guides/iap-glossary.md`](guides/iap-glossary.md)
 - 구조: [`spec/bookshelf-architecture.md`](spec/bookshelf-architecture.md)(옛 RN 앱 기록), 앱 폴더 안내 [`../app/README.md`](../app/README.md)
 - 계획: [`spec/PLAN-2026-11-flow.md`](spec/PLAN-2026-11-flow.md)
 - 배포: [`release/android-release.md`](release/android-release.md), [`release/ios-release.md`](release/ios-release.md)
