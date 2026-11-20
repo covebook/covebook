@@ -391,7 +391,6 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
           final sub = _subOf(lib, r, copyOf);
           return BookRow(
             size: BookRowSize.large,
-            alignTop: true,
             cover: _thumb(lib, id),
             title: r.book.title,
             meta: r.book.author,
@@ -663,8 +662,8 @@ class _BookListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => BookRow(
           size: BookRowSize.large,
-          // 큰 표지 옆 글은 위에서 시작(시안, 메모 단추도 제목 옆 위)
-          alignTop: true,
+          // 글 묶음 · 메모 단추는 큰 표지 높이의 세로 가운데(2026-11-20 사용자: 글씨가 작아져 위에 맞추면 아래가 남는다.
+          // 썸네일 줄이기 · 한줄평 3줄보다 가운데 정렬: 한줄평 0 · 1 · 2줄 어느 줄이든 위아래가 고르고 표지는 그대로)
           cover: _thumb(lib, book.id),
           title: book.title,
           titleLines: 1,

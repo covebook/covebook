@@ -1054,7 +1054,6 @@ class BookRow extends StatelessWidget {
     this.label,
     this.selected,
     this.dense = false,
-    this.alignTop = false,
     this.onLongPress,
     this.checked,
   });
@@ -1067,9 +1066,6 @@ class BookRow extends StatelessWidget {
 
   /// 줄이 많은 목록(읽기 탭 '내 읽기 목록'): TDS ListRow verticalPadding small 8(공식 가장 작은 값. 지금 앱은 4였다, 2026-11-18 사용자 '간격 촘촘하게')
   final bool dense;
-
-  /// 글 묶음 · 오른쪽을 표지 위 끝에 맞춘다(내 책 목록: 큰 표지 옆 글이 위에서 시작, 시안)
-  final bool alignTop;
 
   /// 표지(폭은 [coverWidth])
   final Widget cover;
@@ -1097,7 +1093,8 @@ class BookRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final row = Padding(
       padding: EdgeInsets.symmetric(vertical: dense ? Space.rowS : Space.rowM),
-      child: Row(crossAxisAlignment: alignTop ? CrossAxisAlignment.start : CrossAxisAlignment.center, children: [
+      // 글 묶음 · 오른쪽은 표지 높이의 세로 가운데(TDS ListRow: 왼쪽 그림 옆 내용 가운데. 내 책 목록도, 2026-11-20 사용자)
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         SizedBox(width: coverWidth(size), child: label != null ? ExcludeSemantics(child: cover) : cover),
         const SizedBox(width: Space.l),
         Expanded(
