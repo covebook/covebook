@@ -6,6 +6,8 @@ import 'dart:math' as math;
 
 import 'library.dart';
 
+export 'josa.dart';
+
 // ---------- 읽기 탭 목록 ----------
 
 /// 오늘(기기 날짜, 세션 시작 시각 기준) 저장된 독서 시간: 전체·책마다·책 없이. 지금 재는 시간은 화면이 더한다
@@ -254,19 +256,7 @@ FinishDraft wholeSeconds(FinishDraft p) => FinishDraft(
       notes: p.notes,
     );
 
-/// 받침에 맞는 조사(이/가, 을/를, 은/는): 마지막 글자가 한글이 아니면 받침 없음으로 본다
-String josa(String word, String withFinal, String withoutFinal) {
-  final t = word.trimRight();
-  if (t.isEmpty) return withoutFinal;
-  final c = t.runes.last;
-  if (c >= 0xAC00 && c <= 0xD7A3) return (c - 0xAC00) % 28 != 0 ? withFinal : withoutFinal;
-  // 숫자로 끝나면 읽는 소리로(0 영, 1 일, 3 삼, 6 육, 7 칠, 8 팔은 받침, 2 이, 4 사, 5 오, 9 구는 없음)
-  if (c >= 0x30 && c <= 0x39) return '013678'.contains(String.fromCharCode(c)) ? withFinal : withoutFinal;
-  return withoutFinal;
-}
-
-/// 단어 + 조사
-String withJosa(String word, String withFinal, String withoutFinal) => '$word${josa(word, withFinal, withoutFinal)}';
+// 조사 고르기(josa · withJosa)는 domain/josa.dart로 옮겼다(따옴표 · 영문 끝 글자까지, 2026-11-20). 이 파일을 가져오는 곳이 그대로 쓰도록 다시 내보낸다
 
 /// 종료 화면에 적는 중인 값(입력 그대로의 글자)
 class FinishNotes {

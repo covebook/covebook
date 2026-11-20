@@ -302,7 +302,8 @@ class _AppShellState extends State<AppShell> {
     appAlert(
       context,
       title ?? '이어서 읽을까요?',
-      message ?? '지금까지 ${withJosa(formatDuration(total), '을', '를')} 읽었어요.',
+      // 안내창이 떠 있던 시간도 읽은 시간에 들어간다: 앞 창의 '…까지 0분'과 달라 보여 그 까닭을 글에 넣는다(2026-11-20 QA)
+      message ?? '안내가 떠 있던 시간까지 지금 ${withJosa(formatDuration(total), '을', '를')} 읽었어요.',
       [
         AlertButton('이어서 읽기', onPress: () {
           reading.resumeInterrupted(includeGap: includeGap);

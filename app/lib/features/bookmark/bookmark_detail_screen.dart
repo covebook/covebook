@@ -200,7 +200,13 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
       imageReady = true;
       await SharePlus.instance.share(ShareParams(files: [XFile(f.path, mimeType: 'image/png')], title: '갈피 공유'));
     } catch (e) {
-      if (mounted) appAlert(context, imageReady ? '공유 창을 열지 못했어요' : '공유 이미지를 만들지 못했어요', errorText(e));
+      // 책 공유와 같은 창: 제목 · 사람 문장 · 취소 | 다시 시도(2026-11-20 QA: 갈피 공유만 '확인' 하나였다)
+      if (mounted) {
+        appAlert(context, imageReady ? '공유 창을 열지 못했어요' : '공유 이미지를 만들지 못했어요', errorText(e), [
+          const AlertButton('취소', style: AlertStyle.cancel),
+          AlertButton('다시 시도', onPress: () => _shoot(withMemo, cur, data)),
+        ]);
+      }
     } finally {
       if (mounted) {
         setState(() {

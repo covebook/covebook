@@ -30,6 +30,7 @@ Future<void> switchReadingBook(BuildContext context, String? nextId, {VoidCallba
     curId: cur.myBookId,
     nextId: nextId,
     elapsedMs: reading.elapsed,
+    paused: !reading.running,
     onSaveNew: () {
       chosen?.call();
       // 저장하지 못하면 지금까지 읽은 것은 저장 전 기록으로 남는다(읽기 탭 '저장하지 않은 독서 기록'). 예외 원문은 보이지 않는다
@@ -51,6 +52,7 @@ Future<void> askSwitchBook(
   required String? curId,
   required String? nextId,
   required num elapsedMs,
+  bool paused = false,
   required VoidCallback onSaveNew,
   required VoidCallback onMove,
 }) {
@@ -58,7 +60,10 @@ Future<void> askSwitchBook(
   final next = bookTitle(lib, nextId);
   // 지금까지 시간(1분이 안 되면 초까지)
   final so = formatDurationShort(elapsedMs);
-  final reading = cur != null ? '지금 ‘$cur’${josa(cur, '을', '를')} $so째 읽는 중이에요.' : '지금 책 없이 $so째 읽는 중이에요.';
+  // 일시정지 중이면 '읽는 중'이 아니라 멈춘 상태로(2026-11-20 QA: 멈춰 있는데 '3분째 읽는 중이에요'였다)
+  final reading = paused
+      ? (cur != null ? '지금 ‘$cur’${josa(cur, '을', '를')} $so 읽고 일시정지했어요.' : '지금 책 없이 $so 읽고 일시정지했어요.')
+      : (cur != null ? '지금 ‘$cur’${josa(cur, '을', '를')} $so째 읽는 중이에요.' : '지금 책 없이 $so째 읽는 중이에요.');
   // 책을 고르지 않은 기록의 이름은 앱 어디서나 '책 없이 읽기'(DESIGN 9장)
   final saved = cur != null ? '‘$cur’ 기록으로' : '책 없이 읽기 기록으로';
   return appAlert(

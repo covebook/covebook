@@ -71,6 +71,12 @@ class _BookScreenState extends State<BookScreen> {
   final _note = TextEditingController();
   final _page = TextEditingController();
   bool _noteLoaded = false;
+
+  /// 지우고 닫는 중: 화면이 닫히는 동안 지운 책 대신 마지막으로 보던 책을 그린다
+  /// (2026-11-20 QA: 삭제 직후 닫히는 동안 '책을 찾을 수 없어요'가 잠깐 비쳤다)
+  bool _leaving = false;
+  MyBook? _lastBook;
+  Edition? _lastEdition;
   BookReviewsState? _reviews; // 같은 판본(ISBN-13)의 공개 후기. 판본 ISBN을 고치면 새로 받는다
   String? _reviewsIsbn;
 
@@ -277,9 +283,11 @@ class _BookScreenState extends State<BookScreen> {
     final r = await confirmRemoveBooks(context, [id]);
     if (r == null || !mounted) return;
     final nav = Navigator.of(context);
+    _leaving = true;
     try {
       await removeBooks(r);
     } catch (e) {
+      _leaving = false;
       if (mounted) appAlert(context, r.hidden.isNotEmpty ? '숨기지 못했어요' : '삭제하지 못했어요', errorText(e));
       return;
     }
@@ -292,8 +300,15 @@ class _BookScreenState extends State<BookScreen> {
   @override
   Widget build(BuildContext context) {
     final lib = _model.lib;
-    final b = lib.books[id];
-    final e = b == null ? null : lib.editions[b.editionId];
+    final b0 = lib.books[id];
+    final e0 = b0 == null ? null : lib.editions[b0.editionId];
+    // 지우고 닫는 중이면 마지막으로 보던 책(_leaving)
+    final b = b0 ?? (_leaving ? _lastBook : null);
+    final e = e0 ?? (_leaving ? _lastEdition : null);
+    if (b0 != null && e0 != null) {
+      _lastBook = b0;
+      _lastEdition = e0;
+    }
     if (!_model.loaded) return const Screen(children: [Loading()]);
     if (b == null || e == null) {
       // 찾을 수 없음(docs/design/DESIGN.md 9장): 이유 + 나가는 단추 하나(뒤로와 같다. '책장으로'라 했지만 실제로는 이전 화면이었다)

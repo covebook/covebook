@@ -206,7 +206,9 @@ class _ReadListState extends State<ReadList> {
     final fActive = active != null && active.myBookId == featured;
     final fMs = active != null && active.myBookId == featured ? math.max(t.of(featured), _reading.elapsed) : t.of(featured);
     final fRead = featured != null && lib.sessions.values.any((x) => x.myBookId == featured);
-    final fLabel = fActive ? (running ? '읽기 화면으로' : '이어서 읽기') : (fRead ? '이어서 읽기' : '읽기 시작');
+    // 완독한 책은 '다시 읽기'(책 정보 아래 단추와 같은 말. 완독으로 바꾼 책이 '이어서 읽기'로 보였다, 2026-11-20 QA)
+    final fDone = featured != null && lib.books[featured]?.status == ReadStatus.read;
+    final fLabel = fActive ? (running ? '읽기 화면으로' : '이어서 읽기') : (fDone ? '다시 읽기' : fRead ? '이어서 읽기' : '읽기 시작');
     final title = _titleOf(lib, featured), author = bookAuthor(lib, featured);
     void open() => featured == null ? null : openBook(context, featured);
     return [
