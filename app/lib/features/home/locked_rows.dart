@@ -16,7 +16,7 @@ import '../../domain/types.dart';
 const shelfSlots = 6;
 int lockedShelfCount(int shelves) => (shelfSlots - shelves).clamp(0, shelfSlots);
 
-/// 무료로 쓸 수 있는 선반 칸 수(2026-11-15 사용자 결정: 3칸까지 무료, 그 위는 유료 예정·결제는 아직 없음)
+/// 무료로 쓸 수 있는 선반 칸 수(2026-11-15 결정, 2026-11-19 정환: 나머지 3칸은 연도 책장마다 유료)
 const freeShelfSlots = 3;
 
 /// 지금 쓸 수 있는 선반 칸 수: 무료 칸 + 그 책장에서 구매한 칸(여섯 칸까지). 결제가 꺼진 빌드는 구매한 칸이 0이다
