@@ -790,6 +790,11 @@ func TestIAPShelfYearFromReservation(t *testing.T) {
 	if body["year"] != float64(2027) || shelvesIn(body, 2027) != 1 || shelvesIn(body, 2026) != 1 {
 		t.Fatalf("예약 연도가 먼저여야 함: %v", body)
 	}
+	// 결제 완료 고지(T3)에도 예약의 연도가 적힌다
+	var noticeYear string
+	if err := e.db.QueryRow(e.ctx, "SELECT params->>'year' FROM iap_notices WHERE user_id=$1 AND kind='purchase_done' AND dedupe_key LIKE '%'||$2||'%'", user, moved).Scan(&noticeYear); err != nil || noticeYear != "2027" {
+		t.Fatalf("결제 완료 고지의 연도: %q %v", noticeYear, err)
+	}
 	// 3칸 묶음도. 값의 연도(2026, 1칸 있음)로 셌다면 3칸을 넘어 칸을 못 받았을 거래
 	r = reserve(token, 2028, 3)
 	if body, _ = buy(three, "", r["reservation"]); body["year"] != float64(2028) || shelvesIn(body, 2028) != 3 || body["overCap"] == true || shelvesIn(body, 2026) != 1 {
