@@ -663,10 +663,14 @@ class _FindStepState extends State<_FindStep> {
       // 2026-11-17 사용자 시안: 뒤로 옆 '책 추가' 제목 + 오른쪽 '목록 가져오기', 그 아래 검색칸(오른쪽 끝 바코드), '많이 찾는 책' 줄은 제목·저자와 +
       child: Screen(
         headerField: Semantics(header: true, child: Text(_m.multi ? (n == 0 ? '여러 권 고르기' : '$n권 고름') : '책 추가', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle)),
-        // 고르기를 끝내는 '취소'는 본문색(2026-11-19 공통 규칙)
-        left: _m.multi ? TextLink(label: '취소', ink: true, onPress: _endMulti) : null,
+        // 고르는 중에는 뒤로 꺾쇠 없이 오른쪽 빨간 '취소'(2026-11-20 사용자: 왼쪽 말고 오른쪽에, 빨간색으로). 기기 뒤로도 고르기만 끝낸다
+        back: !_m.multi,
         // 엑셀·CSV 목록으로 여러 권(책 고르기에서 왔을 때는 한 권만 고르므로 없음)
-        right: widget.pick || _m.multi ? null : TextLink(label: '목록 가져오기', soft: true, onPress: () => openImportList(context)),
+        right: _m.multi
+            ? TextLink(label: '취소', danger: true, onPress: _endMulti)
+            : widget.pick
+                ? null
+                : TextLink(label: '목록 가져오기', soft: true, onPress: () => openImportList(context)),
         // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장).
         // 여러 권 고르기는 단추를 화면 아래에 붙인다(목록 끝까지 내려야 보였다, 2026-11-20 QA · SCREENS 114 예외)
         pinFooter: _m.multi,

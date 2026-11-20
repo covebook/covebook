@@ -214,17 +214,16 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       },
       child: Screen(
         scroll: false,
-        // 탭 머리줄(제목 · 검색 · 추가). 고르는 중에는 가운데 'N권 선택'과 왼쪽 '취소'(뒤로 자리)
-        back: _selecting,
+        // 탭 머리줄(제목 · 검색 · 추가). 고르는 중에는 가운데 'N권 선택'과 오른쪽 빨간 '취소'(뒤로 꺾쇠 없음)
+        back: false,
         // 삭제 · 진열하는 동안은 누른 때 수 그대로(한 권씩 지워지며 '2권 선택' → '1권 선택' → '책 선택'으로 바뀌어 보였다)
         title: _selecting ? _selectedTitle((_working?.now.picked ?? pickedBooks).length) : '내 책',
-        // 고르기를 끝내는 '취소'는 본문색(2026-11-19 공통 규칙: 회색이었다)
-        left: _selecting ? TextLink(label: '취소', ink: true, onPress: _stopSelecting) : null,
         // 검색 중: '내 책' 제목 자리에 검색칸, 오른쪽 '취소'(2026-11-18 사용자 그림: 머리줄 아래 따로 뜨지 않게)
         headerField: !_selecting && _searching
             ? SearchField(value: _q, onChange: (v) => setState(() => _q = v), autofocus: true, placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '내 책에서 찾기')
             : null,
-        right: _selecting ? null : _headRight(),
+        // 고르기를 끝내는 '취소'는 오른쪽 주의색(2026-11-20 사용자: 왼쪽 말고 오른쪽에, 빨간색으로)
+        right: _selecting ? TextLink(label: '취소', danger: true, onPress: _stopSelecting) : _headRight(),
         footer: _selecting ? _selectFooter(_working?.now ?? (picked: pickedBooks, chosen: chosen, hideOnly: hideOnly), busy: _working?.kind) : null,
         children: [
           Expanded(
