@@ -31,6 +31,7 @@ type Server struct {
 	IAPSandbox        bool                    // 샌드박스 거래에도 지급할지 (IAP_ALLOW_SANDBOX)
 	iapMu             sync.Mutex
 	iapHits           map[int64]iapHit
+	iapRenewalAt      time.Time                                             // 갱신 예정 고지를 마지막으로 찾은 때
 	iapCatchUpAt      map[iap.Route]time.Time                               // 경로마다 스토어 목록으로 메우기를 마지막으로 돌린 때
 	iapLoggedAt       time.Time                                             // 대조 요약 로그를 마지막으로 남긴 때
 	iapWake           chan struct{}                                         // 새 알림이 오면 처리 작업을 깨운다

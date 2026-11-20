@@ -416,6 +416,51 @@ return tx.Commit(ctx)
 - **문구는 저장하지 않음**: 문구 번호(T7)와 버전, 채울 값만 저장. 문구를 고치면 버전을 올림. 분쟁 때 "어떤 문구를 언제 보여 줬나"를 답할 수 있음
 - **Java였다면**: JPA의 `@PreUpdate`나 Hibernate 이벤트로 이전 값을 받았을 자리. 여기서는 직접 읽어야 해서 번거롭지만, 어느 SQL이 언제 잠그는지가 코드에 그대로 보임
 
+### 10-9. 갱신 예정 고지: "상태가 바뀌지 않았는데" 알리기 (T4, V23)
+
+- **10-8과 다른 점**: 앞의 고지는 상태가 바뀐 순간에 씀. 갱신 예정은 아무것도 바뀌지 않음. "만료일이 14일 안으로 들어왔다"는 시간이 흘러서 생기는 일이라, 알림이 아니라 정기 대조가 찾아야 함
+- **한 문장으로 찾고 쓰기**: `INSERT INTO iap_notices SELECT ... FROM iap_subscriptions JOIN iap_plans ... WHERE expires_at <= now + 14일 ON CONFLICT DO NOTHING`. 대상 고르기와 쓰기가 한 SQL이라 Go로 줄을 가져와 돌 필요가 없음(`iapNoteRenewals`)
+- **유일 키에 만료일을 넣음**: `renewal_upcoming:<경로>:<구독>:<만료일>`. 몇 번을 돌아도 같은 갱신은 한 줄, 1년 뒤 갱신은 만료일이 달라 새 줄
+- **스토어는 주기를 알려 주지 않음**: 애플 거래 정보에도, 구글 구독 조회에도 "월인지 연인지"가 없음. 상품 표처럼 운영자가 채우는 표(`iap_plans`)를 둠. 구글은 한 상품에 월·연 요금제가 함께 있어서 열쇠가 (경로, 상품, 요금제)
+- **자주 돌 필요가 없는 일**: 1분마다 도는 대조 안에 있지만 6시간에 한 번만 함(`iapRenewalDue`, 10-7의 메우기와 같은 방식). 결과가 같아서 서버를 다시 켜면 한 번 더 돌아도 괜찮음
+- **환경 변수 숫자 읽기**: `strconv.Atoi(os.Getenv(...))`가 실패하거나 범위 밖이면 기본값 14. Java의 `Integer.parseInt`는 예외를 던지지만 Go는 `err`를 돌려주니 if 하나로 기본값 처리
+
+### 10-10. 추가 선반을 연도 책장마다: 스토어가 모르는 값을 거래에 붙이기 (D1, V21)
+
+- **문제**: 2026-11-19 결정으로 선반은 연도 책장마다 따로 삼(책장 6칸 중 3칸 무료, 유료는 해마다 최대 3칸). 그런데 스토어 거래에는 "몇 년 책장"이 없음. 앱이 제출할 때 연도를 같이 보내면 될 것 같지만, 앱이 결제 중 꺼지거나 스토어 알림이 먼저 오면 연도가 사라짐
+- **풀이: 계정 연결 값을 연도마다 따로 발급**: 스토어는 결제 때 넘긴 값(애플 `appAccountToken`, 구글 `obfuscatedAccountId`)을 거래에 그대로 붙여 돌려줌. 그래서 값을 "계정 × 연도"마다 하나씩 만들고(`iap_account_tokens.year`), 돌아온 값으로 연도를 찾음. 구독용 값은 `year`가 NULL인 줄
+  - 앱 흐름: `POST /iap/shelf-token {"year":2026}` → 받은 값을 결제에 넘김 → 제출
+  - 이미 다 연 해(3칸)에는 409 `iap_shelf_full`을 줘서 결제창이 뜨기 전에 막음
+- **연도는 거래 줄에 복사해 둠**: `iap_purchases.shelf_year`. 넣는 SQL 안에서 `(SELECT year FROM iap_account_tokens WHERE token=...)`로 채움. 탈퇴하면 값 표는 CASCADE로 지워지지만 거래 원장은 남으니, 연도도 원장에 있어야 함
+- **연도 하나에 값 하나: 부분 유일 색인**: `CREATE UNIQUE INDEX ... (user_id, year) WHERE year IS NOT NULL`. 구독용 값(NULL)은 이 색인에 안 걸림. 만들 때 `INSERT ... ON CONFLICT (user_id, year) WHERE year IS NOT NULL DO NOTHING` 뒤 다시 읽음. 부분 색인을 `ON CONFLICT`로 쓰려면 같은 `WHERE`를 적어야 PostgreSQL이 그 색인을 찾음
+  - Java·JPA로 치면 `@Table(uniqueConstraints=...)`로는 조건부 유일을 못 적음. DDL을 직접 써야 하는 자리
+- **3칸 상한은 읽을 때 자름**: `least(sum(p.shelves), 3)`(`iapEntitlements`). 두 기기에서 동시에 사면 넘을 수 있는데, 저장할 때 막으려면 잠금이 늘어남. 원장은 사실대로 두고 읽을 때 자르면 환불이 들어와도 다시 계산할 게 없음(D5와 같은 생각). 상한은 `iapPaidShelfMax` 한 곳
+  - 넘은 거래는 제출 응답의 `overCap`, 결제 완료 고지의 `overCap`, `/admin/iap/stats`의 `shelfOverCap`으로 보임. 환불은 운영자가 함
+  - **10-11에서 바뀜**: 넘은 거래는 통째로 칸을 주지 않고(`over_cap`) 자동 환불. 결제 전 예약도 더함
+- **넘은 거래 세기: 윈도 함수**: `sum(shelves) OVER (PARTITION BY user_id, shelf_year ORDER BY purchased_at, id)`로 "그 거래까지 산 칸"을 구하고 3을 넘는 줄을 셈. Java로 하면 줄을 다 가져와 누적합을 돌렸을 일을 SQL 한 문장으로 함(10-11에서 `over_cap` 칸을 세는 것으로 바뀜)
+- **연도를 모르는 거래**: 앱 밖에서 산 구매(프로모션 코드)는 계정 연결 값이 비어 있음. 이때만 제출 본문의 `year`를 씀. 값이 연도를 알면 본문은 무시함(값이 결제 때의 뜻이라). 둘 다 없으면 거래는 기록하고(돈은 받았으니) 칸은 주지 않고 422 `iap_shelf_year_missing`. 같은 거래를 연도와 함께 다시 내면 그때 채우고 결제 완료를 알림(`iapSetShelfYear`가 "이번에 채웠는지"를 돌려줌)
+- **고치기 전 값과 고친 값을 한 문장에서**: `WITH old AS (SELECT ... FOR UPDATE) UPDATE ... FROM old RETURNING b.shelf_year, old.shelf_year IS NULL`. CTE의 `old`는 고치기 전 값이라 "채웠는지"를 바로 앎(10-8의 `RETURNING`과 같은 수법)
+- **Java와 다른 점: JSON의 숫자 키**: Go의 `map[int]int`를 `encoding/json`으로 내보내면 키가 문자열이 됨(`{"2026":3}`). JSON 객체 키는 문자열뿐이라 그렇고, Jackson의 `Map<Integer,Integer>`도 같음. 앱은 키를 문자열로 읽음
+
+### 10-11. 두 기기에서 동시에 살 때: 결제 전 예약 + 결제 뒤 자동 환불 (D1)
+
+- **문제**: 태블릿에서 결제창을 띄워 둔 채 휴대폰에서도 사면, 두 기기 모두 "산 칸 0"을 보고 결제가 시작됨. 둘 다 3칸 묶음이면 6칸. 10-10의 409는 계정 연결 값을 받는 순간에만 보므로 못 막음
+- **두 겹으로 지킴**
+  - **결제 전: 예약**(`iap_shelf_reservations`). `POST /iap/shelf-token {"year":2026,"shelves":3}`이 값을 주면서 "이 해 책장 3칸 결제 중"을 5분(`iapShelfHold`) 잡음. 산 칸 + 살아 있는 예약 칸 + 이번 칸 > 3이면 409 `iap_shelf_busy`와 `retryAfter`(가장 먼저 끝나는 예약까지 남은 초)
+    - 결제가 끝나면 제출(`reservation`)이 풀고, 취소하면 앱이 `POST /iap/shelf-token/release`로 풂. 앱이 꺼지면 `expires_at`이 지나 저절로 무시됨(지우는 일은 다음 예약 때)
+    - 예약 번호를 모르는 지급(스토어 알림이 먼저 옴, 옛 앱)은 그 해의 가장 오래된 예약 하나를 풂
+  - **결제 뒤: 넘은 거래는 칸을 주지 않고 환불**(`iap_purchases.over_cap`). 예약이 끝난 뒤 결제가 끝나는 등 예약을 지나친 경우를 받음
+- **왜 예약만으로 안 되나**: 예약은 "앱이 약속을 지킨다"는 가정 위에 있음. 5분을 넘긴 결제(구글 결제 대기, 느린 카드), 예약을 안 부르는 옛 앱, 앱 밖 구매는 예약을 지나침. 돈이 걸린 상한은 마지막에 서버가 원장으로 한 번 더 지켜야 함
+- **왜 "읽을 때 자르기"만으로 안 되나**: 10-10은 넘어도 3칸까지는 열어 줬음. 그런데 넘은 거래를 환불하면 그 거래의 칸도 빠져야 함. 3칸 묶음 일부만 인정하면 "환불은 통째, 칸은 일부"가 되어 셈이 꼬임. 그래서 넘은 거래는 통째로 넘은 것으로 보고(`iapSettleShelf`), 칸 수에서 뺌. `least(sum, 3)`은 마지막 안전장치로 남김
+- **한 번 넘은 거래는 되돌리지 않음**: 앞선 거래가 나중에 환불돼 자리가 생겨도 `over_cap`을 false로 돌리지 않음. 이미 환불을 요청한 거래에 칸을 주면 돈과 칸을 둘 다 주게 됨. SQL에서 `SET over_cap = me.over_cap OR (...)`로 true에서 false로 가는 길을 막음
+- **유저 줄 잠금으로 줄 세우기**: 예약과 판정 둘 다 `SELECT ... FROM users WHERE id=$1 FOR UPDATE` 뒤에 셈. 같은 유저의 두 요청이 차례로 보게 됨. Java의 `synchronized(user)`를 DB에서 하는 셈이고, 서버가 여러 대여도 통함
+- **환불: 구글만 서버가 할 수 있음**: Play Developer API `orders.refund`(`iap.Refunder`). 애플은 개발자가 환불하는 API가 없어 고지로 "애플에 환불 요청"을 안내(`autoRefund=false`)
+  - 소비(consume)를 먼저 하고 환불함. 구글은 3일 안에 확인하지 않으면 어차피 환불하지만, 그때는 사용자에게 알릴 길이 없음
+  - 실패하면 `refund_attempts`를 올리고 정기 처리(4단계)가 다시 요청. 주문 ID는 원장에 두지 않고 구매 토큰으로 다시 조회해 받음
+  - 다시 시도 목록은 환불할 수 있는 경로만 물음(`route = ANY($1)`). 애플의 넘은 거래가 목록 50줄을 차지해 구글 거래가 밀리는 일을 막음
+- **Go: 선택 기능은 작은 인터페이스로**: `Store`에 `Refund`를 넣지 않고 `Refunder`를 따로 둠. 쓰는 곳에서 `rf, ok := store.(iap.Refunder)`로 물어봄(타입 단언). Java로 치면 `if (store instanceof Refunder rf)`. 애플 구현이 "지원 안 함" 오류를 돌려주는 빈 메서드를 갖지 않아도 됨
+  - 시험 가짜도 `FakeRefunder{*Fake}`로 따로 둠. 구조체 포함(embedding)이라 `Fake`의 메서드를 그대로 가지면서 `Refund`만 더함. 애플 가짜가 환불을 흉내 내지 않게
+
 ## 진행 기록
 
 | 날짜 | 이슈 | 한 것 | 배운 것 |
@@ -429,3 +474,6 @@ return tx.Commit(ctx)
 | 2026-11-18 | #9 | 구글 거래 조회, 인터페이스를 `Lookup(Ref)`로 고침, 상태 값 `State`, 환경변수 읽기 | 4장 고친 기록, 4-1, 9장 구글 비교, 9-1 |
 | 2026-11-19 | #26, #39, L14, L17 | 구매 내역, 사업자 정보, 애플 알림 이력·구글 무효 구매 목록으로 메우기, 밀린 일 숫자 | 10-5, 10-6, 10-7 |
 | 2026-11-19 | L8, L11, L18 | 알림함: 고지 표(V22), 바뀐 순간에 한 번 쓰기, 목록·읽음 API | 10-8 |
+| 2026-11-19 | L9, L11 | 고지 기록 탈퇴 뒤 보존, 갱신 예정 고지(V23 `iap_plans`), `/iap/me`의 `period` | 10-9 |
+| 2026-11-19 | #6, D1 | 추가 선반 연도 책장마다(유료 최대 3칸): 연도별 계정 연결 값, `shelf_year`, `POST /iap/shelf-token`, `shelvesByYear`, 넘은 거래 세기 | 10-10 |
+| 2026-11-19 | D1 | 두 기기 동시 구매: 결제 중 예약 5분, 넘은 거래는 칸을 주지 않고 자동 환불(구글), 넘김 고지 | 10-11 |

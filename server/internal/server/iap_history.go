@@ -272,8 +272,8 @@ func (s *Server) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	if skip {
 		return
 	}
-	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_pending=%ds shelf_over_cap=%d shelf_over_cap_apple=%d shelf_no_year=%d",
-		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Refunds,
+	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_pending=%ds shelf_over_cap=%d shelf_over_cap_apple=%d shelf_no_year=%d",
+		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals, res.Refunds,
 		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestPendingSecs, b.ShelfOverCap, b.ShelfOverCapApple, b.ShelfNoYear)
 }
 
