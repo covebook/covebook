@@ -400,7 +400,15 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	}
 	note, granted, user := "상태 갱신", false, owner.user
 	if owner.found {
+		// 고치기 전의 값을 읽어 두고, 고친 뒤 달라진 것(유예 시작, 만료, 해지 접수, 환불)을 고지로 남긴다
+		before, e := iapSubBeforeOf(ctx, tx, route, sub.OriginalID)
+		if e != nil {
+			return "", e
+		}
 		if _, err = iapRefreshSubscription(ctx, tx, sub); err != nil {
+			return "", err
+		}
+		if err = iapNoteSubscriptionChange(ctx, tx, user, before, sub, time.Now()); err != nil {
 			return "", err
 		}
 	} else {
@@ -420,6 +428,12 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 		}
 		if _, err = iapUpsertSubscription(ctx, tx, user, sub); err != nil {
 			return "", err
+		}
+		// 알림만으로 새로 지급한 구독도 결제 완료를 알린다(T3). 뒤에 앱이 같은 거래를 제출하면 "전에 지급한 것"이라 다시 알리지 않는다
+		if cur.State == iap.StatePaid {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapShelfGrant{}); err != nil {
+				return "", err
+			}
 		}
 		note, granted = "알림으로 새 구독 연결", true
 	}
@@ -494,7 +508,11 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if user == 0 {
 		return "주인을 모르는 구매. 앱이 제출하면 연결됨", nil
 	}
-	// 원장에 넣고, 연도를 알면 3칸을 넘는지 정하고, 그 해의 결제 중 예약 하나를 푼다(앱보다 알림이 먼저 온 경우)
+	product, err := iapFindProduct(ctx, s.DB, route, p.ProductID)
+	if err != nil {
+		return "", err
+	}
+	// 원장, 3칸 넘김 판정, 결제 중 예약 풀기, 고지(T3 또는 넘김)를 한 트랜잭션에 쓴다(앱보다 알림이 먼저 온 경우)
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return "", err
@@ -504,7 +522,7 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if err != nil {
 		return "", err
 	}
-	// 어느 해 책장의 칸인지는 넣을 때 계정 연결 값으로 적었다(D1)
+	// 어느 해 책장의 칸인지는 넣을 때 계정 연결 값으로 적었다(D1). 연도를 모르면 칸을 주지 않았으니 결제 완료도 알리지 않는다
 	year, err := iapTokenYear(ctx, tx, p.AccountToken)
 	if err != nil {
 		return "", err
@@ -517,16 +535,15 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 		if err = iapReleaseOldestReservation(ctx, tx, user, year); err != nil {
 			return "", err
 		}
+		if err = iapNoteShelfGrant(ctx, tx, user, p, iapShelfGrant{Shelves: product.Shelves, Year: year, OverCap: overCap}); err != nil {
+			return "", err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return "", err
 	}
 	if inserted && !p.Acknowledged {
-		product, e := iapFindProduct(ctx, s.DB, route, p.ProductID)
-		if e != nil {
-			return "", e
-		}
-		if e = store.Confirm(storeCtx, ref, p.ProductID, product.Consume); e != nil {
+		if e := store.Confirm(storeCtx, ref, p.ProductID, product.Consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
 		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)

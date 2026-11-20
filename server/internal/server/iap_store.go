@@ -74,15 +74,20 @@ func iapTokenYear(ctx context.Context, q dbtx, token string) (int, error) {
 
 // iapSetShelfYear는 선반 거래가 어느 해 책장의 것인지 정하고 그 연도를 돌려준다(D1).
 // 넣을 때 계정 연결 값으로 적은 연도가 있으면 그대로 둔다. 없을 때만 year(앱이 보낸 연도)로 채운다. 끝내 모르면 0이다.
-func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKey string, year int) (int, error) {
-	var got *int
-	err := q.QueryRow(ctx, `UPDATE iap_purchases SET shelf_year=coalesce(shelf_year, nullif($3,0)),
-			updated_at=CASE WHEN shelf_year IS NULL AND $3<>0 THEN now() ELSE updated_at END
-		WHERE route=$1 AND transaction_id=$2 AND kind='product' RETURNING shelf_year`, string(route), transactionKey, year).Scan(&got)
-	if errors.Is(err, pgx.ErrNoRows) || got == nil {
-		return 0, nil
+// filled는 이번에 연도를 채웠는지다(그때 결제 완료를 알린다).
+func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKey string, year int) (got int, filled bool, err error) {
+	var now *int
+	err = q.QueryRow(ctx, `WITH old AS (
+			SELECT id, shelf_year FROM iap_purchases WHERE route=$1 AND transaction_id=$2 AND kind='product' FOR UPDATE
+		)
+		UPDATE iap_purchases b SET shelf_year=coalesce(old.shelf_year, nullif($3,0)),
+			updated_at=CASE WHEN old.shelf_year IS NULL AND $3<>0 THEN now() ELSE b.updated_at END
+		FROM old WHERE b.id=old.id
+		RETURNING b.shelf_year, old.shelf_year IS NULL AND $3<>0`, string(route), transactionKey, year).Scan(&now, &filled)
+	if errors.Is(err, pgx.ErrNoRows) || now == nil {
+		return 0, false, nil
 	}
-	return *got, err
+	return *now, filled, err
 }
 
 // iapReservationYear는 이 유저의 결제 중 예약이 어느 해 책장의 것인지 알려 준다.
@@ -261,10 +266,31 @@ func iapTransactionKey(kind iap.Kind, p iap.Purchase) string {
 }
 
 // iapRevokePurchase는 환불·취소를 원장에 남긴다. 줄을 지우지 않는다. 바뀐 줄이 있으면 true다.
+// 같은 SQL 문에서 환불 고지(T9)도 쓴다: 상태만 바뀌고 고지가 빠지는 일이 없게 한다(주인이 있는 줄만).
+// 선반은 거래마다, 구독은 구독 줄기마다 한 번 알린다. 3칸을 넘게 산 선반 거래(over_cap)는 알리지 않는다.
 func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transactionID string, at time.Time) (bool, error) {
-	tag, err := q.Exec(ctx, `UPDATE iap_purchases SET state='revoked', revoked_at=$3, updated_at=now()
-		WHERE route=$1 AND transaction_id=$2 AND state='paid'`, string(route), transactionID, at)
-	return tag.RowsAffected() == 1, err
+	var changed int
+	err := q.QueryRow(ctx, `WITH r AS (
+			UPDATE iap_purchases SET state='revoked', revoked_at=$3, updated_at=now()
+			WHERE route=$1 AND transaction_id=$2 AND state='paid'
+			RETURNING user_id, kind, product_id, original_id, transaction_id, env, revoked_at, shelf_year, over_cap
+		), n AS (
+			INSERT INTO iap_notices (user_id, kind, template, params, env, dedupe_key)
+			SELECT r.user_id,
+				CASE WHEN r.kind='product' THEN 'shelf_refunded' ELSE 'subscription_refunded' END, 'T9',
+				jsonb_strip_nulls(jsonb_build_object('route', $1::text, 'productId', r.product_id, 'kind', r.kind,
+					'shelves', CASE WHEN r.kind='product' THEN p.shelves END,
+					'year', r.shelf_year,
+					'revokedAt', to_char(r.revoked_at AT TIME ZONE 'UTC', `+iapStampSQL+`))),
+				r.env,
+				CASE WHEN r.kind='product' THEN 'shelf_refunded:' || $1::text || ':' || r.transaction_id
+					ELSE 'subscription_refunded:' || $1::text || ':' || r.original_id END
+			FROM r LEFT JOIN iap_products p ON p.route=$1 AND p.product_id=r.product_id
+			-- 3칸을 넘게 사서 칸을 주지 않은 선반은 환불돼도 알리지 않는다(넘김 고지로 이미 알렸고 닫을 칸이 없다)
+			WHERE r.user_id IS NOT NULL AND NOT (r.kind='product' AND r.over_cap)
+			ON CONFLICT (user_id, dedupe_key) DO NOTHING
+		) SELECT count(*)::int FROM r`, string(route), transactionID, at).Scan(&changed)
+	return changed == 1, err
 }
 
 // iapSubscription은 구독 한 줄기의 지금 상태다.
@@ -495,8 +521,20 @@ func iapRefreshSubscription(ctx context.Context, q dbtx, s iapSubscription) (boo
 }
 
 // iapTouchSubscription은 스토어가 그 구독을 더 알려 주지 않을 때(구글은 만료 60일 뒤) 권한 없음으로 확정한다.
+// paid였던 줄이면 같은 SQL 문에서 만료 고지(T8)도 쓴다.
 func iapTouchSubscription(ctx context.Context, q dbtx, route iap.Route, originalID string) error {
-	_, err := q.Exec(ctx, "UPDATE iap_subscriptions SET state=CASE WHEN state='paid' THEN 'inactive' ELSE state END, updated_at=now() WHERE route=$1 AND original_id=$2", string(route), originalID)
+	_, err := q.Exec(ctx, `WITH old AS (
+			SELECT user_id, state, product_id, env, expires_at FROM iap_subscriptions WHERE route=$1 AND original_id=$2 FOR UPDATE
+		), u AS (
+			UPDATE iap_subscriptions SET state=CASE WHEN state='paid' THEN 'inactive' ELSE state END, updated_at=now() WHERE route=$1 AND original_id=$2
+		)
+		INSERT INTO iap_notices (user_id, kind, template, params, env, dedupe_key)
+		SELECT old.user_id, 'expired', 'T8',
+			jsonb_build_object('route', $1::text, 'productId', old.product_id, 'kind', 'subscription',
+				'expiresAt', to_char(old.expires_at AT TIME ZONE 'UTC', `+iapStampSQL+`)),
+			old.env, 'expired:' || $1::text || ':' || $2::text || ':' || to_char(old.expires_at AT TIME ZONE 'UTC', `+iapStampSQL+`)
+		FROM old WHERE old.state='paid' AND old.user_id IS NOT NULL
+		ON CONFLICT (user_id, dedupe_key) DO NOTHING`, string(route), originalID)
 	return err
 }
 
