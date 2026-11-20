@@ -218,32 +218,43 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
         back: false,
         // 삭제 · 진열하는 동안은 누른 때 수 그대로(한 권씩 지워지며 '2권 선택' → '1권 선택' → '책 선택'으로 바뀌어 보였다)
         title: _selecting ? _selectedTitle((_working?.now.picked ?? pickedBooks).length) : '내 책',
-        // 검색 중: '내 책' 제목 자리에 검색칸, 오른쪽 '취소'(2026-11-18 사용자 그림: 머리줄 아래 따로 뜨지 않게)
+        // 검색 중: '내 책' 제목 자리에 검색칸(2026-11-18 사용자 그림: 머리줄 아래 따로 뜨지 않게).
+        // 닫기는 칸 왼쪽 ← 화살표(오른쪽 '취소' 글자 없음, 2026-11-20 사용자 · 11-21 내 책 검색 시안)
         headerField: !_selecting && _searching
-            ? SearchField(value: _q, onChange: (v) => setState(() => _q = v), autofocus: true, placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색', label: '내 책에서 찾기')
+            ? SearchField(
+                value: _q,
+                onChange: (v) => setState(() => _q = v),
+                autofocus: true,
+                placeholder: total > 0 ? '책 $total권에서 찾기' : '제목, 저자 검색',
+                label: '내 책에서 찾기',
+                onBack: () => setState(() {
+                  _q = '';
+                  _searching = false;
+                }),
+              )
             : null,
         // 고르기를 끝내는 '취소'는 오른쪽 주의색(2026-11-20 사용자: 왼쪽 말고 오른쪽에, 빨간색으로)
         right: _selecting ? TextLink(label: '취소', danger: true, onPress: _stopSelecting) : _headRight(),
         footer: _selecting ? _selectFooter(_working?.now ?? (picked: pickedBooks, chosen: chosen, hideOnly: hideOnly), busy: _working?.kind) : null,
         children: [
+          // 스크롤 칸은 화면 폭(Bleed), 좌우 여백은 목록 안쪽: 표지 모서리에 걸친 고르는 원 · 책장 배지가 오른쪽 줄에서 잘렸다(2026-11-21 촬영 확인)
           Expanded(
-            child: LayoutBuilder(builder: (_, box) {
-              final pad = EdgeInsets.only(bottom: bottomPad);
-              if (rows.isEmpty) return ListView(padding: pad, children: [header, _empty(total)]);
-              return _grid ? _gridView(box.maxWidth, lib, rows, header, pad, copyOf) : _listView(lib, rows, header, pad, copyOf);
-            }),
+            child: Bleed(
+              child: LayoutBuilder(builder: (_, box) {
+                final pad = EdgeInsets.fromLTRB(Space.page, 0, Space.page, bottomPad);
+                if (rows.isEmpty) return ListView(padding: pad, children: [header, _empty(total)]);
+                return _grid ? _gridView(box.maxWidth - Space.page * 2, lib, rows, header, pad, copyOf) : _listView(lib, rows, header, pad, copyOf);
+              }),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// 머리줄 오른쪽: 검색 중이면 '취소', 아니면 검색 · 추가(머리줄 아이콘은 공용 HeadIcon 회색, 2026-11-18 사용자)
-  Widget _headRight() => _searching
-      ? TextLink(label: '취소', ink: true, onPress: () => setState(() {
-            _q = '';
-            _searching = false;
-          }))
+  /// 머리줄 오른쪽: 검색 중이면 없음(닫기는 검색칸 ← ), 아니면 검색 · 추가(머리줄 아이콘은 공용 HeadIcon 회색, 2026-11-18 사용자)
+  Widget? _headRight() => _searching
+      ? null
       : Row(mainAxisSize: MainAxisSize.min, children: [
           IconBtn(label: '내 책 검색', onPress: () => setState(() => _searching = true), child: const HeadIcon('Search')),
           const SizedBox(width: headIconGap),
@@ -623,8 +634,17 @@ class _GridCell extends StatelessWidget {
                     height: r.h + 4,
                     child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: AppColors.accent, width: 2), borderRadius: BorderRadius.circular(5))),
                   ),
-                // 공용 고르는 원(22, 2026-11-19 공통 규칙: 24 · 테두리 진회색이었다). 가운데 자리는 그대로
-                if (state != _CellState.normal) Positioned(top: r.edge - 6, right: r.edge - 4, child: RadioMark(on: state == _CellState.picked)),
+                // 공용 고르는 원(24)은 표지 오른쪽 위 모서리에 걸친다: 원 가운데가 모서리 쪽(2026-11-20 사용자 '체크표시 원을 좀 더 오른쪽으로 해서 모서리로').
+                // 책장 배지(오른쪽 아래)와 같은 걸침(0.7)
+                if (state != _CellState.normal)
+                  Positioned(
+                    left: r.edge + r.w - ControlSize.radio * 0.7,
+                    top: r.edge - ControlSize.radio * 0.3,
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0x1F191F28), offset: Offset(0, 1), blurRadius: 4)]),
+                      child: RadioMark(on: state == _CellState.picked),
+                    ),
+                  ),
                 if (shelf && state == _CellState.normal)
                   Positioned(
                     left: r.edge + r.w - _shelfBadge * 0.7,
@@ -686,9 +706,6 @@ class _BookListRow extends StatelessWidget {
   final List<BookMemo> memos;
   final VoidCallback onPress, onLongPress;
 
-  /// 메모 그림(18) 오른쪽 끝을 내용 오른쪽 끝에 맞춘다(누르는 칸 48 가운데라 남는 만큼 밀어 둔다)
-  static const _memoNudge = (Space.hit - 18) / 2;
-
   // 꾹 누르기는 공용 책 줄의 onLongPress(화면 읽기에도 꾹 누르기가 생긴다, 2026-11-19 공통 규칙: 바깥 GestureDetector였다)
   @override
   Widget build(BuildContext context) => BookRow(
@@ -700,16 +717,14 @@ class _BookListRow extends StatelessWidget {
           titleLines: 1,
           meta: sub,
           third: note,
-          trailing: memos.isEmpty
+          // 메모 단추는 제목 줄 오른쪽 끝(한줄평이 줄 폭을 다 쓰게, 2026-11-20 사용자)
+          titleTrailing: memos.isEmpty
               ? null
-              : Transform.translate(
-                  offset: const Offset(_memoNudge, 0),
-                  child: Builder(
-                    builder: (ctx) => IconBtn(
-                      label: '메모 ${memos.length}개 보기',
-                      onPress: () => _showMemos(ctx, book.id, memos),
-                      child: const LucideIcon('StickyNote', size: 18, color: AppColors.inkSoft),
-                    ),
+              : Builder(
+                  builder: (ctx) => IconBtn(
+                    label: '메모 ${memos.length}개 보기',
+                    onPress: () => _showMemos(ctx, book.id, memos),
+                    child: const LucideIcon('StickyNote', size: IconSize.small, color: AppColors.icon),
                   ),
                 ),
           onPress: onPress,

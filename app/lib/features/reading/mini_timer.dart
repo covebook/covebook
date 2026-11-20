@@ -26,6 +26,9 @@ import 'play_icons.dart';
 import 'reading_screen.dart';
 
 const _actionsW = 112.0; // 펼친 왼쪽 부분(바로가기 + 재생/일시정지)
+
+/// 펼쳤을 때 시간 오른쪽 여백(왼쪽 바로가기 그림 옆 여백과 맞춘다)
+const _openPad = Space.l;
 const _gap = 12.0;
 // 하단 탭 화면(앱 틀 tabPaths에서 읽기 탭만 뺀 것: 읽기 탭에서는 타이머를 띄우지 않는다)
 const _tabs = ['/', '/books', '/records', '/stats'];
@@ -100,7 +103,8 @@ class _MiniTimerState extends State<MiniTimer> {
     final running = _reading.running;
     final label = clock(ms);
     // 한 시간을 넘으면 숫자가 길어져 원 대신 같은 높이의 캡슐로 넓힌다
-    final timeW = label.length > 5 ? miniTimerSize + 24 : miniTimerSize;
+    // 펼치면 시간 오른쪽에 여백을 더한다: 동그라미 폭 그대로면 숫자가 캡슐 끝에 붙었다(2026-11-20 사용자 '펼쳤을 때 디자인 문제')
+    final timeW = (label.length > 5 ? miniTimerSize + 24 : miniTimerSize) + (_open ? _openPad : 0);
     final s = SettingsStore.instance;
     final reduce = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && mq.disableAnimations);
     final onTabs = _place.route == '/' && _tabs.contains(path);
@@ -191,7 +195,8 @@ class _MiniTimerState extends State<MiniTimer> {
                 final nav = widget.navigator.currentContext;
                 if (nav != null) openReadingScene(nav);
               },
-              child: const SizedBox(width: 52, height: miniTimerSize, child: Center(child: LucideIcon('BookOpen'))),
+              // 바로가기 그림은 다른 선 아이콘과 같은 회색, 재생 · 일시정지는 먹색(주된 조작)
+              child: const SizedBox(width: 52, height: miniTimerSize, child: Center(child: LucideIcon('BookOpen', color: AppColors.inkSoft))),
             ),
           ),
           divider(),
@@ -235,13 +240,14 @@ class _MiniTimerState extends State<MiniTimer> {
         // 누르는 동안 옅어진다(펼친 단추와 같은 Pressable, 2026-11-19 공통 규칙: 눌림 표시가 없었다)
         child: Pressable(
           onPress: () => setState(() => _open = !_open),
-          child: SizedBox(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
             width: timeW - hair * 2,
             height: miniTimerSize - hair * 2,
-            // 큰 글씨에서는 동그라미 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA 확인)
+            // 큰 글씨에서는 동그라미 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA 확인). 펼치면 오른쪽 여백을 더 둔다
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: EdgeInsets.only(left: 4, right: 4 + (_open ? _openPad : 0)),
                 child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: AppType.labelStrong.tnum)),
               ),
             ),

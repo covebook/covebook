@@ -143,17 +143,17 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    testWidgets('고친 것이 있으면 묻고, 계속 수정은 머물고, 버리기는 나간다', (t) async {
+    testWidgets('고친 것이 있으면 묻고, 취소는 머물고, 확인은 나간다', (t) async {
       await open(t, DraftGuard.edit(dirty: () => true, child: const Scaffold(body: Text('수정 화면'))));
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('고친 내용을 버릴까요?'), findsOneWidget);
-      await t.tap(find.text('계속 수정'));
+      expect(find.text('수정을 그만할까요?'), findsOneWidget);
+      await t.tap(find.text('취소'));
       await t.pumpAndSettle();
       expect(find.text('수정 화면'), findsOneWidget);
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      await t.tap(find.text('버리기'));
+      await t.tap(find.text('확인'));
       await t.pumpAndSettle();
       expect(find.text('수정 화면'), findsNothing);
       expect(find.text('열기'), findsOneWidget);
@@ -163,7 +163,7 @@ void main() {
       await open(t, DraftGuard(dirty: () => false, child: const Scaffold(body: Text('쓰기 화면'))));
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('쓰던 내용을 버릴까요?'), findsNothing);
+      expect(find.text('그만 쓸까요?'), findsNothing);
       expect(find.text('열기'), findsOneWidget);
     });
   });

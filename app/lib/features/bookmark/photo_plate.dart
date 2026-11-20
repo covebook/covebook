@@ -1,6 +1,6 @@
 // 사진 갈피의 사진(지금 앱 PhotoPlate.tsx): 흰 테두리를 두른 인화 사진을 한지 테이프로 붙인 모양.
 // 사진은 가로로 긴 틀에 맞춰 자르고(cover), 눌러서 원본 비율 그대로 크게 볼 수 있다(손가락으로 벌려 확대).
-// 테이프는 흰 테두리까지만 덮는다(2026-11-16 QA 은서 F9: 사진 첫 줄 글자를 가렸다). whole이면 잘라 내지 않고 사진 전체를 보인다(읽은 글과 견줄 때)
+// 테이프는 옛 앱처럼 틀 위 끝을 덮는다(2026-11-20 사용자. 2026-11-16 QA 은서 F9로 테두리만 덮게 했던 것을 되돌림). whole이면 잘라 내지 않고 사진 전체를 보인다(읽은 글과 견줄 때)
 // 인화지·테이프의 색·여백 숫자는 옛 앱 화소 값 그대로(docs/design/DESIGN.md 16장 예외)
 library;
 
@@ -109,9 +109,10 @@ class PhotoPlate extends StatelessWidget {
     final r = ratio != null && ratio! > 0 ? ratio!.toDouble() : 1.35;
     final frameRatio = whole ? r.clamp(0.5, 2.0) : photoFrameRatio(compact ? math.max(r, 1.35) : ratio);
     final innerW = width - border * 2;
-    final tapeW = compact ? 62.0 : 92.0, tapeH = compact ? 16.0 : 24.0;
-    // 테이프 아래 끝이 흰 테두리 안(사진에서 1px)에 오게 사진을 내린다
-    final top = tapeH - border - 1;
+    // 테이프 크기 · 걸침은 옛 앱 그대로: 92×30(작게 62×20), 사진틀은 12(작게 8) 내려 테이프가 틀 위 끝을 18 덮는다
+    // (2026-11-18 · 20 사용자 '원래 테이프 이렇게 아니었잖아': 테이프를 24로 줄이고 틀을 내려 테두리만 덮었더니 얹어 놓은 듯 보였다)
+    final tapeW = compact ? 62.0 : 92.0, tapeH = compact ? 20.0 : 30.0;
+    final top = compact ? 8.0 : 12.0;
     return SizedBox(
       width: width,
       child: Stack(clipBehavior: Clip.none, children: [

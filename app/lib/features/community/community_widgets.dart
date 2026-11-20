@@ -181,7 +181,7 @@ class PostCard extends StatelessWidget {
                       label: '댓글 ${p.comments}',
                       excludeSemantics: true,
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const LucideIcon('MessageCircle', size: 20, color: AppColors.inkSoft),
+                        const LucideIcon('MessageCircle', size: 20, color: AppColors.icon),
                         if (p.comments > 0) Padding(padding: const EdgeInsets.only(left: 4), child: Text('${p.comments}', style: AppType.micro)),
                       ]),
                     ),
@@ -274,7 +274,7 @@ class MoreDots extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onPress,
-          child: const Padding(padding: EdgeInsets.fromLTRB(16, 2, 0, 2), child: LucideIcon('MoreHorizontal', size: 18, color: AppColors.inkSoft)),
+          child: const Padding(padding: EdgeInsets.fromLTRB(16, 2, 0, 2), child: LucideIcon('MoreHorizontal', size: 18, color: AppColors.icon)),
         ),
       );
 }

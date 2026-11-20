@@ -229,7 +229,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               : '이어서 읽기';
 
   Future<void> _pickBook() async {
-    final r = await pickBook(context, lib, allowNone: true);
+    // 지금 책(없으면 책 없이 읽기)은 고르는 원으로 보인다(DESIGN 13장 current)
+    final a0 = _reading.active;
+    final r = await pickBook(context, lib, allowNone: true, current: (id: a0 != null ? a0.myBookId : _draftBookId));
     if (!r.picked || !mounted) return;
     final a = _reading.active;
     if (a != null && a.myBookId != r.id) {
@@ -521,6 +523,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     );
   }
 
+  Widget _maybeAvoid(Widget panel) => _open ? ToastAvoid(child: panel) : panel;
+
   /// 조작부(아래 흰 판): 1) 연결된 책 2) 시간 3) [분위기 | 재생·일시정지 | 목표]
   Widget _panel(BuildContext context, EdgeInsets insets, double vh, bool ticking) {
     final soundOnly = widget.soundOnly;
@@ -532,7 +536,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
       bottom: 0,
       child: Offstage(
         offstage: !_open,
-        child: Container(
+        // 펼친 조작부 위로 토스트를 띄운다(책을 바꿔 나눠 저장한 토스트가 시간 · 일시정지를 덮었다, 2026-11-21 촬영 확인).
+        // 판은 GlobalKey라 감싸도 상태가 그대로 옮겨진다
+        child: _maybeAvoid(Container(
           key: _panelKey,
           constraints: BoxConstraints(maxHeight: vh * 0.65),
           decoration: const BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.vertical(top: Radius.circular(Shape.sheet))),
@@ -549,7 +555,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 Expanded(
                   child: _Side(
                     icon: _soundOff ? 'VolumeX' : 'AudioLines',
-                    text: _soundOff ? [sceneName(scene), '꺼짐'].join(metaSep) : sceneName(scene),
+                    // 꺼졌으면 '꺼짐'만(분위기 이름까지 붙이면 길었다, 2026-11-20 사용자 '꺼짐 옆에 창가의 빗소리 | 이거 없애버려')
+                    text: _soundOff ? '꺼짐' : sceneName(scene),
                     label: '분위기 고르기, ${sceneName(scene)}, ${_soundOff ? '소리 꺼짐' : _settings.muted ? '음소거' : '소리 ${(_settings.volume * 100).round()}%'}',
                     onPress: _moodSheet,
                   ),
@@ -561,8 +568,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                       : _Side(icon: 'Timer', text: goalMin != null ? '목표 ${minutesLabel(goalMin)}' : '목표 없음', label: '목표 시간, ${goalMin != null ? minutesLabel(goalMin) : '목표 없음'}', onPress: _goalSheet),
                 ),
               ]),
-              // 소리 재생 실패: 예외 원문(Ambient.error) 대신 사람 말과 다시 할 곳(DESIGN 9장 실패 알림, 원문은 로그로)
-              if (_audio.error != null) const NoticeText('소리를 재생하지 못했어요. 분위기에서 다시 켜 주세요.', error: true),
+              // 소리 재생 실패는 글로 알리지 않는다: 분위기 칸이 '꺼짐'으로 보인다(2026-11-20 사용자 '저 빨간색은 왜 있어 … 다 지워', SCREENS 156 예외)
               // 소리만 듣다가 기록 시작: 같은 장면에 타이머를 띄운다
               if (soundOnly)
                 Padding(
@@ -578,7 +584,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
             ]),
           ),
-        ),
+        )),
       ),
     );
   }
@@ -634,7 +640,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
         child: Pressable(
           onPress: () => setState(() => _open = false),
           // 글자 없이 ⌄만(2026-11-17 시안)
-          child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronDown', size: 26, color: AppColors.inkSoft))),
+          child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronDown', size: 26, color: AppColors.icon))),
         ),
       ),
     ]);
@@ -680,12 +686,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
               ]),
             ),
-            // 오류 글은 앱 공통 안내 · 오류 글(NoticeText). 시간 아래 한 줄('일시정지' · '목표') 밑에서 시작한다(그 줄과 겹쳐 그려졌다)
-            if (_reading.error != null)
-              Padding(
-                padding: EdgeInsets.only(top: _captionLine(context) - 2),
-                child: const NoticeText('독서 시간을 기기에 저장하지 못했어요. 저장 공간을 확인해 주세요.', error: true, center: true),
-              ),
+            // 기기 저장 실패도 장면에 빨간 글로 보이지 않는다(2026-11-20 사용자 '다 지워', SCREENS 156 예외). 기록을 저장하지 못하면 독서 끝 저장 때 알린다
           ]),
         ),
       ),

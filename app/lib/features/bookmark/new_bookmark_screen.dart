@@ -267,11 +267,15 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             )
           else
             _photoSection(context, photo),
+          // 사진이 있으면 '문장' 이름 줄 오른쪽에 '사진만 저장'(2026-11-21 갈피 남기기 시안). 사진만 저장이면 문장 칸은 접는다
+          if (photo != null) _textHead(),
+          if (photo != null && !_photoOnly) ..._recogParts(photo),
           if (!_asPhoto)
-            // 갈피 수정과 같은 칸(form_parts)
+            // 갈피 수정과 같은 칸(form_parts). 사진이 있으면 이름은 위 줄이 대신한다
             Field(
               key: ValueKey(('text', _textVersion)),
               label: markTextLabel,
+              showLabel: photo == null,
               value: _text,
               onChange: (t) {
                 _text = t;
@@ -281,7 +285,16 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
               multiline: true,
               minHeight: markTextHeight,
             ),
+          // 줄바꿈 설정: 사진에서 읽은 글을 어떻게 나눌지(시트에서 고른다. 칸 두 줄을 늘 펼쳐 두지 않는다, 시안)
+          if (photo != null && !_photoOnly && _recog?.state == 'done' && !_recog!.empty) ...[
+            ListItem(label: '줄바꿈 설정', value: _lineLabel, chevron: true, onPress: _lineSheet),
+            if (_modeNote && _edited) ...[
+              const NoticeText('고친 글은 그대로 둬요. 고른 방식으로 다시 나누려면 아래 \'다시 나누기\'를 눌러 주세요. 고친 곳은 사라져요.'),
+              TextLink(label: '다시 나누기', onPress: _redo, start: true),
+            ],
+          ],
           if (photo != null && !_photoOnly) ListItem(label: '원본 사진도 보관', right: Toggle(label: '원본 사진도 보관', value: _keepPhoto, onChange: (v) => setState(() => _keepPhoto = v))),
+          if (photo != null) const SizedBox(height: Space.l),
           Field(
             label: '쪽수 (선택)',
             unit: '쪽',
@@ -297,29 +310,87 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
     );
   }
 
-  /// 사진을 넣은 뒤: 사진 · 칩 줄 · 사진만 저장 · 글자 읽기 결과(build가 길어 나눴다, 2026-11-19)
+  /// 사진을 넣은 뒤: 테이프로 붙인 사진 + 오른쪽 아래 '⋯'(다시 찍기 · 다른 사진 · 사진 빼기)
   Widget _photoSection(BuildContext context, _Photo photo) {
     final width = MediaQuery.sizeOf(context).width;
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.l),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // 자른 사진(눌러서 크게 보기). 사진만 저장이면 이 모양 그대로 저장된다. 글로 남길 때는 읽은 글과 견주게 잘라 내지 않고 다 보인다(QA F9)
-        Center(child: PhotoPlate(uri: photo.uri, ratio: photo.ratio, width: math.min(_photoOnly ? 300 : 220, width - Space.page * 2), seed: 'new', whole: !_photoOnly)),
-        PhotoChips(
-          onCamera: () => _fromPhoto('camera'),
-          onLibrary: () => _fromPhoto('library'),
-          onRemove: () => setState(() {
-            _photo = null;
-            _recog = null;
-            _modeNote = false;
-          }),
+        Center(
+          child: PhotoWithMenu(
+            plate: PhotoPlate(uri: photo.uri, ratio: photo.ratio, width: math.min(_photoOnly ? 300 : 220, width - Space.page * 2), seed: 'new', whole: !_photoOnly),
+            onCamera: () => _fromPhoto('camera'),
+            onLibrary: () => _fromPhoto('library'),
+            onRemove: () => setState(() {
+              _photo = null;
+              _recog = null;
+              _modeNote = false;
+            }),
+          ),
         ),
         if (_msg case final msg?) NoticeText(msg.text, error: msg.error, center: true),
-        ListItem(label: '사진만 저장', sub: '글자 없이 사진 그대로 남겨요', right: Toggle(label: '사진만 저장', value: _photoOnly, onChange: _choosePhotoOnly)),
-        if (!_photoOnly) ..._recogParts(photo),
       ]),
     );
   }
+
+  /// '문장' 이름 줄: 왼쪽 이름, 오른쪽 '사진만 저장' 스위치(줄 전체가 아니라 오른쪽 글자 + 스위치만 누른다)
+  Widget _textHead() => Padding(
+        padding: const EdgeInsets.only(bottom: Space.xs),
+        child: Row(children: [
+          Expanded(child: ExcludeSemantics(child: Text(markTextLabel, style: AppType.label))),
+          Semantics(
+            container: true,
+            toggled: _photoOnly,
+            label: '사진만 저장',
+            onTap: () => _choosePhotoOnly(!_photoOnly),
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _choosePhotoOnly(!_photoOnly),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: Space.hit),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('사진만 저장', style: AppType.sub),
+                  const SizedBox(width: Space.s),
+                  IgnorePointer(child: Toggle(label: '사진만 저장', value: _photoOnly, onChange: (_) {})),
+                ]),
+              ),
+            ),
+          ),
+        ]),
+      );
+
+  /// 줄바꿈 설정 값 이름(시안 '자동으로 잇기')
+  String get _lineLabel => _lineMode == LineMode.keep
+      ? '줄바꿈 그대로'
+      : switch (_words) {
+          WordJoin.auto => '자동으로 잇기',
+          WordJoin.attach => '붙여 잇기',
+          WordJoin.space => '띄어 잇기',
+        };
+
+  /// 줄바꿈 설정 시트: 하나 고르기 넷(줄 끝 낱말을 알아서 · 붙여 · 띄어 잇기, 줄바꿈 그대로(시)). 고르면 바로 닫히고 글을 다시 나눈다
+  Future<void> _lineSheet() => showSheet<void>(
+        context,
+        title: '줄바꿈 설정',
+        description: '사진의 줄이 바뀐 곳을 어떻게 이을지 골라요.',
+        builder: (ctx) {
+          void pick(LineMode m, [WordJoin? w]) {
+            Navigator.pop(ctx);
+            if (w != null && w != _words) _changeWords(w);
+            if (m != _lineMode) _changeLineMode(m);
+          }
+
+          final join = _lineMode == LineMode.join;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            FilterOption(label: '자동으로 잇기', sub: '낱말 가운데서 끊긴 곳만 붙여요', selected: join && _words == WordJoin.auto, onPress: () => pick(LineMode.join, WordJoin.auto)),
+            FilterOption(label: '붙여 잇기', selected: join && _words == WordJoin.attach, onPress: () => pick(LineMode.join, WordJoin.attach)),
+            FilterOption(label: '띄어 잇기', selected: join && _words == WordJoin.space, onPress: () => pick(LineMode.join, WordJoin.space)),
+            FilterOption(label: '줄바꿈 그대로', sub: '시처럼 사진의 줄을 그대로 둬요', selected: !join, onPress: () => pick(LineMode.keep)),
+          ]);
+        },
+      );
 
   /// 글자 읽기: 읽는 중 · 실패(다시 인식) · 빈 결과(사진만 저장) · 읽은 결과와 줄 나누기 방식
   List<Widget> _recogParts(_Photo photo) {
@@ -349,39 +420,8 @@ class _NewBookmarkScreenState extends State<NewBookmarkScreen> {
             Btn(label: '사진만 저장하기', kind: 'secondary', size: 'medium', onPress: () => _choosePhotoOnly(true)),
           ]),
         ),
-      if (recog?.state == 'done' && !empty)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.s),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('읽은 글자를 사진과 비교해 고쳐 주세요. 사진을 누르면 크게 볼 수 있어요.${unsure > 0 ? ' 흐릿하게 읽힌 줄이 $unsure개 있어요.' : ''}', style: AppType.sub),
-            Padding(
-              padding: const EdgeInsets.only(top: Space.s),
-              // 하나 고르기: TDS에 칩이 없어 SegmentedControl
-              child: Segmented<LineMode>(
-                items: const [(LineMode.join, '줄 끝 이어 쓰기'), (LineMode.keep, '줄바꿈 그대로(시)')],
-                value: _lineMode,
-                onChange: (m) => _changeLineMode(m),
-              ),
-            ),
-            // 한글 줄 끝: 낱말 가운데서 끊긴 곳만 붙이기(알아서)·늘 붙이기·늘 띄우기(QA F5)
-            if (_lineMode == LineMode.join)
-              Padding(
-                padding: const EdgeInsets.only(top: Space.s),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Text('줄이 바뀐 곳', style: AppType.caption),
-                  Segmented<WordJoin>(
-                    items: const [(WordJoin.auto, '알아서 잇기'), (WordJoin.attach, '붙여 잇기'), (WordJoin.space, '띄어 잇기')],
-                    value: _words,
-                    onChange: (w) => _changeWords(w),
-                  ),
-                ]),
-              ),
-            if (_modeNote && _edited) ...[
-              const NoticeText('고친 글은 그대로 둬요. 고른 방식으로 다시 나누려면 아래 \'다시 나누기\'를 눌러 주세요. 고친 곳은 사라져요.'),
-              TextLink(label: '다시 나누기', onPress: _redo, start: true),
-            ],
-          ]),
-        ),
+      // 흐릿하게 읽힌 줄이 있으면 사진과 견줘 보라고 알린다(읽은 글을 사진과 비교해 고치는 화면)
+      if (recog?.state == 'done' && !empty && unsure > 0) NoticeText('흐릿하게 읽힌 줄이 $unsure개 있어요. 사진을 누르면 크게 볼 수 있어요.'),
     ];
   }
 }

@@ -90,8 +90,8 @@ void main() {
     await pick(t, '모순');
     await t.tap(find.text('1권 삭제'));
     await t.pumpAndSettle();
-    // 확인 시트의 삭제 단추
-    await t.tap(find.text('삭제').last);
+    // 확인 시트의 확인 단추(취소 · 확인 좌우, 2026-11-20 사용자)
+    await t.tap(find.text('확인').last);
     await t.pump();
     await t.pump(const Duration(milliseconds: 300));
     expect(plain('1권을 삭제했어요.'), findsOneWidget);

@@ -401,13 +401,12 @@ class _Bar extends StatelessWidget {
         }
 
         final hair = 2 / MediaQuery.devicePixelRatioOf(context);
-        final divider = Hairline.of(context);
         final actions = Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (i, b) in buttons.indexed) ...[if (i > 0) const SizedBox(width: _btnBetween), b],
         ]);
         final brandW = _brandLine + Space.m + tw(_brand);
         final actionsW = buttons.fold<double>(0, (a, b) => a + _BarBtn.chrome + tw(b.label)) + _btnBetween * (buttons.length - 1);
-        if (brandW + _brandRoom + divider + _btnBetween + actionsW > c.maxWidth) return Center(child: actions);
+        if (brandW + _brandRoom + actionsW > c.maxWidth) return Center(child: actions);
         return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Semantics(
             label: _brand,
@@ -418,8 +417,8 @@ class _Bar extends StatelessWidget {
               Text(_brand, style: AppType.sub),
             ]),
           ),
-          // 세로 구분선은 Hairline(공통 규칙 7장, 화소 2개 상자였다)
-          Row(mainAxisSize: MainAxisSize.min, children: [const Hairline(vertical: true, length: 28), const SizedBox(width: _btnBetween), actions]),
+          // 서명과 단추 사이 세로선은 두지 않는다(2026-11-18 사용자 '이거 사이에 | 있을 필요도 없고')
+          actions,
         ]);
       });
 }
@@ -450,9 +449,10 @@ class _BarBtn extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: _pad),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 // 진행은 공용 작은 원(Spinner 20, 공통 규칙 11장)
-                busy ? const Spinner(color: AppColors.accent) : LucideIcon(icon, size: _icon),
+                // 아이콘 · 글자는 옅은 회색(2026-11-18 사용자 '공유 버튼이랑 이런 게 너무 진해': 먹색이었다)
+                busy ? const Spinner(color: AppColors.accent) : LucideIcon(icon, size: _icon, color: AppColors.icon),
                 const SizedBox(width: _gap),
-                Text(label, style: AppType.sub.copyWith(color: AppColors.ink)),
+                Text(label, style: AppType.sub),
               ]),
             ),
           ),
@@ -547,11 +547,13 @@ class _EditBookmarkState extends State<_EditBookmark> {
             Padding(
               padding: const EdgeInsets.only(bottom: Space.l),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Center(child: PhotoPlate(uri: _photo.uri!, ratio: _photo.ratio, width: math.min(300, width - Space.page * 2), seed: widget.m.id)),
-                PhotoChips(
-                  onCamera: () => _swap('camera'),
-                  onLibrary: () => _swap('library'),
-                  onRemove: _text.trim().isNotEmpty ? () => setState(() => _photo = (uri: null, ratio: null, changed: true)) : null,
+                Center(
+                  child: PhotoWithMenu(
+                    plate: PhotoPlate(uri: _photo.uri!, ratio: _photo.ratio, width: math.min(300, width - Space.page * 2), seed: widget.m.id),
+                    onCamera: () => _swap('camera'),
+                    onLibrary: () => _swap('library'),
+                    onRemove: _text.trim().isNotEmpty ? () => setState(() => _photo = (uri: null, ratio: null, changed: true)) : null,
+                  ),
                 ),
                 if (_msg case final msg?) NoticeText(msg.text, error: msg.error, center: true),
               ]),

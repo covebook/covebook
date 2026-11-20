@@ -93,15 +93,15 @@ void main() {
   });
 
   group('고치는 화면 나가기 확인(12장)', () {
-    testWidgets('책 정보 수정: 고치고 뒤로 가면 묻고, 계속 수정이면 머문다', (t) async {
+    testWidgets('책 정보 수정: 고치고 뒤로 가면 묻고, 취소면 머문다', (t) async {
       _use(_lib());
       await _push(t, const EditBookScreen(id: 'b1'));
       await t.enterText(find.widgetWithText(TextField, '작별하지 않는다'), '작별하지 않는다 (개정판)');
       await t.pump();
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('고친 내용을 버릴까요?'), findsOneWidget);
-      await t.tap(find.text('계속 수정'));
+      expect(find.text('수정을 그만할까요?'), findsOneWidget);
+      await t.tap(find.text('취소'));
       await t.pumpAndSettle();
       expect(find.text('열기'), findsNothing);
     });
@@ -111,7 +111,7 @@ void main() {
       await _push(t, const SessionEditScreen(id: 's1'));
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('고친 내용을 버릴까요?'), findsNothing);
+      expect(find.text('수정을 그만할까요?'), findsNothing);
       expect(find.text('열기'), findsOneWidget);
     });
 

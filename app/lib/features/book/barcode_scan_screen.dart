@@ -138,8 +138,8 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
     // 찾아 둔 책이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
     return DraftGuard(
       dirty: () => _dirty,
-      title: '찾은 책을 버릴까요?',
-      keep: '계속 찾기',
+      title: '바코드 찾기를 그만할까요?',
+      body: '지금 나가면 찾은 책은 추가되지 않아요.',
       child: Screen(
         title: '바코드로 찾기',
         scroll: false,

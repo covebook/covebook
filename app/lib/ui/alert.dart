@@ -1,5 +1,5 @@
 // 앱이 직접 그리는 확인창(지금 앱 ui/alert.tsx) = TDS Dialog.
-//  - 단추 하나(알림 확인) = AlertDialog: 제목 · 설명 · 글자 단추 하나(AlertDialog.AlertButton = TextButton medium · bold · blue500 자리에 갈색)
+//  - 단추 하나(알림 확인): 제목 · 설명 · 폭 가득 단추 하나(primary large). TDS AlertDialog의 오른쪽 글자 단추는 2026-11-20 사용자 지적으로 쓰지 않는다
 //  - 단추 둘 = ConfirmDialog: 왼쪽 취소 단추(dark weak large) · 오른쪽 확인 단추(primary fill large). 글자가 길면 세로로 쌓고 단추마다 전체 폭
 //  - 셋 이상(TDS에 없음 → 우리 값): 세로로 쌓고 취소는 맨 아래 글자 단추
 // 제목 t4 Bold grey800 · 설명 t6 Medium grey600(AlertDialog/ConfirmDialog.Title · Description 기본값).
@@ -96,14 +96,10 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
     String leftKind(AlertButton b) => b.style == AlertStyle.destructive ? 'dangerFill' : 'secondary';
 
     Widget body(double width) {
-      // AlertDialog: 단추 하나는 글자 단추(TextButton medium · bold · 갈색), 오른쪽 끝(자리는 공식 없음 → 우리 값)
+      // 단추 하나: 폭 가득 채운 단추(large). 오른쪽 끝 글자 단추는 자리가 어색하고 창 아래가 비어 보였다(2026-11-20 사용자 '확인 위치가 이상하고 밑으로 너무 길지 않나')
       if (list.length == 1 && !widget.stacked) {
         final b = list.first;
-        return Align(
-          alignment: Alignment.centerRight,
-          // start: 글자 폭만큼(가운데 맞춤 TextLink는 줄 폭을 다 차지한다)
-          child: TextLink(label: b.text, bold: true, start: true, danger: b.style == AlertStyle.destructive, onPress: () => Navigator.pop(context, b)),
-        );
+        return btn(b, kindOf(b));
       }
       // ConfirmDialog: 취소(dark weak) 왼쪽 · 확인(primary fill) 오른쪽. 두 단추 높이는 같게(큰 글씨에서 한쪽만 두 줄이어도 어긋나지 않게, 2026-11-16 QA 영숙 F6)
       if (list.length == 2 && !widget.stacked) {
@@ -123,6 +119,20 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
           btn(right, kindOf(right)),
           const SizedBox(height: Space.s),
           btn(left, leftKind(left)),
+        ]);
+      }
+      // 행동 둘 + 취소(넣기 · 빼기 · 나중에): 행동 둘은 좌우(첫째가 오른쪽 primary), 취소는 아래 글자 단추(2026-11-20 사용자 '굳이 2줄로 놔야 돼? 좌우로')
+      if (actions.length == 2 && cancel != null && !widget.stacked && _fits(context, width, actions)) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(child: btn(actions[1], leftKind(actions[1]))),
+              const SizedBox(width: Space.s),
+              Expanded(child: btn(actions[0], kindOf(actions[0]))),
+            ]),
+          ),
+          const SizedBox(height: Space.s),
+          btn(cancel, 'ghost'),
         ]);
       }
       // 셋 이상 · stacked(TDS에 없음 → 우리 값): 주요 → 보조 → 맨 아래 취소 글자 단추
@@ -152,7 +162,7 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
                 ]),
               ),
             ),
-            const SizedBox(height: Space.xl),
+            const SizedBox(height: Space.page),
             body(box.maxWidth),
           ]),
         ),

@@ -10,8 +10,8 @@ import '../../ui/alert.dart';
 import '../../ui/brand_button.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../settings/settings_screen.dart' show showPrivacySheet;
-import '../settings/terms.dart' show showTermsSheet;
+import '../settings/settings_screen.dart' show openPrivacyPage;
+import '../settings/terms.dart' show openTermsPage;
 
 /// 로그인 화면 맨 위 책장 그림(우리 앱이 그린 책장 사진, tool/make_login_shelf.py). 이 파일만 바꾸면 그림이 바뀐다
 const loginShelfAsset = 'assets/login/shelf.webp';
@@ -237,10 +237,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _footLink('이용약관', () => showTermsSheet(context)),
+                            _footLink('이용약관', () => openTermsPage(context)),
                             const MetaBar(),
                             // 내 정보와 같은 앱 안 안내 시트(전문은 시트 안 단추로 웹, DESIGN 9장 같은 일 같은 동작)
-                            _footLink('개인정보 처리방침', () => showPrivacySheet(context)),
+                            _footLink('개인정보 처리방침', () => openPrivacyPage(context)),
                           ],
                         ),
                         const SizedBox(height: Space.s),

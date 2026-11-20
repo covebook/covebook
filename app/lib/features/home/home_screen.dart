@@ -73,6 +73,7 @@ import '../../ui/scene.dart';
 import '../../ui/theme.dart';
 import '../../ui/a11y_text.dart';
 import '../book/add_book_screen.dart' show openAddBook;
+import '../book/binding_screen.dart' show openBindingEditor;
 
 /// 앱이 깨어난 때(main이 채운다). 켜고 책장이 다 될 때까지를 잰다
 DateTime bootAt = DateTime.now();
@@ -967,11 +968,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     setState(() {});
   }
 
-  /// 꾸미기 아래 칸: 책 배치는 고른 책 조작부(고르기 전에는 안내와 책 측면), 선반·벽지는 고르기 칸
+  /// 꾸미기 아래 칸: 책 배치는 고른 책 조작부(고르기 전에는 안내 하나), 선반·벽지는 고르기 칸
   Widget _decoBottom() {
     if (_decoTab != DecorateTab.books) return SkinSheet(tab: _decoTab, choice: skinChoice, onPick: _pickSkin);
     final p = _panel;
-    if (p == null) return DecorateHint(msg: _editMsg, spine: spineLook.value, onSpine: _pickSpine);
+    if (p == null) return DecorateHint(msg: _editMsg);
+    final id = _editId;
     return DecoratePanel(
       bookKey: _editId,
       title: p.title,
@@ -988,6 +990,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       onLean: _editLean,
       onSpin: _editSpin,
       onDepth: _editDepth,
+      spine: spineLook.value,
+      onSpine: _pickSpine,
+      onBinding: () {
+        if (id != null) openBindingEditor(context, id);
+      },
     );
   }
 
@@ -1914,6 +1921,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                   },
                 ),
               );
+    // 꾸미는 동안은 책장을 조금 위로(꾸미기 맨 위 줄이 머리줄보다 낮다: 줄과 책장 사이가 넓었다, 2026-11-20 사용자 '밑에 책장 조금 위로 올려').
+    // 배치(줄 높이 · 굽기)는 그대로 두고 그린 자리만 옮긴다(누르기 · 끌기도 같이 옮겨진다)
+    Widget liftedPage(double headerOpacity) => TweenAnimationBuilder<double>(
+          tween: Tween(end: _decorating ? homeHeaderHeight - decoBarHeight : 0),
+          duration: _reduceMotion ? Duration.zero : const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          builder: (_, dy, child) => Transform.translate(offset: Offset(0, -dy), child: child),
+          child: shelfPage(headerOpacity),
+        );
     // 꾸미는 중 기기 뒤로 = 꾸미기 끝내기(끄던 책은 제자리로). 앱 껍데기는 꾸미는 동안(탭 바가 숨은 동안) 뒤로를 홈에 맡긴다(2026-11-15 QA 민혁 F2)
     return PopScope(
       canPop: !_decorating,
@@ -1949,14 +1965,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                       behavior: HitTestBehavior.translucent,
                       excludeFromSemantics: true, // 알림만 띄우는 밀기: 화면 읽기에 이름 없는 전체 칸을 만들지 않는다(영숙 F10)
                       onHorizontalDragEnd: _decorating ? null : _noPastShelf,
-                      child: shelfPage(1),
+                      child: liftedPage(1),
                     )
                   : YearPager(
                       key: _pagerKey,
                       bookcases: _bookcases,
                       blocked: _decorating || _drag != null || _head != null,
                       onPinch: (v) => setState(() => _pinching = v),
-                      current: shelfPage,
+                      current: liftedPage,
                     ),
             ),
           // 화면 위 끝 덮개(HeaderVeil)는 뺐다: 내리면 위가 뿌옇게 덮였다(2026-11-18 사용자 '상단 블러는 없애'). 하단바 쪽 덮개만 남긴다
@@ -1985,7 +2001,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
               left: 0,
               right: 0,
               top: 0,
-              height: pad.top + homeHeaderHeight,
+              height: pad.top + decoBarHeight,
               child: ColoredBox(
                 color: AppColors.bg,
                 child: Padding(
@@ -2209,6 +2225,9 @@ const _fadeStops = [(0.0, 0.0), (0.2, 0.05), (0.4, 0.2), (0.6, 0.48), (0.8, 0.8)
 /// (2026-11-10 사용자 '책장 좀 더 높이', '2026이랑 나의 책장 사이 간격 줄이고': 아래 여백 12 → 4, 해 위 4 → −2)
 const _headerBottom = 4.0;
 double get homeHeaderHeight => TabHeader.paddingTop + rnPx(TypeSpecs.title.line) - 2 + rnPx(TypeSpecs.secondary.line) + _headerBottom;
+
+/// 꾸미기 맨 위 줄 높이: 낮은 전환 칸(누르는 자리 48) + 위아래 4. 머리줄보다 낮아 꾸미는 동안 책장이 그만큼 위로 온다(liftedPage)
+const decoBarHeight = Space.hit + Space.xs * 2;
 
 /// 책장 줄 배치에서 하단바 몫(지금 앱 navigation.shelfReserve)
 const navigationShelfReserve = 78.0;

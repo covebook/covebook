@@ -277,33 +277,40 @@ class _AppShellState extends State<AppShell> {
           '앱이 ${formatDuration(it.gapMs)} 꺼져 있어서 그 시간은 뺐어요. 마지막으로 확인된 $hm까지 ${withJosa(formatDuration(it.countedMs), '을', '를')} 읽었어요.');
       return;
     }
-    // 꺼져 있던 시간을 넣을지 먼저 묻는다(사용자 결정 2026-11-15 '물어보기'). 넣거나 빼도 안내창이 떠 있던 동안은 읽은 시간에 들어간다
+    // 꺼져 있던 시간을 넣을지 먼저 묻는다(사용자 결정 2026-11-15 '물어보기'). 넣거나 빼도 안내창이 떠 있던 동안은 읽은 시간에 들어간다.
+    // 고르면 바로 이어서 읽는다: 그 뒤 '이어서 읽을까요?'를 또 물었다(2026-11-20 사용자 '결국 둘 다 멈춘 거잖아'). 끝내기는 읽기 장면에서.
+    // 넣기 · 빼기는 좌우 두 단추(2026-11-20 사용자 '굳이 2줄로 놔야 돼? 좌우로'), 나중에는 아래 글자 단추
     appAlert(
       context,
       '지난 독서가 중간에 멈췄어요',
-      '마지막으로 확인된 $hm까지 ${withJosa(formatDuration(it.countedMs), '을', '를')} 읽었어요. 앱이 꺼져 있던 ${formatDuration(it.gapMs)}도 읽은 시간에 넣을까요?',
+      '마지막으로 확인된 $hm까지 ${withJosa(formatDuration(it.countedMs), '을', '를')} 읽었어요. 앱이 꺼져 있던 ${formatDuration(it.gapMs)}도 읽은 시간에 넣고 이어서 읽을까요?',
       [
-        AlertButton('넣기', onPress: () => _askContinue(true)),
-        AlertButton('빼기', onPress: () => _askContinue(false)),
+        AlertButton('넣기', onPress: () => _continueNow(true)),
+        AlertButton('빼기', onPress: () => _continueNow(false)),
         AlertButton('나중에 정하기(일시정지로 둠)', style: AlertStyle.cancel, onPress: reading.dismissInterrupted),
       ],
-      true,
-      true,
     );
   }
 
-  /// 꺼져 있던 시간을 정한 뒤: 이어 읽기 · 여기서 끝내기 · 나중에
-  void _askContinue(bool includeGap, [String? title, String? message]) {
+  /// 꺼져 있던 시간을 정하고 바로 이어서 읽기(읽기 장면을 연다)
+  void _continueNow(bool includeGap) {
+    final reading = ReadingStore.instance;
+    if (reading.interrupted == null || !mounted) return;
+    reading.resumeInterrupted(includeGap: includeGap);
+    // 소리를 켜 둔 채 꺼졌으면 다시 켠다(이어 읽기 뒤 빗소리가 꺼져 있었다, 2026-11-15 QA 수아 F2)
+    Ambient.instance.resumeIfWanted();
+    openReadingScene(context);
+  }
+
+  /// 묻지 않고 정한 경우(1분 미만은 넣고, 3시간 넘으면 뺀다): 이어 읽기 · 여기서 끝내기 · 나중에
+  void _askContinue(bool includeGap, String title, String message) {
     final reading = ReadingStore.instance;
     final it = reading.interrupted;
     if (it == null || !mounted) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final total = it.countedMs + (includeGap ? now - it.lastBeat : now - it.reopenAt);
     appAlert(
       context,
-      title ?? '이어서 읽을까요?',
-      // 안내창이 떠 있던 시간도 읽은 시간에 들어간다: 앞 창의 '…까지 0분'과 달라 보여 그 까닭을 글에 넣는다(2026-11-20 QA)
-      message ?? '안내가 떠 있던 시간까지 지금 ${withJosa(formatDuration(total), '을', '를')} 읽었어요.',
+      title,
+      message,
       [
         AlertButton('이어서 읽기', onPress: () {
           reading.resumeInterrupted(includeGap: includeGap);

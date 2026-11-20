@@ -92,7 +92,7 @@ void main() {
             child: Scaffold(body: Align(alignment: Alignment.bottomCenter, child: child)),
           ),
         );
-    Widget panel({double scale = 1}) => host(
+    Widget panel({double scale = 1, ValueChanged<SpineLook>? onSpine, VoidCallback? onBinding}) => host(
           DecoratePanel(
             title: '작별하지 않는다',
             pose: Pose.upright,
@@ -107,6 +107,9 @@ void main() {
             onLean: (_) {},
             onSpin: (_) {},
             onDepth: (_) {},
+            spine: SpineLook.color,
+            onSpine: onSpine ?? (_) {},
+            onBinding: onBinding ?? () {},
           ),
           scale: scale,
         );
@@ -127,14 +130,28 @@ void main() {
       expect(done, 1);
     });
 
-    testWidgets('책 고르기 전: 떠 있는 안내와 책 측면 고르기, 2배 글자에서도 넘치지 않는다', (tester) async {
-      final picked = <SpineLook>[];
-      await tester.pumpWidget(host(DecorateHint(msg: null, spine: SpineLook.color, onSpine: picked.add), scale: 2));
+    testWidgets('책 고르기 전: 떠 있는 안내 하나(책 측면은 책을 고른 뒤 겉모습에), 2배 글자에서도 넘치지 않는다', (tester) async {
+      await tester.pumpWidget(host(const DecorateHint(msg: null), scale: 2));
       expect(tester.takeException(), isNull);
-      expect(find.text('책을 누르거나 끌어보세요'), findsOneWidget);
+      expect(find.text('책을 하나 골라 주세요'), findsOneWidget);
       expect(find.text('책등'), findsNothing);
+      expect(find.text('실물 측면'), findsNothing);
+    });
+
+    testWidgets('고른 책: 움직임 | 겉모습 전환 칸, 겉모습에서 책 측면 · 이 책 장정', (tester) async {
+      final picked = <SpineLook>[];
+      var binding = 0;
+      await tester.pumpWidget(panel(onSpine: picked.add, onBinding: () => binding++));
+      expect(find.text('움직임'), findsOneWidget);
+      expect(find.text('실물 측면'), findsNothing);
+      await tester.tap(find.text('겉모습'));
+      await tester.pump();
+      expect(find.text('앞뒤'), findsNothing);
       await tester.tap(find.text('실물 측면'));
       expect(picked, [SpineLook.photo]);
+      await tester.tap(find.text('이 책 장정'));
+      expect(binding, 1);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('선반 탭은 선반·벽(틀), 벽지 탭은 벽지만. 고르면 그 조합을 넘긴다', (tester) async {
@@ -144,7 +161,8 @@ void main() {
       expect(find.text('선반'), findsOneWidget);
       expect(find.text('벽'), findsOneWidget);
       expect(find.text('벽지'), findsNothing);
-      await tester.tap(find.text(plankSkins['walnut']!.name));
+      // 선반 · 벽 둘 다 '호두나무'(묶음 이름이 '벽'이라 '호두나무 벽'으로 쓰지 않는다): 위가 선반
+      await tester.tap(find.text(plankSkins['walnut']!.name).first);
       expect(picked.single, defaultSkin.copyWith(plank: 'walnut'));
       await tester.pumpWidget(host(SkinSheet(tab: DecorateTab.wall, choice: defaultSkin, onPick: picked.add)));
       expect(find.text('벽지'), findsOneWidget);

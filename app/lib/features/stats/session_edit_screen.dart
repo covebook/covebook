@@ -120,7 +120,7 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
     final endOver = total != null && ep != null && ep > total;
     final badRange = sp != null && ep != null && ep < sp;
     final pageBad = startOver || endOver || badRange;
-    // 고친 것이 있으면 나갈 때 묻는다(공통 규칙 12장 고치는 화면: '고친 내용을 버릴까요?' + '계속 수정'). 저장 · 삭제 뒤 닫기는 pop이라 묻지 않는다
+    // 고친 것이 있으면 나갈 때 묻는다(공통 규칙 12장 고치는 화면: '수정을 그만할까요?' + 취소 · 확인). 저장 · 삭제 뒤 닫기는 pop이라 묻지 않는다
     return DraftGuard.edit(
       dirty: () => _dirty,
       child: Screen(

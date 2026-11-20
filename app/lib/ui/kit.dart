@@ -146,6 +146,9 @@ abstract final class Shape {
   /// 고르는 큰 칸(Choice) 14 · 전환 칸 바깥 12 · 고른 칸 9 · 칩 알약
   static const choice = 14.0, segmented = 12.0, segment = 9.0, pill = 999.0;
 
+  /// 낮은 전환 칸(머리줄 안, 회색 칸 36): 바깥 8 · 고른 칸 6. 높이에 비해 12 · 9가 알약처럼 너무 둥글었다(2026-11-20 사용자 '버튼 모서리가 유난히 둥근데')
+  static const segmentedCompact = 8.0, segmentCompact = 6.0;
+
   /// 표지 · 대체 표지 · 줄 안 막대 끝 3
   static const cover = 3.0;
 
@@ -158,7 +161,7 @@ abstract final class Shape {
   /// 이름 → 값(토큰 내보내기 · 검사용)
   static const all = <String, double>{
     'button': button, 'input': input, 'sheet': sheet, 'dialog': dialog, 'tag': tag, 'card': card,
-    'choice': choice, 'segmented': segmented, 'segment': segment, 'pill': pill, 'cover': cover,
+    'choice': choice, 'segmented': segmented, 'segment': segment, 'segmentedCompact': segmentedCompact, 'segmentCompact': segmentCompact, 'pill': pill, 'cover': cover,
   };
 }
 
@@ -210,8 +213,11 @@ abstract final class IconSize {
   /// 이미 넣음 체크(AddedMark) 20 · 굵기 2, 고른 원 안 흰 체크 굵기 3
   static const mark = 20.0, markStroke = 2.0, checkStroke = 3.0;
 
+  /// 줄 안 작은 표시 아이콘(내 책 목록 메모 · 갈피 카드 사진 표시): 18
+  static const small = 18.0;
+
   static const all = <String, double>{
-    'base': base, 'chevron': chevron, 'head': head, 'back': back, 'stroke': stroke, 'mark': mark, 'markStroke': markStroke, 'checkStroke': checkStroke,
+    'base': base, 'chevron': chevron, 'head': head, 'back': back, 'stroke': stroke, 'mark': mark, 'markStroke': markStroke, 'checkStroke': checkStroke, 'small': small,
   };
 }
 
@@ -220,8 +226,8 @@ abstract final class CoverSize {
   /// 책 한 줄(BookRow): 작게 40(고르기 · 선택 · 바코드 · 가져오기 · 읽기 목록 · 통계) · 보통 64(검색 결과 · 감상 목록) · 크게 80(내 책 목록)
   static const row = 40.0, result = 64.0, list = 80.0;
 
-  /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 120, 책 확인(추가 전) 120, 책 정보 수정 96
-  static const head = 140.0, feature = 120.0, confirm = 120.0, edit = 96.0;
+  /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 120, 책 확인(추가 전) 120, 책 정보 수정 120(2026-11-21 시안: 표지 옆 제목 · 저자 두 칸 높이)
+  static const head = 140.0, feature = 120.0, confirm = 120.0, edit = 120.0;
 
   /// 창 · 시트 안 표지: '추가했어요' 88, 저장했어요 창 72(사용자 시안), 책장에 꽂기 68, 숨기기 · 삭제 확인 56
   static const added = 88.0, saved = 72.0, place = 68.0, sheet = 56.0;
@@ -275,10 +281,10 @@ class Chevron extends StatelessWidget {
   Widget build(BuildContext context) => LucideIcon('ChevronRight', size: IconSize.chevron, color: color);
 }
 
-/// 머리줄 아이콘(검색 · + · 공유 · 더 보기 · 필터 · 보기 바꾸기): TDS Icon Button iconSize 기본 24 · 선 1.6 · 회색 grey600
-/// (아이콘 색 기본값은 공식 없음 → 지금 앱 '우측 상단 아이콘 회색', 2026-11-18 사용자)
+/// 머리줄 아이콘(검색 · + · 공유 · 더 보기 · 필터 · 보기 바꾸기): TDS Icon Button iconSize 기본 24 · 선 1.6 · 회색 [AppColors.icon]
+/// (아이콘 색 기본값은 공식 없음 → 지금 앱 '우측 상단 아이콘 회색', 2026-11-18 사용자 · 11-18 '아이콘 색 좀 연하게, 통일')
 class HeadIcon extends StatelessWidget {
-  const HeadIcon(this.name, {super.key, this.color = AppColors.inkSoft});
+  const HeadIcon(this.name, {super.key, this.color = AppColors.icon});
   final String name;
   final Color color;
 
@@ -462,6 +468,9 @@ class NavBar extends StatelessWidget {
   }
 }
 
+/// 화면 아래에 붙인 단추 줄 바로 위 흰 그라데이션 높이(2026-11-20 사용자 '윗부분은 살짝 그라데이션')
+const footerFade = Space.page;
+
 class Screen extends StatelessWidget {
   const Screen({
     super.key,
@@ -479,7 +488,7 @@ class Screen extends StatelessWidget {
     this.pinned,
     this.fixedHead = false,
     this.background = AppColors.bg,
-    this.pinFooter = false,
+    this.pinFooter = true,
   });
   final List<Widget> children;
   final String? title;
@@ -490,8 +499,9 @@ class Screen extends StatelessWidget {
   final double bottomPad;
   final Widget? footer;
 
-  /// 스크롤하는 화면에서도 아래 단추 줄을 화면 아래에 붙여 둔다(키보드가 열려 있을 때는 내용 끝으로).
-  /// 긴 목록에서 고르는 화면만(여러 권 고르기 'N권 추가'). 2026-11-19 '고정 다 없애'의 예외: 목록 끝까지 내려야 단추가 보였다(2026-11-20 QA)
+  /// 스크롤하는 화면에서도 아래 단추 줄을 화면 아래에 붙여 둔다(키보드가 열려 있을 때는 내용 끝으로). 기본으로 붙인다:
+  /// 2026-11-20 사용자 '하단바 이런 거 그냥 고정해', '버튼 그냥 하단에 고정하고 윗부분은 살짝 그라데이션'. 붙인 단추 줄 바로 위는
+  /// 흰 그라데이션([footerFade])으로 내용이 스며들 듯 사라진다. false면 내용 끝에 둔다
   final bool pinFooter;
 
   /// 뒤로 대신 왼쪽에 둘 것(예: 고르는 중 '취소')
@@ -519,7 +529,7 @@ class Screen extends StatelessWidget {
     // 키보드가 열리면 아래 안전 여백 대신 키보드 높이만큼 비운다(키보드가 열리면 paddingOf 아래는 0이 된다)
     final insets = MediaQuery.paddingOf(context);
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
-    // 아래 단추 줄을 화면 아래에 붙이나: 스크롤하지 않는 화면, 또는 pinFooter이고 키보드가 닫혀 있을 때
+    // 아래 단추 줄을 화면 아래에 붙이나: 스크롤하지 않는 화면, 또는 pinFooter(기본)이고 키보드가 닫혀 있을 때
     final footerFixed = footer != null && (!scroll || (pinFooter && keyboard == 0));
     // 밀어 넣은 화면은 모두 가운데 작은 제목(2026-11-17 사용자: 가운데 제목이면 깔끔). 큰 왼쪽 제목은 탭 첫 화면에만 남긴다.
     // 부제목은 내용 맨 위 한 줄로 옮긴다
@@ -561,8 +571,9 @@ class Screen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 탭 첫 화면 제목도 내용과 함께 올라간다(머리줄 고정 아님)
-            if (!bar && title != null && scroll) tabHead(),
+            // 탭 첫 화면 제목도 내용과 함께 올라간다(머리줄 고정 아님). 뒤로 없이 제목 자리에 칸을 둔 화면(여러 권 고르기 'N권 고름')도 이 머리
+            // (제목이 없으면 그리지 않아 위 줄 · 빨간 '취소'가 통째로 사라졌다, 2026-11-21 촬영 확인)
+            if (!bar && (title != null || headerField != null) && scroll) tabHead(),
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
@@ -607,7 +618,8 @@ class Screen extends StatelessWidget {
         ? ListenableBuilder(
             listenable: ReadingStore.instance,
             builder: (context, _) {
-              final pad = EdgeInsets.only(bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + insets.bottom);
+              // 붙인 단추 줄이 아래 안전 영역을 맡으면 내용 아래는 그만큼 덜 비운다
+              final pad = EdgeInsets.only(bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + (footerFixed ? 0 : insets.bottom));
               if (pinnedSliver == null) {
                 return SingleChildScrollView(
                   padding: pad,
@@ -645,7 +657,17 @@ class Screen extends StatelessWidget {
           children: [
             if (!scroll && fixedHead) head,
             if (!scroll && fixedHead && pinned != null) Padding(padding: const EdgeInsets.symmetric(horizontal: Space.page), child: Center(child: pinned!)),
-            Expanded(child: body),
+            // 붙인 단추 줄 바로 위: 내용이 흰색으로 스며들며 사라지는 그라데이션(누름은 통과).
+            // 몸통을 감싸는 틀은 키보드가 열려도 같게 둔다: 틀이 바뀌면 입력칸이 새로 만들어져 초점이 풀리고 키보드가 바로 닫혔다(2026-11-21 촬영 확인)
+            Expanded(
+              child: scroll
+                  ? Stack(children: [
+                      Positioned.fill(child: body),
+                      if (footerFixed)
+                        Positioned(left: 0, right: 0, bottom: 0, height: footerFade, child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [background.withValues(alpha: 0), background]))))),
+                    ])
+                  : body,
+            ),
             if (footerFixed)
               // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
               FooterReport(
@@ -996,7 +1018,8 @@ class Empty extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Semantics(header: true, child: WordText(title, textAlign: TextAlign.center, style: AppType.heading)),
+            // 제목은 옅은 굵은 글자(emptyTitle): 먹색 큰 제목이 너무 진했다(2026-11-20 사용자 '색 너무 진하지 않나')
+            Semantics(header: true, child: WordText(title, textAlign: TextAlign.center, style: AppType.emptyTitle)),
             if (body != null) Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText(body!, textAlign: TextAlign.center, style: AppType.sub)),
             if (action != null && onAction != null)
               Padding(
@@ -1112,7 +1135,12 @@ class BookRow extends StatelessWidget {
     this.dense = false,
     this.onLongPress,
     this.checked,
+    this.titleTrailing,
   });
+
+  /// 제목 줄 오른쪽 끝 작은 단추(내 책 목록의 메모, 그림 18 · 누르는 칸 48). 오른쪽 칸([trailing])과 달리 둘째 · 셋째 줄은 줄 폭을 다 쓴다
+  /// (2026-11-20 사용자 '메모 제목 라인에 넣어놓고 한줄평이나 이런 거 더 길게 보이게')
+  final Widget? titleTrailing;
 
   /// 꾹 누르기(내 책 목록: 고르기 시작)
   final VoidCallback? onLongPress;
@@ -1154,14 +1182,27 @@ class BookRow extends StatelessWidget {
         SizedBox(width: coverWidth(size), child: label != null ? ExcludeSemantics(child: cover) : cover),
         const SizedBox(width: Space.l),
         Expanded(
-          child: ExcludeSemantics(
-            excluding: label != null,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text(title, maxLines: titleLines ?? (size == BookRowSize.small ? 1 : 2), overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
-            if (meta != null && meta!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
-            if (third != null && third!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(third!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bookNote)),
-            ]),
-          ),
+          child: Stack(clipBehavior: Clip.none, children: [
+            ExcludeSemantics(
+              excluding: label != null,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                // 제목 줄 단추 자리만큼 제목 오른쪽을 비운다(둘째 · 셋째 줄은 줄 폭 그대로)
+                Padding(
+                  padding: EdgeInsets.only(right: titleTrailing != null ? Space.touch - Space.s : 0),
+                  child: Text(title, maxLines: titleLines ?? (size == BookRowSize.small ? 1 : 2), overflow: TextOverflow.ellipsis, style: AppType.bookTitle),
+                ),
+                if (meta != null && meta!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(meta!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
+                if (third != null && third!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: MetaText(third!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.bookNote)),
+              ]),
+            ),
+            // 누르는 칸 48의 가운데가 제목 첫 줄 가운데, 그림 오른쪽 끝이 글 묶음 오른쪽 끝
+            if (titleTrailing != null)
+              Positioned(
+                top: (TypeSpecs.bookTitle.line - Space.hit) / 2,
+                right: -(Space.hit - IconSize.small) / 2,
+                child: SizedBox(width: Space.hit, height: Space.hit, child: Center(child: titleTrailing)),
+              ),
+          ]),
         ),
         if (trailing != null) ...[const SizedBox(width: Space.m), trailing!],
       ]),
@@ -1394,7 +1435,7 @@ class Segmented<T> extends StatelessWidget {
         Positioned.fill(
           top: inset,
           bottom: inset,
-          child: DecoratedBox(decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(Shape.segmented))),
+          child: DecoratedBox(decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(compact ? Shape.segmentedCompact : Shape.segmented))),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -1417,7 +1458,7 @@ class Segmented<T> extends StatelessWidget {
                           decoration: id == value
                               ? BoxDecoration(
                                   color: AppColors.bg,
-                                  borderRadius: BorderRadius.circular(Shape.segment),
+                                  borderRadius: BorderRadius.circular(compact ? Shape.segmentCompact : Shape.segment),
                                   boxShadow: const [Shape.segmentShadow],
                                 )
                               : null,
@@ -1525,15 +1566,18 @@ class SectionBand extends StatelessWidget {
 /// 흰 띠: 좌우는 화면 끝까지 붙이고 위아래로만 층을 나눈다. 띠 위에 회색 칸(Space.band, greyBackground)을 화면 폭으로 깔아
 /// 바로 위 띠(또는 맨 위 흰 머리)와 나눈다. 띠 안 위아래 Space.bandPad, 좌우는 화면 여백 Space.page.
 /// 화면 바탕은 흰색 그대로라 맨 위(제목 · 전환 칸 · 달)도 흰색(2026-11-20 사용자 '맨 위쪽 배경 회색 넣지 말고 전부 흰색').
-/// 통계(캘린더 · 분석)에만 쓴다(2026-11-20 사용자 '박스인데 위아래 층만 나누고 좌우는 붙히자', '통계랑 캘린더에만 쓰라 했지')
+/// 통계 분석에만 쓴다(2026-11-20 사용자 '박스인데 위아래 층만 나누고 좌우는 붙히자' → '캘린더 쪽은 … 박스 모양 안 만들어도, 분석 쪽만 그렇게 하자 그래프 있는 쪽')
 class Band extends StatelessWidget {
-  const Band({super.key, required this.children});
+  const Band({super.key, required this.children, this.top = true});
   final List<Widget> children;
+
+  /// 위 회색 칸을 깔지(맨 위 흰 머리 바로 아래 첫 띠는 깔지 않는다: 날짜 밑 회색선, 2026-11-20 사용자 '이 날짜 밑에는 회색선 없애')
+  final bool top;
 
   @override
   Widget build(BuildContext context) => Bleed(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: Space.band, child: ColoredBox(color: AppColors.greyBackground)),
+          if (top) const SizedBox(height: Space.band, child: ColoredBox(color: AppColors.greyBackground)),
           ColoredBox(
             color: AppColors.bg,
             child: Padding(
@@ -1788,7 +1832,7 @@ class FilterIcon extends StatelessWidget {
           width: Space.touch,
           height: Space.touch,
           child: Stack(children: [
-            const Center(child: LucideIcon('SlidersHorizontal', size: IconSize.head, color: AppColors.inkSoft)),
+            const Center(child: LucideIcon('SlidersHorizontal', size: IconSize.head, color: AppColors.icon)),
             if (active)
               Positioned(
                 top: 9,
@@ -1898,8 +1942,12 @@ class FilterOption extends StatelessWidget {
 
 /// 검색창: 돋보기 + 입력 + 지우기(입력이 있을 때)
 class SearchField extends StatefulWidget {
-  const SearchField({super.key, required this.value, required this.onChange, this.placeholder, this.label, this.autofocus = false, this.onSubmit, this.busy = false, this.trailing});
+  const SearchField({super.key, required this.value, required this.onChange, this.placeholder, this.label, this.autofocus = false, this.onSubmit, this.busy = false, this.trailing, this.onBack});
   final String value;
+
+  /// 검색 모드를 닫기(탭 첫 화면의 검색): 있으면 왼쪽 돋보기 자리에 뒤로 화살표(←). 오른쪽 '취소' 글자는 두지 않는다
+  /// (2026-11-20 사용자 '검색할 때 취소는 저 글자 넣지 말고 맨 왼쪽 돋보기를 ← 이런 화살표로')
+  final VoidCallback? onBack;
   /// 칸 오른쪽 끝에 둘 단추(예: 책 추가의 바코드). 지우기 단추 오른쪽에 놓인다
   final Widget? trailing;
   final ValueChanged<String> onChange;
@@ -1950,12 +1998,16 @@ class _SearchFieldState extends State<SearchField> {
           Semantics(
             container: true,
             button: true,
-            label: '검색',
-            onTap: _magnifier,
+            label: widget.onBack != null ? '검색 닫기' : '검색',
+            onTap: widget.onBack ?? _magnifier,
             excludeSemantics: true,
             child: Pressable(
-              onPress: _magnifier,
-              child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('Search', size: 22, color: AppColors.inkSoft))),
+              onPress: widget.onBack ?? _magnifier,
+              child: SizedBox(
+                width: Space.hit,
+                height: Space.hit,
+                child: Center(child: LucideIcon(widget.onBack != null ? 'ArrowLeft' : 'Search', size: IconSize.base, color: widget.onBack != null ? AppColors.inkSoft : AppColors.icon)),
+              ),
             ),
           ),
           Expanded(
@@ -2242,9 +2294,10 @@ class _LabelRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: Space.s),
         child: ExcludeSemantics(
-          child: Wrap(crossAxisAlignment: WrapCrossAlignment.end, spacing: 8, children: [
+          // 필수 칸은 이름 뒤 주의색 '*', 선택 칸은 회색 '선택'(2026-11-21 책 정보 수정 · 갈피 남기기 시안)
+          child: Wrap(crossAxisAlignment: WrapCrossAlignment.end, spacing: tag == '필수' ? 4 : 8, children: [
             WordText(name, style: AppType.label),
-            if (tag != null) Text(tag!, style: AppType.caption.copyWith(color: AppColors.inkSoft)),
+            if (tag == '필수') Text('*', style: AppType.label.copyWith(color: AppColors.danger)) else if (tag != null) Text(tag!, style: AppType.caption.copyWith(color: AppColors.inkSoft)),
           ]),
         ),
       );
@@ -2252,8 +2305,11 @@ class _LabelRow extends StatelessWidget {
 
 /// 입력칸: 입력칸색 단색 바탕, 테두리 없음, 누르면 갈색 테두리. 이름은 위에, 단위('쪽')는 칸 안 오른쪽, 도움말·오류는 아래
 class Field extends StatefulWidget {
-  const Field({super.key, required this.label, required this.value, required this.onChange, this.hint, this.error, this.unit, this.placeholder, this.multiline = false, this.number = false, this.minHeight});
+  const Field({super.key, required this.label, required this.value, required this.onChange, this.hint, this.error, this.unit, this.placeholder, this.multiline = false, this.number = false, this.minHeight, this.showLabel = true});
   final String label;
+
+  /// 이름 줄을 그릴지(이름은 화면 읽기에만 남긴다): 화면이 이름 줄을 따로 그릴 때(갈피 남기기 '문장 · 사진만 저장')
+  final bool showLabel;
   final String value;
   final ValueChanged<String> onChange;
   final String? hint, error, unit, placeholder;
@@ -2296,7 +2352,7 @@ class _FieldState extends State<Field> {
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.xl),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _LabelRow(l.name, l.tag),
+        if (widget.showLabel) _LabelRow(l.name, l.tag),
         Stack(children: [
           Container(
             constraints: BoxConstraints(minHeight: widget.minHeight ?? (widget.multiline ? ControlSize.fieldMultiline : ControlSize.field)),
@@ -2317,7 +2373,9 @@ class _FieldState extends State<Field> {
                   isCollapsed: true,
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.fromLTRB(16, widget.multiline ? 14 : 16, widget.unit != null ? 44 : 16, 16),
-                  hintText: placeholder,
+                  // 자리 표시 글도 낱말 단위로 줄을 바꾼다('…빠져 / 요'처럼 한 글자만 넘어갔다, 2026-11-21 촬영 확인)
+                  hintText: placeholder == null ? null : keepAll(placeholder),
+                  hintMaxLines: widget.multiline ? 3 : 1,
                   hintStyle: AppType.input.copyWith(color: AppColors.inkFaint),
                 ),
               ),
@@ -2365,11 +2423,14 @@ class SelectField extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m),
               decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
               child: Row(children: [
+                // 고른 값과 덧붙임(책 저자)은 한 줄: '데미안 | 헤르만 헤세'(2026-11-21 갈피 남기기 시안. 두 줄이라 칸이 높았다)
                 Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    WordText(value ?? placeholder, maxLines: 2, style: AppType.input.copyWith(color: value != null ? AppColors.ink : AppColors.inkFaint)),
-                    if (sub != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub!, maxLines: 1, style: AppType.caption)),
-                  ]),
+                  child: value != null && sub != null
+                      ? Row(children: [
+                          Flexible(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.input.strong)),
+                          Flexible(child: MetaText('$metaSep${sub!}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                        ])
+                      : WordText(value ?? placeholder, maxLines: 2, style: AppType.input.copyWith(color: value != null ? AppColors.ink : AppColors.inkFaint)),
                 ),
                 if (!disabled) ...[const SizedBox(width: Space.s), const Chevron()],
               ]),
@@ -2820,14 +2881,14 @@ class _DateBodyState extends State<_DateBody> {
       Padding(
         padding: const EdgeInsets.only(bottom: Space.s),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconBtn(label: '이전 달', disabled: !canPrev, onPress: () => _shift(-1), child: LucideIcon('ChevronLeft', color: canPrev ? AppColors.ink : AppColors.inkFaint)),
+          IconBtn(label: '이전 달', disabled: !canPrev, onPress: () => _shift(-1), child: LucideIcon('ChevronLeft', color: canPrev ? AppColors.icon : AppColors.inkFaint)),
           const SizedBox(width: Space.l),
           ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 128),
             child: Semantics(header: true, child: Text('$_y년 $_m월', textAlign: TextAlign.center, style: AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()]))),
           ),
           const SizedBox(width: Space.l),
-          IconBtn(label: '다음 달', disabled: !canNext, onPress: () => _shift(1), child: LucideIcon('ChevronRight', color: canNext ? AppColors.ink : AppColors.inkFaint)),
+          IconBtn(label: '다음 달', disabled: !canNext, onPress: () => _shift(1), child: LucideIcon('ChevronRight', color: canNext ? AppColors.icon : AppColors.inkFaint)),
         ]),
       ),
       LayoutBuilder(builder: (context, box) {

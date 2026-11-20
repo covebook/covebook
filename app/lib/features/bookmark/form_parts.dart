@@ -1,5 +1,5 @@
 // 갈피·감상 쓰기 화면이 함께 쓰는 부품(2026-11-19 공통 규칙): 쓰던 글 지킴(갈피 남기기 · 갈피 수정 · 감상 쓰기 · 감상 수정),
-// 갈피 칸 이름 · 높이, 사진을 못 넣었을 때 안내, 사진 칩 줄(다시 찍기 · 다른 사진 · 사진 빼기)
+// 갈피 칸 이름 · 높이, 사진을 못 넣었을 때 안내, 사진 메뉴(다시 찍기 · 다른 사진 · 사진 빼기)
 library;
 
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ export '../../ui/draft_guard.dart';
 import '../../services/photos.dart' show deniedMessage;
 import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
+import '../../ui/theme.dart';
 import 'page_photo.dart' show cropCanceledMessage;
 
 /// 갈피 글 칸(갈피 남기기 · 갈피 수정이 같은 이름 · 안내 · 높이, 2026-11-19 공통 규칙: 두 화면이 '문장' 160 · '문장 (줄바꿈으로…)' 190,
@@ -29,20 +30,65 @@ const markMemoLabel = '한 줄 메모 (선택)', markMemoHint = '나만 보는 �
       _ => null,
     };
 
-/// 사진 단추 줄(갈피 남기기 · 갈피 수정): 다시 찍기 · 다른 사진 · (onRemove가 있으면) 사진 빼기. 사진 아래 가운데.
-/// TDS에 칩이 없어 행동 단추는 Button small weak(dark)
-class PhotoChips extends StatelessWidget {
-  const PhotoChips({super.key, required this.onCamera, required this.onLibrary, this.onRemove});
+/// 사진과 사진 메뉴(갈피 남기기 · 갈피 수정): 사진 오른쪽 아래 흰 원 '⋯'. 누르면 시트 다시 찍기 · 다른 사진 · (onRemove가 있으면) 사진 빼기.
+/// 사진 아래 단추 줄(다시 찍기 · 다른 사진 · 사진 빼기)이 자리를 차지했다(2026-11-21 갈피 남기기 시안)
+class PhotoWithMenu extends StatelessWidget {
+  const PhotoWithMenu({super.key, required this.plate, required this.onCamera, required this.onLibrary, this.onRemove});
+  final Widget plate;
   final VoidCallback onCamera, onLibrary;
   final VoidCallback? onRemove;
 
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: Space.s),
-        child: Wrap(alignment: WrapAlignment.center, spacing: Space.s, runSpacing: Space.s, children: [
-          Btn(label: '다시 찍기', kind: 'secondary', size: 'small', onPress: onCamera),
-          Btn(label: '다른 사진', kind: 'secondary', size: 'small', onPress: onLibrary),
-          if (onRemove != null) Btn(label: '사진 빼기', kind: 'secondary', size: 'small', onPress: onRemove!),
+  /// 메뉴 단추 지름
+  static const size = 36.0;
+
+  Future<void> _menu(BuildContext context) => showSheet<void>(
+        context,
+        builder: (ctx) => ListGroup(children: [
+          ListItem(label: '다시 찍기', icon: const LucideIcon('Camera', color: AppColors.icon), onPress: () {
+            Navigator.pop(ctx);
+            onCamera();
+          }),
+          ListItem(label: '다른 사진', icon: const LucideIcon('Image', color: AppColors.icon), onPress: () {
+            Navigator.pop(ctx);
+            onLibrary();
+          }),
+          if (onRemove != null)
+            ListItem(label: '사진 빼기', danger: true, icon: const LucideIcon('Trash2', color: AppColors.danger), onPress: () {
+              Navigator.pop(ctx);
+              onRemove!();
+            }),
         ]),
       );
+
+  @override
+  Widget build(BuildContext context) => Stack(clipBehavior: Clip.none, children: [
+        plate,
+        Positioned(
+          right: Space.s,
+          bottom: Space.s,
+          child: Semantics(
+            container: true,
+            button: true,
+            label: '사진 메뉴',
+            onTap: () => _menu(context),
+            excludeSemantics: true,
+            child: Pressable(
+              onPress: () => _menu(context),
+              // 누르는 자리 48, 보이는 원 36
+              child: SizedBox(
+                width: Space.hit,
+                height: Space.hit,
+                child: Center(
+                  child: Container(
+                    width: size,
+                    height: size,
+                    decoration: const BoxDecoration(color: AppColors.white, shape: BoxShape.circle, boxShadow: [Shape.floatShadow]),
+                    child: const Center(child: LucideIcon('MoreHorizontal', size: IconSize.small, color: AppColors.inkSoft)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]);
 }

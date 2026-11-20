@@ -49,7 +49,8 @@ Future<({bool picked, String? id})> pickBook(
     context,
     title: '책 고르기',
     description: description,
-    maxHeight: 0.85,
+    // 검색할 때는 시트가 화면 맨 위까지 올라간다(_Picker가 높이를 다 쓴다, 2026-11-20 사용자). 평소에는 목록 길이만큼
+    maxHeight: 0.95,
     fit: true,
     builder: (ctx) => _Picker(
       lib: lib,
@@ -118,6 +119,9 @@ class _Picker extends StatefulWidget {
 class _PickerState extends State<_Picker> {
   String _q = '';
   final _picked = <String>[];
+
+  /// 검색칸에 초점이 있다(검색 중): 시트를 화면 위까지 키운다
+  bool _searchFocus = false;
 
   void _choose(String? id) {
     final m = widget.multi;
@@ -195,15 +199,9 @@ class _PickerState extends State<_Picker> {
 
     final list = [for (final id in ids) if (t.isEmpty || hit(id)) id];
     final noneFixed = m != null && m.fixed.contains(m.none);
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (ids.length > _searchFrom)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.s, bottom: Space.s),
-          child: SearchField(value: _q, onChange: (v) => setState(() => _q = v), placeholder: '제목, 저자', label: '책 찾기'),
-        ),
-      Flexible(
-        // 줄 사이 선 없이
-        child: ListView(shrinkWrap: true, keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, children: [
+    // 검색 중이면 시트가 높이를 다 쓴다(맨 위까지): 목록이 남은 높이를 채운다
+    final tall = _searchFocus || t.isNotEmpty;
+    final listView = ListView(shrinkWrap: !tall, keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, children: [
           if (widget.onAddNew != null)
             Semantics(
               button: true,
@@ -214,22 +212,45 @@ class _PickerState extends State<_Picker> {
                 onPress: widget.onAddNew,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: Space.hit),
-                  child: Padding(padding: const EdgeInsets.symmetric(vertical: Space.m), child: Text('+ 새 책 등록', style: AppType.row.copyWith(color: AppColors.accent))),
+                  // 회색 글자(갈색은 주요 단추 · 고른 것에만, 2026-11-20 사용자 '갈색 말고 그냥 회색으로')
+                  child: Padding(padding: const EdgeInsets.symmetric(vertical: Space.m), child: Text('+ 새 책 등록', style: AppType.row.copyWith(color: AppColors.inkSoft))),
                 ),
               ),
             ),
           // '모든 책'은 책이 아니라 조건이라 하나 고르기 줄(표지 자리 없이)
           if (widget.all && m == null) FilterOption(label: '모든 책', sub: widget.allSub, selected: _on(null), onPress: () => _choose(null)),
-          // 책 없이: 이름은 앱 어디서나 '책 없이 읽기', 표지 자리는 같은 회색 칸(공통 규칙 3장)
-          if (widget.allowNone) _row(cover: NoBookCover(width: BookRow.coverWidth(BookRowSize.small)), title: NoBookCover.name, id: null, fixed: noneFixed),
+          // 책 없이(여러 권 고르기): 이름은 앱 어디서나 '책 없이 읽기', 표지 자리는 같은 회색 칸(공통 규칙 3장).
+          // 한 권 고르기는 목록 위 폭 가득 단추(아래)
+          if (widget.allowNone && m != null) _row(cover: NoBookCover(width: BookRow.coverWidth(BookRowSize.small)), title: NoBookCover.name, id: null, fixed: noneFixed),
           for (final id in list) _book(id),
           // 공통 규칙 11장: 검색 0건은 검색어를 넣은 제목(다시 찾을 칸이 바로 위에 있어 본문 없음)
           if (list.isEmpty && t.isNotEmpty)
             Empty(title: '‘$t’에 맞는 책이 없어요')
           else if (ids.isEmpty && widget.books == null)
             const Empty(title: '내 책이 없어요', body: '먼저 책을 추가해 주세요.'),
-        ]),
-      ),
+        ]);
+    return Column(mainAxisSize: tall ? MainAxisSize.max : MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (ids.length > _searchFrom)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s, bottom: Space.s),
+          child: Focus(
+            onFocusChange: (f) => setState(() => _searchFocus = f),
+            child: SearchField(value: _q, onChange: (v) => setState(() => _q = v), placeholder: '제목, 저자', label: '책 찾기'),
+          ),
+        ),
+      // 한 권 고르기의 '책 없이 읽기'는 폭 가득 보조 단추(2026-11-20 사용자 '좌우 꽉 차는 버튼 넣고 거기에다가 책 없이 읽기').
+      if (widget.allowNone && m == null)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.xs, bottom: Space.s),
+          child: Btn(
+            label: NoBookCover.name,
+            kind: 'secondary',
+            size: 'large',
+            onPress: () => _choose(null),
+          ),
+        ),
+      // 줄 사이 선 없이
+      if (tall) Expanded(child: listView) else Flexible(child: listView),
       // 한 권 고르기는 줄을 누르면 닫힌다. 시트에 '닫기' 단추를 두지 않는다(밖 누르기 · 내려 닫기, 공통 규칙 7장)
       if (m != null)
         Padding(

@@ -128,9 +128,10 @@ class _FinishScreenState extends State<FinishScreen> {
   }
 
   // 저장하지 않고 뒤로: 갈피 화면처럼 묻는다. 나가도 기록은 읽기 탭에 남아 나중에 저장·버릴 수 있다(2026-11-15 QA 민혁 F3)
+  // 단추는 다른 나가기 확인과 같은 '취소' · '확인'(2026-11-20 사용자 '취소 확인으로 테마색으로')
   void _askLeave() => appAlert(context, '저장하지 않고 나갈까요?', '이 기록은 읽기 탭에 남아 있어 나중에 저장하거나 버릴 수 있어요.', [
-        const AlertButton('계속 쓰기', style: AlertStyle.cancel),
-        AlertButton('나가기', onPress: () {
+        const AlertButton('취소', style: AlertStyle.cancel),
+        AlertButton('확인', onPress: () {
           if (!mounted) return;
           _flushNotes();
           setState(() => _leaving = true);
@@ -270,7 +271,8 @@ class _FinishScreenState extends State<FinishScreen> {
           sub: author.isEmpty ? null : author,
           placeholder: '책 연결하기 (선택)',
           onPress: () async {
-            final r = await pickBook(context, lib, allowNone: true);
+            // 지금 연결된 책(없으면 책 없이 읽기)은 고르는 원으로 보인다(DESIGN 13장 current)
+            final r = await pickBook(context, lib, allowNone: true, current: (id: b?.id));
             if (r.picked) _reading.setPendingBook(r.id, r.id == null ? null : lib.books[r.id]?.currentPage);
           },
         ),

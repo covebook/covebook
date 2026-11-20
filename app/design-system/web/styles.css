@@ -13,7 +13,8 @@
   --ck-ink: #191F28; /* 본문(grey900) */
   --ck-title: #333D4B; /* 제목(grey800): 탭 · 머리줄 · 시트 · 확인창 · 구역 제목 */
   --ck-ink-sub: #4E5968; /* 부제 · 오른쪽 값(grey700) */
-  --ck-ink-soft: #6B7684; /* 설명 · 보조 글자 · 머리줄 아이콘(grey600) */
+  --ck-ink-soft: #6B7684; /* 설명 · 보조 글자(grey600) */
+  --ck-icon: #8B95A1; /* 선 아이콘: 머리줄 · 검색칸 · 카드 · 줄 안(grey500) */
   --ck-ink-faint: #B0B8C1; /* 흐린 글자 · 빈 칸 안내 · 줄 끝 화살표(grey400) */
   --ck-line: #E5E8EB; /* 구분선 · 테두리 */
   --ck-divider: #EBECEE; /* 밑줄 탭 아래 화면 폭 옅은 선 */
@@ -69,6 +70,7 @@
   --ck-type-page-title: 700 22px/31px var(--ck-font-ui);
   --ck-type-nav-title: 600 18px/27px var(--ck-font-ui);
   --ck-type-heading: 700 20px/29px var(--ck-font-ui);
+  --ck-type-empty-title: 600 17px/25.5px var(--ck-font-ui);
   --ck-type-section: 700 20px/29px var(--ck-font-ui);
   --ck-type-list-header: 700 17px/25.5px var(--ck-font-ui);
   --ck-type-row: 400 17px/25.5px var(--ck-font-ui);
@@ -150,6 +152,8 @@
   --ck-radius-choice: 14px;
   --ck-radius-segmented: 12px;
   --ck-radius-segment: 9px;
+  --ck-radius-segmented-compact: 8px;
+  --ck-radius-segment-compact: 6px;
   --ck-radius-pill: 999px;
   --ck-radius-cover: 3px;
 
@@ -195,7 +199,7 @@
   --ck-cover-head: 140px;
   --ck-cover-feature: 120px;
   --ck-cover-confirm: 120px;
-  --ck-cover-edit: 96px;
+  --ck-cover-edit: 120px;
   --ck-cover-added: 88px;
   --ck-cover-saved: 72px;
   --ck-cover-place: 68px;
@@ -231,6 +235,7 @@
 .ck-type-page-title { font: var(--ck-type-page-title); color: var(--ck-title); }
 .ck-type-nav-title { font: var(--ck-type-nav-title); color: var(--ck-ink); }
 .ck-type-heading { font: var(--ck-type-heading); color: var(--ck-title); }
+.ck-type-empty-title { font: var(--ck-type-empty-title); color: var(--ck-ink-soft); }
 .ck-type-section { font: var(--ck-type-section); color: var(--ck-title); }
 .ck-type-list-header { font: var(--ck-type-list-header); color: var(--ck-title); }
 .ck-type-row { font: var(--ck-type-row); color: var(--ck-ink); }

@@ -140,13 +140,13 @@ void main() {
     await t.pump();
     await t.binding.handlePopRoute();
     await t.pumpAndSettle();
-    expect(plain('고친 내용을 버릴까요?').evaluate().isNotEmpty, isTrue);
-    await t.tap(find.text('계속 수정'));
+    expect(plain('수정을 그만할까요?').evaluate().isNotEmpty, isTrue);
+    await t.tap(find.text('취소'));
     await t.pumpAndSettle();
-    expect(find.byType(PageView), findsNothing, reason: '계속 수정이면 수정 화면 그대로');
+    expect(find.byType(PageView), findsNothing, reason: '취소면 수정 화면 그대로');
     await t.binding.handlePopRoute();
     await t.pumpAndSettle();
-    await t.tap(find.text('버리기'));
+    await t.tap(find.text('확인'));
     await t.pumpAndSettle();
     expect(find.byType(PageView), findsOneWidget);
     expect(shown(t), 'A');

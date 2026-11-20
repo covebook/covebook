@@ -50,6 +50,9 @@ abstract final class AppColors {
 
   /// 자리 표시 글자 · 꺼진 것 · 줄 끝 화살표: grey400(ListHeader 화살표 · Board Row 아이콘 · Stepper 화살표 기본 색)
   static const inkFaint = grey400;
+
+  /// 선 아이콘(머리줄 · 검색칸 · 카드 · 줄 안): grey500. 글자(inkSoft)보다 한 단계 옅게(2026-11-18 사용자 '아이콘 색 좀 연하게, 통일')
+  static const icon = grey500;
   static const line = grey200;
 
   /// 밑줄 탭 아래 화면 폭 옅은 선(토스 앱 실측 #EBECEE, 2026-11-20 사용자 '이런 은은한 선 괜찮은 듯'). 테두리 line보다 옅다
@@ -90,7 +93,8 @@ abstract final class AppColors {
     'ink': (ink, '본문(grey900)'),
     'title': (title, '제목(grey800): 탭 · 머리줄 · 시트 · 확인창 · 구역 제목'),
     'inkSub': (inkSub, '부제 · 오른쪽 값(grey700)'),
-    'inkSoft': (inkSoft, '설명 · 보조 글자 · 머리줄 아이콘(grey600)'),
+    'inkSoft': (inkSoft, '설명 · 보조 글자(grey600)'),
+    'icon': (icon, '선 아이콘: 머리줄 · 검색칸 · 카드 · 줄 안(grey500)'),
     'inkFaint': (inkFaint, '흐린 글자 · 빈 칸 안내 · 줄 끝 화살표(grey400)'),
     'line': (line, '구분선 · 테두리'),
     'divider': (divider, '밑줄 탭 아래 화면 폭 옅은 선'),
@@ -231,6 +235,8 @@ abstract final class TypeSpecs {
   static const navTitle = TypeSpec(AppFonts.uiBold, 18, 27);
   /// 시트 · 확인창 · 빈 화면 제목, 큰 카드 제목: t4 Bold grey800(BottomSheet.Header · AlertDialog/ConfirmDialog.Title)
   static const heading = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
+  /// 빈 화면 · 검색 0건 · 조건 0건 제목(Empty): t5 SemiBold grey600. 먹색 굵은 제목이 너무 진했다(2026-11-20 사용자 '색 너무 진하지 않나')
+  static const emptyTitle = TypeSpec(AppFonts.uiBold, 17, 25.5, color: AppColors.inkSoft);
   /// 구역 제목(H2 · SectionHead · 달력 달): ListHeader.TitleParagraph t4 Bold grey800
   static const section = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 묶음 이름(ListGroup · FilterGroup · SheetLabel): ListHeader.TitleParagraph t5 Bold grey800(공식 예시 BasicHeaders)
@@ -324,6 +330,7 @@ abstract final class TypeSpecs {
     'pageTitle': pageTitle,
     'navTitle': navTitle,
     'heading': heading,
+    'emptyTitle': emptyTitle,
     'section': section,
     'listHeader': listHeader,
     'row': row,
@@ -380,6 +387,7 @@ abstract final class AppType {
   static TextStyle get pageTitle => TypeSpecs.pageTitle.style;
   static TextStyle get navTitle => TypeSpecs.navTitle.style;
   static TextStyle get heading => TypeSpecs.heading.style;
+  static TextStyle get emptyTitle => TypeSpecs.emptyTitle.style;
   static TextStyle get section => TypeSpecs.section.style;
   static TextStyle get listHeader => TypeSpecs.listHeader.style;
   static TextStyle get row => TypeSpecs.row.style;

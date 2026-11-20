@@ -297,7 +297,7 @@ class BookmarkCard extends StatelessWidget {
           const Spacer(),
           Padding(
             padding: EdgeInsets.only(right: compact ? 40 : 44),
-            child: Semantics(container: true, label: '원본 사진 있음', child: const ExcludeSemantics(child: LucideIcon('Camera', size: 16, color: AppColors.inkSoft))),
+            child: Semantics(container: true, label: '원본 사진 있음', child: const ExcludeSemantics(child: LucideIcon('Camera', size: 16, color: AppColors.icon))),
           ),
         ],
       ]),
@@ -362,7 +362,7 @@ class BookmarkCard extends StatelessWidget {
           label: saved ? '아껴둔 갈피에서 빼기' : '갈피 아껴두기',
           child: Pressable(
             onPress: onToggleSaved,
-            child: SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('Bookmark', color: AppColors.inkSoft, fill: saved ? AppColors.inkSoft : null))),
+            child: SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('Bookmark', color: AppColors.icon, fill: saved ? AppColors.inkSoft : null))),
           ),
         ),
       );

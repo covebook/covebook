@@ -125,22 +125,24 @@ class _StatsScreenState extends State<StatsScreen> {
       ),
       _periodBar(now),
       // 책 선택은 제목 줄 오른쪽(두 칸 모두 같은 자리: 달력·그래프·숫자가 함께 바뀐다, 2026-11-17 통계 시안)
-      if (_view == 'records' && book != null) Band(children: [BookRecordView(lib: lib, id: book)]),
+      // 날짜 바로 밑에는 회색 띠를 두지 않는다(2026-11-20 사용자 '이 날짜 밑에는 회색선 없애')
+      if (_view == 'records' && book != null) Band(top: false, children: [BookRecordView(lib: lib, id: book)]),
       if (_view == 'calendar') ...[
-        Band(children: [ReadingCalendar(lib: lib, y: _y, m: _m, days: days, selected: selected, today: todayDay, onSelect: (d) => setState(() => _picked = d))]),
-        Band(
-          children: selected != null
-              ? _dayRecords(lib, selected, selMs, [for (final s in sessions) if (sessionDay(s).startsWith(selected)) s])
-              : [
-                  Empty(
-                    title: '$periodName에는 독서 기록이 없어요',
-                    // 책 이름은 ‘…’로 감싼다(공통 규칙 9장)
-                    body: bookName != null ? '‘$bookName’ 기준이에요.' : thisPeriod ? '책을 읽으면 그날이 달력에 칠해져요.' : null,
-                  ),
-                ],
-        ),
+        // 캘린더는 회색 띠 · 흰 상자 없이 흰 바탕 그대로(2026-11-20 사용자 '캘린더 쪽은 회색선 넣어서 박스 모양 안 만들어도', '분석 쪽만 그렇게').
+        // 달 아래 여백은 달 위 여백과 같게(전환 칸 → 달 Space.s, 달 → 달력 Space.s, 2026-11-20 사용자 '년도랑 월 위아래 여백 맞춰')
+        const SizedBox(height: Space.s),
+        ReadingCalendar(lib: lib, y: _y, m: _m, days: days, selected: selected, today: todayDay, onSelect: (d) => setState(() => _picked = d)),
+        const SizedBox(height: Space.block),
+        if (selected != null)
+          ..._dayRecords(lib, selected, selMs, [for (final s in sessions) if (sessionDay(s).startsWith(selected)) s])
+        else
+          Empty(
+            title: '$periodName에는 독서 기록이 없어요',
+            // 책 이름은 ‘…’로 감싼다(공통 규칙 9장)
+            body: bookName != null ? '‘$bookName’ 기준이에요.' : thisPeriod ? '책을 읽으면 그날이 달력에 칠해져요.' : null,
+          ),
       ] else ...[
-        Band(children: [_summary(st0, sessions, activeDays, periodName)]),
+        Band(top: book != null, children: [_summary(st0, sessions, activeDays, periodName)]),
         Band(children: [
           StatHead(
             title: '날짜별 독서',
@@ -173,9 +175,9 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _periodBar(DateTime now) => Padding(
         padding: const EdgeInsets.only(top: Space.s),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconBtn(label: '이전 달', onPress: () => _shift(-1), child: const LucideIcon('ChevronLeft')),
+          IconBtn(label: '이전 달', onPress: () => _shift(-1), child: const LucideIcon('ChevronLeft', color: AppColors.icon)),
           Semantics(header: true, child: Text(monthTitle(_y, _m), style: AppType.heading.tnum)),
-          IconBtn(label: '다음 달', disabled: _y * 12 + _m >= now.year * 12 + now.month, onPress: () => _shift(1), child: const LucideIcon('ChevronRight')),
+          IconBtn(label: '다음 달', disabled: _y * 12 + _m >= now.year * 12 + now.month, onPress: () => _shift(1), child: const LucideIcon('ChevronRight', color: AppColors.icon)),
         ]),
       );
 

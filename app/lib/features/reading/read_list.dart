@@ -312,10 +312,14 @@ class _ReadListState extends State<ReadList> {
             Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.section))),
             // +는 보이는 획의 오른쪽 끝을 아래 '▶ 읽기' 글자 끝 선에 맞춘다(2026-11-18 사용자 '+ 너무 작고 우측 라인에 안 맞아, 회색').
             // 26 그림(24칸에 획은 5~19)이 누르는 칸 48 가운데라 칸 끝까지 11, 그림 안 여백 5.4, 반 획 1을 빼 15.4만큼 민다
-            Transform.translate(
-              offset: const Offset(15.4, 0),
-              child: IconBtn(label: '읽기 목록에 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.inkSoft, stroke: 2)),
-            ),
+            // 첫 사용(목록이 빔)에는 +를 두지 않는다: 아래 단추('책 추가' · '읽기 목록에 추가')와 같은 일이라 헷갈렸다(2026-11-20 사용자 '+랑 책 추가랑 무슨 차이야')
+            if (hasRows || rest.isNotEmpty || restNoBook)
+              Transform.translate(
+                offset: const Offset(15.4, 0),
+                child: IconBtn(label: '읽기 목록에 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.icon, stroke: 2)),
+              )
+            else
+              const SizedBox(height: Space.hit),
           ]),
         ),
         if (rest.isNotEmpty || restNoBook)

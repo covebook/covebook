@@ -189,8 +189,8 @@ class _ImportListScreenState extends State<ImportListScreen> {
     // 찾은 책이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
     return DraftGuard(
       dirty: () => _dirty,
-      title: '찾은 책을 버릴까요?',
-      keep: '계속 가져오기',
+      title: '가져오기를 그만할까요?',
+      body: '지금 나가면 찾은 책은 추가되지 않아요.',
       child: Screen(
         title: '책 목록 가져오기',
         // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
@@ -238,11 +238,11 @@ class _ImportListScreenState extends State<ImportListScreen> {
               ]),
             ),
           if (found.isNotEmpty) ...[
-            _Head(
-              title: '찾은 책',
-              count: '${found.length}권',
-              action: found.every((l) => l.picked) ? '모두 빼기' : '모두 고르기',
-              onAction: () => setState(() {
+            _Head(title: '찾은 책', count: '${found.length}권'),
+            // 전체 선택: 줄들과 같은 자리의 고르는 원(2026-11-20 사용자 '전체선택 버튼 넣어줘'. 구역 제목 오른쪽 '모두 고르기' 글자는 눈에 띄지 않았다)
+            _SelectAll(
+              on: found.every((l) => l.picked),
+              onTap: () => setState(() {
                 final all = found.every((l) => l.picked);
                 for (final l in found) {
                   l.picked = !all;
@@ -403,15 +403,43 @@ class _FoldState extends State<_Fold> {
 
 /// 결과 묶음 머리: 공용 구역 머리(제목 19 · 개수 · 아래 설명 · 오른쪽 글자 단추, 2026-11-19 공통 규칙: 설명이 오른쪽 caption이었다)
 class _Head extends StatelessWidget {
-  const _Head({required this.title, this.count, this.note, this.action, this.onAction});
+  const _Head({required this.title, this.count, this.note});
   final String title;
-  final String? count, note, action;
-  final VoidCallback? onAction;
+  final String? count, note;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: Space.xl, bottom: Space.xs),
-        child: SectionHead(title: title, count: count, note: note, link: action, linkLabel: action, onLink: onAction),
+        child: SectionHead(title: title, count: count, note: note),
+      );
+}
+
+/// 찾은 책 '전체 선택' 줄: 왼쪽 이름, 오른쪽 고르는 원(책 줄의 원과 같은 세로 줄). 화면 읽기는 체크 상자 하나
+class _SelectAll extends StatelessWidget {
+  const _SelectAll({required this.on, required this.onTap});
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        checked: on,
+        button: true,
+        label: '전체 선택',
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Pressable(
+          onPress: onTap,
+          dim: true,
+          bleed: Space.page,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.hit),
+            child: Row(children: [
+              Expanded(child: Text('전체 선택', style: AppType.row)),
+              RadioMark(on: on),
+            ]),
+          ),
+        ),
       );
 }
 
