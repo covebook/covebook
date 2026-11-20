@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 export '../services/error_text.dart';
 import '../store/settings_store.dart';
 import 'alert.dart';
+import 'josa.dart';
 import 'kit.dart';
 import 'theme.dart';
 
@@ -148,6 +149,7 @@ class _ToastState extends State<_Toast> {
 /// 앱 밖(웹 · 메일 · 스토어)을 연다. 열지 못하면 확인창으로 알린다(DESIGN 10장: 조용히 끝나지 않게)
 Future<bool> openExternal(BuildContext context, String url, {String what = '페이지'}) async {
   final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication).catchError((_) => false);
-  if (!ok && context.mounted) appAlert(context, '$what를 열 수 없어요', '인터넷 연결이나 기본 브라우저를 확인하고 다시 시도해 주세요.');
+  // 조사는 이름 끝소리로('처리방침를'이었다, 2026-11-20)
+  if (!ok && context.mounted) appAlert(context, '${eulReul(what)} 열 수 없어요', '인터넷 연결이나 기본 브라우저를 확인하고 다시 시도해 주세요.');
   return ok;
 }

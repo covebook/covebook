@@ -91,7 +91,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _mailTo() async {
     final ok = await launchUrl(Uri.parse('mailto:$_mail')).catchError((_) => false);
     if (!ok && mounted) {
-      appAlert(context, '메일 앱을 열 수 없어요', '$_mail로 보내 주세요.', [
+      // '…com로'처럼 주소 끝 조사가 틀려 주소 뒤에 '주소로'를 붙인다(2026-11-20)
+      appAlert(context, '메일 앱을 열 수 없어요', '$_mail 주소로 보내 주세요.', [
         const AlertButton('확인', style: AlertStyle.cancel),
         AlertButton('주소 복사', onPress: () {
           Clipboard.setData(const ClipboardData(text: _mail));
