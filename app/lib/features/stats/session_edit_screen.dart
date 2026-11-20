@@ -103,7 +103,8 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
     final s = _s, initial = _initial;
     if (s == null || initial == null) {
       // 찾을 수 없음 틀(공통 규칙 9장)
-      return Screen(title: '독서 기록', children: [
+      // 제목은 정상 화면과 같게(다른 '찾을 수 없음' 화면처럼, 2026-11-20)
+      return Screen(title: '독서 기록 수정', children: [
         Empty(title: '기록을 찾을 수 없어요', action: '돌아가기', actionKind: 'secondary', onAction: () => Navigator.of(context).maybePop()),
       ]);
     }

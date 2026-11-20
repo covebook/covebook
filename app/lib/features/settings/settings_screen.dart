@@ -156,7 +156,11 @@ void showPrivacySheet(BuildContext context) => showSheet<void>(
               ? '내 기록은 공개되지 않아요. 커뮤니티에 직접 올린 글과 고른 항목만 공개돼요.'
               : '공개되는 기록은 없어요. 별점, 한줄평, 감상, 갈피는 나만 봐요.'),
           // 계정 삭제는 서버를 쓰는 빌드에만 있다(로그인 없는 빌드에서 '서버 계정 삭제'를 말하지 않는다)
-          if (_syncAvailable) para('회원탈퇴를 요청하면 연결된 로그인과 서버 기록, 사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
+          // 로그인 필수 빌드는 탈퇴하면 이 폰의 기록도 지운다(회원탈퇴 확인창 · 실제 동작과 같게, 2026-11-20: 이 시트만 '남겨요'였다)
+          if (_syncAvailable)
+            para(SyncService.instance.loginRequired
+                ? '회원탈퇴를 요청하면 연결된 로그인과 서버 기록, 사진을 삭제 처리하고, 이 기기의 기록도 지워요.'
+                : '회원탈퇴를 요청하면 연결된 로그인과 서버 기록, 사진을 삭제 처리하고, 이 기기의 기록은 남겨요.'),
           Padding(
             padding: const EdgeInsets.only(top: Space.s),
             // 시트 안 단추는 xlarge(2026-11-19 공통 규칙)
