@@ -133,11 +133,17 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       appAlert(context, '책장이 꽉 차서 진열하지 못했어요', keptNote(full: true));
       return;
     }
-    showToast(
-        context,
-        r.placed > 0
-            ? (r.kept > 0 ? '${r.placed}권을 책장에 진열했어요. ${r.kept}권은 $why 보관해 두었어요.' : '${r.placed}권을 책장에 진열했어요.')
-            : '진열할 자리가 없어 보관해 두었어요.');
+    _toastAfterFrame(r.placed > 0
+        ? (r.kept > 0 ? '${r.placed}권을 책장에 진열했어요. ${r.kept}권은 $why 보관해 두었어요.' : '${r.placed}권을 책장에 진열했어요.')
+        : '진열할 자리가 없어 보관해 두었어요.');
+  }
+
+  /// 결과 토스트는 고르기를 끝낸 화면이 한 번 그려진 다음에 띄운다(2026-11-20 QA: 고르기 삭제 · 진열 뒤 토스트가 보이지 않았다).
+  /// 지우거나 놓은 책 때문에 책장 탭(뒤에 숨어 있어도)이 같은 프레임에 책장을 다시 만들고 굽는다. 그 프레임에서 토스트를 만들면
+  /// 토스트의 3초가 그 무거운 프레임 동안 흘러 화면에 그려지기 전에 걷혔다(되돌리기가 있는 5초 토스트는 남아 보였다)
+  Future<void> _toastAfterFrame(String text) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) showToast(context, text);
   }
 
   /// 삭제 · 숨기기(확인은 책 정보와 같은 시트). 결과는 토스트, 실패하면 확인창
@@ -152,7 +158,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     }
     if (!mounted) return;
     _stopSelecting();
-    showToast(context, removedText(r));
+    _toastAfterFrame(removedText(r));
   }
 
   /// 줄 이름 · 고르는 줄 셋째 줄: 상태 | 소장본 | 책장
