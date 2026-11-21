@@ -7,6 +7,7 @@ import 'package:chaekjang/domain/types.dart';
 import 'package:chaekjang/features/bookmark/bookmark_tape.dart' show WashiStrip;
 import 'package:chaekjang/features/bookmark/paper_grain.dart' show tapeStrip;
 import 'package:chaekjang/features/bookmark/photo_plate.dart' show PhotoPlate;
+import 'package:chaekjang/features/share/share_scene.dart' show ShareSceneInput, layoutShareScene;
 import 'package:chaekjang/features/reading/mini_timer.dart' show miniTimerWidth, miniTimerPad;
 import 'package:chaekjang/store/mini_timer_store.dart' show miniTimerSize;
 import 'package:chaekjang/store/library_store.dart' show saveLayout;
@@ -162,5 +163,13 @@ void main() {
     final angle = math.atan2(rot.transform.entry(1, 0), rot.transform.entry(0, 0)) * 180 / math.pi;
     expect(angle, closeTo(tapeStrip('bm1-washi', 92, 30).angle, 0.01));
     expect(t.takeException(), isNull);
+  });
+
+  test('책 공유 카드 속지 띠는 시안보다 조금 얇다(두께/높이 × 0.46, 8~32)', () {
+    ShareSceneInput input(double t) => ShareSceneInput(title: '작별하지 않는다', coverAspect: 0.68, thicknessRatio: t);
+    expect(layoutShareScene(input(0.08)).pageW, closeTo(616 * 0.08 * 0.46, 1e-6));
+    expect(layoutShareScene(input(0.08)).pageW, lessThan(616 * 0.08 * 0.57));
+    expect(layoutShareScene(input(0.01)).pageW, 8);
+    expect(layoutShareScene(input(0.5)).pageW, 32);
   });
 }
