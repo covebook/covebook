@@ -669,7 +669,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
             ElapsedTicker(
               running: ticking,
               builder: (ms) => Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-                Text(clock(ms), style: AppType.timer),
+                // '11:03:25'처럼 길어져도 화면 폭을 넘을 때(아주 큰 글씨)만 그 안에 들어가게 줄인다. 보통은 글자 그대로
+                FittedBox(fit: BoxFit.scaleDown, child: Text(clock(ms), maxLines: 1, style: AppType.timer)),
                 Positioned(
                   left: -100,
                   right: -100,
@@ -790,20 +791,26 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
               ),
               const SizedBox(width: Space.xl - _hitPad),
-              Semantics(
-                button: true,
-                label: '조작부 열기',
-                child: Pressable(
-                  onPress: () => setState(() {
-                    _volOpen = false;
-                    _open = true;
-                  }),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: Space.hit),
-                    child: Center(
-                      child: soundOnly
-                          ? Text('조작부 열기', style: _dockTime)
-                          : ElapsedTicker(running: ticking, builder: (ms) => Text(clock(ms), style: _dockTime)),
+              // 시간은 글자 폭만큼, 남는 자리를 넘으면(아주 큰 글씨) 줄인다: 'h:mm:ss' · 'hh:mm:ss'에서 양쪽 단추를 밀어내지 않게
+              Flexible(
+                child: Semantics(
+                  button: true,
+                  label: '조작부 열기',
+                  child: Pressable(
+                    onPress: () => setState(() {
+                      _volOpen = false;
+                      _open = true;
+                    }),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: Space.hit),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: soundOnly
+                              ? Text('조작부 열기', maxLines: 1, style: _dockTime)
+                              : ElapsedTicker(running: ticking, builder: (ms) => Text(clock(ms), maxLines: 1, style: _dockTime)),
+                        ),
+                      ),
                     ),
                   ),
                 ),

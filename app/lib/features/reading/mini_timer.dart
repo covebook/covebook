@@ -35,6 +35,18 @@ const _tabs = ['/', '/books', '/records', '/stats'];
 
 bool miniTimerHidden(String path) => path == '/read' || path.startsWith('/reading');
 
+/// 시간 글자 양쪽 여백(캡슐일 때)
+const miniTimerPad = Space.m;
+
+/// 작은 타이머(접힌 시간 부분) 폭: 글자 폭 + 양쪽 [miniTimerPad], 원 지름보다 좁지 않고 [max]보다 넓지 않다.
+/// 숫자는 고정 폭(tnum)이라 같은 자릿수면 폭이 같다: 숫자를 0으로 바꿔 재서 1초마다 흔들리지 않게 한다
+double miniTimerWidth(String label, TextScaler scaler, double max) {
+  final p = TextPainter(text: TextSpan(text: label.replaceAll(RegExp(r'\d'), '0'), style: AppType.labelStrong.tnum), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)..layout();
+  final w = p.width;
+  p.dispose();
+  return (w + 2 * miniTimerPad).ceilToDouble().clamp(miniTimerSize, math.max(miniTimerSize, max)).toDouble();
+}
+
 /// 화면 읽기용 시간(초까지): 공용 formatDurationPrecise('20초' · '1분 20초' · '1시간 2분 3초', DESIGN 4장).
 /// 보이는 시계(clock)처럼 초 아래는 버린다(읽어 주는 값과 보이는 값이 1초 어긋나지 않게)
 String _speak(num ms) => formatDurationPrecise((ms / 1000).floor() * 1000);
@@ -102,9 +114,10 @@ class _MiniTimerState extends State<MiniTimer> {
     final path = _place.path;
     final running = _reading.running;
     final label = clock(ms);
-    // 한 시간을 넘으면 숫자가 길어져 원 대신 같은 높이의 캡슐로 넓힌다
+    // 폭은 시간 글자 폭 + 양쪽 여백, 원(56)보다 좁아지지 않는다: '03:27'은 원, '1:03:26' · '11:03:25' · '100:00:00'은 글자만큼 긴 캡슐
+    // (2026-11-21 사용자 '1:03:26 또는 11:03:25 되면 디자인 깨질텐데 동적으로 늘어나게'). 큰 글씨에서도 줄이지 않고 늘린다(화면 폭 절반까지)
     // 펼치면 시간 오른쪽에 여백을 더한다: 동그라미 폭 그대로면 숫자가 캡슐 끝에 붙었다(2026-11-20 사용자 '펼쳤을 때 디자인 문제')
-    final timeW = (label.length > 5 ? miniTimerSize + 24 : miniTimerSize) + (_open ? _openPad : 0);
+    final timeW = miniTimerWidth(label, MediaQuery.textScalerOf(context), mq.size.width / 2) + (_open ? _openPad : 0);
     final s = SettingsStore.instance;
     final reduce = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && mq.disableAnimations);
     final onTabs = _place.route == '/' && _tabs.contains(path);
@@ -244,7 +257,7 @@ class _MiniTimerState extends State<MiniTimer> {
             duration: const Duration(milliseconds: 180),
             width: timeW - hair * 2,
             height: miniTimerSize - hair * 2,
-            // 큰 글씨에서는 동그라미 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA 확인). 펼치면 오른쪽 여백을 더 둔다
+            // 폭은 글자에 맞춰 늘어난다(miniTimerWidth). 화면 폭 절반을 넘는 아주 큰 글씨만 그 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA). 펼치면 오른쪽 여백을 더 둔다
             child: Center(
               child: Padding(
                 padding: EdgeInsets.only(left: 4, right: 4 + (_open ? _openPad : 0)),

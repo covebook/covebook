@@ -2,6 +2,8 @@
 import 'package:chaekjang/domain/layout.dart';
 import 'package:chaekjang/domain/layout_engine.dart';
 import 'package:chaekjang/domain/types.dart';
+import 'package:chaekjang/features/reading/mini_timer.dart' show miniTimerWidth, miniTimerPad;
+import 'package:chaekjang/store/mini_timer_store.dart' show miniTimerSize;
 import 'package:chaekjang/store/library_store.dart' show saveLayout;
 import 'package:chaekjang/store/placement_store.dart';
 import 'package:chaekjang/ui/alert.dart';
@@ -114,5 +116,25 @@ void main() {
     final back = setFrontLean(straight.layout!, books, 'b02', true);
     expect(back.ok, isTrue);
     expect(pitch(back.layout!), greaterThan(0.5));
+  });
+
+  test('작은 타이머 폭은 시간 글자만큼 늘어난다(1:03:26 · 11:03:25 · 100:00:00), 원보다 좁지 않고 1초마다 흔들리지 않는다', () {
+    const one = TextScaler.noScaling;
+    double w(String s, [double max = 1000, TextScaler sc = one]) => miniTimerWidth(s, sc, max);
+    // 같은 자릿수면 숫자가 달라도 같은 폭(고정 폭 숫자로 잰다)
+    expect(w('1:03:26'), w('9:59:59'));
+    expect(w('11:03:25'), w('10:00:00'));
+    // 자릿수가 늘면 넓어진다
+    expect(w('11:03:25'), greaterThan(w('1:03:26')));
+    expect(w('100:00:00'), greaterThan(w('11:03:25')));
+    // 글자 폭 + 양쪽 여백
+    final p = TextPainter(text: TextSpan(text: '00:00:00', style: AppType.labelStrong.tnum), textDirection: TextDirection.ltr)..layout();
+    expect(w('11:03:25'), (p.width + 2 * miniTimerPad).ceilToDouble());
+    p.dispose();
+    // 아주 작은 글자도 원(56)보다 좁지 않고, 화면 폭 한도는 넘지 않는다
+    expect(w('03:27', 1000, const TextScaler.linear(0.1)), miniTimerSize);
+    expect(w('100:00:00', 90), 90);
+    // 큰 글씨면 더 넓어진다(줄이지 않는다)
+    expect(w('1:03:26', 1000, const TextScaler.linear(1.5)), greaterThan(w('1:03:26')));
   });
 }
