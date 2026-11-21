@@ -11,7 +11,7 @@
 | 이슈 | 내용 | 상태 |
 |---|---|---|
 | #9 | `go-iap` 도입, 결제 경로 인터페이스 | 거래 조회, 구독 상태 조회, 구글 확인, 알림 해석, 환경변수 읽기까지 됨 |
-| #8 | 테이블 (V21~) | #6 결정 대기 |
+| #8 | 테이블 (V21) | 초안 PR. 선반을 어디에 붙일지(#6)만 열려 있음 |
 | #10 | 구매 검증 API | 시작 전 |
 
 - 내가 직접 채울 곳: `server/internal/iap/check.go`의 `Check` (7장)
@@ -31,6 +31,18 @@
 
 - `./...`은 "이 폴더 아래 모든 패키지"
 - DB 통합 테스트는 `TEST_DATABASE_URL`이 있을 때만 돎. 없으면 건너뜀. 실제 DB를 넣지 않음
+- 버릴 DB를 로컬에 띄워 돌리는 법 (Homebrew의 PostgreSQL 기준)
+
+```sh
+initdb -D /tmp/pgtest -U test --auth=trust
+pg_ctl -D /tmp/pgtest -o "-p 55432" -w start
+psql -h 127.0.0.1 -p 55432 -U test -d postgres -c "CREATE DATABASE iaptest"
+TEST_DATABASE_URL='postgres://test@127.0.0.1:55432/iaptest?sslmode=disable' go test ./...
+pg_ctl -D /tmp/pgtest stop
+```
+
+- 주의: `TestCommunity`는 같은 DB에서 두 번째 실행하면 실패함 (고정된 이름을 씀). 다시 돌릴 때는 DB를 지우고 새로 만듦
+- `-count=1`: 캐시된 결과를 쓰지 않고 다시 실행. DB 테스트에 붙임
 - `go.mod`가 Java의 `build.gradle`, `go.sum`이 의존성 잠금 파일. 둘 다 커밋
 
 ## 2. Java와 다른 것 한눈에
@@ -164,6 +176,23 @@ return tx.Commit(ctx)
   2. 짧은 트랜잭션: 거래 기록 `INSERT ... ON CONFLICT DO NOTHING` → 들어갔을 때만 권한 지급 → 커밋
   3. 커밋 뒤: 스토어에 확인(acknowledge) (ADR-0002 D10)
 
+### 6-1. 결제 표에서 쓴 것 (V21, `server/internal/server/iap_store.go`)
+
+| 하고 싶은 것 | 쓴 방법 | Java·JPA로 치면 |
+|---|---|---|
+| 같은 거래를 두 번 넣지 않기 | `INSERT ... ON CONFLICT (route, transaction_id) DO NOTHING` 뒤 `tag.RowsAffected() == 1` | `save` 전에 `existsBy...`를 하는 대신 유일 키에 맡김 |
+| 있으면 고치고 없으면 넣기 | `ON CONFLICT (...) DO UPDATE SET x = EXCLUDED.x` | `merge` |
+| 동시에 두 개 생기지 않게 | `SELECT id FROM users WHERE id=$1 FOR UPDATE`로 유저 줄을 먼저 잠금 | `@Lock(PESSIMISTIC_WRITE)` |
+| 트랜잭션 안팎 어디서나 부를 함수 | `dbtx` 인터페이스 (`Exec`, `Query`, `QueryRow`)를 인자로 받음. 풀과 `tx`가 둘 다 맞음 | `EntityManager`를 받는 것 |
+| 빈 값을 NULL로 | SQL에서 `nullif($1, '')` | |
+| NULL일 수 있는 칸 읽기 | 포인터로 받음: `var owner *int64` | `Long` (박싱 타입) |
+| 계정을 지워도 기록은 남기기 | 외래 키를 `ON DELETE SET NULL` | `@OnDelete` 없이 연관만 끊기 |
+
+- 권한은 저장하지 않고 계산 (ADR-0002 D5): `iapEntitlements`가 구독 표와 거래 표에서 매번 셈. 원장과 "가진 것"이 어긋날 수 없음
+- 만료 판단은 SQL의 `now()` (DB 서버 시계). 앱 서버가 여러 대여도 기준이 하나
+- 동시성은 테스트로 확인: 같은 거래를 고루틴 10개가 동시에 넣고 "처음 들어갔다"는 답이 1번인지 봄 (`iap_store_test.go`)
+  - 고루틴: `go func() { ... }()`. 가벼운 스레드. `sync.WaitGroup`으로 끝나기를 기다림 (`CountDownLatch` 자리)
+
 ## 7. 내가 채울 것: `Check`
 
 - 위치: `server/internal/iap/check.go`
@@ -292,4 +321,5 @@ return tx.Commit(ctx)
 | 2026-11-18 | #9 | `go-iap` v1.59.1 추가, `iap` 패키지(`Store`, 애플 거래 조회, 가짜), `Check` 자리 | 1~9장 |
 | 2026-11-19 | #9 | 구독 상태 조회, 구글 확인·소비, 애플·구글 알림 해석 | 9-0 |
 | 2026-11-19 | 조사 | 애플·구글·중국어권·국내 자료 조사, 이슈 #22~#42 | [조사 종합](../reports/2026-11-19-iap-pitfalls.md) |
+| 2026-11-19 | #8 | V21 마이그레이션(표 5개), 저장소 함수와 DB 테스트 | 1장 로컬 DB, 6-1 |
 | 2026-11-18 | #9 | 구글 거래 조회, 인터페이스를 `Lookup(Ref)`로 고침, 상태 값 `State`, 환경변수 읽기 | 4장 고친 기록, 4-1, 9장 구글 비교, 9-1 |
