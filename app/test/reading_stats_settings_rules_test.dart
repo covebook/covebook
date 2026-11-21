@@ -5,6 +5,7 @@ import 'package:chaekjang/features/reading/finish_screen.dart' show showSavedDia
 import 'package:chaekjang/features/settings/backup_screen.dart';
 import 'package:chaekjang/features/settings/settings_screen.dart';
 import 'package:chaekjang/features/stats/chart_data.dart';
+import 'package:chaekjang/features/stats/stats_screen.dart';
 import 'package:chaekjang/features/stats/stats_widgets.dart';
 import 'package:chaekjang/store/library_model.dart';
 import 'package:chaekjang/ui/kit.dart';
@@ -111,6 +112,24 @@ void main() {
     await t.pumpAndSettle();
     expect(plainStarts('45초'), findsOneWidget);
     expect(find.text('책 없이 읽기'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('한 책 독서 기록 분석: 달 숫자는 달 · 책 칸 바로 아래, \'이 책 전체\'는 맨 아래. 책 칸은 흰 바탕 + 회색 테두리(2026-11-21)', (t) async {
+    await pump(t, const StatsScreen(tab: false, initialBook: 'bk1'));
+    final box = t.widget<SelectField>(find.byType(SelectField));
+    expect(box.outlined, isTrue);
+    await t.tap(find.text('분석'));
+    await t.pumpAndSettle();
+    await t.dragUntilVisible(find.text('이 책 전체'), find.byType(Scrollable).first, const Offset(0, -300));
+    await t.pumpAndSettle();
+    final month = t.getRect(find.text('독서 횟수'));
+    final whole = t.getRect(find.text('이 책 전체'));
+    expect(month.top, lessThan(whole.top));
+    expect(t.getRect(find.text('날짜별 독서')).top, lessThan(whole.top));
+    // 한 권이면 '많이 읽은 책'(늘 그 책 한 줄)은 없고, 달 완독은 '이 책 전체'와 같은 '회'
+    expect(find.text('많이 읽은 책'), findsNothing);
+    expect(find.text('0권'), findsNothing);
     expect(t.takeException(), isNull);
   });
 }

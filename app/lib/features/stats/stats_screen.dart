@@ -126,6 +126,7 @@ class _StatsScreenState extends State<StatsScreen> {
             sub: book != null && bookAuthor(lib, book).isNotEmpty ? bookAuthor(lib, book) : null,
             placeholder: '모든 책',
             onPress: () => _pickBook(lib),
+            outlined: true,
           ),
         );
 
@@ -143,7 +144,6 @@ class _StatsScreenState extends State<StatsScreen> {
       _periodBar(now),
       // 분석: 달 바로 아래 책 칸. 날짜 바로 밑에는 회색 띠를 두지 않는다(2026-11-20 사용자 '이 날짜 밑에는 회색선 없애')
       if (_view == 'records' && !widget.tab) bookBox(top: Space.s, bottom: 0),
-      if (_view == 'records' && book != null) Band(top: false, children: [BookRecordView(lib: lib, id: book)]),
       if (_view == 'calendar') ...[
         // 캘린더는 회색 띠 · 흰 상자 없이 흰 바탕 그대로(2026-11-20 사용자 '캘린더 쪽은 회색선 넣어서 박스 모양 안 만들어도', '분석 쪽만 그렇게').
         // 달 아래 여백은 달 위 여백과 같게(전환 칸 → 달 Space.s, 달 → 달력 Space.s, 2026-11-20 사용자 '년도랑 월 위아래 여백 맞춰')
@@ -160,7 +160,9 @@ class _StatsScreenState extends State<StatsScreen> {
             body: bookName != null ? '‘$bookName’ 기준이에요.' : thisPeriod ? '책을 읽으면 그날이 달력에 칠해져요.' : null,
           ),
       ] else ...[
-        Band(top: book != null, children: [_summary(st0, sessions, activeDays, periodName)]),
+        // 달 숫자는 늘 달 · 책 칸 바로 아래(달 고르기와 붙어 있어야 그 달 숫자로 읽힌다). 책 한 권이면 '이 책 전체'는 맨 아래 따로
+        // (2026-11-21 사용자 '이건 왜 위아래로 2개가 있는 거야': '이 책 전체'가 달과 달 숫자 사이에 끼어 같은 숫자 두 줄로 보였다)
+        Band(top: false, children: [_summary(st0, sessions, activeDays, periodName)]),
         Band(children: [
           StatHead(
             title: '날짜별 독서',
@@ -171,6 +173,7 @@ class _StatsScreenState extends State<StatsScreen> {
           ReadingChart(bars: bars, selected: selected, unit: '일', onSelect: (k) => setState(() => _picked = k)),
         ]),
         ..._records(lib, st0, sessions, period, book),
+        if (book != null) Band(children: [BookRecordView(lib: lib, id: book)]),
       ],
     ];
     return Screen(
@@ -286,7 +289,8 @@ class _StatsScreenState extends State<StatsScreen> {
           valueText: (b) => formatDuration(b.value),
         ),
       ]),
-      if (top.isNotEmpty)
+      // 책 한 권으로 열면 '많이 읽은 책'은 늘 그 책 한 줄이라 뺀다(2026-11-21 사용자 '왜 2개가 있어': 같은 것이 되풀이됐다)
+      if (top.isNotEmpty && book == null)
         Band(children: [
           const Padding(padding: EdgeInsets.only(bottom: Space.s), child: SectionHead(title: '많이 읽은 책')),
           // 다른 책 줄처럼 누르면 책 정보(눌러도 아무 일 없었다)
@@ -303,10 +307,11 @@ class _StatsScreenState extends State<StatsScreen> {
         ListGroup(children: [
           // 넣은 책·지금 서재(모든 책일 때만): '전체 책'의 권수와 맞춰 볼 수 있게
           if (book == null) ListItem(label: '넣은 책', value: '${counts.added}권'),
+          // 책 한 권이면 '권'이 아니라 '이 책 전체'와 같은 '회'(이번 달 이 책을 다 읽은 횟수)
           ListItem(
             label: '완독',
-            sub: st0.completedRounds > st0.completedCount || st0.rereads > 0 ? ['완독 ${st0.completedRounds}회', '재독 ${st0.rereads}회'].join(metaSep) : null,
-            value: '${st0.completedCount}권',
+            sub: book == null && (st0.completedRounds > st0.completedCount || st0.rereads > 0) ? ['완독 ${st0.completedRounds}회', '재독 ${st0.rereads}회'].join(metaSep) : null,
+            value: book == null ? '${st0.completedCount}권' : '${st0.completedRounds}회',
           ),
           ListItem(label: '남긴 갈피', value: '${st0.bookmarkCount}개'),
           if (book == null) ListItem(label: '지금 서재', sub: counts.hidden > 0 ? '숨긴 책 ${counts.hidden}권은 빼고' : null, value: '${counts.shelf}권'),

@@ -143,15 +143,14 @@ class _EditBookScreenState extends State<EditBookScreen> {
     }
     final noTitle = _f['title']!.trim().isEmpty;
     // 나가기 확인은 공용 DraftGuard.edit('수정을 그만할까요?' · 취소 · 확인)
-    // 2026-11-21 사용자 시안: 위 줄 오른쪽 '저장'(아래 저장 단추 없음), 표지 옆 제목 · 저자, 선 아래 '출판 정보'
+    // 2026-11-21 사용자 시안: 표지 옆 제목 · 저자. 저장은 다른 수정 화면처럼 화면 아래 '책 정보 저장'(5장), 구역은 선 없이 '출판 정보' 제목만
+    // (같은 날 사용자 '이 부분 공통 컨벤션 깬 거 아닌가?': 시안의 위 줄 '저장' 글자 · 가는 선을 공통 규칙으로 되돌림)
     return DraftGuard.edit(
       dirty: () => _dirty && !_saving,
       child: Screen(
         title: '책 정보 수정',
         // 제목이 비면 할 일이 없어 꺼 두고, 까닭은 제목 칸 아래 오류 글로(DESIGN 12장)
-        right: _saving
-            ? const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: Spinner()))
-            : TextLink(label: '저장', bold: true, disabled: noTitle, onPress: _save),
+        footer: Btn(label: '책 정보 저장', size: 'xlarge', disabled: noTitle, busy: _saving, onPress: _save),
         children: [
           // 저장하지 못했으면 맨 위에 오류 글(고친 칸은 그대로)
           if (_saveError case final m?) Padding(padding: const EdgeInsets.only(top: Space.s), child: NoticeText(m, error: true)),
@@ -186,8 +185,7 @@ class _EditBookScreenState extends State<EditBookScreen> {
             ]),
           ),
           if (_msg case final m?) NoticeText(m.text, error: m.error),
-          const Hairline(),
-          const H2('출판 정보', first: true),
+          const H2('출판 정보'),
           Field(label: '출판사', value: _f['publisher']!, onChange: (t) => _set('publisher', t)),
           Field(label: '출간일', value: _f['publishedAt']!, onChange: (t) => _set('publishedAt', t), placeholder: 'YYYY 또는 YYYY-MM'),
           Field(label: 'ISBN', value: _f['isbn']!, onChange: (t) => _set('isbn', t), number: true, placeholder: 'ISBN 입력'),

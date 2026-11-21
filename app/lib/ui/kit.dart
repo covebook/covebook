@@ -2509,7 +2509,7 @@ class _FieldState extends State<Field> {
 
 /// 고르는 칸(누르면 시트·화면에서 고른다): 입력칸과 같은 모양 + 오른쪽 화살표
 class SelectField extends StatelessWidget {
-  const SelectField({super.key, required this.label, required this.placeholder, required this.onPress, this.value, this.sub, this.disabled = false, this.leading, this.showLabel = true, this.bottom = Space.xl});
+  const SelectField({super.key, required this.label, required this.placeholder, required this.onPress, this.value, this.sub, this.disabled = false, this.leading, this.showLabel = true, this.bottom = Space.xl, this.outlined = false});
   final String label, placeholder;
   final String? value, sub;
   final VoidCallback onPress;
@@ -2523,6 +2523,10 @@ class SelectField extends StatelessWidget {
 
   /// 칸 아래 여백(입력칸 사이 Space.xl). 바로 아래가 전환 칸이면 Space.l
   final double bottom;
+
+  /// 흰 바탕 + 옅은 회색 테두리(line 1). 입력 양식 안의 고르는 칸은 회색 채움 그대로, 화면 맨 위에서 이 화면이 보여 줄 대상을 고르는 칸(독서 기록 책 칸)만
+  /// (2026-11-21 사용자 '그냥 회색 선으로 감싸는 거 어때, 안에는 흰색에')
+  final bool outlined;
 
   @override
   Widget build(BuildContext context) {
@@ -2544,7 +2548,9 @@ class SelectField extends StatelessWidget {
               // 입력칸(Field)과 같은 높이 ControlSize.field(2026-11-19 공통 규칙: 52였다)
               constraints: const BoxConstraints(minHeight: ControlSize.field),
               padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m),
-              decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
+              decoration: outlined
+                  ? BoxDecoration(color: AppColors.bg, border: Border.all(color: AppColors.line), borderRadius: BorderRadius.circular(Shape.input))
+                  : BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
               child: Row(children: [
                 if (leading != null) ...[leading!, const SizedBox(width: Space.m)],
                 // 고른 값과 덧붙임(책 저자)은 한 줄: '데미안  헤르만 헤세', 덧붙임은 세로선 없이 작은 회색 글자(caption)로 글자 바닥을 맞춘다
