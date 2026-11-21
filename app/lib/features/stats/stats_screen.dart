@@ -112,20 +112,24 @@ class _StatsScreenState extends State<StatsScreen> {
     final todayDay = today(now);
     final bookName = bookTitle(lib, book);
 
+    // 한 책으로 연 독서 기록: 폭 가득 '표지 + 책 이름  저자' 고르는 칸(누르면 책 고르기 시트, 2026-11-21 사용자 '좌우 꽉 찬 썸네일이랑 이름 넣는 박스').
+    // 자리는 맨 위가 아니라 캘린더는 그날 기록 머리('11월 18일 목요일') 바로 위, 분석은 달('2026년 11월') 바로 아래(같은 날 사용자).
+    // 위 줄 오른쪽 '책 이름 ⌄'는 통계 탭에만
+    Widget bookBox({double top = 0, double bottom = Space.l}) => Padding(
+          padding: EdgeInsets.only(top: top),
+          child: SelectField(
+            label: '책',
+            showLabel: false,
+            bottom: bottom,
+            leading: book != null ? IgnorePointer(child: LinkedCover(lib: lib, id: book, width: CoverSize.row)) : null,
+            value: bookName ?? '모든 책',
+            sub: book != null && bookAuthor(lib, book).isNotEmpty ? bookAuthor(lib, book) : null,
+            placeholder: '모든 책',
+            onPress: () => _pickBook(lib),
+          ),
+        );
+
     final children = <Widget>[
-      // 한 책으로 연 독서 기록: 맨 위 폭 가득 '표지 + 책 이름 | 저자' 고르는 칸(누르면 책 고르기 시트). 위 줄 오른쪽 '책 이름 ⌄'는 통계 탭에만
-      // (2026-11-21 사용자 '여기에 좌우 꽉 찬 썸네일이랑 이름 넣는 박스 어때')
-      if (!widget.tab)
-        SelectField(
-          label: '책',
-          showLabel: false,
-          bottom: Space.l,
-          leading: book != null ? IgnorePointer(child: LinkedCover(lib: lib, id: book, width: CoverSize.row)) : null,
-          value: bookName ?? '모든 책',
-          sub: book != null && bookAuthor(lib, book).isNotEmpty ? bookAuthor(lib, book) : null,
-          placeholder: '모든 책',
-          onPress: () => _pickBook(lib),
-        ),
       // 캘린더|분석 → 그 아래 가운데 달 넘기기. 맨 위(제목 · 전환 칸 · 달)는 흰 바탕, 회색은 아래 띠 사이만
       // (2026-11-20 사용자 '맨 위쪽 배경 회색 넣지 말고 전부 흰색, 날짜랑 버튼 위치 바꿔')
       Segmented<String>(
@@ -137,15 +141,16 @@ class _StatsScreenState extends State<StatsScreen> {
         }),
       ),
       _periodBar(now),
-      // 책 선택은 제목 줄 오른쪽(두 칸 모두 같은 자리: 달력·그래프·숫자가 함께 바뀐다, 2026-11-17 통계 시안)
-      // 날짜 바로 밑에는 회색 띠를 두지 않는다(2026-11-20 사용자 '이 날짜 밑에는 회색선 없애')
+      // 분석: 달 바로 아래 책 칸. 날짜 바로 밑에는 회색 띠를 두지 않는다(2026-11-20 사용자 '이 날짜 밑에는 회색선 없애')
+      if (_view == 'records' && !widget.tab) bookBox(top: Space.s, bottom: 0),
       if (_view == 'records' && book != null) Band(top: false, children: [BookRecordView(lib: lib, id: book)]),
       if (_view == 'calendar') ...[
         // 캘린더는 회색 띠 · 흰 상자 없이 흰 바탕 그대로(2026-11-20 사용자 '캘린더 쪽은 회색선 넣어서 박스 모양 안 만들어도', '분석 쪽만 그렇게').
         // 달 아래 여백은 달 위 여백과 같게(전환 칸 → 달 Space.s, 달 → 달력 Space.s, 2026-11-20 사용자 '년도랑 월 위아래 여백 맞춰')
         const SizedBox(height: Space.s),
         ReadingCalendar(lib: lib, y: _y, m: _m, days: days, selected: selected, today: todayDay, onSelect: (d) => setState(() => _picked = d)),
-        const SizedBox(height: Space.block),
+        // 캘린더: 그날 기록 머리 바로 위 책 칸(달력과는 구역 사이만큼)
+        if (!widget.tab) ...[const SizedBox(height: Space.xl), bookBox(bottom: Space.xl)] else const SizedBox(height: Space.block),
         if (selected != null)
           ..._dayRecords(lib, selected, selMs, [for (final s in sessions) if (sessionDay(s).startsWith(selected)) s])
         else
