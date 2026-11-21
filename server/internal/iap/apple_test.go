@@ -18,6 +18,8 @@ type fakeAppleAPI struct {
 	parseErr error
 	status   *api.StatusResponse
 	renewal  *api.JWSRenewalInfoDecodedPayload
+	history  []api.NotificationHistoryResponseItem
+	since    *int64 // 이력을 물은 시작 시각(밀리초)
 }
 
 func (f fakeAppleAPI) GetTransactionInfo(context.Context, string) (*api.TransactionInfoResponse, error) {
@@ -31,6 +33,13 @@ func (f fakeAppleAPI) ParseSignedTransaction(string) (*api.JWSTransaction, error
 }
 func (f fakeAppleAPI) GetALLSubscriptionStatuses(context.Context, string, *url.Values) (*api.StatusResponse, error) {
 	return f.status, f.lookup
+}
+
+func (f fakeAppleAPI) GetAllNotificationHistory(_ context.Context, body api.NotificationHistoryRequest, _ time.Duration) ([]api.NotificationHistoryResponseItem, error) {
+	if f.since != nil {
+		*f.since = body.StartDate
+	}
+	return f.history, f.lookup
 }
 
 // renewalParser는 Apple.parseRenewal 자리에 끼우는 가짜다.

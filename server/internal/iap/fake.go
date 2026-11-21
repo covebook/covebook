@@ -15,6 +15,8 @@ type Fake struct {
 	Err        error               // 값이 있으면 조회가 항상 이 오류로 실패한다(통신 장애 흉내)
 	Confirmed  []string            // Confirm이 불린 Ref.ID. 순서대로
 	ConfirmErr error               // 값이 있으면 Confirm이 실패한다
+	History    []Notice            // NoticeHistory가 돌려줄, 스토어가 보냈던 알림
+	VoidedList []VoidedPurchase    // Voided가 돌려줄, 스토어가 환불한 구매
 }
 
 func (f *Fake) Route() Route  { return f.R }

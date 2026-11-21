@@ -8,15 +8,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/awa/go-iap/playstore"
 	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/googleapi"
 )
 
 type fakeGoogleAPI struct {
-	sub   *androidpublisher.SubscriptionPurchaseV2
-	prod  *androidpublisher.ProductPurchaseV2
-	err   error
-	calls *[]string // 확인·소비 호출 기록
+	sub    *androidpublisher.SubscriptionPurchaseV2
+	prod   *androidpublisher.ProductPurchaseV2
+	err    error
+	calls  *[]string                                                // 확인·소비 호출 기록
+	voided map[string]*androidpublisher.VoidedPurchasesListResponse // 쪽 토큰 → 응답
+}
+
+func (f fakeGoogleAPI) VoidedPurchases(_ context.Context, _ string, _, _, _ int64, token string, _ int64, _ playstore.VoidedPurchaseType) (*androidpublisher.VoidedPurchasesListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.voided[token], nil
 }
 
 func (f fakeGoogleAPI) AcknowledgeSubscription(_ context.Context, pkg, id, token string, _ *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error {
