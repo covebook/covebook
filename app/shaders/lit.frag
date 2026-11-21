@@ -778,7 +778,8 @@ vec4 _tex2(vec2 q) {
     else if (abs(n.z) > 0.5) {
       float fx = max(2.0 * jointF(P.x - 0.00000000, 19.8250000, 1.0), 2.0 * jointF(366.000000 - P.x, 19.8250000, 1.0));
       float fy = 2.0 * jointF(env.z - P.y, 19.8250000, 1.0);
-      k = (1.0 - jointF(env.z - P.y, 6.10000000, 0.150000000)) * jointXs(P, 0.300000000) * (1.0 - 0.150000000 * fx * fy);
+      // 아래 판 윗면과 만나는 모서리도 옆벽과 같은 바닥 그늘(light-model jointBase, Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선')
+      k = (1.0 - jointF(env.z - P.y, 6.10000000, 0.150000000)) * (1.0 - jointF(P.y - env.y, 6.10000000, 0.400000000)) * jointXs(P, 0.300000000) * (1.0 - 0.150000000 * fx * fy);
     }
     else if (n.y > 0.5) k = jointXs(P, 1.0) * (1.0 - jointF(DEPTH - P.z, 6.10000000, 0.0750000000));
     else {
@@ -833,13 +834,12 @@ vec4 _tex2(vec2 q) {
   }
   vec3 coveOf(vec3 P, vec3 V) {
     vec3 c = vec3(0.0);
-    if (env.x < 1.5 || false || P.z < -56.9250000 || (abs(tN.z) > 0.5 && P.z < -52.8750000)) return c;
+    // 판 윗면과 벽·틀이 만나는 곳은 곡면 없이 곧은 모서리 + 접촉 그늘만(light-model coveNormal, Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선')
+    if (env.x < 1.5 || false || tN.y > 0.5 || P.z < -56.9250000 || (abs(tN.z) > 0.5 && P.z < -52.8750000)) return c;
     float w0 = coveWt(tN, V);
     vec3 m = tN * w0;
     float w;
     if (abs(tN.y) < 0.5) {
-      w = coveS(P.y - env.y);
-      if (w > 0.0) m += vec3(0.0, 1.0, 0.0) * w * coveWt(vec3(0.0, 1.0, 0.0), V);
       w = coveS(env.z - P.y);
       if (w > 0.0) m += vec3(0.0, -1.0, 0.0) * w * coveWt(vec3(0.0, -1.0, 0.0), V);
     }

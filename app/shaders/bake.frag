@@ -766,7 +766,8 @@ vec4 _grid(vec2 q) {
     else if (abs(n.z) > 0.5) {
       float fx = max(2.0 * jointF(P.x - 0.00000000, 19.8250000, 1.0), 2.0 * jointF(366.000000 - P.x, 19.8250000, 1.0));
       float fy = 2.0 * jointF(env.z - P.y, 19.8250000, 1.0);
-      k = (1.0 - jointF(env.z - P.y, 6.10000000, 0.150000000)) * jointXs(P, 0.300000000) * (1.0 - 0.150000000 * fx * fy);
+      // 아래 판 윗면과 만나는 모서리도 옆벽과 같은 바닥 그늘(light-model jointBase, Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선')
+      k = (1.0 - jointF(env.z - P.y, 6.10000000, 0.150000000)) * (1.0 - jointF(P.y - env.y, 6.10000000, 0.400000000)) * jointXs(P, 0.300000000) * (1.0 - 0.150000000 * fx * fy);
     }
     else if (n.y > 0.5) k = jointXs(P, 1.0) * (1.0 - jointF(DEPTH - P.z, 6.10000000, 0.0750000000));
     else {
