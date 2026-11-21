@@ -3,6 +3,7 @@
 // 공식에 숫자가 없는 곳(단추 높이 · 모서리 · 그림자)은 지금 앱 값을 쓰고 '공식 없음'으로 적었다
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -40,10 +41,11 @@ abstract final class Space {
   /// TDS BottomCTA paddingBottom: max(안전 영역, 20px)(BottomCTA Single · Double 절). 화면 아래 고정 단추 · 시트 아래 여백
   static const ctaBottom = 20.0;
 
-  /// TDS Border variant height16: 구간을 나누는 띠 높이(Border 절)
-  static const band = 16.0;
+  /// 구간을 나누는 회색 띠 높이. TDS Border variant height16(Border 절)은 16이지만 두꺼워 보여 반으로
+  /// (2026-11-21 사용자 '이 선 좀 두껍지 않나? 이것도 토스 기준이야?'). 통계 분석 띠 사이 · 책 정보 · 책별 기록 구간 띠가 모두 이 값
+  static const band = 8.0;
 
-  /// 통계의 흰 띠(Band) 안 위아래(2026-11-20 토스 공식+: 회색 바탕 위 좌우 끝까지 붙인 흰 띠. 띠 사이는 band 16 회색)
+  /// 통계의 흰 띠(Band) 안 위아래(2026-11-20 토스 공식+: 회색 바탕 위 좌우 끝까지 붙인 흰 띠. 띠 사이는 band 회색)
   static const bandPad = 24.0;
 
   /// 이름 → 값(토큰 내보내기 · 검사용). 값이 같아도 역할이 다르면 이름을 따로 둔다(group 28 · xl 28 등)
@@ -171,9 +173,9 @@ abstract final class ControlSize {
   /// buttonM = large(확인창 두 단추 · 빈 화면 · 카드 안) · buttonS = medium(줄 안 작은 단추) · small(사진 단추처럼 안쪽 여백만 좁은 것)
   static const buttonL = 52.0, buttonM = 48.0, buttonS = 40.0;
 
-  /// 입력칸 · 고르는 칸(Field · SelectField) 56, 여러 줄 입력칸 110, 검색칸 48.
+  /// 입력칸 · 고르는 칸(Field · SelectField · DateField · TimeField) 48(검색칸과 같다. 56이었다: 2026-11-21 사용자 '쪽수 박스 두께가 좀 두껍지 않나'), 여러 줄 입력칸 110, 검색칸 48.
   /// 검색칸: 11-18 사용자 '두께 좀 줄이고'로 52 → 44를 넣었지만 안쪽 검색 아이콘 칸(누르는 자리 48)이 높이를 정해 실제로는 48로 그려진다(2026-11-19 값 대조에서 발견). 지금 화면 그대로 48
-  static const field = 56.0, fieldMultiline = 110.0, search = 48.0;
+  static const field = 48.0, fieldMultiline = 110.0, search = 48.0;
 
   /// 고르는 큰 칸(Choice) 56
   static const choice = 56.0;
@@ -226,8 +228,13 @@ abstract final class CoverSize {
   /// 책 한 줄(BookRow): 작게 40(고르기 · 선택 · 바코드 · 가져오기 · 읽기 목록 · 통계) · 보통 64(검색 결과 · 감상 목록) · 크게 80(내 책 목록)
   static const row = 40.0, result = 64.0, list = 80.0;
 
-  /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 120, 책 확인(추가 전) 120, 책 정보 수정 120(2026-11-21 시안: 표지 옆 제목 · 저자 두 칸 높이)
-  static const head = 140.0, feature = 120.0, confirm = 120.0, edit = 120.0;
+  /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 120, 책 확인(추가 전) 120.
+  /// 책 정보 수정은 표지 위 끝 = '제목' 이름 줄 위, 아래 끝 = '저자' 칸 아래가 되는 폭(옆 두 칸 높이 [editHeight] × [ratio] ≈ 127.8,
+  /// 2026-11-21 사용자 '책이랑 옆에 쓰는 거랑 라인이 안 맞아': 120이라 표지가 저자 칸보다 짧았다)
+  static const head = 140.0, feature = 120.0, confirm = 120.0, edit = editHeight * ratio;
+
+  /// 책 정보 수정 표지 옆 두 칸(이름 줄 24 + 8 + 입력칸 ControlSize.field, 사이 Space.xl 28) 높이 = 표지 높이
+  static const editHeight = 2 * (24.0 + Space.s + ControlSize.field) + Space.xl;
 
   /// 창 · 시트 안 표지: '추가했어요' 88, 저장했어요 창 72(사용자 시안), 책장에 꽂기 68, 숨기기 · 삭제 확인 56
   static const added = 88.0, saved = 72.0, place = 68.0, sheet = 56.0;
@@ -239,7 +246,7 @@ abstract final class CoverSize {
   static const ratio = 0.68;
 
   static const all = <String, double>{
-    'row': row, 'result': result, 'list': list, 'head': head, 'feature': feature, 'confirm': confirm, 'edit': edit,
+    'row': row, 'result': result, 'list': list, 'head': head, 'feature': feature, 'confirm': confirm, 'edit': edit, 'editHeight': editHeight,
     'added': added, 'saved': saved, 'place': place, 'sheet': sheet, 'post': post, 'swatch': swatch, 'ratio': ratio,
   };
 }
@@ -471,6 +478,102 @@ class NavBar extends StatelessWidget {
 /// 화면 아래에 붙인 단추 줄 바로 위 흰 그라데이션 높이(2026-11-20 사용자 '윗부분은 살짝 그라데이션')
 const footerFade = Space.page;
 
+/// 화면 틀(Screen)의 키보드 자리: 실제 키보드 높이, 또는 입력칸을 막 눌러 키보드가 올라오는 중이면 지난번 키보드 높이(처음에는 화면 높이의 0.38)만큼
+/// 미리 비우고 입력칸을 그 위로 부드럽게 올린다. 키보드 높이가 오면(멈추면) 그 값으로 바꾼다.
+/// 까닭: 키보드 높이를 다 올라온 뒤에야 앱에 알려 주는 기기에서는 입력칸이 키보드에 가렸다가 0.7초쯤 뒤 화면이 한 번에 튀어 올랐다
+/// (2026-11-21 사용자 '한줄 메모 눌러서 키보드 올라올 때 드드득 하면서 걸리면서 올라와', 에뮬 녹화: 키보드는 1.38~1.74초, 화면은 2.50초에 331화소 한 번에).
+/// 높이를 매 프레임 알려 주는 기기에서도 올라오는 동안 틀이 그대로라 프레임마다 다시 배치하지 않는다.
+/// 키보드가 뜨지 않으면(물리 키보드 · 떠 있는 키보드) 1.5초 뒤 비운 자리를 거둔다
+class KeyboardSpace extends StatefulWidget {
+  const KeyboardSpace({super.key, required this.builder});
+  final Widget Function(BuildContext context, double keyboard) builder;
+
+  /// 마지막으로 멈춘 키보드 높이(앱을 켠 뒤 아직 없으면 0)
+  static double last = 0;
+
+  @override
+  State<KeyboardSpace> createState() => _KeyboardSpaceState();
+}
+
+class _KeyboardSpaceState extends State<KeyboardSpace> {
+  double _reserve = 0;
+  bool _seen = false;
+  FocusNode? _focus;
+  Timer? _giveUp, _settle;
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_focusChanged);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_focusChanged);
+    _giveUp?.cancel();
+    _settle?.cancel();
+    super.dispose();
+  }
+
+  /// 이 화면 안의 입력칸에 초점이 왔는지
+  bool _mine(FocusNode f) {
+    final c = f.context;
+    if (c == null || !c.mounted || c.findAncestorStateOfType<EditableTextState>() == null) return false;
+    return identical(c.findAncestorStateOfType<_KeyboardSpaceState>(), this);
+  }
+
+  void _focusChanged() {
+    final f = FocusManager.instance.primaryFocus;
+    if (!mounted || identical(f, _focus)) return;
+    _focus = f;
+    _giveUp?.cancel();
+    final open = MediaQuery.viewInsetsOf(context).bottom > 0;
+    if (f == null || open || !_mine(f)) {
+      if (_reserve != 0) setState(() => _reserve = 0);
+      return;
+    }
+    _seen = false;
+    setState(() => _reserve = KeyboardSpace.last > 0 ? KeyboardSpace.last : MediaQuery.sizeOf(context).height * 0.38);
+    // 줄어든 화면에 맞춰 입력칸을 비운 자리 위로(가려질 때만 움직인다). 입력칸 아래로 누르는 자리(48)만큼 더 보이게:
+    // 키보드 높이가 오면 입력칸이 스스로 커서 아래를 그만큼(여백 20 + 손잡이) 띄우려고 한 번 더 튀었다(2026-11-21 녹화: 102화소)
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 그사이 화면이 닫혔거나 입력칸이 사라졌으면 그만(닫힌 칸의 그림을 찾으면 오류였다)
+      final c = f.context;
+      if (!mounted || _reserve == 0 || c == null || !c.mounted) return;
+      final ro = c.findRenderObject();
+      if (ro is! RenderBox || !ro.attached) return;
+      ro.showOnScreen(
+        rect: Offset.zero & Size(ro.size.width, ro.size.height + kMinInteractiveDimension),
+        duration: reduce ? Duration.zero : const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+    });
+    _giveUp = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted && !_seen && _reserve != 0) setState(() => _reserve = 0);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final k = MediaQuery.viewInsetsOf(context).bottom;
+    if (k <= 0) return;
+    _seen = true;
+    // 키보드 높이가 멈추면 그 값을 기억하고 미리 비운 자리를 거둔다(실제 높이로)
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      final now = MediaQuery.viewInsetsOf(context).bottom;
+      if (now > 0) KeyboardSpace.last = now;
+      if (_reserve != 0) setState(() => _reserve = 0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, math.max(MediaQuery.viewInsetsOf(context).bottom, _reserve));
+}
+
 class Screen extends StatelessWidget {
   const Screen({
     super.key,
@@ -525,10 +628,12 @@ class Screen extends StatelessWidget {
   final bool? topBar;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => KeyboardSpace(builder: _build);
+
+  // keyboard: 키보드 자리(실제 키보드 높이, 입력칸을 막 눌렀으면 미리 비운 높이, KeyboardSpace)
+  Widget _build(BuildContext context, double keyboard) {
     // 키보드가 열리면 아래 안전 여백 대신 키보드 높이만큼 비운다(키보드가 열리면 paddingOf 아래는 0이 된다)
     final insets = MediaQuery.paddingOf(context);
-    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     // 아래 단추 줄을 화면 아래에 붙이나: 스크롤하지 않는 화면, 또는 pinFooter(기본)이고 키보드가 닫혀 있을 때
     final footerFixed = footer != null && (!scroll || (pinFooter && keyboard == 0));
     // 밀어 넣은 화면은 모두 가운데 작은 제목(2026-11-17 사용자: 가운데 제목이면 깔끔). 큰 왼쪽 제목은 탭 첫 화면에만 남긴다.
@@ -1413,10 +1518,13 @@ Toggle? _rowToggle(VoidCallback? onPress, Widget? right) => onPress == null && r
 /// TDS에 칩이 없어 하나 고르는 칩 자리도 이것을 쓴다. 높이 · 모양 · 글자는 공식 글에 없음 → 지금 앱 모양(회색 칸 44 안 고른 칸만 흰 바탕),
 /// 글자는 t6 15(작은 본문): 고른 칸 SemiBold grey900, 나머지 Regular grey600. 화면 읽기는 라디오처럼 '선택됨'(role radio · aria-checked)
 class Segmented<T> extends StatelessWidget {
-  const Segmented({super.key, required this.items, required this.value, required this.onChange, this.track = AppColors.surface, this.compact = false});
+  const Segmented({super.key, required this.items, required this.value, required this.onChange, this.track = AppColors.surface, this.compact = false, this.disabled = const {}});
   final List<(T, String)> items;
   final T value;
   final ValueChanged<T> onChange;
+
+  /// 지금 고를 수 없는 칸(흐리게, 눌러도 그대로): 꾸미기 '기대기'에서 기댈 옆 책이 없는 쪽
+  final Set<T> disabled;
 
   /// 칸 바탕
   final Color track;
@@ -1447,9 +1555,10 @@ class Segmented<T> extends StatelessWidget {
                     container: true,
                     inMutuallyExclusiveGroup: true,
                     checked: id == value,
+                    enabled: !disabled.contains(id),
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => onChange(id),
+                      onTap: disabled.contains(id) ? null : () => onChange(id),
                       child: Padding(
                         padding: EdgeInsets.symmetric(vertical: pad),
                         child: Container(
@@ -1466,12 +1575,15 @@ class Segmented<T> extends StatelessWidget {
                           // (Container alignment는 늘어났다: 회색 칸 44가 68로 보였다, 2026-11-20 사용자 '세로 높이 좀 길지 않나')
                           child: Center(
                             heightFactor: 1,
-                            child: Text(label,
-                                maxLines: 1,
-                                style: AppType.bodySmall.copyWith(
-                                  fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
-                                  color: id == value ? AppColors.ink : AppColors.inkSoft,
-                                )),
+                            child: Opacity(
+                              opacity: disabled.contains(id) && id != value ? disabledOpacity : 1,
+                              child: Text(label,
+                                  maxLines: 1,
+                                  style: AppType.bodySmall.copyWith(
+                                    fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
+                                    color: id == value ? AppColors.ink : AppColors.inkSoft,
+                                  )),
+                            ),
                           ),
                         ),
                       ),
@@ -1538,7 +1650,7 @@ class ListGroup extends StatelessWidget {
       );
 }
 
-/// 묶음 사이 = TDS Border. 구간을 나눌 때는 variant height16(화면 끝까지 닿는 높이 16 띠, 색은 공식 없음 → greyBackground = grey100),
+/// 묶음 사이 = TDS Border. 구간을 나눌 때는 variant height16 자리(화면 끝까지 닿는 띠, 높이는 Space.band 8 = 공식 16의 반, 색은 공식 없음 → greyBackground = grey100),
 /// inset은 variant padding24(양옆 24를 두고 그은 선, 색은 공식 없음 → 우리 값). 띠 앞뒤 여백은 공식 없음 → 지금 앱 값(20 · 16)
 class SectionBand extends StatelessWidget {
   const SectionBand({super.key, this.inset = false});
@@ -2367,16 +2479,18 @@ class _FieldState extends State<Field> {
                 maxLines: widget.multiline ? null : 1,
                 keyboardType: widget.number ? TextInputType.number : (widget.multiline ? TextInputType.multiline : TextInputType.text),
                 textInputAction: TextInputAction.done,
-                style: AppType.input.copyWith(height: widget.multiline ? 25 / 16 : null),
+                // 한 줄 칸은 글자 줄 22로 고정: 위아래 12 + 22 + 테두리 2 = 48(줄 높이를 기기 글꼴에 맡기면 칸 높이가 기기마다 달랐다)
+                style: AppType.input.copyWith(height: widget.multiline ? 25 / 16 : 22 / 16),
                 cursorColor: AppColors.accent,
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.fromLTRB(16, widget.multiline ? 14 : 16, widget.unit != null ? 44 : 16, 16),
+                  // 한 줄 칸은 위아래 12(칸 높이 48 안에 글자 줄 가운데), 여러 줄은 위 14 · 아래 16
+                  contentPadding: EdgeInsets.fromLTRB(16, widget.multiline ? 14 : 12, widget.unit != null ? 44 : 16, widget.multiline ? 16 : 12),
                   // 자리 표시 글도 낱말 단위로 줄을 바꾼다('…빠져 / 요'처럼 한 글자만 넘어갔다, 2026-11-21 촬영 확인)
                   hintText: placeholder == null ? null : keepAll(placeholder),
                   hintMaxLines: widget.multiline ? 3 : 1,
-                  hintStyle: AppType.input.copyWith(color: AppColors.inkFaint),
+                  hintStyle: AppType.input.copyWith(color: AppColors.inkFaint, height: widget.multiline ? 25 / 16 : 22 / 16),
                 ),
               ),
             ),
@@ -2395,19 +2509,28 @@ class _FieldState extends State<Field> {
 
 /// 고르는 칸(누르면 시트·화면에서 고른다): 입력칸과 같은 모양 + 오른쪽 화살표
 class SelectField extends StatelessWidget {
-  const SelectField({super.key, required this.label, required this.placeholder, required this.onPress, this.value, this.sub, this.disabled = false});
+  const SelectField({super.key, required this.label, required this.placeholder, required this.onPress, this.value, this.sub, this.disabled = false, this.leading, this.showLabel = true, this.bottom = Space.xl});
   final String label, placeholder;
   final String? value, sub;
   final VoidCallback onPress;
   final bool disabled;
 
+  /// 값 앞 그림(책 표지 작게 40): 화면 맨 위에서 이 화면의 책을 고르는 칸(독서 기록, 2026-11-21 사용자 '좌우 꽉 찬 썸네일이랑 이름 넣는 박스')
+  final Widget? leading;
+
+  /// 이름 줄을 그릴지(이름은 화면 읽기에 남는다). 화면 제목이 이미 무엇을 고르는지 말할 때 뺀다
+  final bool showLabel;
+
+  /// 칸 아래 여백(입력칸 사이 Space.xl). 바로 아래가 전환 칸이면 Space.l
+  final double bottom;
+
   @override
   Widget build(BuildContext context) {
     final l = splitLabel(label);
     return Padding(
-      padding: const EdgeInsets.only(bottom: Space.xl),
+      padding: EdgeInsets.only(bottom: bottom),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _LabelRow(l.name, l.tag),
+        if (showLabel) _LabelRow(l.name, l.tag),
         Semantics(
           container: true,
           button: true,
@@ -2418,17 +2541,20 @@ class SelectField extends StatelessWidget {
           child: GestureDetector(
             onTap: disabled ? null : onPress,
             child: Container(
-              // 입력칸(Field)과 같은 높이 56(2026-11-19 공통 규칙: 52였다)
+              // 입력칸(Field)과 같은 높이 ControlSize.field(2026-11-19 공통 규칙: 52였다)
               constraints: const BoxConstraints(minHeight: ControlSize.field),
               padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m),
               decoration: BoxDecoration(color: AppColors.input, borderRadius: BorderRadius.circular(Shape.input)),
               child: Row(children: [
-                // 고른 값과 덧붙임(책 저자)은 한 줄: '데미안 | 헤르만 헤세'(2026-11-21 갈피 남기기 시안. 두 줄이라 칸이 높았다)
+                if (leading != null) ...[leading!, const SizedBox(width: Space.m)],
+                // 고른 값과 덧붙임(책 저자)은 한 줄: '데미안  헤르만 헤세', 덧붙임은 세로선 없이 작은 회색 글자(caption)로 글자 바닥을 맞춘다
+                // (2026-11-21 갈피 남기기 시안: 두 줄이라 칸이 높았다. 같은 날 사용자 '가호 | 무라카미 이렇게 하지 말고 … 무라카미는 좀 작고 회색으로')
                 Expanded(
                   child: value != null && sub != null
-                      ? Row(children: [
+                      ? Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
                           Flexible(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.input.strong)),
-                          Flexible(child: MetaText('$metaSep${sub!}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub)),
+                          const SizedBox(width: Space.s),
+                          Flexible(child: Text(sub!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption)),
                         ])
                       : WordText(value ?? placeholder, maxLines: 2, style: AppType.input.copyWith(color: value != null ? AppColors.ink : AppColors.inkFaint)),
                 ),
@@ -2443,7 +2569,7 @@ class SelectField extends StatelessWidget {
 }
 
 /// 글자 버튼 = TDS TextButton variant clear(기본, 밑줄 없음) · size medium(= t5, 'Migrate to v2.x' TextButton 표, AppType.link).
-/// 색: 갈색 = 이어서 할 일(TDS 글자 단추 · 더 보기 blue500 자리), 회색 grey600 = 조심스러운 일. 눌림은 옅어짐(공식 없음 → 우리 값)
+/// 색: 갈색 = 이어서 할 일(TDS 글자 단추 · 더 보기 blue500 자리), 회색 grey600 = 조심스러운 일(회색은 작고 보통 굵기 AppType.sub 15). 눌림은 옅어짐(공식 없음 → 우리 값)
 /// 큰 단추 바로 아래 보조 행동(계속 추가 · 장정 직접 고르기 · 보관만 하기 · 취소).
 /// 간격(Space.xs) · 옅은 글자 · 누르는 높이 48을 한 곳에서 정한다(2026-11-18 사용자: 화면마다 간격·글자색·단추 모양이 달랐다)
 class SubAction extends StatelessWidget {
@@ -2496,11 +2622,15 @@ class TextLink extends StatelessWidget {
                 // 가운데 정렬은 양옆 8을 누르는 자리로 둔다(지금 앱 hitSlop 8). 왼쪽 정렬은 글자가 위 글줄과 맞게 여백 없이
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: start ? 0 : 8),
+                  // 회색 글자 단추(soft: 장정 직접 고르기 · 계속 추가 · 나중에 정하기 · 조건 지우기 · 원문 보기 …)는 작고 보통 굵기 sub 15(토스 '평생 수수료 무료'처럼,
+                  // 2026-11-21 사용자 '서브 글씨들 토스랑 다르게 너무 두껍지 않나 크기랑 반영해서'). 갈색 · 본문색 · 주의색 글자 단추는 link 17 굵게
                   child: Center(widthFactor: 1, child: WordText(label,
-                      style: AppType.link.copyWith(
-                        fontFamily: bold ? AppFonts.uiTitle : null,
-                        color: danger ? AppColors.danger : soft ? AppColors.inkSoft : ink ? AppColors.ink : null,
-                      ))),
+                      style: soft && !danger
+                          ? AppType.sub.copyWith(fontFamily: bold ? AppFonts.uiTitle : null)
+                          : AppType.link.copyWith(
+                              fontFamily: bold ? AppFonts.uiTitle : null,
+                              color: danger ? AppColors.danger : ink ? AppColors.ink : null,
+                            ))),
                 ),
               ),
             ),

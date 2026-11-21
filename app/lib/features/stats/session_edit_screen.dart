@@ -149,7 +149,7 @@ class _SessionEditScreenState extends State<SessionEditScreen> {
             sub: bookAuthor(lib, _f.bookId).isEmpty ? null : bookAuthor(lib, _f.bookId),
             placeholder: '책 연결하기 (선택)',
             onPress: () async {
-              final r = await pickBook(context, lib, allowNone: true, current: (id: _f.bookId));
+              final r = await pickBook(context, lib, allowNone: true, addNew: true, current: (id: _f.bookId));
               if (r.picked) _set(bookId: r.id);
             },
           ),

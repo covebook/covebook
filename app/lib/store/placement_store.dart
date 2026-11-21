@@ -21,7 +21,10 @@ class PlacementStore {
 
   ShelfLayout? layout;
   BookMap books = {};
-  ShelfLayout? _undo;
+  /// 되돌리기 차례(오래된 것부터): 확정할 때마다 바꾸기 전 배치를 쌓는다. 여러 번 되돌릴 수 있다
+  /// (2026-11-21 사용자 '되돌리기 1번밖에 안 되는 게 좀 별론데'). 너무 길어지지 않게 [_undoMax]까지
+  final List<ShelfLayout> _undo = [];
+  static const _undoMax = 30;
 
   /// 책장에서 뺀 책이 있던 자리(뺄 때 배치와 그 선반에서의 차례). '책장에 진열'로 되돌리면 그 자리부터 본다(앱을 끄면 잊는다).
   /// 2026-11-16 QA 현우 F12: 빼고 나서 다시 진열하면 선반 맨 끝으로 갔다
@@ -33,7 +36,7 @@ class PlacementStore {
   /// 뺄 때 자리를 기억하고 있는지
   bool hadSpot(String bookId) => _spots.containsKey(bookId);
 
-  bool get canUndo => _undo != null;
+  bool get canUndo => _undo.isNotEmpty;
 
   /// 홈이 읽은 서재(책 크기·배치)를 받는다
   void adopt(Library lib) {
@@ -57,7 +60,7 @@ class PlacementStore {
     }
     final fit = fitToShelf(keepGaps(l, before, books), books);
     final next = resolveLeans(fit.layout, books);
-    _undo = null;
+    _undo.clear();
     layout = l;
     // 새 크기의 책은 이미 서재에 있으니 저장하지 못해도 화면은 새 크기에 맞춘 배치로 둔다
     await _write(next, keep: true);
@@ -105,12 +108,12 @@ class PlacementStore {
       debugPrint('[layout] 확정 거절 $errors');
       return false;
     }
-    final undo = _undo;
-    _undo = cur;
+    _undo.add(cur);
+    if (_undo.length > _undoMax) _undo.removeAt(0);
     try {
       await _write(next);
     } catch (_) {
-      if (identical(_undo, cur)) _undo = undo;
+      if (_undo.isNotEmpty && identical(_undo.last, cur)) _undo.removeLast();
       rethrow;
     }
     return true;
@@ -198,19 +201,18 @@ class PlacementStore {
     _spots.removeWhere((id, _) => gone.contains(id));
     final next = resolveLeans(
         normalize(ShelfLayout(l.shelves, [for (final p in l.placements) if (!gone.contains(p.bookId)) p], [for (final id in l.drawer) if (!gone.contains(id)) id])), books);
-    _undo = null;
+    _undo.clear();
     // 책은 이미 서재에서 빠졌으니 저장하지 못해도 화면 배치는 그 책 없이 둔다(다시 켜면 서재에 없는 책의 자리는 읽을 때 빠진다)
     await _write(next, keep: true);
   }
 
   Future<bool> undo() async {
-    final prev = _undo;
-    if (prev == null || layout == null) return false;
-    _undo = null;
+    if (_undo.isEmpty || layout == null) return false;
+    final prev = _undo.removeLast();
     try {
       await _write(_withMissing(prev));
     } catch (_) {
-      _undo ??= prev;
+      _undo.add(prev);
       rethrow;
     }
     // 빼기를 되돌려 책장에 다시 선 책은 기억한 자리가 필요 없다

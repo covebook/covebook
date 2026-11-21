@@ -1,7 +1,10 @@
 // 독서 끝내고 저장하기(지금 앱 store/finish-reading.ts): 기록이 디스크에 저장되기 전에는 복구용 초안을 지우지 않는다. 다시 해도 같은 세션 id
 library;
 
+import 'dart:async';
+
 import '../domain/library.dart' show today;
+import '../services/ambient.dart';
 import '../domain/reading.dart';
 import 'library_model.dart';
 import 'reading_store.dart';
@@ -23,6 +26,16 @@ Future<void> saveFinishedReading(FinishDraft draft, {num? startPage, num? pagesR
   await ReadingStore.instance.clearPending();
 }
 
+/// 독서 일시정지: 타이머와 함께 소리도 멈춘다. 켜 둔 소리 설정은 그대로라 이어 읽으면 다시 난다
+/// (2026-11-21 사용자 '타이머 멈출 때 소리도 같이 멈추게'). 일시정지 단추(장면 · 작은 타이머)가 모두 이것을 쓴다
+void pauseReading() {
+  ReadingStore.instance.pause();
+  Ambient.instance.hold();
+}
+
+/// 이어 읽을 때 켜 둔 소리도 다시(소리를 꺼 둔 사람은 그대로 조용하다)
+void _resumeSound() => unawaited(Ambient.instance.resumeIfWanted().catchError((Object _) {}));
+
 /// 멈춰 둔 독서를 이어 읽기. 시작한 날이 오늘이 아니면 지난 몫은 그날(멈춘 때 끝난) 기록으로 저장하고 같은 책으로 오늘 새로 시작한다
 /// (2026-11-19 타이머 점검 B1: 어제 멈춘 독서를 오늘 이어 읽으면 오늘 읽은 시간까지 어제 기록이 되고 읽기 탭은 00:00이었다).
 /// 이어 읽기 단추(장면 · 작은 타이머 · 읽기 시작 · 멈춰 둔 독서 창)가 모두 이것을 쓴다.
@@ -33,6 +46,7 @@ Future<Object?> resumeReading() async {
   if (a == null || a.runningSince != null) return null;
   if (today(DateTime.parse(a.startedAt)) == today()) {
     rs.resume();
+    _resumeSound();
     return null;
   }
   final draft = rs.finish(a.lastBeat);
@@ -48,6 +62,7 @@ Future<Object?> resumeReading() async {
   }
   final page = a.myBookId == null ? null : LibraryModel.instance.lib.books[a.myBookId]?.currentPage;
   rs.start(a.myBookId, page);
+  _resumeSound();
   return null;
 }
 

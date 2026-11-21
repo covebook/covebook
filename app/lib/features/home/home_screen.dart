@@ -138,6 +138,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     Pose pose,
     int lean,
     ({bool left, bool right}) canLean,
+    double? leanDeg,
+    double? frontPitch,
     double spin,
     double spinMax,
     ({double lo, double hi})? spinRange,
@@ -418,6 +420,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
           pose: p.pose == Pose.front && (p.pitch ?? 0) >= 89.95 ? Pose.horizontal : p.pose,
           lean: p.tilt.sign,
           canLean: (left: can(-1), right: can(1)),
+          leanDeg: p.leanAngle?.abs(),
+          frontPitch: fs?.state.pitch,
           spin: fs?.state.spin ?? p.spin ?? 0,
           spinMax: p.pose == Pose.front ? maxFrontSpin : maxSpin,
           spinRange: spinRangeOf(l, s.books, id),
@@ -463,6 +467,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void _editLean(int d) {
     if (_panel?.lean != d) _edit((l, b, id) => setTilt(l, b, id, tiltToward(d)));
   }
+
+  /// 표지 책 기대기: 바로 | 뒤로(뒤 벽에 기대기)
+  void _editFrontLean(bool back) => _edit((l, b, id) => setFrontLean(l, b, id, back));
 
   void _editSpin(double deg) => _edit((l, b, id) {
         if (placementOf(l, id)?.pose != Pose.front) return setSpin(l, b, id, deg);
@@ -917,12 +924,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     if (pitch == null) return null;
     final deg = jsRound(pitch).toInt();
     if (_head != null) return '뒤로 $deg° 젖혔어요';
-    return '뒤로 $deg° 젖혀 있어요';
+    // 바로 세웠으면 '뒤로 0°' 대신(기대기 '바로'와 같은 말)
+    return deg == 0 ? '똑바로 서 있어요' : '뒤로 $deg° 젖혀 있어요';
   }
 
   bool get _canUndo => _decoUndo.isNotEmpty || PlacementStore.instance.canUndo;
 
-  /// 되돌리기: 이번 꾸미기에서 마지막에 바꾼 것(배치·스킨·책 측면) 하나. 이번에 바꾼 것이 없으면 지난 배치 편집
+  /// 되돌리기: 이번 꾸미기에서 마지막에 바꾼 것(배치·스킨·책 측면)부터 한 번에 하나씩, 여러 번(배치는 PlacementStore가 30번까지 쌓는다,
+  /// 2026-11-21 사용자 '되돌리기 1번밖에 안 되는 게 좀 별론데'). 이번에 바꾼 것이 없으면 지난 배치 편집
   Future<void> _undo() async {
     final last = _decoUndo.isEmpty ? _placeUndo : _decoUndo.removeLast();
     switch (last) {
@@ -988,6 +997,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       depth: p.depth,
       onPose: _editPose,
       onLean: _editLean,
+      leanDeg: p.leanDeg,
+      frontBack: p.frontPitch == null ? null : p.frontPitch! > 0.5,
+      onFrontLean: _editFrontLean,
       onSpin: _editSpin,
       onDepth: _editDepth,
       spine: spineLook.value,

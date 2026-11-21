@@ -26,6 +26,7 @@ import '../services/ambient.dart';
 import '../services/cover_colors.dart';
 import '../services/sync.dart';
 import '../services/warmup.dart';
+import '../store/finish_reading.dart' show resumeReading;
 import '../store/bookcase_store.dart';
 import '../store/library_model.dart';
 import '../store/mini_timer_store.dart';
@@ -112,6 +113,7 @@ class _AppShellState extends State<AppShell> {
     SettingsStore.instance.load();
     ReadingStore.instance.addListener(_readingChanged);
     ReadingStore.instance.watchInterruptions();
+    Ambient.instance.onExternal = _soundToggledOutside;
     if (_cover && shelfReady.value) _cover = false;
     if (_cover) {
       shelfReady.addListener(_shelfChanged);
@@ -290,6 +292,19 @@ class _AppShellState extends State<AppShell> {
         AlertButton('나중에 정하기(일시정지로 둠)', style: AlertStyle.cancel, onPress: reading.dismissInterrupted),
       ],
     );
+  }
+
+  /// 알림 · 잠금 화면 · 이어폰 단추로 소리를 멈추거나 켜면 독서 타이머도 같이(앱 안에서는 타이머 일시정지가 소리도 멈춘다: pauseReading).
+  /// 통화로 끊긴 소리(ReadingStore.interrupting)는 타이머를 그대로 둔다. 끊김 알림이 소리 멈춤보다 늦게 올 수 있어 잠깐 기다려 본다
+  void _soundToggledOutside(bool playing) {
+    final rs = ReadingStore.instance;
+    if (playing) {
+      if (rs.active != null && !rs.running && !rs.stale) unawaited(resumeReading());
+      return;
+    }
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      if (rs.running && !rs.interrupting && !Ambient.instance.playing) rs.pause();
+    });
   }
 
   /// 꺼져 있던 시간을 정하고 바로 이어서 읽기(읽기 장면을 연다)

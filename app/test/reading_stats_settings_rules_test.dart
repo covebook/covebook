@@ -83,11 +83,12 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('책 한 권 기록: 책 줄은 BookRow, 숫자 칸은 StatNumber 하나', (t) async {
+  testWidgets('책 한 권 기록: 머리는 \'이 책 전체\' 구역 머리(책 줄은 화면 맨 위 책 칸에 있어 되풀이하지 않는다), 숫자 칸은 StatNumber 하나', (t) async {
     await pump(t, Scaffold(body: BookRecordView(lib: lib(), id: 'bk1')));
-    // 제목은 책 줄과 그린 대체 표지에 한 번씩
-    expect(find.byType(BookRow), findsOneWidget);
-    expect(find.descendant(of: find.byType(BookRow), matching: find.text('데미안')), findsNWidgets(2));
+    // 2026-11-21: 독서 기록 맨 위 책 칸(SelectField)을 넣으며 책 줄이 두 번 보였다 → 여기서는 뺐다. 아래 회색 띠도 다음 흰 띠가 깐다
+    expect(find.byType(BookRow), findsNothing);
+    expect(find.widgetWithText(SectionHead, '이 책 전체'), findsOneWidget);
+    expect(find.byType(SectionBand), findsNothing);
     expect(find.byType(StatNumber), findsNWidgets(3));
     expect(t.takeException(), isNull);
   });

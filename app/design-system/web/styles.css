@@ -133,7 +133,7 @@
   --ck-space-row-l: 16px;
   --ck-space-row-x-l: 24px;
   --ck-space-cta-bottom: 20px;
-  --ck-space-band: 16px;
+  --ck-space-band: 8px;
   --ck-space-band-pad: 24px;
   --ck-space-content-max: 640px;
   --ck-space-sheet-max: 560px;
@@ -167,7 +167,7 @@
   --ck-btn-l: 52px;
   --ck-btn-m: 48px;
   --ck-btn-s: 40px;
-  --ck-field: 56px;
+  --ck-field: 48px;
   --ck-field-multiline: 110px;
   --ck-search: 48px;
   --ck-choice: 56px;
@@ -199,7 +199,8 @@
   --ck-cover-head: 140px;
   --ck-cover-feature: 120px;
   --ck-cover-confirm: 120px;
-  --ck-cover-edit: 120px;
+  --ck-cover-edit: 127.84px;
+  --ck-cover-edit-height: 188px;
   --ck-cover-added: 88px;
   --ck-cover-saved: 72px;
   --ck-cover-place: 68px;

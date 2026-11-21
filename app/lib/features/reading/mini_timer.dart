@@ -6,7 +6,7 @@
 library;
 
 import 'dart:async';
-import '../../store/finish_reading.dart' show resumeReading;
+import '../../store/finish_reading.dart' show pauseReading, resumeReading;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -205,7 +205,7 @@ class _MiniTimerState extends State<MiniTimer> {
             // 다시 재기는 앱 공통 말 '이어서 읽기'(DESIGN 9장)
             label: running ? '독서 일시정지' : '이어서 읽기',
             child: Pressable(
-              onPress: () => running ? _reading.pause() : unawaited(_resume()),
+              onPress: () => running ? pauseReading() : unawaited(_resume()),
               child: SizedBox(
                 width: 52,
                 height: miniTimerSize,

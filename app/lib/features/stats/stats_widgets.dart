@@ -415,11 +415,11 @@ class BookRecordView extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = bookRecord(lib, id);
     final span = r.firstDay != null ? dateRange(r.firstDay, r.lastDay) : '아직 기록이 없어요';
-    // 책 줄은 앱 공통 BookRow(작게 40, 2026-11-19 공통 규칙). 위아래 12는 BookRow가 가진다
-    final w = BookRow.coverWidth(BookRowSize.small);
-    return Column(children: [
-      BookRow(cover: LinkedCover(lib: lib, id: id, width: w), title: bookTitle(lib, id) ?? '', meta: span),
-      const SizedBox(height: Space.s),
+    // 책은 화면 맨 위 책 칸에 이미 있어 책 줄을 되풀이하지 않는다. 아래 달 숫자와 헷갈리지 않게 '이 책 전체'와 읽은 기간을 머리로
+    // (2026-11-21: 맨 위 책 칸을 넣으며 책 줄이 두 번 보였다)
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SectionHead(title: '이 책 전체', note: span),
+      const SizedBox(height: Space.m),
       Row(children: [
         StatNumber(label: '총 독서 시간', value: formatDuration(r.readMs)),
         const SizedBox(width: Space.m),
@@ -437,7 +437,7 @@ class BookRecordView extends StatelessWidget {
           const Spacer(),
         ]),
       ],
-      const SectionBand(),
+      // 아래 구역과 나누는 회색 띠는 다음 흰 띠(Band)가 깐다(여기도 띠를 두면 회색 띠 둘 사이에 빈 흰 칸이 생겼다, 2026-11-21 촬영 확인)
     ]);
   }
 }

@@ -437,7 +437,7 @@ class _BookScreenState extends State<BookScreen> {
     setState(() => _noteEdit = false);
   }
 
-  /// 줄 안 입력칸(한줄평 · 현재 쪽): 입력 바탕 · 모서리 · 안쪽 16 · 높이 56 · 갈색 커서 · 화면 읽기 이름을 한 곳에서
+  /// 줄 안 입력칸(한줄평 · 현재 쪽): 입력 바탕 · 모서리 · 안쪽 좌우 16 위아래 12 · 높이 ControlSize.field(Field와 같다) · 갈색 커서 · 화면 읽기 이름을 한 곳에서
   /// (2026-11-19 공통 규칙: 쪽수 칸만 커서 색과 이름이 없었다)
   Widget _inlineInput({
     required String label,
@@ -472,7 +472,7 @@ class _BookScreenState extends State<BookScreen> {
               isCollapsed: true,
               counterText: '',
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.all(Space.l),
+              contentPadding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m),
               hintText: hint,
               hintStyle: AppType.input.copyWith(color: AppColors.inkFaint),
             ),

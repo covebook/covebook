@@ -113,6 +113,19 @@ class _StatsScreenState extends State<StatsScreen> {
     final bookName = bookTitle(lib, book);
 
     final children = <Widget>[
+      // 한 책으로 연 독서 기록: 맨 위 폭 가득 '표지 + 책 이름 | 저자' 고르는 칸(누르면 책 고르기 시트). 위 줄 오른쪽 '책 이름 ⌄'는 통계 탭에만
+      // (2026-11-21 사용자 '여기에 좌우 꽉 찬 썸네일이랑 이름 넣는 박스 어때')
+      if (!widget.tab)
+        SelectField(
+          label: '책',
+          showLabel: false,
+          bottom: Space.l,
+          leading: book != null ? IgnorePointer(child: LinkedCover(lib: lib, id: book, width: CoverSize.row)) : null,
+          value: bookName ?? '모든 책',
+          sub: book != null && bookAuthor(lib, book).isNotEmpty ? bookAuthor(lib, book) : null,
+          placeholder: '모든 책',
+          onPress: () => _pickBook(lib),
+        ),
       // 캘린더|분석 → 그 아래 가운데 달 넘기기. 맨 위(제목 · 전환 칸 · 달)는 흰 바탕, 회색은 아래 띠 사이만
       // (2026-11-20 사용자 '맨 위쪽 배경 회색 넣지 말고 전부 흰색, 날짜랑 버튼 위치 바꿔')
       Segmented<String>(
@@ -158,11 +171,13 @@ class _StatsScreenState extends State<StatsScreen> {
     return Screen(
       back: !widget.tab,
       title: widget.tab ? '통계' : '독서 기록',
-      // 누르는 자리 48이 되며 위 빈 자리를 10 → 2로 줄여 글자 자리는 그대로
-      right: Padding(
-        padding: const EdgeInsets.only(top: Space.xs / 2, right: 10),
-        child: FilterButton(label: bookName ?? '모든 책', active: book != null, onPress: () => _pickBook(lib)),
-      ),
+      // 누르는 자리 48이 되며 위 빈 자리를 10 → 2로 줄여 글자 자리는 그대로. 한 책으로 연 독서 기록은 맨 위 책 칸으로 고른다
+      right: widget.tab
+          ? Padding(
+              padding: const EdgeInsets.only(top: Space.xs / 2, right: 10),
+              child: FilterButton(label: bookName ?? '모든 책', active: book != null, onPress: () => _pickBook(lib)),
+            )
+          : null,
       // 떠 있는 하단바 아래까지 내용이 내려가게
       bottomPad: widget.tab ? TabBarStyle.contentPad - Space.section : 0,
       // 바탕은 흰색. 띠 사이 회색은 띠(Band)가 위에 깐다

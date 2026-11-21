@@ -241,6 +241,9 @@ class _FinishScreenState extends State<FinishScreen> {
           disabled: !_lib.loaded || tooShort,
           onPress: () => fieldError != null ? _showError(fieldError) : _save(pending, sp, ep),
         ),
+        // 버리기는 저장 단추 바로 아래 보조 행동(큰 단추 아래 SubAction, 2026-11-21 사용자 '이 기록 버리기 간격이 이게 맞나':
+        // 메모 칸 아래에 따로 떠 있어 위아래 간격이 어디에도 맞지 않았다)
+        SubAction(label: '이 기록 버리기', onPress: () => _discard(pending)),
       ]),
       children: [
         // 기기 저장 실패 안내는 앱 공통 안내 · 오류 글
@@ -272,7 +275,7 @@ class _FinishScreenState extends State<FinishScreen> {
           placeholder: '책 연결하기 (선택)',
           onPress: () async {
             // 지금 연결된 책(없으면 책 없이 읽기)은 고르는 원으로 보인다(DESIGN 13장 current)
-            final r = await pickBook(context, lib, allowNone: true, current: (id: b?.id));
+            final r = await pickBook(context, lib, allowNone: true, addNew: true, current: (id: b?.id));
             if (r.picked) _reading.setPendingBook(r.id, r.id == null ? null : lib.books[r.id]?.currentPage);
           },
         ),
@@ -320,7 +323,6 @@ class _FinishScreenState extends State<FinishScreen> {
             _edited();
           },
         ),
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: TextLink(label: '이 기록 버리기', soft: true, onPress: () => _discard(pending))),
       ],
     );
     return PopScope(canPop: _leaving, onPopInvokedWithResult: (didPop, _) => didPop ? null : _askLeave(), child: screen);

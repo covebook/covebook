@@ -14,6 +14,7 @@ import 'package:video_player/video_player.dart';
 import '../../domain/library.dart';
 import '../../domain/reading.dart';
 import '../../services/ambient.dart';
+import '../../store/finish_reading.dart' show pauseReading;
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
@@ -187,7 +188,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     } else if (_reading.active == null) {
       _start();
     } else {
-      _reading.running ? _reading.pause() : unawaited(resumeReadingOrTell(context));
+      _reading.running ? pauseReading() : unawaited(resumeReadingOrTell(context));
     }
   }
 
@@ -231,7 +232,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   Future<void> _pickBook() async {
     // 지금 책(없으면 책 없이 읽기)은 고르는 원으로 보인다(DESIGN 13장 current)
     final a0 = _reading.active;
-    final r = await pickBook(context, lib, allowNone: true, current: (id: a0 != null ? a0.myBookId : _draftBookId));
+    // 책을 기록에 잇는 고르기는 모두 '+ 새 책 등록'(2026-11-21 사용자 '여기는 왜 책 추가 없어')
+    final r = await pickBook(context, lib, allowNone: true, addNew: true, current: (id: a0 != null ? a0.myBookId : _draftBookId));
     if (!r.picked || !mounted) return;
     final a = _reading.active;
     if (a != null && a.myBookId != r.id) {

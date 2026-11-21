@@ -1686,6 +1686,21 @@ _FrontRest _releaseRest(_FrontWorld w, FrontState cur, double target) {
   return v.kind == 'slip' ? _slideRest(w, fell.pose) : v;
 }
 
+/// 표지 책 '기대기' 칸(꾸미기 조작부, 2026-11-21 사용자 '표지 쪽은 뒤로 기대기가 안 돼'): back이면 뒤 벽에 기댄다(처음 놓을 때와 같은
+/// wallLeanPose, 돌린 각도 그대로), 아니면 젖힘 0으로 바로 세운 뒤 손을 놓은 것처럼 무게중심대로 둔다. 머리 손잡이로 끄는 것과 같은 계산
+EditResult setFrontLean(ShelfLayout layout, BookMap books, String bookId, bool back) {
+  final fs = frontStateOf(layout, books, bookId), book = books[bookId];
+  if (fs == null || book == null) return const EditResult.fail('no-space');
+  if (back) {
+    final w = wallLeanPose(frontDims(book), shelfDepth, fs.state.spin);
+    final placed = _placeFront(layout, books, bookId, fs.qx, (depth: w.depth, pitch: w.pitch, spin: w.spin ?? fs.state.spin));
+    return placed != null ? EditResult.ok(placed) : const EditResult.fail('no-space');
+  }
+  final r = frontTilt(layout, books, bookId, fs.state, fs.qx, 0);
+  final fin = r == null ? null : frontRelease(r.layout, books, bookId, r.state, fs.qx);
+  return fin != null ? EditResult.ok(fin) : const EditResult.fail('no-space');
+}
+
 /// 손을 놓으면 무게중심 방향으로 넘어지며 받침·벽·바닥에서 멈춘다(다시 서기·기대기·눕기·미끄러짐). 선반 밖으로는 떨어지지 않는다
 ShelfLayout? frontRelease(ShelfLayout layout, BookMap books, String bookId, FrontState cur, double qx) {
   final dims = frontDims(books[bookId]!);

@@ -16,6 +16,9 @@ import 'theme.dart';
 
 enum AlertStyle { normal, cancel, destructive }
 
+/// 회색 글자 단추(SubAction, 누르는 자리 48) 안에서 글자 줄(AppType.sub 22.5) 아래 빈 곳: 창 맨 아래가 글자 단추면 아래 여백에서 뺀다
+final textButtonInset = (Space.hit - TypeSpecs.sub.line) / 2;
+
 class AlertButton {
   const AlertButton(this.text, {this.onPress, this.style = AlertStyle.normal});
   final String text;
@@ -95,6 +98,9 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
     String kindOf(AlertButton b, {bool first = true}) => b.style == AlertStyle.destructive ? 'dangerFill' : first ? 'primary' : 'secondary';
     String leftKind(AlertButton b) => b.style == AlertStyle.destructive ? 'dangerFill' : 'secondary';
 
+    // 아래 끝이 글자 단추('취소'만 아래에 따로 있는 창)인지: 행동 둘 + 취소, 또는 늘 쌓는 창의 취소. 단추 하나 · 둘(좌우)은 칠한 단추
+    final endsWithText = cancel != null && (actions.length >= 2 || widget.stacked);
+
     Widget body(double width) {
       // 단추 하나: 폭 가득 채운 단추(large). 오른쪽 끝 글자 단추는 자리가 어색하고 창 아래가 비어 보였다(2026-11-20 사용자 '확인 위치가 이상하고 밑으로 너무 길지 않나')
       if (list.length == 1 && !widget.stacked) {
@@ -131,8 +137,8 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
               Expanded(child: btn(actions[0], kindOf(actions[0]))),
             ]),
           ),
-          const SizedBox(height: Space.s),
-          btn(cancel, 'ghost'),
+          // 아래 '취소'는 큰 단추 아래 보조 행동과 같은 부품(SubAction: 위 Space.xs · 옅은 회색 · 누르는 높이 48, 2026-11-21 사용자 '하단 간격이랑 색 연하기가 컨벤션에 안 맞는')
+          SubAction(label: cancel.text, onPress: () => Navigator.pop(context, cancel)),
         ]);
       }
       // 셋 이상 · stacked(TDS에 없음 → 우리 값): 주요 → 보조 → 맨 아래 취소 글자 단추
@@ -141,7 +147,7 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
           if (i > 0) const SizedBox(height: Space.s),
           btn(b, kindOf(b, first: i == 0)),
         ],
-        if (cancel != null) ...[const SizedBox(height: Space.s), btn(cancel, 'ghost')],
+        if (cancel != null) SubAction(label: cancel.text, onPress: () => Navigator.pop(context, cancel)),
       ]);
     }
 
@@ -149,7 +155,8 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
       color: AppColors.bg,
       borderRadius: BorderRadius.circular(Shape.dialog),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(Space.page, Space.page + 2, Space.page, Space.page),
+        // 맨 아래가 글자 단추면 누르는 자리(48) 안 빈 곳만큼 아래 여백을 줄여, 보이는 글자 아래도 다른 창처럼 Space.page
+        padding: EdgeInsets.fromLTRB(Space.page, Space.page + 2, Space.page, Space.page - (endsWithText ? textButtonInset : 0)),
         child: LayoutBuilder(
           builder: (context, box) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             // 설명이 길면 스크롤(AlertDialog · ConfirmDialog '긴 설명 사용하기')

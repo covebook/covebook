@@ -1,7 +1,8 @@
 // 재장정 미리보기·편집(지금 앱 features/book/BindingEditor.tsx: 책 추가 확인 화면과 책 상세가 함께 쓴다). 2026-10-10 시안: 책 미리보기 → 그림·색상·재질 탭 → 그 탭의 옵션.
 // 책장과 같은 책 그림·빛으로 같은 책을 돌려 보며 고른 장정이 바로 반영된다.
 // - 그림: 기본 정면 장정 6종(3열) + '그림 없음'(단색 정면 또는 실제 표지). 그림을 골라도 책 색은 그대로
-// - 색상: 표지 색(많은 순서) + 이 책 추천 색 + 모든 색. 고른 색에 테두리와 체크. 추천 장정으로 되돌리기
+// - 색상: 표지 색(많은 순서) + 이 책 추천 색 + 모든 색 + 직접 고르기(R · G · B 막대와 색 코드, 2026-11-21 사용자 '표지색 rgb 고를 수 있게').
+//   고른 색에 테두리와 체크. 추천 장정으로 되돌리기
 // - 재질: 고운 종이·린넨·매끈 무광·줄무늬 종이 + 책등 글자 배치
 // 탭을 바꿔도 고르던 값은 그대로다(값은 부르는 쪽이 가진다). 고르면 사용자 장정(source 'custom')
 library;
@@ -257,6 +258,14 @@ class _BindingEditorState extends State<BindingEditor> {
     ];
     // 추천 장정에는 재질 · 표지 그림이 없다(resetBinding)
     final same = v.spineColor == rec0.spineColor && v.motif == rec0.motif && v.layout == rec0.layout && (v.material ?? 'fine') == 'fine' && v.coverArtId == null;
+    void pick(String hex) {
+      final t = tonesFor(hex);
+      widget.onChange(v.custom(spineColor: hex, inkColor: t.inkColor, accentColor: t.accentColor));
+    }
+
+    // 지금 색이 위 목록에 없으면(직접 고른 색 · 표지 사진에서 온 색) '직접 고르기' 칸에 그 색을 고른 채로 보인다
+    final listed = {..._fromCover, ...rec, for (final c in bookColors) c.hex};
+    final mine = listed.contains(v.spineColor) ? null : v.spineColor;
     Widget swatch(String hex, String name) {
       final on = v.spineColor == hex;
       return Semantics(
@@ -306,6 +315,19 @@ class _BindingEditorState extends State<BindingEditor> {
         Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final (i, h) in rec.indexed) swatch(h, i == 0 ? '추천' : '추천 ${i + 1}')]),
         const H2('모든 색'),
         Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final c in rest) swatch(c.hex, c.name)]),
+        const H2('직접 고르기'),
+        Row(children: [
+          if (mine != null) ...[swatch(mine, '지금 색 ${mine.toUpperCase()}'), const SizedBox(width: Space.s)],
+          Btn(
+            label: 'RGB로 고르기',
+            kind: 'secondary',
+            size: 'medium',
+            onPress: () async {
+              final hex = await pickRgbColor(context, v.spineColor);
+              if (hex != null && mounted) pick(hex);
+            },
+          ),
+        ]),
         Padding(
           padding: const EdgeInsets.only(top: Space.group),
           // 머리줄 '초기화'와 같은 일이라 같은 말(2026-11-19 공통 규칙: '되돌리기'는 토스트 단추 말)
@@ -481,3 +503,72 @@ class _MaterialSwatch extends CustomPainter {
   @override
   bool shouldRepaint(_MaterialSwatch old) => old.material != material || old.color != color;
 }
+
+/// 색 직접 고르기 시트: R · G · B 막대(0~255)와 색 코드(#RRGGBB), 위에 고른 색 미리보기. '이 색으로'를 누르면 '#rrggbb', 닫으면 null
+Future<String?> pickRgbColor(BuildContext context, String start) {
+  var rgb = [for (var i = 0; i < 3; i++) (_hex(start) >> (16 - 8 * i)) & 0xFF];
+  var code = _rgbCode(rgb);
+  return showSheet<String>(
+    context,
+    title: '색 직접 고르기',
+    scroll: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) {
+        final color = Color(0xFF000000 | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]);
+        Widget channel(int i, String name) => Row(children: [
+              SizedBox(width: 24, child: Text(name, style: AppType.sub.strong.copyWith(color: AppColors.ink))),
+              Expanded(
+                child: AppSlider(
+                  label: '$name 값',
+                  value: rgb[i] / 255,
+                  valueText: '${rgb[i]}',
+                  onChange: (x) => set(() {
+                    rgb[i] = (x * 255).round();
+                    code = _rgbCode(rgb);
+                  }),
+                  onCommit: (x) => set(() {
+                    rgb[i] = (x * 255).round();
+                    code = _rgbCode(rgb);
+                  }),
+                ),
+              ),
+              SizedBox(width: 40, child: Text('${rgb[i]}', textAlign: TextAlign.end, style: AppType.sub.tnum)),
+            ]);
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: const Color(0x14000000))),
+            ),
+            const SizedBox(width: Space.l),
+            Text(code.toUpperCase(), style: AppType.row.tnum),
+          ]),
+          const SizedBox(height: Space.l),
+          channel(0, 'R'),
+          channel(1, 'G'),
+          channel(2, 'B'),
+          const SizedBox(height: Space.l),
+          // 색 코드를 넣으면 막대도 그 값으로(여섯 자리가 다 맞을 때만)
+          Field(
+            label: '색 코드',
+            value: code,
+            placeholder: '#RRGGBB',
+            onChange: (t) {
+              final h = t.trim().replaceFirst('#', '');
+              final n = h.length == 6 ? int.tryParse(h, radix: 16) : null;
+              if (n == null) return;
+              set(() {
+                rgb = [(n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF];
+                code = _rgbCode(rgb);
+              });
+            },
+          ),
+          Btn(label: '이 색으로', onPress: () => Navigator.pop(ctx, code)),
+        ]);
+      },
+    ),
+  );
+}
+
+String _rgbCode(List<int> rgb) => '#${[for (final c in rgb) c.toRadixString(16).padLeft(2, '0')].join()}';

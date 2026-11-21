@@ -32,7 +32,8 @@ const _searchFrom = 5;
 /// - current: 지금 고른 것((id: null)은 책 없이 읽기 · 모든 책). 주면 줄마다 고르는 원, 고른 줄은 채운 원
 /// - books: 고를 책(순서 그대로). 없으면 숨기지 않은 내 책 전부(최근 읽은 책 먼저). meta: 책 줄 둘째 줄(없으면 '저자 | 읽기 상태')
 /// - all: 맨 위 '모든 책' 줄(고르면 null, allSub는 그 아래 작은 글). allowNone: '책 없이 읽기' 줄
-/// - addNew: 맨 위 '+ 새 책 등록'(책 추가로 갔다가 등록한 책을 고른 것으로 돌아온다)
+/// - addNew: 맨 위 '+ 새 책 등록'(책 추가로 갔다가 등록한 책을 고른 것으로 돌아온다). 책을 기록에 잇는 고르기(갈피 · 감상 · 읽기 장면 · 독서 끝 · 기록 수정)는
+///   모두 켠다(2026-11-21 사용자 '여기는 왜 책 추가 없어'). 이미 있는 기록을 거르는 고르기(기록 탭 · 통계)는 끈다
 Future<({bool picked, String? id})> pickBook(
   BuildContext context,
   Library lib, {
@@ -219,9 +220,6 @@ class _PickerState extends State<_Picker> {
             ),
           // '모든 책'은 책이 아니라 조건이라 하나 고르기 줄(표지 자리 없이)
           if (widget.all && m == null) FilterOption(label: '모든 책', sub: widget.allSub, selected: _on(null), onPress: () => _choose(null)),
-          // 책 없이(여러 권 고르기): 이름은 앱 어디서나 '책 없이 읽기', 표지 자리는 같은 회색 칸(공통 규칙 3장).
-          // 한 권 고르기는 목록 위 폭 가득 단추(아래)
-          if (widget.allowNone && m != null) _row(cover: NoBookCover(width: BookRow.coverWidth(BookRowSize.small)), title: NoBookCover.name, id: null, fixed: noneFixed),
           for (final id in list) _book(id),
           // 공통 규칙 11장: 검색 0건은 검색어를 넣은 제목(다시 찾을 칸이 바로 위에 있어 본문 없음)
           if (list.isEmpty && t.isNotEmpty)
@@ -229,8 +227,11 @@ class _PickerState extends State<_Picker> {
           else if (ids.isEmpty && widget.books == null)
             const Empty(title: '내 책이 없어요', body: '먼저 책을 추가해 주세요.'),
         ]);
+    final search = ids.length > _searchFrom;
+    // 제목 아래 첫 칸은 늘 Space.s 아래에서 시작한다(검색칸이든 '책 없이 읽기'든 같게, 2026-11-21 사용자 '책 고르기랑 간격이 여기서도 원래 그런가':
+    // 검색칸이 없는 책 적은 시트에서만 4 · 있으면 8이었다), 위 칸들 사이도 Space.s
     return Column(mainAxisSize: tall ? MainAxisSize.max : MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (ids.length > _searchFrom)
+      if (search)
         Padding(
           padding: const EdgeInsets.only(top: Space.s, bottom: Space.s),
           child: Focus(
@@ -238,14 +239,18 @@ class _PickerState extends State<_Picker> {
             child: SearchField(value: _q, onChange: (v) => setState(() => _q = v), placeholder: '제목, 저자', label: '책 찾기'),
           ),
         ),
-      // 한 권 고르기의 '책 없이 읽기'는 폭 가득 보조 단추(2026-11-20 사용자 '좌우 꽉 차는 버튼 넣고 거기에다가 책 없이 읽기').
-      if (widget.allowNone && m == null)
+      // '책 없이 읽기'는 목록 위 폭 가득 보조 단추(2026-11-20 사용자 '좌우 꽉 차는 버튼 넣고 거기에다가 책 없이 읽기').
+      // 여러 권 고르기도 같은 단추(2026-11-21 사용자 '책 없이 읽기 내가 좌우 꽉 찬 버튼으로 만들라 했던 것 같은데': 여기만 줄이었다):
+      // 누르면 고르고 다시 누르면 뺀다, 고르면 앞에 체크. 이미 목록에 있으면 꺼 둔다
+      if (widget.allowNone)
         Padding(
-          padding: const EdgeInsets.only(top: Space.xs, bottom: Space.s),
+          padding: EdgeInsets.only(top: search ? 0 : Space.s, bottom: Space.s),
           child: Btn(
-            label: NoBookCover.name,
+            label: m != null && noneFixed ? '${NoBookCover.name} · 목록에 있어요' : NoBookCover.name,
             kind: 'secondary',
             size: 'large',
+            disabled: m != null && noneFixed,
+            icon: m != null && _on(null) && !noneFixed ? const LucideIcon('Check', size: IconSize.small, color: AppColors.accent) : null,
             onPress: () => _choose(null),
           ),
         ),

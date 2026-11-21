@@ -62,6 +62,14 @@ class Ambient extends ChangeNotifier {
 
   String? scene;
   bool playing = false;
+
+  /// 앱이 스스로 켜거나 멈추지 않은 재생 바뀜(알림 · 잠금 화면 · 이어폰 단추): true 켬, false 멈춤. 앱 틀이 독서 타이머를 같이 맞춘다
+  /// (2026-11-21 사용자 '읽기 멈췄는데 왜 다른 화면에서 타이머는 돌아가?': 알림에서 멈추면 소리만 멈췄다)
+  void Function(bool playing)? onExternal;
+
+  /// 이 시각까지 오는 재생 바뀜은 앱이 부른 것(play · pause · hold)
+  DateTime _selfUntil = DateTime(0);
+  void _self() => _selfUntil = DateTime.now().add(const Duration(seconds: 1));
   String? error;
   AudioPlayer? _player;
   static bool _askedNotify = false;
@@ -105,6 +113,7 @@ class Ambient extends ChangeNotifier {
           if (!identical(_player, p) || v == playing) return;
           playing = v;
           notifyListeners();
+          if (DateTime.now().isAfter(_selfUntil)) onExternal?.call(v);
         });
         await p.setAudioSource(AudioSource.asset(info.asset, tag: MediaItem(id: info.id, title: info.sound, artist: '책장 한켠')));
         await p.setLoopMode(LoopMode.one);
@@ -112,6 +121,7 @@ class Ambient extends ChangeNotifier {
         notifyListeners();
       }
       _applyVolume();
+      _self();
       _player!.play();
       error = null;
       notifyListeners();
@@ -124,6 +134,14 @@ class Ambient extends ChangeNotifier {
 
   void pause() {
     _want(false);
+    _self();
+    _player?.pause();
+  }
+
+  /// 독서 타이머를 멈출 때: 소리도 멈추되 켜 둔 설정(soundOn)은 그대로 둔다. 이어 읽으면 resumeIfWanted가 다시 켠다
+  /// (2026-11-21 사용자 '타이머 멈출 때 소리도 같이 멈추게')
+  void hold() {
+    _self();
     _player?.pause();
   }
 
