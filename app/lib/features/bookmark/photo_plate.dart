@@ -1,7 +1,7 @@
 // 사진 갈피의 사진(지금 앱 PhotoPlate.tsx): 흰 테두리를 두른 인화 사진을 한지 테이프로 붙인 모양.
 // 사진은 가로로 긴 틀에 맞춰 자르고(cover), 눌러서 원본 비율 그대로 크게 볼 수 있다(손가락으로 벌려 확대).
 // 테이프는 옛 앱처럼 틀 위 끝을 덮는다(2026-11-20 사용자. 2026-11-16 QA 은서 F9로 테두리만 덮게 했던 것을 되돌림). whole이면 잘라 내지 않고 사진 전체를 보인다(읽은 글과 견줄 때)
-// 인화지·테이프의 색·여백 숫자는 옛 앱 화소 값 그대로(docs/design/DESIGN.md 16장 예외)
+// 인화지·테이프의 색·여백 숫자는 옛 앱 화소 값 그대로(docs/design/DESIGN.md 16장 예외). 테이프 각도 · 재질은 2026-11-21에 바꿨다(일부러 틀어 붙인 한지 띠)
 library;
 
 import 'dart:io';
@@ -13,7 +13,8 @@ import 'package:flutter/material.dart';
 import '../../services/cover_cache.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import 'bookmark_paper.dart';
+import 'bookmark_tape.dart';
+import 'paper_grain.dart' show tapeStrip;
 
 double photoFrameRatio(num? r) => math.max(0.9, math.min(1.5, r != null && r > 0 ? r.toDouble() : 1.35));
 
@@ -113,6 +114,17 @@ class PhotoPlate extends StatelessWidget {
     // (2026-11-18 · 20 사용자 '원래 테이프 이렇게 아니었잖아': 테이프를 24로 줄이고 틀을 내려 테두리만 덮었더니 얹어 놓은 듯 보였다)
     final tapeW = compact ? 62.0 : 92.0, tapeH = compact ? 20.0 : 30.0;
     final top = compact ? 8.0 : 12.0;
+    // 테이프는 일부러 틀어 붙인다: 사진마다 5~9°(오른쪽이 올라감)와 가로 어긋남이 조금씩 다르다(2026-11-21 사용자 '테이프 일부러 각도 틀게, 재질도 신경 써').
+    // 한지 띠: 양 끝은 손으로 찢은 섬유 끝, 비치는 바탕, 사진틀 위 끝을 넘는 자리에 턱(WashiStrip)
+    final tapeSeed = '$seed-washi';
+    final strip = tapeStrip(tapeSeed, tapeW, tapeH);
+    final frameAngle = (compact ? -0.4 : -0.8) * _deg, tapeAngle = strip.angle * _deg;
+    final tapeLeft = width / 2 - tapeW / 2 + strip.shift;
+    // 사진틀 위 끝(틀 가운데를 축으로 돈 선)이 테이프 아래를 지나는 한 점을 테이프 좌표로
+    final frameH = innerW / frameRatio + border * 2;
+    final edge = Offset(width / 2 + frameH / 2 * math.sin(frameAngle), top + frameH / 2 - frameH / 2 * math.cos(frameAngle));
+    final d = edge - Offset(tapeLeft + tapeW / 2, tapeH / 2);
+    final join = Offset(tapeW / 2 + d.dx * math.cos(tapeAngle) + d.dy * math.sin(tapeAngle), tapeH / 2 - d.dx * math.sin(tapeAngle) + d.dy * math.cos(tapeAngle));
     return SizedBox(
       width: width,
       child: Stack(clipBehavior: Clip.none, children: [
@@ -151,20 +163,14 @@ class PhotoPlate extends StatelessWidget {
           ),
         ),
         Positioned(
-          left: width / 2 - tapeW / 2 + 2,
+          left: tapeLeft,
           top: 0,
           width: tapeW,
           height: tapeH,
           child: IgnorePointer(
             child: Transform.rotate(
-              angle: -0.8 * _deg,
-              child: Opacity(
-                opacity: 0.86,
-                child: Container(
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(1.5), boxShadow: [cssShadow(const Color.fromRGBO(100, 80, 50, 0.18), 0, 1, 2)]),
-                  child: BookmarkPaper(color: const Color(0xFFE8E4DC), radius: 1.5, seed: '$seed-washi', kind: PaperKind.tape),
-                ),
-              ),
+              angle: tapeAngle,
+              child: WashiStrip(color: const Color(0xFFE8E4DC), seed: tapeSeed, width: tapeW, height: tapeH, join: join, joinAngle: frameAngle - tapeAngle),
             ),
           ),
         ),

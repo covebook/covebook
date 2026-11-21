@@ -1,7 +1,12 @@
 // 2026-11-21 비교 아티팩트 댓글 반영 시험: 책 정보 수정 표지 높이, 확인창 아래 '취소', 고르는 칸 덧붙임 글자, 입력칸 높이
+import 'dart:math' as math;
+
 import 'package:chaekjang/domain/layout.dart';
 import 'package:chaekjang/domain/layout_engine.dart';
 import 'package:chaekjang/domain/types.dart';
+import 'package:chaekjang/features/bookmark/bookmark_tape.dart' show WashiStrip;
+import 'package:chaekjang/features/bookmark/paper_grain.dart' show tapeStrip;
+import 'package:chaekjang/features/bookmark/photo_plate.dart' show PhotoPlate;
 import 'package:chaekjang/features/reading/mini_timer.dart' show miniTimerWidth, miniTimerPad;
 import 'package:chaekjang/store/mini_timer_store.dart' show miniTimerSize;
 import 'package:chaekjang/store/library_store.dart' show saveLayout;
@@ -136,5 +141,26 @@ void main() {
     expect(w('100:00:00', 90), 90);
     // 큰 글씨면 더 넓어진다(줄이지 않는다)
     expect(w('1:03:26', 1000, const TextScaler.linear(1.5)), greaterThan(w('1:03:26')));
+  });
+
+  test('사진 테이프 띠: 일부러 틀어 붙인 각도(5~9°, 오른쪽이 올라감), 씨앗마다 같고 사진마다 조금 다르다', () {
+    final a = tapeStrip('bm1-washi', 92, 30), b = tapeStrip('bm1-washi', 92, 30), c = tapeStrip('bm2-washi', 92, 30);
+    expect(a.angle, b.angle);
+    expect(a.outline, b.outline);
+    for (final s in [a, c, tapeStrip('new-washi', 92, 30), tapeStrip('x-washi', 62, 20)]) {
+      expect(s.angle, inInclusiveRange(-9, -5));
+      expect(s.shift.abs(), lessThanOrEqualTo(92 * .05));
+      expect(s.fringe, isNotEmpty);
+    }
+    expect(a.outline == c.outline && a.angle == c.angle, isFalse);
+  });
+
+  testWidgets('사진 갈피 테이프는 한지 띠(WashiStrip)를 그 각도로 돌려 붙인다', (t) async {
+    await t.pumpWidget(const MaterialApp(home: Scaffold(body: Center(child: PhotoPlate(uri: '/nope.jpg', width: 220, seed: 'bm1')))));
+    expect(find.byType(WashiStrip), findsOneWidget);
+    final rot = t.widget<Transform>(find.ancestor(of: find.byType(WashiStrip), matching: find.byType(Transform)).first);
+    final angle = math.atan2(rot.transform.entry(1, 0), rot.transform.entry(0, 0)) * 180 / math.pi;
+    expect(angle, closeTo(tapeStrip('bm1-washi', 92, 30).angle, 0.01));
+    expect(t.takeException(), isNull);
   });
 }
