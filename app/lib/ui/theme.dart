@@ -434,12 +434,15 @@ abstract final class AppType {
 
 /// 탭 첫 화면 머리줄 = TDS Top: upperGap 24 · lowerGap 24(Top 절 기본값). 양옆은 ListRow horizontalPadding medium 24와 같은 24
 abstract final class TabHeader {
-  static const paddingTop = 24.0;
+  /// 상태 표시줄 아래(2026-11-23 사용자 '나의 책장이랑 2026라인이랑 아이콘 라인이 위아래 간격이 안 맞잖아, 위쪽이 넓어서 그 부분을 줄이라고':
+  /// 24면 책장 머리 글자 위가 약 31, 아래가 약 10이었다. 4로 줄여 위아래 빈 곳을 맞춘다. 다섯 탭 첫 화면이 같이 쓴다)
+  static const paddingTop = 4.0;
 
   /// 제목 아래(2026-11-20 사용자: 토스 공식 24는 '밑에랑 간격이 너무 커', 갈피 · 감상 탭은 아이콘 줄 바로 아래)
   static const paddingBottom = 4.0;
   static const paddingH = 24.0;
-  static const minHeight = 64.0;
+  /// 머리줄 최소 높이(위 · 아래 여백 포함). 안쪽 최소 36은 그대로(64 − 24 − 4였다)
+  static const minHeight = 44.0;
 }
 
 /// 알림 줄(토스트) 시간: TDS Toast duration 기본 3000ms, 버튼이 있으면 5000ms(Toast 절 · useToast 절)

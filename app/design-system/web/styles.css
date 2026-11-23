@@ -137,10 +137,10 @@
   --ck-space-band-pad: 24px;
   --ck-space-content-max: 640px;
   --ck-space-sheet-max: 560px;
-  --ck-tab-header-padding-top: 24px;
+  --ck-tab-header-padding-top: 4px;
   --ck-tab-header-padding-bottom: 4px;
   --ck-tab-header-padding-h: 24px;
-  --ck-tab-header-min-height: 64px;
+  --ck-tab-header-min-height: 44px;
 
   /* 모서리(Shape) */
   --ck-radius-button: 10px;
