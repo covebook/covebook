@@ -180,7 +180,7 @@ return tx.Commit(ctx)
   2. 짧은 트랜잭션: 거래 기록 `INSERT ... ON CONFLICT DO NOTHING` → 들어갔을 때만 권한 지급 → 커밋
   3. 커밋 뒤: 스토어에 확인(acknowledge) (ADR-0002 D10)
 
-### 6-1. 결제 표에서 쓴 것 (V21, `server/internal/server/iap_store.go`)
+### 6-1. 결제 테이블에서 쓴 것 (V21, `server/internal/server/iap_store.go`)
 
 | 하고 싶은 것 | 쓴 방법 | Java·JPA로 치면 |
 |---|---|---|
@@ -192,7 +192,7 @@ return tx.Commit(ctx)
 | NULL일 수 있는 칸 읽기 | 포인터로 받음: `var owner *int64` | `Long` (박싱 타입) |
 | 계정을 지워도 기록은 남기기 | 외래 키를 `ON DELETE SET NULL` | `@OnDelete` 없이 연관만 끊기 |
 
-- 권한은 저장하지 않고 계산 (ADR-0002 D5): `iapEntitlements`가 구독 표와 거래 표에서 매번 셈. 원장과 "가진 것"이 어긋날 수 없음
+- 권한은 저장하지 않고 계산 (ADR-0002 D5): `iapEntitlements`가 구독 테이블과 거래 테이블에서 매번 셈. 원장과 "가진 것"이 어긋날 수 없음
 - 만료 판단은 SQL의 `now()` (DB 서버 시계). 앱 서버가 여러 대여도 기준이 하나
 - 동시성은 테스트로 확인: 같은 거래를 고루틴 10개가 동시에 넣고 "처음 들어갔다"는 답이 1번인지 봄 (`iap_store_test.go`)
   - 고루틴: `go func() { ... }()`. 가벼운 스레드. `sync.WaitGroup`으로 끝나기를 기다림 (`CountDownLatch` 자리)
@@ -218,8 +218,8 @@ return tx.Commit(ctx)
   - 로그에 남는 오류가 원인 파악에 쓰임. 가장 근본적인 것(다른 앱)부터 보는 것이 보통
 - 확인 방법
   - `go test -v -run TestCheck ./internal/iap`
-  - 지금은 "먼저 채운다"로 건너뜀. 채우면 표의 경우들이 돎
-  - `check_test.go`의 표에 빈 `AccountToken` 경우를 한 줄 추가
+  - 지금은 "먼저 채운다"로 건너뜀. 채우면 테이블의 경우들이 돎
+  - `check_test.go`의 테이블에 빈 `AccountToken` 경우를 한 줄 추가
 - 쓸 문법
   - `if p.BundleID != want.BundleID { return ErrWrongApp }`
   - 맵 조회: `want.Products[p.ProductID]`는 없으면 `false`
@@ -229,7 +229,7 @@ return tx.Commit(ctx)
 
 - 파일 이름이 `_test.go`로 끝나고 함수가 `TestXxx(t *testing.T)`면 테스트. 프레임워크 없음
 - 실패 알림: `t.Fatalf("...")`. 단정문 라이브러리를 쓰지 않고 `if`로 비교
-- 표 형식 테스트 (`check_test.go`): 경우를 구조체 목록으로 늘어놓고 `t.Run(이름, ...)`으로 돌림. JUnit의 `@ParameterizedTest`
+- 테이블 주도 테스트(table-driven test, `check_test.go`): 경우를 구조체 목록으로 늘어놓고 `t.Run(이름, ...)`으로 돌림. JUnit의 `@ParameterizedTest`
 - 가짜: 인터페이스를 구현한 작은 구조체를 손으로 씀 (`fake.go`, `apple_test.go`)
 - 다른 패키지에서 결제를 테스트할 때는 `iap.Fake`에 거래를 넣어 두고 씀
 
@@ -324,7 +324,7 @@ return tx.Commit(ctx)
 
 | 단계 | 하는 일 | DB 트랜잭션 | 실패하면 |
 |---|---|---|---|
-| 1 | 우리 상품 표에서 종류를 찾음 | 없음 | 422 |
+| 1 | 우리 상품 테이블에서 종류를 찾음 | 없음 | 422 |
 | 2 | 구매 증거 확인(애플은 서명) 뒤 스토어에 조회 | **없음** | 없는 거래 404, 조회 실패 503 |
 | 3 | `iap.Check`로 지급해도 되는지 봄 | 없음 | 409, 422, 결제 대기는 202 |
 | 4 | 유저 줄 잠금 → 주인 확인 → 원장에 넣기 → 커밋 | 짧게 | 롤백 |
@@ -338,9 +338,9 @@ return tx.Commit(ctx)
 ### 10-2. 알림 `POST /iap/notifications/...` (`iap_notify.go`)
 
 1. 받기 (`iapNotify`): 확인 → 원문을 DB에 저장 → 바로 200
-2. 뒤에서 처리 (`iapSweep`): 저장된 알림을 꺼내 스토어에 다시 묻고 우리 표를 그 답으로 덮어씀
+2. 뒤에서 처리 (`iapSweep`): 저장된 알림을 꺼내 스토어에 다시 묻고 우리 테이블을 그 답으로 덮어씀
 - 알림 내용으로 상태를 정하지 않음. 알림은 "이 거래를 다시 물어보라"는 신호. 그래서 겹치거나 순서가 바뀌어도 결과가 같음
-- 구독 줄의 주인은 알림이 바꾸지 못함. 주인은 우리 표가 정함
+- 구독 줄의 주인은 알림이 바꾸지 못함. 주인은 우리 테이블이 정함
 
 ### 10-3. 여기서 새로 쓴 Go 문법
 
@@ -374,5 +374,5 @@ return tx.Commit(ctx)
 | 2026-11-19 | 조사 | 애플·구글·중국어권·국내 자료 조사, 이슈 #22~#42 | [조사 종합](../reports/2026-11-19-iap-pitfalls.md) |
 | 2026-11-19 | #10 | 구매 검증 API, `Check`, 보안 수정(서명된 거래, 샌드박스 스위치, 제출 제한) | 10-1, 10-4 |
 | 2026-11-19 | #11, #12, #26 | 알림 수신, 뒤에서 도는 처리·대조 작업 | 10-2, 10-3 |
-| 2026-11-19 | #8 | V21 마이그레이션(표 5개), 저장소 함수와 DB 테스트 | 1장 로컬 DB, 6-1 |
+| 2026-11-19 | #8 | V21 마이그레이션(테이블 5개), 저장소 함수와 DB 테스트 | 1장 로컬 DB, 6-1 |
 | 2026-11-18 | #9 | 구글 거래 조회, 인터페이스를 `Lookup(Ref)`로 고침, 상태 값 `State`, 환경변수 읽기 | 4장 고친 기록, 4-1, 9장 구글 비교, 9-1 |
