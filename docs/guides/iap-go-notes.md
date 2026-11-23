@@ -185,8 +185,8 @@ return tx.Commit(ctx)
   - 로그에 남는 오류가 원인 파악에 쓰임. 가장 근본적인 것(다른 앱)부터 보는 것이 보통
 - 확인 방법
   - `go test -v -run TestCheck ./internal/iap`
-  - 지금은 "먼저 채운다"로 건너뜀. 채우면 표의 경우들이 돎
-  - `check_test.go`의 표에 빈 `AccountToken` 경우를 한 줄 추가
+  - 지금은 "먼저 채운다"로 건너뜀. 채우면 테이블의 경우들이 돎
+  - `check_test.go`의 테이블에 빈 `AccountToken` 경우를 한 줄 추가
 - 쓸 문법
   - `if p.BundleID != want.BundleID { return ErrWrongApp }`
   - 맵 조회: `want.Products[p.ProductID]`는 없으면 `false`
@@ -196,7 +196,7 @@ return tx.Commit(ctx)
 
 - 파일 이름이 `_test.go`로 끝나고 함수가 `TestXxx(t *testing.T)`면 테스트. 프레임워크 없음
 - 실패 알림: `t.Fatalf("...")`. 단정문 라이브러리를 쓰지 않고 `if`로 비교
-- 표 형식 테스트 (`check_test.go`): 경우를 구조체 목록으로 늘어놓고 `t.Run(이름, ...)`으로 돌림. JUnit의 `@ParameterizedTest`
+- 테이블 주도 테스트(table-driven test, `check_test.go`): 경우를 구조체 목록으로 늘어놓고 `t.Run(이름, ...)`으로 돌림. JUnit의 `@ParameterizedTest`
 - 가짜: 인터페이스를 구현한 작은 구조체를 손으로 씀 (`fake.go`, `apple_test.go`)
 - 다른 패키지에서 결제를 테스트할 때는 `iap.Fake`에 거래를 넣어 두고 씀
 

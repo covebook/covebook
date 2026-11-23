@@ -1,14 +1,14 @@
 # 결제 용어집
 
 - 결제 코드·문서·PR에 나오는 말을 한곳에 모은 것. 처음 보는 말이 나오면 여기부터
-- 세팅과 출시 순서는 [`iap-store-setup.md`](iap-store-setup.md), 표와 칸의 이유는 [`spec/erd.md`](../spec/erd.md), 결정은 [ADR-0002](../adr/0002-iap-design.md)·[ADR-0003](../adr/0003-iap-compliance.md), 조사는 `reports/2026-11-19-iap-pitfalls.md`
+- 세팅과 출시 순서는 [`iap-store-setup.md`](iap-store-setup.md), 테이블과 칸의 이유는 [`spec/erd.md`](../spec/erd.md), 결정은 [ADR-0002](../adr/0002-iap-design.md)·[ADR-0003](../adr/0003-iap-compliance.md), 조사는 `reports/2026-11-19-iap-pitfalls.md`
 
 ## 1. 상품과 권한
 
 | 말 | 뜻 | 우리에게서 |
 |---|---|---|
 | 인앱결제(IAP) | 앱 안에서 애플·구글 결제창으로 사는 것. 돈은 스토어가 받고 수수료를 뗀 뒤 정산해 준다 | 결제 전부 |
-| 결제 경로(route) | 결제를 처리한 곳. `apple`, `google`. 나중에 `stripe`, `onestore` | 모든 결제 표의 `route` (D19) |
+| 결제 경로(route) | 결제를 처리한 곳. `apple`, `google`. 나중에 `stripe`, `onestore` | 모든 결제 테이블의 `route` (D19) |
 | 자동 갱신 구독 | 기간마다 저절로 다시 결제되는 상품 | 구독 plus(월·연) |
 | 소모성(consumable) | 여러 번 살 수 있는 상품. 스토어는 "샀다"를 기억하지 않아 복원이 안 된다 | 추가 선반 (D1) |
 | 비소모성(non-consumable) | 계정당 한 번만 사는 영구 상품. 스토어가 기억해 복원된다 | 쓰지 않음 |
@@ -21,10 +21,11 @@
 | 말 | 뜻 | 우리에게서 |
 |---|---|---|
 | 거래 ID(transactionId) | 애플의 결제 1건 번호. 갱신마다 새로 생긴다. 숫자라 추측할 수 있다 | `transaction_id` |
-| 원 거래 ID(originalTransactionId) | 애플 구독의 첫 거래 번호. 갱신돼도 같아서 구독 한 줄기를 묶는다 | `original_id` |
+| 원 거래 ID(originalTransactionId) | 애플 구독의 첫 거래 번호. 갱신돼도 같아서 같은 구독 1건의 결제들을 묶는다 | `original_id` |
 | 구매 토큰(purchaseToken) | 구글이 구매마다 주는 긴 문자열. 추측할 수 없다. 구독은 다시 시작·요금제 변경 때 새로 나온다 | 구글의 `transaction_id`·`original_id` |
 | 주문 ID(orderId) | 구글 결제 1건 번호. 구독은 갱신마다 `..0`, `..1`처럼 늘어난다 | 구글 구독의 `transaction_id` |
-| `linkedPurchaseToken` | 구글에서 새 구매 토큰이 이어받은 옛 토큰. 따라가면 같은 구독 줄기 | D6 |
+| `linkedPurchaseToken` | 구글에서 새 구매 토큰이 이어받은 옛 토큰. 요금제를 바꾸거나 다시 구독하면 새 토큰이 나오는데, 이 값으로 옛 구독을 찾아 끝낸다 | D6 |
+| 구독 1건 | 처음 구독한 때부터 해지·결제 실패로 끝날 때까지 자동 갱신으로 이어진 결제 묶음. 결제는 여러 번이어도 구독은 1건 | `iap_subscriptions` 1줄 (`erd.md` 3.4) |
 | JWS (서명된 거래) | 애플이 서명한 거래 정보. 구매한 기기만 가진다. 서명을 확인하면 위조가 아님을 안다 | 앱이 내는 `proof` (#43) |
 | 계정 연결 값 | 결제할 때 앱이 스토어에 넘기는 무작위 UUID. 스토어가 영수증·알림마다 돌려준다. 애플 `appAccountToken`, 구글 `obfuscatedAccountId` | `iap_account_tokens` (D7) |
 | storefront / regionCode | 결제한 나라의 스토어. 애플은 세 글자 나라 코드, 구글은 두 글자 | `country` (D20) |
