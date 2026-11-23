@@ -2236,9 +2236,14 @@ Future<void> dropHomeSnapshot() async {
 const _fadeStops = [(0.0, 0.0), (0.2, 0.05), (0.4, 0.2), (0.6, 0.48), (0.8, 0.8), (1.0, 1.0)];
 
 /// 머리줄 높이(지금 앱은 배치에서 잰다) = 위 여백(TabHeader.paddingTop 4, 2026-11-23 사용자 '위쪽이 넓어서 줄이라고': 24였다) + 제목 줄(title) − 2 + 해 줄(Top 부제 secondary) + 아래 4(홈만: 바로 아래가 책장 벽).
+/// 제목을 내린 만큼(_titleDrop) 해를 끌어올려 높이에는 들어가지 않는다.
 /// 줄 높이는 글자 역할에서 읽고, 지금 앱처럼 화소로 올린다(rnPx). 숫자를 따로 두면 글자 위계를 바꿀 때 어긋난다
 /// (2026-11-10 사용자 '책장 좀 더 높이', '2026이랑 나의 책장 사이 간격 줄이고': 아래 여백 12 → 4, 해 위 4 → −2)
 const _headerBottom = 4.0;
+
+/// '나의 책장'만 이만큼 내리고 해는 그 자리(해를 같은 만큼 더 끌어올린다): 머리줄 높이 · 해 · 아이콘 자리는 그대로, 제목과 해 사이만 좁다
+/// (2026-11-24 사용자 '나의 책장 위치 좀만 내려서 2026이랑 좀 더 가깝게')
+const _titleDrop = Space.xs;
 double get homeHeaderHeight => TabHeader.paddingTop + rnPx(TypeSpecs.title.line) - 2 + rnPx(TypeSpecs.secondary.line) + _headerBottom;
 
 /// 꾸미기 맨 위 줄 높이: 낮은 전환 칸(누르는 자리 48) + 위아래 4. 머리줄보다 낮아 꾸미는 동안 책장이 그만큼 위로 온다(liftedPage)
@@ -2270,7 +2275,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      // 머리줄 아래 여백 4, 해는 제목 바로 밑(−2dp, 지금 앱 11-10 조정). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌').
+      // 머리줄 아래 여백 4, 해는 제목 바로 밑(−2dp, 지금 앱 11-10 조정. 2026-11-24 제목만 _titleDrop 내려 더 붙임). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌').
       // 오른쪽은 아이콘 누르는 칸이 그림 칸보다 양옆으로 넓은 만큼(_HeaderIcons.slop) 덜 비운다: 그림 자리는 그대로
       padding: EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, _headerLastCenter - Space.hit / 2, _headerBottom),
       child: Row(
@@ -2289,10 +2294,10 @@ class _Header extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('나의 책장', style: AppType.title, maxLines: 1),
+                    Padding(padding: const EdgeInsets.only(top: _titleDrop), child: Text('나의 책장', style: AppType.title, maxLines: 1)),
                     // 굽기 시간 툴팁은 측정용이라 시험 빌드(QA_FRAMES)에서만: 출시 빌드 사용자에게 개발 숫자를 보이지 않는다
                     PullUp(
-                      dy: 2,
+                      dy: 2 + _titleDrop,
                       child: qaFrames
                           // 해는 제목 아래 부제(TDS Top.SubtitleParagraph size 15: t6 regular grey700)
                           ? Tooltip(message: status, child: Text('$year', style: AppType.secondary, maxLines: 1))
