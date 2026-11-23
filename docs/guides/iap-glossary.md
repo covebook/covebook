@@ -1,7 +1,7 @@
 # 결제 용어집
 
 - 결제 코드·문서·PR에 나오는 말을 한곳에 모은 것. 처음 보는 말이 나오면 여기부터
-- 표와 칸의 이유는 [`spec/erd.md`](../spec/erd.md), 결정은 [ADR-0002](../adr/0002-iap-design.md)·[ADR-0003](../adr/0003-iap-compliance.md), 조사는 `reports/2026-11-19-iap-pitfalls.md`
+- 세팅과 출시 순서는 [`iap-store-setup.md`](iap-store-setup.md), 표와 칸의 이유는 [`spec/erd.md`](../spec/erd.md), 결정은 [ADR-0002](../adr/0002-iap-design.md)·[ADR-0003](../adr/0003-iap-compliance.md), 조사는 `reports/2026-11-19-iap-pitfalls.md`
 
 ## 1. 상품과 권한
 
@@ -69,8 +69,8 @@
 |---|---|---|
 | 샌드박스 | 돈이 나가지 않는 시험 결제 환경. TestFlight·심사·라이선스 테스터가 쓴다 | `env='sandbox'`, `IAP_ALLOW_SANDBOX` (D15) |
 | 운영(production) | 실제 결제 | `env='production'` |
-| 애플 샌드박스 갱신 주기 | 시험용이라 연 구독이 1시간마다 갱신되는 등 실제보다 훨씬 빠르다 | 출시 점검표 4장 |
-| 라이선스 테스터 | 구글에서 돈 없이 시험 결제할 수 있게 등록한 계정 | 출시 점검표 2장 |
+| 애플 샌드박스 갱신 주기 | 시험용이라 연 구독이 1시간마다 갱신되는 등 실제보다 훨씬 빠르다 | 결제 세팅 6장 |
+| 라이선스 테스터 | 구글에서 돈 없이 시험 결제할 수 있게 등록한 계정 | 결제 세팅 3-7 |
 
 ## 7. 법과 해외
 
