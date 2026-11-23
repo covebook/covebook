@@ -7,6 +7,7 @@ import 'package:chaekjang/features/book/book_screen.dart';
 import 'package:chaekjang/features/stats/session_edit_screen.dart';
 import 'package:chaekjang/features/stats/stats_screen.dart';
 import 'package:chaekjang/store/library_model.dart';
+import 'package:chaekjang/ui/kit.dart' show Field;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -131,4 +132,22 @@ void main() {
     expect(find.text('기록 저장'), findsOneWidget);
     expect(find.textContaining('${now.month}월 1일'), findsWidgets, reason: '그 날짜로 열린다');
   });
+
+  testWidgets('추가 화면(1단계 규칙): 도달한 쪽을 마지막 쪽(216)으로 적어 저장하면 완독, 완독일은 그 날짜', (t) async {
+    await pumpIn(t, const SessionAddScreen(bookId: 'bk1', day: '2026-11-20'));
+    await t.tap(find.text('30분'));
+    await t.pumpAndSettle();
+    final pages = find.descendant(of: find.byWidgetPredicate((w) => w is Field && w.label == '도달한 쪽 (선택)'), matching: find.byType(TextField));
+    await t.ensureVisible(pages);
+    await t.enterText(pages, '216');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await t.pumpAndSettle(const Duration(seconds: 2));
+    await t.tap(find.text('기록 저장'));
+    await t.pumpAndSettle();
+    final m = LibraryModel.instance;
+    expect(m.lib.sessions.values.single.pagesRead, 216);
+    expect(m.lib.books['bk1']!.status, ReadStatus.read);
+    expect(m.lib.rounds.values.single.finishedAt, '2026-11-20');
+  });
 }
+

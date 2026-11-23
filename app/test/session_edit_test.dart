@@ -67,4 +67,73 @@ void main() {
     expect(gone.bookmarks['m1']!.sessionId, isNull);
     expect(gone.bookmarks['m1']!.text, '문장');
   });
+
+  group('읽기 상태 · 현재 쪽 규칙(2026-11-24 1단계): 기록 수정 · 삭제', () {
+    Session rec(String id, {num? start, num? pages, String round = 'r1', int day = 3}) => Session(
+          id: id,
+          myBookId: 'a',
+          roundId: round,
+          startedAt: local(2026, 11, day, 20, 0),
+          endedAt: local(2026, 11, day, 21, 0),
+          durationMs: 3600000,
+          createdAt: '',
+          updatedAt: '',
+          startPage: start,
+          pagesRead: pages,
+        );
+    Library make({num? current = 120, ReadStatus status = ReadStatus.reading}) {
+      final lib = Library();
+      lib.editions['e'] = Edition(id: 'e', title: '책', authors: const [], source: 'photo', pageCount: 200, createdAt: '', updatedAt: '');
+      lib.books['a'] = MyBook(id: 'a', editionId: 'e', status: status, currentPage: current, createdAt: '', updatedAt: '');
+      lib.rounds['r1'] = Round(id: 'r1', myBookId: 'a', index: 1, createdAt: '', updatedAt: '', startedAt: '2026-11-01');
+      lib.sessions['s1'] = rec('s1', start: 50, pages: 80, day: 1);
+      lib.sessions['s2'] = rec('s2', start: 80, pages: 120, day: 2);
+      return lib;
+    }
+
+    test('규칙 3: 현재 쪽이 그 기록의 도달한 쪽이면, 도달한 쪽을 고친 뒤 같은 회차 남은 기록 중 가장 큰 쪽으로', () {
+      expect(updateSessionIn(make(), 's2', {'pagesRead': 100}, 'now').books['a']!.currentPage, 100);
+      expect(updateSessionIn(make(), 's2', {'pagesRead': 60}, 'now').books['a']!.currentPage, 80, reason: '다른 기록(80)이 더 크다');
+      expect(updateSessionIn(make(), 's2', {'pagesRead': 150}, 'now').books['a']!.currentPage, 150);
+    });
+
+    test('규칙 3: 기록을 지우면 남은 기록의 가장 큰 쪽, 남은 게 없으면 그 기록의 시작 쪽, 그것도 없으면 비운다', () {
+      expect(deleteSessionIn(make(), 's2', 'now').books['a']!.currentPage, 80);
+      final only = make()..sessions.remove('s1');
+      expect(deleteSessionIn(only, 's2', 'now').books['a']!.currentPage, 80, reason: '그 기록의 시작 쪽');
+      final noStart = make()
+        ..sessions.remove('s1')
+        ..sessions['s2'] = rec('s2', pages: 120, day: 2);
+      expect(deleteSessionIn(noStart, 's2', 'now').books['a']!.currentPage, isNull);
+    });
+
+    test('규칙 3: 다른 회차 기록은 세지 않는다', () {
+      final lib = make()
+        ..rounds['r0'] = Round(id: 'r0', myBookId: 'a', index: 0, createdAt: '', updatedAt: '', startedAt: '2026-10-01', finishedAt: '2026-10-20')
+        ..sessions['old'] = rec('old', pages: 190, round: 'r0', day: 1);
+      expect(deleteSessionIn(lib, 's2', 'now').books['a']!.currentPage, 80);
+    });
+
+    test('규칙 3: 현재 쪽이 기록과 다르면(직접 적은 쪽) 고치거나 지워도 그대로', () {
+      expect(updateSessionIn(make(current: 130), 's2', {'pagesRead': 100}, 'now').books['a']!.currentPage, 130);
+      expect(deleteSessionIn(make(current: 130), 's2', 'now').books['a']!.currentPage, 130);
+    });
+
+    test('규칙 1: 도달한 쪽을 마지막 쪽으로 고치면 완독, 완독일은 그 기록을 시작한 날', () {
+      final out = updateSessionIn(make(), 's2', {'pagesRead': 200}, 'now');
+      expect(out.books['a']!.status, ReadStatus.read);
+      expect(out.rounds['r1']!.finishedAt, '2026-11-02');
+    });
+
+    test('규칙 4: 완독은 되돌리지 않는다(기록을 지우거나 쪽을 낮춰도 완독)', () {
+      final done = updateSessionIn(make(), 's2', {'pagesRead': 200}, 'now');
+      final lowered = updateSessionIn(done, 's2', {'pagesRead': 120}, 'now');
+      expect(lowered.books['a']!.status, ReadStatus.read);
+      expect(lowered.books['a']!.currentPage, 120);
+      final gone = deleteSessionIn(done, 's2', 'now');
+      expect(gone.books['a']!.status, ReadStatus.read);
+      expect(gone.books['a']!.currentPage, 80);
+    });
+  });
 }
+

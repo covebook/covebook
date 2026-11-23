@@ -134,7 +134,8 @@ class SessionInput {
 }
 
 /// 독서 기록 저장: 같은 id(타이머 id)로 다시 저장해도 하나로 남는다. 책이 있으면 회차를 먼저 확보해 연결하고,
-/// 적은 쪽수는 현재 쪽수를 앞으로만 옮긴다. 책 없이 시간만도 저장한다
+/// 적은 쪽수는 현재 쪽수를 앞으로만 옮기고, 마지막 쪽이면 완독으로(finishIfLastPage). 책 없이 시간만도 저장한다.
+/// 타이머 저장 · 읽은 시간 직접 추가가 같이 쓴다
 ({Library lib, String id}) addSessionTo(Library lib, SessionInput input, String now, {String Function()? sessionId, String Function()? roundId}) {
   final prev = input.id == null ? null : lib.sessions[input.id];
   var next = lib;
@@ -163,6 +164,8 @@ class SessionInput {
   final b = s.myBookId == null ? null : next.books[s.myBookId];
   if (b != null && input.pagesRead != null && input.pagesRead != 0) {
     next = next.copy(books: {...next.books, b.id: b.copyWith(currentPage: math.max(b.currentPage ?? 0, input.pagesRead!), updatedAt: now)});
+    // 적은 쪽이 마지막 쪽이면 완독(완독일은 그 기록을 시작한 날)
+    next = finishIfLastPage(next, b.id, input.pagesRead, today(DateTime.parse(input.startedAt)), now, roundId: roundId);
   }
   return (lib: next, id: id);
 }
@@ -326,7 +329,8 @@ FinishDraft finishActive(Active a, num now, [num? endAt]) {
 
 // ---------- 읽기 상태·다시 읽기(지금 앱 domain/library.ts applyStatus·rereadRound) ----------
 
-/// 상태 변경 규칙(사용자가 정한다. 타이머 시간으로 자동 완독 판정하지 않는다). day는 기기 현지 날짜.
+/// 상태 변경 규칙. 상태는 사용자가 정하고, 자동으로는 적은 쪽이 마지막 쪽일 때만 완독으로 바꾼다(finishIfLastPage. 타이머 시간으로는 판정하지 않는다,
+/// 완독은 자동으로 되돌리지 않는다). day는 기기 현지 날짜.
 /// 같은 상태면 그대로. 읽는 중·보류로: 열린 회차를 이어 가거나(보류 해제/설정) 없으면 새 회차(완독 뒤면 다시 읽기, 진도 0쪽부터).
 /// 완독으로: 열린 회차를 닫고(완독일 오늘), 회차가 없으면 만들고 바로 닫는다. 읽기 전으로: 날짜 없는 빈 열린 회차만 지운다
 Library applyStatus(Library lib, String myBookId, ReadStatus status, String now, {String? day, String Function()? roundId}) {
@@ -358,6 +362,53 @@ Library applyStatus(Library lib, String myBookId, ReadStatus status, String now,
     rounds.remove(open.id);
   }
   return lib.copy(rounds: rounds, books: {...lib.books, myBookId: book.patch(status: status, currentPage: page, updatedAt: now)});
+}
+
+// ---------- 읽기 상태 · 현재 쪽 규칙(한 곳, 2026-11-24 사용자 1단계) ----------
+// 들어오는 길(타이머 저장 · 읽은 시간 직접 추가 · 기록 수정 · 기록 삭제 · 현재 쪽 고치기)이 모두 아래를 거친다.
+//  1. 책에 연결된 기록을 저장할 때 도달한 쪽이 판본 전체 쪽수(있고 0보다 클 때만) 이상이면 완독(완독일은 그 기록을 시작한 날). 이미 완독이면 그대로
+//  2. 현재 쪽을 직접 고쳐 전체 쪽수 이상이 되면 같은 완독(완독일은 오늘)
+//  3. 기록의 도달한 쪽을 고치거나 기록을 지우면, 책의 현재 쪽이 그 기록의 예전 도달한 쪽과 같았을 때만 같은 회차에 남은 기록의 도달한 쪽 중 가장 큰 값으로
+//     (없으면 그 기록의 시작 쪽, 그것도 없으면 비움). 사용자가 직접 적은 다른 값은 그대로
+//  4. 완독은 자동으로 되돌리지 않는다(기록을 지우거나 쪽을 낮춰도 상태는 그대로)
+
+/// 판본 전체 쪽수(값이 있고 0보다 클 때만)
+num? bookPageCount(Library lib, String myBookId) {
+  final b = lib.books[myBookId];
+  final n = b == null ? null : lib.editions[b.editionId]?.pageCount;
+  return n != null && n > 0 ? n : null;
+}
+
+/// 규칙 1·2: 적은 쪽이 마지막 쪽 이상이면 완독(applyStatus, 완독일 day). 이미 완독이거나 쪽수를 모르면 그대로
+Library finishIfLastPage(Library lib, String myBookId, num? page, String day, String now, {String Function()? roundId}) {
+  final b = lib.books[myBookId];
+  final count = bookPageCount(lib, myBookId);
+  if (b == null || b.status == ReadStatus.read || page == null || count == null || page < count) return lib;
+  return applyStatus(lib, myBookId, ReadStatus.read, now, day: day, roundId: roundId);
+}
+
+/// 규칙 2: 현재 쪽 직접 고치기(null이면 비운다). 마지막 쪽 이상이면 완독(완독일 오늘)
+Library setCurrentPageIn(Library lib, String myBookId, num? page, String now) {
+  final b = lib.books[myBookId];
+  if (b == null) return lib;
+  final next = lib.copy(books: {...lib.books, myBookId: b.patch(currentPage: page, updatedAt: now)});
+  return finishIfLastPage(next, myBookId, page, today(DateTime.parse(now)), now);
+}
+
+/// 규칙 3: 기록 하나([before], 고치거나 지우기 전)가 바뀐 뒤 그 책의 현재 쪽을 맞춘다. [lib]은 바뀐 뒤 서재
+Library syncPageAfterSessionChange(Library lib, Session before, String now) {
+  final id = before.myBookId, old = before.pagesRead;
+  final b = id == null ? null : lib.books[id];
+  if (b == null || old == null || old == 0 || b.currentPage != old) return lib;
+  num? best;
+  for (final s in lib.sessions.values) {
+    if (s.myBookId != id || s.roundId != before.roundId) continue;
+    final p = s.pagesRead;
+    if (p != null && p != 0 && (best == null || p > best)) best = p;
+  }
+  final page = best ?? (before.startPage != null && before.startPage != 0 ? before.startPage : null);
+  if (page == b.currentPage) return lib;
+  return lib.copy(books: {...lib.books, id!: b.patch(currentPage: page, updatedAt: now)});
 }
 
 /// 다시 읽기(명시적): 지난 회차는 그대로 두고 새 회차를 연다(진도 0쪽부터). 열린 회차가 있으면 그대로

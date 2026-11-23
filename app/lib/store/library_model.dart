@@ -165,12 +165,16 @@ class LibraryModel extends ChangeNotifier {
     return r.id;
   }
 
-  /// 책 고치기(별점·한 줄 감상·현재 쪽·갈피 색). null을 주면 비운다
+  /// 책 고치기(별점·한 줄 감상·현재 쪽·갈피 색). null을 주면 비운다.
+  /// 현재 쪽은 읽기 상태 · 현재 쪽 규칙(reading.dart setCurrentPageIn: 마지막 쪽이면 완독)을 거친다
   Future<void> updateBook(String id, {Object? rating = _keep, Object? note = _keep, Object? currentPage = _keep, Object? ribbonColor = _keep}) {
     final b = lib.books[id];
     if (b == null) return Future.value();
-    final next = b.patch(rating: rating, note: note, currentPage: currentPage, ribbonColor: ribbonColor, updatedAt: nowIso());
-    return commitLib(lib.copy(books: {...lib.books, id: next}));
+    final now = nowIso();
+    final next = b.patch(rating: rating, note: note, ribbonColor: ribbonColor, updatedAt: now);
+    var out = lib.copy(books: {...lib.books, id: next});
+    if (!identical(currentPage, _keep)) out = setCurrentPageIn(out, id, currentPage as num?, now);
+    return commitLib(out);
   }
 
   /// 읽기 상태 바꾸기(같은 상태면 그대로)
