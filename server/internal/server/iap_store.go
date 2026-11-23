@@ -6,12 +6,13 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
 )
 
-// 결제 테이블(V21)를 읽고 쓰는 함수들. 지급 판단은 여기서 하지 않는다. 부르는 쪽이 스토어 조회와 iap.Check를 끝낸 뒤 부른다.
+// 결제 테이블(V21)을 읽고 쓰는 함수들. 지급 판단은 여기서 하지 않는다. 부르는 쪽이 스토어 조회와 iap.Check를 끝낸 뒤 부른다.
 
 // dbtx는 연결 풀(s.DB)과 트랜잭션(pgx.Tx)이 둘 다 가진 메서드다.
 // 이 타입을 받는 함수는 트랜잭션 안에서도 밖에서도 부를 수 있다.
@@ -42,7 +43,7 @@ func iapAccountToken(ctx context.Context, tx pgx.Tx, user int64) (string, error)
 	var token string
 	err := tx.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 AND year IS NULL ORDER BY created_at, token LIMIT 1", user).Scan(&token)
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = tx.QueryRow(ctx, "INSERT INTO iap_account_tokens(user_id) VALUES($1) RETURNING token::text", user).Scan(&token)
+		err = tx.QueryRow(ctx, "INSERT INTO iap_account_tokens(token, user_id) VALUES($1,$2) RETURNING token::text", uuid.NewString(), user).Scan(&token)
 	}
 	return token, err
 }
@@ -50,8 +51,8 @@ func iapAccountToken(ctx context.Context, tx pgx.Tx, user int64) (string, error)
 // iapShelfToken은 그 연도 책장의 추가 선반을 살 때 스토어에 넘길 계정 연결 값을 돌려준다. 없으면 만든다(D1).
 // 연도 하나에 값 하나다. 두 요청이 동시에 와도 유일 색인 때문에 같은 값을 받는다.
 func iapShelfToken(ctx context.Context, q dbtx, user int64, year int) (string, error) {
-	if _, err := q.Exec(ctx, `INSERT INTO iap_account_tokens(user_id, year) VALUES($1,$2)
-		ON CONFLICT (user_id, year) WHERE year IS NOT NULL DO NOTHING`, user, year); err != nil {
+	if _, err := q.Exec(ctx, `INSERT INTO iap_account_tokens(token, user_id, year) VALUES($1,$2,$3)
+		ON CONFLICT (user_id, year) WHERE year IS NOT NULL DO NOTHING`, uuid.NewString(), user, year); err != nil {
 		return "", err
 	}
 	var token string
@@ -683,9 +684,9 @@ func iapReserveShelf(ctx context.Context, tx pgx.Tx, user int64, year, shelves, 
 		}
 		return
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO iap_shelf_reservations(user_id, year, shelves, expires_at)
-		VALUES($1,$2,$3, now() + make_interval(secs => $4)) RETURNING id::text, expires_at`,
-		user, year, shelves, iapShelfHold.Seconds()).Scan(&r.ID, &r.ExpiresAt)
+	err = tx.QueryRow(ctx, `INSERT INTO iap_shelf_reservations(id, user_id, year, shelves, expires_at)
+		VALUES($1,$2,$3,$4, now() + make_interval(secs => $5)) RETURNING id::text, expires_at`,
+		uuid.NewString(), user, year, shelves, iapShelfHold.Seconds()).Scan(&r.ID, &r.ExpiresAt)
 	return
 }
 
