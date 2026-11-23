@@ -49,4 +49,27 @@ void main() {
     expect(find.text('한줄평'), findsNothing);
     expect(find.text('독서 기록'), findsOneWidget);
   });
+
+  testWidgets('5단계: 현재 쪽을 마지막 쪽(216)으로 고쳐 완독이 되면 평가 칸으로', (t) async {
+    await _openMine(t);
+    await t.tap(find.bySemanticsLabel(RegExp('^현재 쪽')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byType(TextField).last, '216');
+    await t.pump(const Duration(milliseconds: 700));
+    await t.pumpAndSettle();
+    expect(LibraryModel.instance.lib.books['bk1']!.status, ReadStatus.read);
+    expect(find.text('한줄평'), findsOneWidget, reason: '평가 칸');
+  });
+
+  testWidgets('5단계: 마지막 쪽 전이면 내 기록 칸 그대로', (t) async {
+    await _openMine(t);
+    await t.tap(find.bySemanticsLabel(RegExp('^현재 쪽')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byType(TextField).last, '100');
+    await t.pump(const Duration(milliseconds: 700));
+    await t.pumpAndSettle();
+    expect(LibraryModel.instance.lib.books['bk1']!.status, ReadStatus.reading);
+    expect(find.text('한줄평'), findsNothing);
+  });
 }
+

@@ -7,7 +7,7 @@ import 'package:chaekjang/features/book/book_screen.dart';
 import 'package:chaekjang/features/stats/session_edit_screen.dart';
 import 'package:chaekjang/features/stats/stats_screen.dart';
 import 'package:chaekjang/store/library_model.dart';
-import 'package:chaekjang/ui/kit.dart' show Field;
+import 'package:chaekjang/ui/kit.dart' show Field, Stars;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -148,6 +148,10 @@ void main() {
     expect(m.lib.sessions.values.single.pagesRead, 216);
     expect(m.lib.books['bk1']!.status, ReadStatus.read);
     expect(m.lib.rounds.values.single.finishedAt, '2026-11-20');
+    // 5단계: 완독이 된 기록은 연 자리로 돌아가 저장했어요 창 + 별점
+    await t.pumpAndSettle();
+    expect(find.textContaining('기록하고 완독했어요'), findsOneWidget);
+    expect(find.byType(Stars), findsOneWidget);
   });
 }
 

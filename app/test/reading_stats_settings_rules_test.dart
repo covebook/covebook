@@ -1,5 +1,6 @@
 // 2026-11-19 공통 규칙(읽기 · 통계 · 내 정보): 하나 고르기 시트는 FilterOption + 고르는 원, 책 줄은 BookRow, 책 없음은 '책 없이 읽기',
 // 시각은 '오후 9:05', 1분 미만은 초까지, 저장했어요 창은 사용자 시안 그대로
+import 'package:chaekjang/db/library_write.dart';
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/reading/finish_screen.dart' show showSavedDialog;
 import 'package:chaekjang/features/settings/backup_screen.dart';
@@ -162,4 +163,31 @@ void main() {
     expect(as.fontSize!, lessThan(ts.fontSize!));
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('저장했어요 창 5단계(2026-11-24): 저장으로 완독이면 \'기록하고 완독했어요\' + 별(누르면 바로 별점, 있던 별점은 보인다), 확인으로 닫힌다. 완독이 아니면 별 없음', (t) async {
+    final m = LibraryModel.instance;
+    m.lib = lib()..books['bk1'] = MyBook(id: 'bk1', editionId: 'ed1', status: ReadStatus.read, rating: 3, createdAt: t1, updatedAt: t1);
+    m.writeChanges = (_) async {};
+    addTearDown(() => m.writeChanges = applyLocalChanges);
+    await pump(t, Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showSavedDialog(c, bookId: 'bk1', sessionId: 's1', finished: true), child: const Text('열기')))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(plainStarts('25분 기록하고 완독했어요'), findsOneWidget);
+    expect(find.byType(Stars), findsOneWidget);
+    expect(t.widget<Stars>(find.byType(Stars)).value, 3, reason: '있던 별점');
+    await t.tap(find.bySemanticsLabel('별점 4점'));
+    await t.pump();
+    expect(m.lib.books['bk1']!.rating, 4, reason: '누르면 바로 저장');
+    expect(plainStarts('25분 기록하고 완독했어요'), findsOneWidget, reason: '별을 눌러도 창은 그대로');
+    await t.tap(find.text('확인'));
+    await t.pumpAndSettle();
+    expect(find.byType(Stars), findsNothing);
+
+    await pump(t, Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showSavedDialog(c, bookId: 'bk1', sessionId: 's1'), child: const Text('열기')))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(plainStarts('25분 기록했어요'), findsOneWidget);
+    expect(find.byType(Stars), findsNothing, reason: '완독이 아닌 저장은 지금과 같다');
+  });
 }
+

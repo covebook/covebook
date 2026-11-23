@@ -155,9 +155,13 @@ class _FinishScreenState extends State<FinishScreen> {
       _saveError = null;
     });
     try {
-      await saveFinishedReading(pending, startPage: pending.myBookId != null ? sp : null, pagesRead: pending.myBookId != null ? ep : null, memo: _memo.trim().isEmpty ? null : _memo.trim());
+      final bookId = pending.myBookId;
+      final wasRead = bookId != null && _lib.lib.books[bookId]?.status == ReadStatus.read;
+      await saveFinishedReading(pending, startPage: bookId != null ? sp : null, pagesRead: bookId != null ? ep : null, memo: _memo.trim().isEmpty ? null : _memo.trim());
       Ambient.instance.stop();
-      final saved = (bookId: pending.myBookId, sessionId: pending.id);
+      // 이번 저장으로 완독이 됐는지(적은 쪽이 마지막 쪽, 읽기 상태 · 현재 쪽 규칙): 저장했어요 창에 별점
+      final finished = bookId != null && !wasRead && _lib.lib.books[bookId]?.status == ReadStatus.read;
+      final saved = (bookId: bookId, sessionId: pending.id);
       _saved = saved;
       _savedDraft = pending;
       if (!mounted) return;
@@ -166,7 +170,7 @@ class _FinishScreenState extends State<FinishScreen> {
       // 돌아온 화면 위에 창(화면은 이미 닫히는 중이라 앱 Navigator의 오버레이로 띄운다)
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final o = nav.overlay;
-        if (o != null && o.mounted) showSavedDialog(o.context, bookId: saved.bookId, sessionId: saved.sessionId);
+        if (o != null && o.mounted) showSavedDialog(o.context, bookId: saved.bookId, sessionId: saved.sessionId, finished: finished);
       });
     } catch (e) {
       // 예외 원문은 화면에 보이지 않는다(errorText가 로그로)
@@ -332,7 +336,9 @@ class _FinishScreenState extends State<FinishScreen> {
 
 /// 저장했어요(2026-11-17 사용자 시안): 가운데 작은 창에 표지 · 제목 · 저자, 'N분 N초 기록했어요', 확인. 뒤는 어둡게, 어디를 눌러도 닫힌다.
 /// 창 모양(덮개 · 모서리 · 폭 · 나타나기)은 사용자 시안이라 확인창(appAlert)과 따로 둔다(DESIGN 16장)
-Future<void> showSavedDialog(BuildContext context, {required String? bookId, required String sessionId}) {
+/// [finished]: 이번 저장으로 완독이 됐다(2026-11-24 사용자 5단계): 'N분 N초 기록하고 완독했어요' + 그 아래 별(누르면 바로 그 책 별점으로 저장, 있던 별점은 그대로 보인다).
+/// 별점을 주지 않아도 '확인'으로 닫힌다. 한 줄 감상 칸은 두지 않는다. 완독이 아니면 지금과 같다
+Future<void> showSavedDialog(BuildContext context, {required String? bookId, required String sessionId, bool finished = false}) {
   final lib = LibraryModel.instance.lib;
   final ss = lib.sessions[sessionId];
   final sb = bookId == null ? null : lib.books[bookId];
@@ -341,7 +347,8 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
   final linked = sb != null && se != null ? sb.id : null;
   final title = se != null && sb != null ? se.title : NoBookCover.name;
   final author = se != null ? authorLine(se.authors) : '';
-  final done = '${ss == null ? '' : formatDurationPrecise(ss.durationMs)} 기록했어요'.trim();
+  final rate = finished && linked != null;
+  final done = '${ss == null ? '' : formatDurationPrecise(ss.durationMs)} ${rate ? '기록하고 완독했어요' : '기록했어요'}'.trim();
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -391,6 +398,25 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
                           ),
                         ]),
                       ),
+                      // 완독: 별점(공용 Stars, 누르는 대로 저장). 창은 닫히지 않는다
+                      if (rate)
+                        Padding(
+                          padding: const EdgeInsets.only(top: Space.m),
+                          child: StatefulBuilder(
+                            builder: (_, set) => Center(
+                              child: Semantics(
+                                label: '별점',
+                                child: Stars(
+                                  value: LibraryModel.instance.lib.books[linked]?.rating,
+                                  onChange: (v) {
+                                    LibraryModel.instance.updateBook(linked, rating: v);
+                                    set(() {});
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: Space.l),
                       // 가운데 작은 창 안 단추는 확인창과 같은 large(TDS ConfirmDialog 단추 기본값)
                       Btn(label: '확인', size: 'large', onPress: () => Navigator.pop(ctx)),

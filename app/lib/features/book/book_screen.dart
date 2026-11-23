@@ -1,7 +1,7 @@
 // 책 정보(지금 앱 app/book/[id]/index.tsx): 표지 위 가운데 전환 칸 [내 기록 | 평가 | 책 정보], 열면 내 기록(2026-11-24). 이어서 읽기와 갈피 남기기는 아래에 늘 보인다.
 // 책 꾸미기는 책 정보 칸 줄, 책 공유는 머리줄 아이콘(⋯ 메뉴에서는 뺐다)
 // 날짜·쪽수·별점은 모두 선택 입력. 완독은 사용자가 정하거나, 적은 쪽(기록의 도달한 쪽 · 현재 쪽)이 마지막 쪽일 때만 자동으로 바뀐다(타이머 시간으로는 판정하지 않고, 자동으로 되돌리지 않는다. domain/reading.dart 읽기 상태 · 현재 쪽 규칙).
-// 완독한 책을 '읽는 중'·'보류'로 바꾸면 새 회차(다시 읽기)라 먼저 묻는다. 상태를 완독으로 바꾸면 평가 칸으로 넘긴다(2026-11-23)
+// 완독한 책을 '읽는 중'·'보류'로 바꾸면 새 회차(다시 읽기)라 먼저 묻는다. 상태를 완독으로 바꾸면 평가 칸으로 넘긴다(2026-11-23). 현재 쪽을 마지막 쪽으로 고쳐 완독이 돼도 평가 칸으로(2026-11-24)
 library;
 
 import 'dart:async';
@@ -159,10 +159,15 @@ class _BookScreenState extends State<BookScreen> {
   }
 
   /// 현재 쪽 저장(0 · 빈 값은 없음). 한줄평처럼 적는 대로 잠깐 뒤 저장한다(2026-11-19 공통 규칙 12장: 한 칸짜리 값은 바로 저장. 키보드 '완료'를 눌러야만 저장됐다)
+  /// 마지막 쪽을 적어 완독이 되면(읽기 상태 · 현재 쪽 규칙) 상태를 완독으로 바꿀 때처럼 평가 칸으로(2026-11-24 사용자 5단계)
   void _savePage() {
     final n = num.tryParse(_page.text.trim());
     final next = n != null && n > 0 ? n.round() : null;
-    if (next != _model.lib.books[id]?.currentPage) _model.updateBook(id, currentPage: next);
+    if (next == _model.lib.books[id]?.currentPage) return;
+    final wasRead = _model.lib.books[id]?.status == ReadStatus.read;
+    _model.updateBook(id, currentPage: next).then((_) {
+      if (mounted && !wasRead && _model.lib.books[id]?.status == ReadStatus.read) _chooseTab('rate');
+    }, onError: (Object _) {});
   }
 
   void _chooseStatus(MyBook b, Round? last, ReadStatus s) {

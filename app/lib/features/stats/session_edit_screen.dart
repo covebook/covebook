@@ -7,12 +7,13 @@
 // 연결된 책(들어온 곳의 책, 책 없이도) · 날짜(기본 오늘) · 독서 시간(10분 · 30분 · 1시간 빠른 고르기와 직접 입력) · 쪽(선택) · 메모(선택).
 // 시작 시각은 묻지 않는다(오늘이면 지금에서 독서 시간을 뺀 때, 지난 날이면 그날 21시, domain/session_edit manualSessionTimes).
 // 저장은 타이머 저장과 같은 길(store/finish_reading saveManualReading). 여는 곳: 책 정보 › 내 기록 › 독서 기록 '추가', 통계 캘린더 그날 '독서 기록 추가', 읽기 탭 '오늘 총'
+// 저장으로 완독이 되면(적은 쪽이 마지막 쪽) 연 자리로 돌아가 독서 저장과 같은 저장했어요 창 + 별점(2026-11-24 사용자 5단계)
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
-import '../../domain/library.dart' show formatDurationPrecise, today;
+import '../../domain/library.dart' show ReadStatus, formatDurationPrecise, today;
 import '../../domain/reading.dart' show SessionInput;
 import '../../domain/session_edit.dart';
 import '../../store/finish_reading.dart' show saveManualReading;
@@ -24,6 +25,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart' show pickBook;
 import '../community/community_screens.dart' show communityOpen, openCommunityShare;
+import '../reading/finish_screen.dart' show showSavedDialog;
 import 'chart_data.dart' show hasPause;
 import 'stats_widgets.dart' show bookAuthor, bookTitle;
 
@@ -278,8 +280,10 @@ class _SessionAddScreenState extends State<SessionAddScreen> {
     setState(() => _saving = true);
     final t = manualSessionTimes(_f.day, durationMs, DateTime.now());
     final memo = _f.memo.trim();
+    final book = _f.bookId;
+    final wasRead = book != null && _model.lib.books[book]?.status == ReadStatus.read;
     try {
-      await saveManualReading(SessionInput(
+      final id = await saveManualReading(SessionInput(
         myBookId: _f.bookId,
         startedAt: t.startedAt,
         endedAt: t.endedAt,
@@ -288,7 +292,17 @@ class _SessionAddScreenState extends State<SessionAddScreen> {
         pagesRead: _page(_f.pages),
         memo: memo.isEmpty ? null : memo,
       ));
-      if (mounted) Navigator.of(context).pop();
+      if (!mounted) return;
+      // 이번 기록으로 완독이 됐으면(적은 쪽이 마지막 쪽) 연 자리로 돌아가 독서 저장과 같은 저장했어요 창 + 별점(2026-11-24 사용자 5단계)
+      final finished = book != null && !wasRead && _model.lib.books[book]?.status == ReadStatus.read;
+      final nav = Navigator.of(context);
+      nav.pop();
+      if (finished) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final o = nav.overlay;
+          if (o != null && o.mounted) showSavedDialog(o.context, bookId: book, sessionId: id, finished: true);
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
