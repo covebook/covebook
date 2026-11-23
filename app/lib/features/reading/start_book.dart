@@ -2,7 +2,8 @@
 // 끝냈지만 저장하지 않은 기록이 있으면 그것부터(독서 끝), 재는 중이 없으면 새로 시작(소리 함께), 그 책을 재는 중이면 이어서(멈춰 있으면 다시 시작),
 // 다른 책을 재는 중이면 책 바꾸기 창(switch_book)을 따른다.
 // 책 정보에서는 그 책으로 타이머를 시작하고 읽기 화면을 연다(2026-11-16 QA 영숙 F2: 읽기 탭 목록에 올리기만 하고 시계가 가지 않아, 표지 위 작은 ▶를 한참 찾았다).
-// 장면에서 뒤로 나오면 읽기 탭 목록이다(그 책이 맨 앞)
+// 2026-11-24 사용자 4단계: 읽기를 시작한 화면은 그대로 두고 그 위에 장면(또는 독서 끝)을 연다. 뒤로 나오거나 독서를 끝내면 시작한 화면으로 돌아온다
+// (전에는 열린 화면을 모두 닫고 읽기 탭으로 바꿨다). 읽기 탭 목록에서 그 책이 맨 앞인 것은 그대로(AppNav.frontRead)
 library;
 
 import 'package:flutter/material.dart';
@@ -75,7 +76,7 @@ Future<void> beginReading(BuildContext context, String? bookId, {required void F
   await switchReadingBook(context, bookId, then: () => show(finish: false));
 }
 
-/// 책 정보·책 시트의 '읽기 시작'·'이어서 읽기': 책장·책 정보는 닫고 읽기 탭(그 책을 맨 앞에) 위에 장면이나 독서 끝을 연다
+/// 책 정보·책 시트·책 공유의 '읽기 시작'·'이어서 읽기': 지금 화면 위에 장면이나 독서 끝을 연다(읽기 탭 목록에서는 그 책이 맨 앞)
 Future<void> startReadingBook(BuildContext context, String bookId) async {
   final reading = ReadingStore.instance;
   final model = LibraryModel.instance;
@@ -88,8 +89,7 @@ Future<void> startReadingBook(BuildContext context, String bookId) async {
   if (!context.mounted || model.lib.books[bookId] == null) return;
   final nav = Navigator.of(context, rootNavigator: true);
   await beginReading(context, bookId, show: ({required bool finish}) {
-    nav.popUntil((r) => r.isFirst);
-    AppNav.instance.goRead(bookId);
+    AppNav.instance.frontRead(bookId);
     nav.push(finish ? finishRoute() : readingSceneRoute());
   });
 }

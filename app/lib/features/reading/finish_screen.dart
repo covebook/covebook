@@ -1,6 +1,6 @@
 // 독서 종료 기록(지금 앱 app/reading/finish.tsx): 연결된 책(바꾸거나 연결하기), 독서 시간, 선택 입력(시작 쪽·도달한 쪽·짧은 메모) → 개인 기록 저장 또는 버리기.
 // 적는 중인 쪽수·메모는 종료 초안에 함께 저장돼 앱이 꺼져도 이어서 쓴다. 분량은 시작 쪽과 도달한 쪽을 둘 다 알 때만 보인다.
-// 저장 후: 읽기 탭으로 돌아가 그 위에 '저장했어요' 창(이번 기록의 책 · 'N분 기록했어요' → '확인').
+// 저장 후: 읽기를 시작한 화면으로 돌아가(2026-11-24 사용자 4단계, 전에는 읽기 탭) 그 위에 '저장했어요' 창(이번 기록의 책 · 'N분 기록했어요' → '확인').
 // 2026-11-16 사용자 '페이지보다 팝업 느낌이 낫지 않나': 저장 뒤 화면 하나를 통째로 바꾸던 것을 가운데 창으로.
 // 독서 끝 화면은 여는 곳이 여럿이라(읽기 탭 · 장면 · 책 정보 · 복구 창) 여는 길은 openFinish 하나로 둔다
 library;
@@ -111,14 +111,15 @@ class _FinishScreenState extends State<FinishScreen> {
     });
   }
 
-  // 읽기 탭으로: 연달아 눌러도 한 번만, 닫히는 동안 아래 탭 바가 눌리지 않게(2026-11-15 QA 민혁 F6)
+  // 읽기를 시작한 화면으로: 독서 끝(그 아래 장면이 남아 있으면 그것도)만 닫는다. 탭은 바꾸지 않는다
+  // (2026-11-24 사용자 4단계: 맨 아래까지 닫고 읽기 탭으로 갔다. 읽기 탭에서 시작했으면 그대로 읽기 탭).
+  // 연달아 눌러도 한 번만, 닫히는 동안 아래 탭 바가 눌리지 않게(2026-11-15 QA 민혁 F6)
   bool _closing = false;
-  void _toRead() {
+  void _toStart() {
     if (_closing) return;
     _closing = true;
     AppNav.instance.blockTabs();
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    AppNav.instance.goTab(AppTab.read);
+    Navigator.of(context).popUntil((r) => r.isFirst || !(r.settings.name?.startsWith('/reading/') ?? false));
   }
 
   /// 적는 중인 값을 바로 초안에 남긴다(나갈 때)
@@ -161,8 +162,8 @@ class _FinishScreenState extends State<FinishScreen> {
       _savedDraft = pending;
       if (!mounted) return;
       final nav = Navigator.of(context);
-      _toRead();
-      // 읽기 탭이 보인 뒤 그 위에 시트(화면은 이미 닫히는 중이라 앱 Navigator의 오버레이로 띄운다)
+      _toStart();
+      // 돌아온 화면 위에 창(화면은 이미 닫히는 중이라 앱 Navigator의 오버레이로 띄운다)
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final o = nav.overlay;
         if (o != null && o.mounted) showSavedDialog(o.context, bookId: saved.bookId, sessionId: saved.sessionId);
@@ -183,8 +184,8 @@ class _FinishScreenState extends State<FinishScreen> {
           Ambient.instance.stop();
           final nav = Navigator.of(context);
           final reading = _reading;
-          _toRead();
-          // 화면을 먼저 옮긴 뒤 초안을 버린다. 보던 기록이 사라지는 일이라 읽기 탭에서 토스트로 알린다(DESIGN 10 · 14장)
+          _toStart();
+          // 화면을 먼저 옮긴 뒤 초안을 버린다. 보던 기록이 사라지는 일이라 돌아온 화면에서 토스트로 알린다(DESIGN 10 · 14장)
           Future<void>.delayed(const Duration(milliseconds: 500), () => reading.clearPending().then((_) {
                 if (nav.mounted) showToast(nav.context, '독서 기록을 버렸어요.');
               }, onError: (Object e) {
@@ -207,7 +208,7 @@ class _FinishScreenState extends State<FinishScreen> {
     final pending = _reading.pending ?? _savedDraft;
     if (pending == null) {
       // 제목은 이 화면 이름 그대로(독서 기록 화면과 헷갈렸다)
-      return Screen(title: '독서 끝', children: [Empty(title: '끝낸 독서가 없어요', action: '읽기로', onAction: _toRead)]);
+      return Screen(title: '독서 끝', children: [Empty(title: '끝낸 독서가 없어요', action: '읽기로', onAction: _toStart)]);
     }
     final b = pending.myBookId == null ? null : lib.books[pending.myBookId];
     final e = b == null ? null : lib.editions[b.editionId];
