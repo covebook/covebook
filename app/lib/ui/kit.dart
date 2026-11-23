@@ -590,6 +590,7 @@ class Screen extends StatelessWidget {
     this.topBar,
     this.pinned,
     this.fixedHead = false,
+    this.hideTitle = false,
     this.background = AppColors.bg,
     this.pinFooter = true,
   });
@@ -627,6 +628,10 @@ class Screen extends StatelessWidget {
   /// 뒤로 없이도 가운데 제목 줄을 둘지(독서 끝처럼 밀어 넣었지만 뒤로를 막은 화면). 기본은 뒤로가 있을 때만
   final bool? topBar;
 
+  /// 탭 첫 화면 왼쪽 위 큰 제목을 그리지 않는다(하단바에 이름이 있다, 2026-11-24 사용자 6단계). 제목은 화면 읽기 머리로만 남고
+  /// 그 자리는 위 여백(TabHeader.paddingTop)만: 다섯 탭 첫 줄이 같은 높이에서 시작한다. right는 그리지 않는다(탭이 자기 줄에 둔다)
+  final bool hideTitle;
+
   @override
   Widget build(BuildContext context) => KeyboardSpace(builder: _build);
 
@@ -641,7 +646,9 @@ class Screen extends StatelessWidget {
     final bar = topBar ?? back;
     // 부제는 TDS Top.SubtitleParagraph(size 15: t6 regular grey700)
     final subLine = bar && subtitle != null ? Padding(padding: const EdgeInsets.only(top: 4, bottom: Space.l), child: WordText(subtitle!, style: AppType.secondary)) : null;
-    Widget tabHead() => Padding(
+    Widget tabHead() => hideTitle && headerField == null
+        ? Semantics(header: true, label: title, child: const SizedBox(width: double.infinity, height: TabHeader.paddingTop))
+        : Padding(
           padding: const EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, TabHeader.paddingH, TabHeader.paddingBottom),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: TabHeader.minHeight - TabHeader.paddingTop - TabHeader.paddingBottom),

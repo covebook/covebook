@@ -279,6 +279,8 @@ abstract final class TypeSpecs {
   static const bodySmall = TypeSpec(AppFonts.ui, 15, 22.5);
   /// 아주 작은 표시(그래프 눈금 · 배지): t7 grey600
   static const micro = TypeSpec(AppFonts.ui, 13, 19.5, color: AppColors.inkSoft, tabular: true);
+  /// 하단 탭 이름(아이콘 아래, 2026-11-24 사용자 6단계 '글자 11'): TDS 표 밖(최소 t7 13) → 우리 값. 색은 그 탭 아이콘 색(고른 탭은 tabInk)
+  static const tabLabel = TypeSpec(AppFonts.uiMedium, 11, 14, color: AppColors.tabInkSoft);
   /// 감상 읽기 화면의 감상 제목(값은 탭 첫 화면 제목과 같지만 감상만 바꿀 수 있게): t3 Bold grey800
   static const essayTitle = TypeSpec(AppFonts.uiTitle, 22, 31, color: AppColors.title);
   /// 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면): t3 Bold grey800
@@ -352,6 +354,7 @@ abstract final class TypeSpecs {
     'labelStrong': labelStrong,
     'bodySmall': bodySmall,
     'micro': micro,
+    'tabLabel': tabLabel,
     'essayTitle': essayTitle,
     'introTitle': introTitle,
     'profileName': profileName,
@@ -409,6 +412,7 @@ abstract final class AppType {
   static TextStyle get labelStrong => TypeSpecs.labelStrong.style;
   static TextStyle get bodySmall => TypeSpecs.bodySmall.style;
   static TextStyle get micro => TypeSpecs.micro.style;
+  static TextStyle get tabLabel => TypeSpecs.tabLabel.style;
   static TextStyle get essayTitle => TypeSpecs.essayTitle.style;
   static TextStyle get introTitle => TypeSpecs.introTitle.style;
   static TextStyle get profileName => TypeSpecs.profileName.style;
@@ -469,6 +473,12 @@ abstract final class TabBarStyle {
   static const gap = 4.0;
   static const paddingX = 9.0;
   static const icon = 23.0;
+
+  /// 아이콘과 이름 사이(아이콘 23 + 2 + 이름 줄 14 = 39, 막대 58 안 가운데)
+  static const labelGap = 2.0;
+
+  /// 큰 글씨에서도 이름이 막대(58)를 넘지 않게 이름 글자 배율 상한(1.3배: 23 + 2 + 18.2 = 43)
+  static const labelScaleMax = 1.3;
   static const shadow = BoxShadow(color: Color(0x21191F28), offset: Offset(0, 3), blurRadius: 14);
 
   /// 홈 화면에서 하단바 위로 벽 색이 옅어지는 높이

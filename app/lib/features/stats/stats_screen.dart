@@ -97,7 +97,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _qaBuild(BuildContext context) {
     final lib = _lib;
-    if (lib == null) return Screen(back: !widget.tab, title: widget.tab ? '통계' : '독서 기록', children: const [Loading()]);
+    if (lib == null) return Screen(back: !widget.tab, title: widget.tab ? '통계' : '독서 기록', hideTitle: widget.tab, children: const [Loading()]);
     final now = DateTime.now();
     final book = _book != null && lib.books.containsKey(_book) ? _book : null;
     final period = monthPeriod(_y, _m);
@@ -183,6 +183,8 @@ class _StatsScreenState extends State<StatsScreen> {
     return Screen(
       back: !widget.tab,
       title: widget.tab ? '통계' : '독서 기록',
+      // 통계 탭은 왼쪽 위 제목 없이 캘린더 | 분석이 맨 위(하단바에 이름, 2026-11-24 사용자 6단계). 책 고르기는 달력 아래 칸(같은 날 사용자)
+      hideTitle: widget.tab,
       // 떠 있는 하단바 아래까지 내용이 내려가게
       bottomPad: widget.tab ? TabBarStyle.contentPad - Space.section : 0,
       // 바탕은 흰색. 띠 사이 회색은 띠(Band)가 위에 깐다

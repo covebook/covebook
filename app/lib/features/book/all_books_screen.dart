@@ -1,8 +1,9 @@
 // 내 책(지금 앱 app/books.tsx 전체 책, 2026-11-05 사용자 시안 → 2026-11-16 메뉴 개편으로 하단 둘째 탭): 등록한 모든 책을 보고 관리하는 곳
 // (책장에 놓인 책도, 책장에 없는 책도 여기 있다). 책장은 그중 골라 놓고 꾸미는 곳.
-// 탭: '내 책' 제목과 검색·추가, 밑줄 글자 탭(읽기 상태), '책 N권'과 선택·보기 전환·필터. 정렬과 '책장에 없는 책'·완독한 해·숨긴 책은 필터 시트에,
+// 탭: 맨 위 밑줄 글자 탭(읽기 상태), 둘째 줄 '책 N권'과 검색·보기 전환·필터·추가(2026-11-24 사용자 6단계: 왼쪽 위 '내 책' 제목 줄 · '선택' 글자 단추를 뺐다).
+// 검색을 켜면 맨 위 한 줄에 검색칸. 정렬과 '책장에 없는 책'·완독한 해·숨긴 책은 필터 시트에,
 // 조건이 걸렸을 때만 그 조건과 해제 줄을 보인다. 다른 화면에서 여는 내 책(openAllBooks)도 이 탭으로 온다.
-// '선택'이나 책을 꾹 누르면 어떤 책이든 고르는 상태가 되고 아래에 '삭제'와 '진열'(진열은 고른 책 중 책장에 없는 책만 센다: 책장에 있는 책 제한은
+// 책을 꾹 누르면 어떤 책이든 고르는 상태가 되고(둘째 줄이 'N권 선택' · '취소') 아래에 '삭제'와 '진열'(진열은 고른 책 중 책장에 없는 책만 센다: 책장에 있는 책 제한은
 // 책장에 꽂기에만). 고른 책이 모두 연도 책장에 있으면 '삭제' 대신 '숨기기'(숨긴 책은 필터 › 숨긴 책 보기에서 되돌린다)
 library;
 
@@ -186,7 +187,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     final place = PlacementStore.instance;
     final layout = place.layout;
     // 탭 첫 화면이라 불러오는 동안에도 뒤로 없이 '내 책' 머리(뒤로 꺾쇠와 빈 위 줄이 잠깐 보였다)
-    if (layout == null) return const Screen(back: false, title: '내 책', children: [Loading()]);
+    if (layout == null) return const Screen(back: false, title: '내 책', hideTitle: true, children: [Loading()]);
     final rows = listAllBooks(lib, place.books, layout, q: _q, status: _status, offShelfOnly: _offShelfOnly, sort: _sort, year: _year);
     final shown = shownBooks(lib).map((b) => b.id).toList();
     final total = shown.length;
@@ -214,12 +215,12 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       },
       child: Screen(
         scroll: false,
-        // 탭 머리줄(제목 · 검색 · 추가). 고르는 중에는 가운데 'N권 선택'과 오른쪽 빨간 '취소'(뒤로 꺾쇠 없음)
+        // 왼쪽 위 제목 줄은 없다(하단바에 이름, 2026-11-24 사용자 6단계): 맨 위가 읽기 상태 탭, 둘째 줄이 '책 N권'과 검색 · 보기 전환 · 필터 · ＋
+        // (고르는 중에는 둘째 줄이 'N권 선택'과 빨간 '취소'). 제목은 화면 읽기 머리로만
         back: false,
-        // 삭제 · 진열하는 동안은 누른 때 수 그대로(한 권씩 지워지며 '2권 선택' → '1권 선택' → '책 선택'으로 바뀌어 보였다)
+        hideTitle: true,
         title: _selecting ? _selectedTitle((_working?.now.picked ?? pickedBooks).length) : '내 책',
-        // 검색 중: '내 책' 제목 자리에 검색칸(2026-11-18 사용자 그림: 머리줄 아래 따로 뜨지 않게).
-        // 닫기는 칸 왼쪽 ← 화살표(오른쪽 '취소' 글자 없음, 2026-11-20 사용자 · 11-21 내 책 검색 시안)
+        // 검색 중: 맨 위 한 줄에 검색칸(끄면 사라진다). 닫기는 칸 왼쪽 ← 화살표(오른쪽 '취소' 글자 없음, 2026-11-20 사용자 · 11-21 내 책 검색 시안)
         headerField: !_selecting && _searching
             ? SearchField(
                 value: _q,
@@ -233,8 +234,6 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                 }),
               )
             : null,
-        // 고르기를 끝내는 '취소'는 오른쪽 주의색(2026-11-20 사용자: 왼쪽 말고 오른쪽에, 빨간색으로)
-        right: _selecting ? TextLink(label: '취소', danger: true, onPress: _stopSelecting) : _headRight(),
         footer: _selecting ? _selectFooter(_working?.now ?? (picked: pickedBooks, chosen: chosen, hideOnly: hideOnly), busy: _working?.kind) : null,
         children: [
           // 스크롤 칸은 화면 폭(Bleed), 좌우 여백은 목록 안쪽: 표지 모서리에 걸친 고르는 원 · 책장 배지가 오른쪽 줄에서 잘렸다(2026-11-21 촬영 확인)
@@ -251,15 +250,6 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
       ),
     );
   }
-
-  /// 머리줄 오른쪽: 검색 중이면 없음(닫기는 검색칸 ← ), 아니면 검색 · 추가(머리줄 아이콘은 공용 HeadIcon 회색, 2026-11-18 사용자)
-  Widget? _headRight() => _searching
-      ? null
-      : Row(mainAxisSize: MainAxisSize.min, children: [
-          IconBtn(label: '내 책 검색', onPress: () => setState(() => _searching = true), child: const HeadIcon('Search')),
-          const SizedBox(width: headIconGap),
-          IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const HeadIcon('Plus')),
-        ]);
 
   /// 고르는 중 아래 단추 두 개: 삭제(또는 숨기기) · 진열. 단추 이름은 'N권 삭제'(다른 화면 'N권 추가'와 같은 어순).
   /// 고른 책이 모두 책장에 있어 진열이 꺼지면 까닭을 단추 바로 위에(2026-11-19 공통 규칙: 꺼진 까닭이 보이지 않았다)
@@ -293,26 +283,36 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
     ]);
   }
 
-  /// 목록 머리: 읽기 상태 탭, '책 N권'과 선택 · 보기 바꾸기 · 필터, 건 조건 줄, 안내 한 줄
+  /// 목록 머리: 맨 위 읽기 상태 탭, 둘째 줄 '책 N권'과 검색 · 보기 바꾸기 · 필터 · ＋(고르는 중에는 'N권 선택'과 '취소'), 건 조건 줄, 안내 한 줄.
+  /// '선택' 글자 단추는 없다(책을 길게 눌러 고른다, 2026-11-24 사용자 6단계)
   Widget _header(List<AllBooksRow> rows, List<String> conditions, VoidCallback onFilter) => Padding(
         padding: EdgeInsets.only(bottom: rows.isEmpty ? 0 : (_grid ? Space.m : Space.xs)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // 읽기 상태 탭은 고르는 중에도 그대로(바꿔도 고른 책은 유지)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.xs),
-            child: Tabs<ReadStatus?>(
-              items: [(id: null, label: '전체'), for (final s in bookStatuses) (id: s, label: statusLabel[s]!)],
-              value: _status,
-              onChange: (v) => setState(() => _status = v),
-            ),
+          // 읽기 상태 탭은 고르는 중에도 그대로(바꿔도 고른 책은 유지). 맨 위 줄이라 위 여백 없이(다섯 탭 첫 줄 높이가 같게)
+          Tabs<ReadStatus?>(
+            items: [(id: null, label: '전체'), for (final s in bookStatuses) (id: s, label: statusLabel[s]!)],
+            value: _status,
+            onChange: (v) => setState(() => _status = v),
           ),
-          // 고르기 안내는 공용 안내 글(가운데 그대로). 검색 중에 고르기를 시작하면 검색칸이 사라져도 그 검색어로 걸러진 목록이라 함께 알린다
-          if (_selecting)
+          // 고르는 중: 둘째 줄 'N권 선택' · 오른쪽 빨간 '취소'(2026-11-20 사용자: 왼쪽 말고 오른쪽에, 빨간색으로), 아래 공용 안내 글.
+          // 검색 중에 고르기를 시작하면 검색칸이 사라져도 그 검색어로 걸러진 목록이라 함께 알린다
+          if (_selecting) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: Space.xs),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: Space.hit),
+                child: Row(children: [
+                  // 삭제 · 진열하는 동안은 누른 때 수 그대로(한 권씩 지워지며 '2권 선택' → '1권 선택' → '책 선택'으로 바뀌어 보였다)
+                  Expanded(child: Text(_selectedTitle((_working?.now.picked ?? [for (final id in _picked) if (LibraryModel.instance.lib.books[id] != null) id]).length), style: AppType.rowStrong, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  Transform.translate(offset: const Offset(8, 0), child: TextLink(label: '취소', danger: true, onPress: _stopSelecting)),
+                ]),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(top: Space.xs, bottom: Space.s),
               child: NoticeText(_q.trim().isNotEmpty ? '‘${_q.trim()}’에 맞는 책에서 삭제하거나 진열할 책을 골라 주세요.' : '삭제하거나 진열할 책을 골라 주세요.', center: true),
-            )
-          else ...[
+            ),
+          ] else ...[
             Padding(
               padding: const EdgeInsets.only(top: Space.xs),
               // 왼쪽 '책 N권'(지금 검색·필터 결과), 오른쪽 선택 · 보기 전환 · 필터(지금 앱: 마지막 아이콘 marginRight −10, Flutter TextLink는 안쪽 여백 8이 이미 있다)
@@ -321,7 +321,8 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                 Transform.translate(
                   offset: const Offset(10, 0),
                   child: Row(children: [
-                    if (rows.isNotEmpty) TextLink(label: '선택', ink: true, onPress: _startManage),
+                    // 검색(검색 중에는 맨 위 검색칸이 있어 없다) · 보기 전환 · 필터 · ＋(머리줄 아이콘과 같은 공용 HeadIcon 회색)
+                    if (!_searching) IconBtn(label: '내 책 검색', onPress: () => setState(() => _searching = true), child: const HeadIcon('Search')),
                     // 보기 바꾸기 단추 하나: 지금 격자면 목록 아이콘, 목록이면 격자 아이콘(누르면 그 보기로).
                     // 지금 보기 아이콘까지 두 개 두면 '이미 격자인데 격자 표시가 왜 있냐'(2026-11-19 사용자). 색은 옅은 회색(2026-11-18)
                     IconBtn(
@@ -330,6 +331,7 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                       child: HeadIcon(_grid ? 'ListIcon' : 'LayoutGrid'),
                     ),
                     FilterIcon(active: conditions.isNotEmpty, onPress: onFilter),
+                    IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const HeadIcon('Plus')),
                   ]),
                 ),
               ]),

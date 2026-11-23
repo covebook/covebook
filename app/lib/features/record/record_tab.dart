@@ -1,4 +1,5 @@
-// 기록 탭(2026-11-16 메뉴 구조 개편): 머리줄 '기록'과 검색·추가(고른 글자 탭에 맞게), 왼쪽 글자 탭 '갈피 | 감상'.
+// 기록 탭(2026-11-16 메뉴 구조 개편): 맨 위 글자 탭 '갈피 | 감상'과 그 줄 오른쪽 검색 · 추가(고른 글자 탭에 맞게). 왼쪽 위 제목 '기록'은 없다(2026-11-24 사용자 6단계, 하단바에 이름).
+// 검색을 켜면 맨 위 한 줄에 검색칸이 나타나고 끄면 사라진다.
 // 갈피: 예전 갈피 탭 그대로 옮김. 탭 아래 한 줄은 '갈피 N개'와 아껴둔 갈피 켜고 끄기·필터. 책·유형(문장·사진)은 필터 시트에,
 // 걸렸을 때만 '데미안 | 사진 갈피'처럼 조건과 '조건 지우기'를 보인다(기본 조건 칩 줄은 없앴다). 갈피 보드는 개수 줄 격자 아이콘에서.
 // 감상: 긴 감상(essay_screens.dart) 목록. '감상 N편'과 필터(책). 표지·책 제목·지은이·미리보기·쓴 날을 상자 없이 줄로
@@ -306,16 +307,26 @@ class _RecordTabState extends State<RecordTab> {
   @override
   Widget build(BuildContext context) {
     // 공통 규칙 11장: 화면 전체를 불러오는 중은 가운데 원(빈 몸통이었다)
-    if (!_model.loaded) return const Screen(title: '기록', back: false, scroll: false, children: [Loading()]);
+    if (!_model.loaded) return const Screen(title: '기록', back: false, scroll: false, hideTitle: true, children: [Loading()]);
     final section = _section;
     final marks = section == RecordSection.marks;
     final searching = _searching.contains(section);
     final what = marks ? '갈피' : '감상';
+    // 왼쪽 위 제목 '기록'은 없다(하단바에 이름, 2026-11-24 사용자 6단계): 맨 위가 '갈피 | 감상' 줄, 그 오른쪽에 검색 · ＋
+    final icons = Row(mainAxisSize: MainAxisSize.min, children: [
+      // 공통 규칙: 머리줄 아이콘은 HeadIcon(회색, 2026-11-19)
+      IconBtn(label: '$what 검색', onPress: () => setState(() => _searching.add(section)), child: const HeadIcon('Search')),
+      const SizedBox(width: headIconGap),
+      marks
+          ? IconBtn(label: '갈피 추가', onPress: () => openNewBookmark(context, book: _markBook, photoOnly: _kind == MarkKind.photo), child: const HeadIcon('Plus'))
+          : IconBtn(label: '감상 쓰기', onPress: () => openNewEssay(context, book: _essayBook), child: const HeadIcon('Plus')),
+    ]);
     return qaProbe('records', Screen(
       title: '기록',
       back: false,
       scroll: false,
-      // 검색 중: '기록' 제목 자리에 검색칸, 닫기는 칸 왼쪽 ← (내 책 검색과 같은 모양, 2026-11-20 사용자 · 11-21 내 책 검색 시안)
+      hideTitle: true,
+      // 검색 중: 맨 위 한 줄에 검색칸(끄면 사라진다), 닫기는 칸 왼쪽 ← (내 책 검색과 같은 모양, 2026-11-20 사용자 · 11-21 내 책 검색 시안)
       headerField: searching
           ? SearchField(
               key: ValueKey(section),
@@ -330,25 +341,14 @@ class _RecordTabState extends State<RecordTab> {
               }),
             )
           : null,
-      right: searching
-          ? null
-          : Row(mainAxisSize: MainAxisSize.min, children: [
-              // 공통 규칙: 머리줄 아이콘은 HeadIcon(회색, 2026-11-19)
-              IconBtn(label: '$what 검색', onPress: () => setState(() => _searching.add(section)), child: const HeadIcon('Search')),
-              const SizedBox(width: headIconGap),
-              marks
-                  ? IconBtn(label: '갈피 추가', onPress: () => openNewBookmark(context, book: _markBook, photoOnly: _kind == MarkKind.photo), child: const HeadIcon('Plus'))
-                  : IconBtn(label: '감상 쓰기', onPress: () => openNewEssay(context, book: _essayBook), child: const HeadIcon('Plus')),
-            ]),
       children: [
-        // 갈피 | 감상: 같은 크기 글자, 고른 것만 진하게 + 짧고 얇은 밑줄(회색 상자 없이 왼쪽 정렬)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xs),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Tabs<RecordSection>(items: _sections, value: section, onChange: (v) => setState(() => _section = v), gap: Space.xl),
-          ),
-        ),
+        // 갈피 | 감상: 같은 크기 글자, 고른 것만 진하게 + 짧고 얇은 밑줄(회색 상자 없이 왼쪽 정렬). 오른쪽 끝 검색 · ＋(검색 중에는 없다)
+        Row(children: [
+          Tabs<RecordSection>(items: _sections, value: section, onChange: (v) => setState(() => _section = v), gap: Space.xl),
+          const Spacer(),
+          // 마지막 아이콘 오른쪽 여백을 개수 줄 아이콘과 맞춘다
+          if (!searching) Transform.translate(offset: const Offset(10, 0), child: icons),
+        ]),
         ...marks ? _marksBody(context) : _essaysBody(context),
       ],
     ));

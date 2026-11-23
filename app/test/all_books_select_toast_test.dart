@@ -61,10 +61,9 @@ Future<void> open(WidgetTester t) async {
   await t.pumpAndSettle();
 }
 
+/// 책을 길게 눌러 고르기를 시작하며 그 책을 고른다('선택' 글자 단추는 없앴다, 2026-11-24 사용자 6단계)
 Future<void> pick(WidgetTester t, String title) async {
-  await t.tap(find.text('선택'));
-  await t.pumpAndSettle();
-  await t.tap(find.text(title).first);
+  await t.longPress(find.text(title).first);
   await t.pumpAndSettle();
 }
 

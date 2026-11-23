@@ -264,7 +264,7 @@ class _ReadListState extends State<ReadList> {
 
   Widget _screen(BuildContext context) {
     // 서재를 읽기 전에는 빈 목록 안내가 잠깐 보이지 않게 불러오는 중(DESIGN 11장)
-    if (!_lib.loaded) return const Screen(back: false, title: '읽기', children: [Loading()]);
+    if (!_lib.loaded) return const Screen(back: false, title: '읽기', hideTitle: true, children: [Loading()]);
     final lib = _lib.lib;
     final active = _reading.active;
     final added = _settings.readList;
@@ -304,11 +304,12 @@ class _ReadListState extends State<ReadList> {
     final rest = [for (final id in ids) if (!(hasFeatured && id == featured)) id];
     final restNoBook = showNoBook && !(hasFeatured && featured == null);
 
-    // 머리: 탭 첫 화면 공통 제목(위 16 · 아래 12, 2026-11-19 공통 규칙: 여기만 직접 만들어 아래 8이었다), 아래 오늘 날짜와 오늘 총 시간.
+    // 머리: 왼쪽 위 제목 '읽기'는 없다(하단바에 이름, 2026-11-24 사용자 6단계. 화면 읽기 머리로만), 맨 위가 오늘 날짜와 오늘 총 시간.
     // 소리만 듣기 아이콘은 뺐다(2026-11-17 사용자 '위에 음악 아이콘 없애')
     return Screen(
       back: false,
       title: '읽기',
+      hideTitle: true,
       bottomPad: TabBarStyle.contentPad - Space.section,
       children: [
         _todayLine(day, t),

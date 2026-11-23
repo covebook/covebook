@@ -92,6 +92,7 @@
   --ck-type-label-strong: 600 16px/24px var(--ck-font-ui);
   --ck-type-body-small: 400 15px/22.5px var(--ck-font-ui);
   --ck-type-micro: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-tab-label: 500 11px/14px var(--ck-font-ui);
   --ck-type-essay-title: 700 22px/31px var(--ck-font-ui);
   --ck-type-intro-title: 700 22px/31px var(--ck-font-ui);
   --ck-type-profile-name: 700 22px/31px var(--ck-font-ui);
@@ -258,6 +259,7 @@
 .ck-type-label-strong { font: var(--ck-type-label-strong); color: var(--ck-ink); }
 .ck-type-body-small { font: var(--ck-type-body-small); color: var(--ck-ink); }
 .ck-type-micro { font: var(--ck-type-micro); color: var(--ck-ink-soft); font-variant-numeric: tabular-nums; }
+.ck-type-tab-label { font: var(--ck-type-tab-label); color: var(--ck-tab-ink-soft); }
 .ck-type-essay-title { font: var(--ck-type-essay-title); color: var(--ck-title); }
 .ck-type-intro-title { font: var(--ck-type-intro-title); color: var(--ck-title); }
 .ck-type-profile-name { font: var(--ck-type-profile-name); color: var(--ck-title); }

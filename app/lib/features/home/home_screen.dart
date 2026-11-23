@@ -19,7 +19,7 @@ import '../../services/qa_probe.dart';
 import '../../services/cover_colors.dart';
 import '../../ui/alert.dart' show appAlert;
 import '../../ui/feedback.dart' show errorText, showToast;
-import '../../ui/kit.dart' show Btn, Pressable, PullUp, Shape, Space, showSheet;
+import '../../ui/kit.dart' show Btn, Pressable, Shape, Space, showSheet;
 import 'locked_rows.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
@@ -2446,16 +2446,10 @@ Future<void> dropHomeSnapshot() async {
 /// 하단바 덮개 농도(끝이 부드러운 곡선)
 const _fadeStops = [(0.0, 0.0), (0.2, 0.05), (0.4, 0.2), (0.6, 0.48), (0.8, 0.8), (1.0, 1.0)];
 
-/// 머리줄 높이(지금 앱은 배치에서 잰다) = 위 여백(TabHeader.paddingTop 4, 2026-11-23 사용자 '위쪽이 넓어서 줄이라고': 24였다) + 제목 줄(title) − 2 + 해 줄(Top 부제 secondary) + 아래 4(홈만: 바로 아래가 책장 벽).
-/// 제목을 내린 만큼(_titleDrop) 해를 끌어올려 높이에는 들어가지 않는다.
-/// 줄 높이는 글자 역할에서 읽고, 지금 앱처럼 화소로 올린다(rnPx). 숫자를 따로 두면 글자 위계를 바꿀 때 어긋난다
-/// (2026-11-10 사용자 '책장 좀 더 높이', '2026이랑 나의 책장 사이 간격 줄이고': 아래 여백 12 → 4, 해 위 4 → −2)
+/// 머리줄 높이(지금 앱은 배치에서 잰다) = 위 여백(TabHeader.paddingTop 4, 2026-11-23 사용자 '위쪽이 넓어서 줄이라고': 24였다) + 아이콘 줄(Space.touch 44, 해는 그 줄 왼쪽)
+/// + 아래 4(홈만: 바로 아래가 책장 벽). 2026-11-24 사용자 6단계: '나의 책장' 글자를 빼(하단바에 이름) 해와 아이콘만 한 줄(전에는 제목 줄 + 해 줄)
 const _headerBottom = 4.0;
-
-/// '나의 책장'만 이만큼 내리고 해는 그 자리(해를 같은 만큼 더 끌어올린다): 머리줄 높이 · 해 · 아이콘 자리는 그대로, 제목과 해 사이만 좁다
-/// (2026-11-24 사용자 '나의 책장 위치 좀만 내려서 2026이랑 좀 더 가깝게')
-const _titleDrop = Space.xs;
-double get homeHeaderHeight => TabHeader.paddingTop + rnPx(TypeSpecs.title.line) - 2 + rnPx(TypeSpecs.secondary.line) + _headerBottom;
+double get homeHeaderHeight => TabHeader.paddingTop + Space.touch + _headerBottom;
 
 /// 꾸미기 맨 위 줄 높이: 낮은 전환 칸(누르는 자리 48) + 위아래 4. 머리줄보다 낮아 꾸미는 동안 책장이 그만큼 위로 온다(liftedPage)
 const decoBarHeight = Space.hit + Space.xs * 2;
@@ -2473,6 +2467,10 @@ const _headerArt = headerArtSize;
 const _headerPitch = 52.0;
 const _headerLastCenter = 36.0;
 
+/// 시험용: 책장 머리줄(해 · 아이콘 한 줄)
+@visibleForTesting
+Widget homeHeaderForTest({required int year, VoidCallback? onDecorate, VoidCallback? onAdd}) => _Header(year: year, status: '', onDecorate: onDecorate, onAdd: onAdd);
+
 class _Header extends StatelessWidget {
   const _Header({required this.year, required this.status, this.onLongPress, this.onDecorate, this.onAdd, this.icons = true});
   final int year;
@@ -2489,14 +2487,15 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      // 머리줄 아래 여백 4, 해는 제목 바로 밑(−2dp, 지금 앱 11-10 조정. 2026-11-24 제목만 _titleDrop 내려 더 붙임). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌').
+      // 머리줄 아래 여백 4. 해 한 줄과 오른쪽 아이콘이 같은 줄(세로 가운데). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌').
       // 오른쪽은 아이콘 누르는 칸이 그림 칸보다 양옆으로 넓은 만큼(_HeaderIcons.slop) 덜 비운다: 그림 자리는 그대로
       padding: EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, _headerLastCenter - Space.hit / 2, _headerBottom),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: SizedBox(
+        height: Space.touch,
+        child: Row(
         children: [
           Expanded(
-            // '나의 책장'과 해를 한 이름으로 읽는다(2026-11-16 QA 영숙 F9: 두 줄로 따로 읽혔다). 길게 누르기는 측정 메뉴라 화면 읽기에서 뺀다
+            // 보이는 글자는 해뿐이지만 화면 읽기는 탭 제목 머리 '나의 책장, 2026'(2026-11-16 QA 영숙 F9 · 2026-11-24 6단계). 길게 누르기는 측정 메뉴라 화면 읽기에서 뺀다
             child: Semantics(
               container: true,
               header: true,
@@ -2505,36 +2504,34 @@ class _Header extends StatelessWidget {
               child: GestureDetector(
                 excludeFromSemantics: true,
                 onLongPress: onLongPress,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(padding: const EdgeInsets.only(top: _titleDrop), child: Text('나의 책장', style: AppType.title, maxLines: 1)),
-                    // 굽기 시간 툴팁은 측정용이라 시험 빌드(QA_FRAMES)에서만: 출시 빌드 사용자에게 개발 숫자를 보이지 않는다
-                    PullUp(
-                      dy: 2 + _titleDrop,
-                      child: qaFrames
-                          // 해는 제목 아래 부제(TDS Top.SubtitleParagraph size 15: t6 regular grey700)
-                          ? Tooltip(message: status, child: Text('$year', style: AppType.secondary, maxLines: 1))
-                          : Text('$year', style: AppType.secondary, maxLines: 1),
-                    ),
-                  ],
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  // 굽기 시간 툴팁은 측정용이라 시험 빌드(QA_FRAMES)에서만: 출시 빌드 사용자에게 개발 숫자를 보이지 않는다.
+                  // 해는 부제 모양 그대로(TDS Top.SubtitleParagraph size 15: t6 regular grey700)
+                  child: qaFrames ? Tooltip(message: status, child: Text('$year', style: AppType.secondary, maxLines: 1)) : Text('$year', style: AppType.secondary, maxLines: 1),
                 ),
               ),
             ),
           ),
           // 꾸미기 · 추가 · 프로필(2026-11-16 메뉴 구조 개편: 전체 책은 하단 '내 책' 탭과 겹쳐 빼고, 스토어(선반·벽지)는 꾸미기 안에서 연다)
+          // 누르는 칸(48)이 줄(44)보다 위아래로 slopY씩 넓다: 아이콘 줄 폭 그대로 줄 가운데에 둔다
+          // (폭을 정하지 않은 OverflowBox는 줄 폭을 다 차지해 해가 밀려 사라졌다, 2026-11-24 촬영 확인)
           if (icons)
-            Padding(
-              padding: const EdgeInsets.only(top: 2.5 - _HeaderIcons.slopY),
-              child: _HeaderIcons(items: [
-                ('decorate', '꾸미기', onDecorate),
-                ('add', '책장에 꽂기', onAdd ?? () => openAddBook(context)),
-                ('profile', '내 정보', () => openProfile(context)),
-              ]),
-            )
-          else
-            const Padding(padding: EdgeInsets.only(top: 2.5), child: SizedBox(height: Space.touch)),
+            SizedBox(
+              width: _HeaderIcons.widthOf(3),
+              height: Space.touch,
+              child: OverflowBox(
+                minHeight: Space.touch + _HeaderIcons.slopY * 2,
+                maxHeight: Space.touch + _HeaderIcons.slopY * 2,
+                child: _HeaderIcons(items: [
+                  ('decorate', '꾸미기', onDecorate),
+                  ('add', '책장에 꽂기', onAdd ?? () => openAddBook(context)),
+                  ('profile', '내 정보', () => openProfile(context)),
+                ]),
+              ),
+            ),
         ],
+        ),
       ),
     );
   }
@@ -2549,6 +2546,9 @@ class _HeaderIcons extends StatefulWidget {
   /// 머리줄 높이(44) 밖으로 넓힌 누르는 자리(위아래)
   static const slopY = (Space.hit - Space.touch) / 2;
 
+  /// 아이콘 n개 줄의 폭(가운데 사이 _headerPitch, 양끝 누르는 칸 반씩)
+  static double widthOf(int n) => _headerPitch * (n - 1) + Space.hit;
+
   @override
   State<_HeaderIcons> createState() => _HeaderIconsState();
 }
@@ -2562,7 +2562,7 @@ class _HeaderIconsState extends State<_HeaderIcons> {
   Widget build(BuildContext context) {
     final n = widget.items.length;
     return SizedBox(
-      width: _headerPitch * (n - 1) + Space.hit,
+      width: _HeaderIcons.widthOf(n),
       height: Space.hit,
       child: Stack(children: [
         for (final (i, it) in widget.items.indexed) ...[

@@ -397,23 +397,10 @@ class _AppShellState extends State<AppShell> {
                         padding: const EdgeInsets.symmetric(horizontal: TabBarStyle.paddingX),
                         child: Row(
                           children: [
-                            // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 탭 아래 글자는 두지 않는다(메뉴 개편: 아이콘 중심)
+                            // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 아래 글자는 같은 이름이라 읽지 않는다.
+                            // 아이콘 아래 이름(2026-11-24 사용자 6단계): 글자 11, 색은 아이콘과 같게(고른 탭은 진하게). 막대 58 · 아이콘 23은 그대로, 큰 글씨는 1.3배까지
                             for (var i = 0; i < _tabs.length; i++)
-                              Expanded(
-                                child: Semantics(
-                                  container: true,
-                                  button: true,
-                                  selected: i == _index,
-                                  label: _tabs[i].label,
-                                  onTap: () => tap(i),
-                                  excludeSemantics: true,
-                                  // 누르는 동안 옅어짐(다른 아이콘 단추와 같은 Pressable, 2026-11-19 규칙: 탭만 표시가 없었다)
-                                  child: Pressable(
-                                    onPress: () => tap(i),
-                                    child: SizedBox.expand(child: Center(child: _tabs[i].icon(i == _index ? AppColors.tabInk : AppColors.tabInkSoft, i == _index))),
-                                  ),
-                                ),
-                              ),
+                              Expanded(child: TabBarItem(label: _tabs[i].label, icon: _tabs[i].icon, selected: i == _index, onTap: () => tap(i))),
                           ],
                         ),
                       ),
@@ -426,5 +413,43 @@ class _AppShellState extends State<AppShell> {
       ),
     );
     return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) => didPop ? null : _back(), child: shell);
+  }
+}
+
+/// 하단 탭 하나: 아이콘과 그 아래 이름(2026-11-24 사용자 6단계: 글자 11, 색은 아이콘과 같게, 고른 탭은 진하게).
+/// 막대 58 · 아이콘 23은 그대로, 이름 글자 배율은 1.3배까지(큰 글씨에서도 막대를 넘지 않게).
+/// 화면 읽기: 탭마다 이름 하나 · 버튼 · 고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 아래 글자는 같은 이름이라 따로 읽지 않는다
+class TabBarItem extends StatelessWidget {
+  const TabBarItem({super.key, required this.label, required this.icon, required this.selected, required this.onTap});
+  final String label;
+  final Widget Function(Color color, bool filled) icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.tabInk : AppColors.tabInkSoft;
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      // 누르는 동안 옅어짐(다른 아이콘 단추와 같은 Pressable, 2026-11-19 규칙: 탭만 표시가 없었다)
+      child: Pressable(
+        onPress: onTap,
+        child: SizedBox.expand(
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            icon(color, selected),
+            const SizedBox(height: TabBarStyle.labelGap),
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: TabBarStyle.labelScaleMax,
+              child: Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.visible, style: AppType.tabLabel.copyWith(color: color)),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 }
