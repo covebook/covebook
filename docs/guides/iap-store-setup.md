@@ -24,7 +24,24 @@
 | 0 | KoDeploy 확인: 서버가 잠드는지, 한 대인지, 백업, Cloudflare | 사람 | 8장. 결과에 따라 다른 일이 바뀌니 먼저 |
 
 - 정환이 Claude Code에 넘길 값: 7장 표
-- 같은 이름을 양쪽에 똑같이 쓴다: 상품 ID, 요금제 ID
+- 양쪽에 같은 이름을 쓴다: 상품 ID, 요금제 ID
+
+## 0-1. 사이트별로 등록할 것
+
+| 사이트 | 결제 때문에 등록할 것 | 장 |
+|---|---|---|
+| 애플 개발자 사이트 `developer.apple.com/account` | 새 약관이 뜨면 동의(안 하면 App Store Connect가 막힘). 앱 ID `app.covebook`에 In-App Purchase가 켜져 있는지 확인(기본으로 켜져 있음). **그 밖에는 없음** | 2-8 |
+| App Store Connect `appstoreconnect.apple.com` | 유료 앱 계약·은행·세금, 구독 그룹과 상품 4개, 서버 알림 주소, 인앱결제 키, 샌드박스 테스터, 앱 개인정보, 심사 메모 | 2-1~2-8 |
+| 애플 소규모 사업자 프로그램 페이지 | 수수료 15% 신청 | 2-2 |
+| Play Console `play.google.com/console` | 결제 프로필, 계정 그룹(15%), 상품, 서비스 계정 초대, 실시간 알림 주제 이름, 라이선스 테스터, 데이터 보안 | 3-1~3-7 |
+| Google Cloud 콘솔 `console.cloud.google.com` | API 2개 사용 설정, 서버용 서비스 계정과 JSON 키, Pub/Sub 주제·푸시 구독 | 3-5, 3-6 |
+| KoDeploy | 환경 변수, 재배포, 서버 상태 확인 | 4, 7, 8 |
+
+- 휴대폰 푸시 알림 등록은 **필요 없다**
+  - 우리 앱은 서버가 휴대폰으로 보내는 원격 푸시를 쓰지 않는다. 그래서 애플 APNs 키·푸시 인증서, 구글 FCM(Firebase) 등록이 필요 없다
+  - 연 구독 갱신 전 알림은 앱이 기기 안에 예약하는 로컬 알림이다(`flutter_local_notifications`). 아이폰은 앱이 권한을 묻고 안드로이드는 `POST_NOTIFICATIONS` 권한이 이미 매니페스트에 있다. 대략적 예약(`inexactAllowWhileIdle`)이라 Play에 신고할 정확한 알람 권한도 없다
+- 이 문서의 "서버 알림·실시간 알림"은 **스토어가 우리 서버로 보내는 웹훅**이다. 휴대폰 푸시와 다르다(2-5, 3-6)
+- 나중에 원격 푸시를 넣으면 그때 APNs 키(애플 개발자 사이트 → Keys)와 Firebase 프로젝트가 생긴다. 결제와는 따로 정한다
 
 ## 1. 사업·세무 [사람]
 
@@ -50,11 +67,11 @@
 ### 2-1. 계약·은행·세금 [사람]
 
 - App Store Connect → 비즈니스(Business) → **유료 앱 계약(Paid Apps Agreement)** 동의
-  - 이것이 "활성"이 아니면 샌드박스에서도 상품이 안 불러와진다. 가장 먼저 한다
+  - 계약이 "활성"이 아니면 샌드박스에서도 상품이 안 불러와진다. 가장 먼저 한다
 - 은행 계좌: 원화 계좌 가능. 은행의 SWIFT 코드가 필요하다
 - 세금 양식: 미국 세금 양식(개인은 W-8BEN, 사업자는 W-8BEN-E)
 - 한국 사업자등록번호 입력
-  - 검증되면 애플 수수료의 전자세금계산서가 매달 나온다
+  - 검증되면 애플 수수료 전자세금계산서가 매달 나온다
   - 세금 정보가 없으면 지급이 늦어진다
 
 ### 2-2. 수수료 15% [사람]
@@ -85,7 +102,7 @@
   - 구독(Subscriptions) → 구독 그룹 하나(예: plus) → 그 안에 월간·연간
   - 그룹 안 순서(레벨): 월↔연 바꾸기를 언제 적용할지가 달라진다. 정책 #33에서 정한다
   - 결제 실패 유예(Billing Grace Period): 켠다. 일수는 정책 #34에서 정한다. 서버는 유예를 이미 처리한다(`grace_until`)
-  - 가족 공유(Family Sharing): **켜지 않는다**. 켜면 다시 끌 수 없다. 가족 구성원의 구매에는 계정 연결 값이 없어 누구 것인지 판단이 어렵다
+  - 가족 공유(Family Sharing): **켜지 않는다**. 켜면 다시 끌 수 없다. 가족 구성원의 구매에는 계정 연결 값이 없어 누구 것인지 가리기 어렵다
   - 무료 체험·할인 제안: 만들지 않는다(ADR-0002 D14)
 - 선반: 앱 내 구입(In-App Purchases) → 소모성 2개
 - 상품마다 넣을 것
@@ -101,7 +118,7 @@
   - 운영(Production) 주소: `https://covebook.kodeploy.com/iap/notifications/apple`
   - 샌드박스(Sandbox) 주소: 같은 주소
   - 버전: **Version 2**
-- 저장한 뒤 "테스트 알림 보내기"는 서버를 켠 뒤(8장) 한다
+- 저장한 다음 "테스트 알림 보내기"는 서버를 켠 뒤(8장) 한다
 
 ### 2-6. 키 [사람]
 
@@ -129,7 +146,10 @@
   - 할 일 [Claude]: 서버에 `/terms` 페이지를 만든다(`server/internal/server/site/`, 처리방침과 같은 방식). 아니면 애플 표준 약관(EULA)을 쓴다
 - 심사 메모 [사람]: 로그인이 필수라 심사용 계정이 필요하다. 소셜 로그인만 있어 방법을 정해야 한다
   - 로그인 강제는 반려 사례가 있다(ADR-0002 부록 A). 심사 메모에 "기록 동기화 때문에 계정이 필요하다"는 이유를 적는다
-- Xcode: 인앱결제는 앱 ID에 기본으로 켜져 있다. 프로파일을 새로 받을 필요는 보통 없다. 첫 TestFlight 빌드에서 상품이 불러와지는지로 확인
+- 애플 개발자 사이트 [사람]
+  - Certificates, Identifiers & Profiles → Identifiers → `app.covebook` → In-App Purchase가 켜져 있는지 본다. 기본으로 켜져 있어 프로파일을 새로 받을 필요는 보통 없다
+  - 첫 TestFlight 빌드에서 상품이 불러와지는지 보고 최종 확인
+  - Push Notifications는 켜지 않아도 된다(0-1)
 
 ## 3. 구글 (Play Console + Google Cloud)
 
@@ -174,7 +194,7 @@
 
 ### 3-5. 서버용 서비스 계정 [사람]
 
-- **배포용(`covebook-play-deploy`)과 따로 만든다**. 배포용은 테스트 출시 권한만 있고, 서버용은 주문 권한만 갖게 나눈다
+- **배포용(`covebook-play-deploy`)과 따로 만든다**. 배포용은 테스트 출시 권한만 있고 서버용은 주문 권한만 갖게 나눈다
 - Google Cloud 콘솔
   1. 프로젝트에서 **Google Play Android Developer API** 사용 설정
   2. IAM → 서비스 계정 만들기(예: `covebook-iap-server`)
@@ -228,7 +248,7 @@ gcloud pubsub subscriptions describe play-rtdn-push --format='value(pushConfig)'
 ### 3-7. 테스터와 앱 정보 [사람]
 
 - Play Console → 설정 → **라이선스 테스트**: 시험할 구글 계정 이메일
-  - 그 계정을 비공개 테스트 트랙 테스터에도 넣고, Play 스토어에서 설치해야 한다
+  - 그 계정을 비공개 테스트 트랙 테스터에도 넣고 Play 스토어에서 설치해야 한다
 - 앱 콘텐츠 → 데이터 보안: "금융 정보 › 구매 기록" 추가
 
 ## 4. 서버 [Claude + 사람]
@@ -267,7 +287,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 
 - PR #45 머지는 3-3에서 이미 함
 - 상품 ID는 앱에 적혀 있지 않다. 앱이 서버(`/iap/me`)에서 받으므로 4장 DB 줄만 맞으면 앱은 고칠 것이 없다
-- 심사 제출 빌드와 TestFlight·Play 워크플로에 `--dart-define=IAP=true`를 넣는 것은 켜는 날(점검표 5장)
+- 심사 제출 빌드와 TestFlight·Play 워크플로에는 켜는 날 `--dart-define=IAP=true`를 넣는다(점검표 5장)
 
 ## 6. 시험
 
@@ -299,7 +319,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 
 ## 8. 서버 호스팅(KoDeploy) 확인
 
-- 우리 서버는 KoDeploy에 있고(`https://covebook.kodeploy.com`), 앞에 Cloudflare가 있다. 애플·구글 알림은 이 주소로 오는 웹훅이다
+- 우리 서버는 KoDeploy에 있고(`https://covebook.kodeploy.com`) 앞에 Cloudflare가 있다. 애플·구글 알림은 이 주소로 오는 웹훅이다
 - 2026-11-23에 밖에서 확인한 것
 
 | 확인할 것 | 결과 | 왜 중요한가 |
