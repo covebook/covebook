@@ -28,7 +28,7 @@
 | 구독 1건 | 처음 구독한 때부터 해지·결제 실패로 끝날 때까지 자동 갱신으로 이어진 결제 묶음. 결제는 여러 번이어도 구독은 1건 | `iap_subscriptions` 1줄 (`erd.md` 3.4) |
 | JWS (서명된 거래) | 애플이 서명한 거래 정보. 구매한 기기만 가진다. 서명을 확인하면 위조가 아님을 안다 | 앱이 내는 `proof` (#43) |
 | 계정 연결 값 | 결제할 때 앱이 스토어에 넘기는 무작위 UUID. 스토어가 영수증·알림마다 돌려준다. 애플 `appAccountToken`, 구글 `obfuscatedAccountId` | `iap_account_tokens` (D7) |
-| storefront / regionCode | 결제한 나라의 스토어. 애플은 세 글자 나라 코드, 구글은 두 글자 | `country` (D20) |
+| storefront / regionCode | 결제한 나라의 스토어. 애플은 세 글자(`KOR`), 구글은 두 글자(`KR`). 서버는 둘 다 두 글자 `KR`로 맞춰 저장 | `country` (D20) |
 
 ## 3. 결제 뒤에 할 일
 

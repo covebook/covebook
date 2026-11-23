@@ -91,7 +91,7 @@ erDiagram
 | `refund_requested_at`, `refund_attempts` | 넘은 거래의 구글 자동 환불 요청 시각과 시도 횟수. 실패하면 정기 작업이 다시 시도하고 20번이면 멈춘다. 애플은 개발자가 환불할 수 없어 비어 있다 |
 | `state` (`paid`/`revoked`) | 환불을 줄 삭제 대신 상태로 |
 | `confirmed_at` | 스토어에 확인(acknowledge·consume)을 마친 시각. 구글은 3일 안에 안 하면 자동 환불한다. 비어 있는 줄을 정기 작업이 다시 시도한다 |
-| `currency`, `price_milli`, `country` | 스토어가 알려 준 결제 금액·통화·나라. 해외 판매와 매출 대조용 (D20). 구글 구매 조회는 금액을 주지 않아 비어 있다 |
+| `currency`, `price_milli`, `country` | 스토어가 알려 준 결제 금액·통화·나라. 해외 판매와 매출 대조용 (D20). 구글 구매 조회는 금액을 주지 않아 비어 있다. 나라는 ISO 두 글자(`KR`)로 맞춰 넣는다. 애플은 `KOR`처럼 세 글자를 줘서 서버가 바꾼다(`iap.Country`). 모르는 코드는 NULL. CHECK `^[A-Z]{2}$` |
 
 | 제약·색인 | 이유 |
 |---|---|
