@@ -1,6 +1,7 @@
 // 책장에서 책을 짧게 누르면 아래에서 올라오는 책 정보 시트(지금 앱 features/home/BookSheet.tsx, 2026-10-31 책장 시안).
 // 왼쪽 작은 표지(실제 표지 사진, 없거나 못 읽으면 이 책의 장정 정면 + '꾸민 표지'), 오른쪽 제목·읽기 상태·한 줄 감상·최근 메모,
-// 아래 '책 정보 보기'(주요 큰 단추)와 보조 셋 '책장에서 빼기 | 읽기 시작(이어서 읽기) | 갈피 남기기'(글자만, 옛 시안 그대로. 빼기는 2026-11-20 맨 왼쪽).
+// 아래 '책 정보 보기'(주요 큰 단추)와 보조 둘 '갈피 남기기 | 읽기 시작(이어서 읽기)'(글자만, 옛 시안 그대로. 책 정보 아래 두 단추와 같은 순서).
+// '책장에서 빼기'는 손잡이 줄 오른쪽 작은 회색 글자 단추(2026-11-23 사용자: 아래 줄에서 빼서 오른쪽 위로).
 // 선반은 그대로 보이게 바탕을 어둡게 덮지 않는다.
 // 배치 조작은 꾹 눌러 꾸미기에서
 library;
@@ -25,6 +26,9 @@ import '../bookmark/book_picker.dart' show statusLabel;
 import '../reading/start_book.dart' show startReadingBook;
 import '../stats/stats_widgets.dart' show CoverImage;
 import '../bookmark/new_bookmark_screen.dart';
+
+/// 손잡이 폭
+const _handleW = 38.0;
 
 /// 표지 폭: 내 책 목록 표지와 같은 80(시안 실측 104였는데 시트가 아래로 너무 길었다, 2026-11-20 사용자 '여기도 밑으로 너무 기네')
 const _coverW = CoverSize.list;
@@ -78,69 +82,111 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
         ),
         padding: EdgeInsets.fromLTRB(Space.page + 4, 0, Space.page + 4, insets.bottom + 14),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Center(
-            child: Container(
-              width: 38,
-              height: 4.5,
-              margin: const EdgeInsets.only(top: 10),
-              decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3)),
+          // 손잡이 줄(누르는 높이 48): 가운데 손잡이, 오른쪽 '책장에서 빼기'(작은 회색 글자 단추, 글자 끝은 아래 내용 오른쪽 끝에 맞춘다).
+          // 글자는 손잡이 오른쪽 자리 안에서만: 큰 글씨면 두 줄로 내려가고 줄 높이가 늘어 아래 제목을 밀어낸다(손잡이 · 제목과 겹치지 않게).
+          // 빼기가 없는 시트(지난 책장 · 책 정보를 열 수 없는 책)도 손잡이 자리는 같다
+          LayoutBuilder(
+            builder: (_, box) => ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: Space.hit),
+              child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
+                Container(
+                  width: _handleW,
+                  height: 4.5,
+                  decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3)),
+                ),
+                // 책장에서 빼기 바로가기(2026-11-15 QA: 책 정보 › 더 보기 안쪽에만 있어 세 단계였다). 책은 내 책에 남고, 바로 되돌릴 수 있다
+                if (canOpen && !readOnly)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    // 글자 단추 양옆 누르는 자리(8)만큼 밖으로: 글자 끝이 내용 오른쪽 끝과 맞는다
+                    child: Transform.translate(
+                      offset: const Offset(Space.s, 0),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: box.maxWidth / 2 - _handleW / 2 - Space.xs + Space.s),
+                        child: IntrinsicWidth(
+                          child: TextLink(
+                            label: '책장에서 빼기',
+                            soft: true,
+                            onPress: () async {
+                              Navigator.pop(ctx);
+                              final place = PlacementStore.instance;
+                              Object? err;
+                              var ok = false;
+                              try {
+                                await place.ensure();
+                                ok = await place.toDrawer(bookId);
+                              } catch (e) {
+                                err = e;
+                              }
+                              if (!context.mounted) return;
+                              // 실패는 늘 알린다(DESIGN 11장): 책은 책장에 그대로 있다
+                              if (!ok) {
+                                appAlert(context, '책장에서 빼지 못했어요', '책은 책장에 그대로 있어요. ${err == null ? '잠시 뒤 다시 시도해 주세요.' : errorText(err)}');
+                                return;
+                              }
+                              // 책장에서 사라지는 일이라 토스트 + 되돌리기(DESIGN 14장)
+                              showToast(context, '책장에서 뺐어요. 내 책에 그대로 있어요.', action: '되돌리기', onAction: () => place.undo());
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ]),
             ),
           ),
           Flexible(
             child: SingleChildScrollView(
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: Space.l),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                    SizedBox(
-                      width: _coverW + 6,
-                      child: e.coverUri != null
-                          ? Center(
-                              child: CoverImage(
-                                uris: [coverAtSize(e.coverUri, 'L'), e.coverUri],
-                                color: AppColors.input,
-                                width: _coverW,
-                                height: (_coverW * ratio).roundToDouble(),
-                                radius: Shape.cover,
-                              ),
-                            )
-                          : Column(children: [
-                              BookVisual(lib: lib, id: bookId, width: _coverW + 6),
-                              Padding(padding: const EdgeInsets.only(top: 4), child: Text('꾸민 표지', textAlign: TextAlign.center, style: AppType.caption)),
-                            ]),
-                    ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        // 시트 머리 책 제목은 bookTitle(DESIGN 3-1)
-                        Semantics(
-                          header: true,
-                          child: Text(e.title, style: AppType.bookTitle),
-                        ),
-                        // 지난 책장은 '2025년 | 완독': 세로줄은 옅게, 화면 읽기는 쉼표로(MetaText)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: MetaText(status ?? statusLabel[b.status]!, style: AppType.caption),
-                        ),
-                        if ((b.note ?? '').isNotEmpty)
-                          Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(b.note!, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink))),
-                        if (memo != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: Space.s),
-                            child: Semantics(
-                              label: '최근 메모, $memo',
-                              excludeSemantics: true,
-                              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const Padding(padding: EdgeInsets.only(top: 3), child: LucideIcon('StickyNote', size: 14, color: AppColors.icon)),
-                                const SizedBox(width: 6),
-                                Expanded(child: Text(memo, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.caption)),
-                              ]),
+                Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  SizedBox(
+                    width: _coverW + 6,
+                    child: e.coverUri != null
+                        ? Center(
+                            child: CoverImage(
+                              uris: [coverAtSize(e.coverUri, 'L'), e.coverUri],
+                              color: AppColors.input,
+                              width: _coverW,
+                              height: (_coverW * ratio).roundToDouble(),
+                              radius: Shape.cover,
                             ),
+                          )
+                        : Column(children: [
+                            BookVisual(lib: lib, id: bookId, width: _coverW + 6),
+                            Padding(padding: const EdgeInsets.only(top: 4), child: Text('꾸민 표지', textAlign: TextAlign.center, style: AppType.caption)),
+                          ]),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      // 시트 머리 책 제목은 bookTitle(DESIGN 3-1)
+                      Semantics(
+                        header: true,
+                        child: Text(e.title, style: AppType.bookTitle),
+                      ),
+                      // 지난 책장은 '2025년 | 완독': 세로줄은 옅게, 화면 읽기는 쉼표로(MetaText)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: MetaText(status ?? statusLabel[b.status]!, style: AppType.caption),
+                      ),
+                      if ((b.note ?? '').isNotEmpty)
+                        Padding(padding: const EdgeInsets.only(top: Space.s), child: Text(b.note!, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.sub.copyWith(color: AppColors.ink))),
+                      if (memo != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: Space.s),
+                          child: Semantics(
+                            label: '최근 메모, $memo',
+                            excludeSemantics: true,
+                            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              const Padding(padding: EdgeInsets.only(top: 3), child: LucideIcon('StickyNote', size: 14, color: AppColors.icon)),
+                              const SizedBox(width: 6),
+                              Expanded(child: Text(memo, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.caption)),
+                            ]),
                           ),
-                      ]),
-                    ),
-                  ]),
-                ),
+                        ),
+                    ]),
+                  ),
+                ]),
                 if (canOpen)
                   Padding(
                   padding: const EdgeInsets.only(top: Space.l),
@@ -156,41 +202,18 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                 if (!readOnly)
                   Padding(
                   padding: const EdgeInsets.only(top: Space.xs),
-                  // 보조 행동(지금 앱 TextActions, 옛 시안 그대로 둔 의도된 예외, TextLink로 맞출지는 사용자 결정 대기): 본문색 보통 글씨, 사이 얇은 세로선, 누르는 칸 48
+                  // 보조 행동(지금 앱 TextActions, 옛 시안 그대로 둔 의도된 예외, TextLink로 맞출지는 사용자 결정 대기): 본문색 보통 글씨, 사이 얇은 세로선, 누르는 칸 48.
+                  // 순서는 책 정보 아래 두 단추와 같다(갈피 남기기 · 읽기)
                   child: Row(children: [
-                    // 책장에서 빼기 바로가기(2026-11-15 QA: 책 정보 › 더 보기 안쪽에만 있어 세 단계였다)는 맨 왼쪽(2026-11-20 사용자). 책은 전체 책에 남고, 바로 되돌릴 수 있다
-                    if (canOpen) ...[
-                      _textAction('책장에서 빼기', () async {
-                        Navigator.pop(ctx);
-                        final place = PlacementStore.instance;
-                        Object? err;
-                        var ok = false;
-                        try {
-                          await place.ensure();
-                          ok = await place.toDrawer(bookId);
-                        } catch (e) {
-                          err = e;
-                        }
-                        if (!context.mounted) return;
-                        // 실패는 늘 알린다(DESIGN 11장): 책은 책장에 그대로 있다
-                        if (!ok) {
-                          appAlert(context, '책장에서 빼지 못했어요', '책은 책장에 그대로 있어요. ${err == null ? '잠시 뒤 다시 시도해 주세요.' : errorText(err)}');
-                          return;
-                        }
-                        // 책장에서 사라지는 일이라 토스트 + 되돌리기(DESIGN 14장)
-                        showToast(context, '책장에서 뺐어요. 내 책에 그대로 있어요.', action: '되돌리기', onAction: () => place.undo());
-                      }),
-                      Container(width: 1, height: 18, color: AppColors.line),
-                    ],
+                    _textAction('갈피 남기기', () {
+                      Navigator.pop(ctx);
+                      openNewBookmark(context, book: bookId);
+                    }),
+                    Container(width: 1, height: 18, color: AppColors.line),
                     // 누르면 그 책으로 바로 독서를 시작하고 읽기 화면을 연다(2026-11-16 QA 영숙 F2: 장면만 열리고 시계가 가지 않았다)
                     _textAction(b.status == ReadStatus.reading || b.status == ReadStatus.paused ? '이어서 읽기' : '읽기 시작', () {
                       Navigator.pop(ctx);
                       startReadingBook(context, bookId);
-                    }),
-                    Container(width: 1, height: 18, color: AppColors.line),
-                    _textAction('갈피 남기기', () {
-                      Navigator.pop(ctx);
-                      openNewBookmark(context, book: bookId);
                     }),
                   ]),
                 ),
