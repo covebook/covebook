@@ -10,7 +10,7 @@ import (
 	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
 )
 
-// 결제 표(V21)를 읽고 쓰는 함수들. 지급 판단은 여기서 하지 않는다. 부르는 쪽이 스토어 조회와 iap.Check를 끝낸 뒤 부른다.
+// 결제 테이블(V21)를 읽고 쓰는 함수들. 지급 판단은 여기서 하지 않는다. 부르는 쪽이 스토어 조회와 iap.Check를 끝낸 뒤 부른다.
 
 // dbtx는 연결 풀(s.DB)과 트랜잭션(pgx.Tx)이 둘 다 가진 메서드다.
 // 이 타입을 받는 함수는 트랜잭션 안에서도 밖에서도 부를 수 있다.
@@ -162,7 +162,7 @@ func iapOwnsToken(ctx context.Context, q dbtx, user int64, token string) (bool, 
 	return ok, err
 }
 
-// iapProduct는 상품 표의 한 줄이다.
+// iapProduct는 상품 테이블의 한 줄이다.
 type iapProduct struct {
 	Kind        iap.Kind
 	Entitlement string
@@ -264,7 +264,7 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 	return 0, nil
 }
 
-// iapEntitlements는 유저가 지금 가진 것을 계산한다. 따로 저장한 값이 없고 매번 표에서 센다(D5).
+// iapEntitlements는 유저가 지금 가진 것을 계산한다. 따로 저장한 값이 없고 매번 테이블에서 센다(D5).
 //   - plus: 결제된 구독이 있고, 만료 전이거나 유예 기간 안이다(D11). 만료 판단은 DB 서버 시계다(D23).
 //   - shelves: 연도 책장마다, 환불되지 않은 선반 거래가 준 칸 수의 합. 3칸을 넘게 산 거래(over_cap)는 세지 않고, iapPaidShelfMax에서 한 번 더 자른다(D1).
 //     산 칸이 없는 연도는 들어 있지 않다. 연도를 모르는 거래는 어느 책장에도 세지 않는다.
@@ -457,7 +457,7 @@ type iapReservation struct {
 // 산 칸 + 살아 있는 예약 칸 + 이번 칸이 iapPaidShelfMax를 넘으면 잡지 않고, 가장 먼저 끝나는 예약까지 남은 시간(wait)을 준다.
 // 부르는 쪽이 유저 줄을 잠근 트랜잭션 안에서 부른다(두 기기가 동시에 잡지 못하게). 시각은 DB 시계다(D23).
 func iapReserveShelf(ctx context.Context, tx pgx.Tx, user int64, year, shelves, paid int) (r iapReservation, wait time.Duration, err error) {
-	// 끝난 예약은 지운다. 남아 있어도 세지 않지만 표가 쌓이지 않게
+	// 끝난 예약은 지운다. 남아 있어도 세지 않지만 테이블이 쌓이지 않게
 	if _, err = tx.Exec(ctx, "DELETE FROM iap_shelf_reservations WHERE user_id=$1 AND expires_at <= now()", user); err != nil {
 		return
 	}
