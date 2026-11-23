@@ -2,13 +2,15 @@
 // 원을 누르면 오른쪽 끝(시간 자리)은 그대로 두고 왼쪽으로 늘어나 '읽기 화면 바로가기'와 '재생/일시정지'가 나온다.
 // 시간을 다시 누르거나 바깥을 누르면 접힌다(타이머·환경음 상태는 그대로). 시간은 같은 누적 값을 1초마다 다시 그릴 뿐 따로 재지 않는다.
 // 읽기 화면·읽기 탭(책마다 흐르는 시간이 보인다)에서는 띄우지 않는다. 하단 탭·키보드·안전 영역과 겹치지 않게 둔다.
-// 꾹 누른 채 끌면 자리를 옮긴다(2026-11-17 사용자 '타이머를 꾹 누르고 옮길 수 있게'). 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다
+// 잡고 끌면 바로 자리를 옮긴다(2026-11-24 사용자 '꾹 누르면 움직이게 말고 그냥 잡고 움직이면 바로 움직이게'. 11-17에는 꾹 눌러야 옮겨졌다).
+// 움직이지 않고 떼면 누르기(펼치기 · 접기 · 단추)는 그대로. 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다
 library;
 
 import 'dart:async';
 import '../../store/finish_reading.dart' show pauseReading, resumeReading;
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
@@ -68,6 +70,9 @@ class _MiniTimerState extends State<MiniTimer> {
   /// 사용자가 옮긴 자리(화면 오른쪽·아래 끝에서 거리). 없으면 기본 자리
   ({double right, double bottom})? _moved;
   ({double right, double bottom})? _dragFrom;
+
+  /// 끌기 시작한 손가락 자리(누른 자리부터 잰다: 움직임 문턱만큼 튀지 않게)
+  Offset _dragStart = Offset.zero;
   static const _posKey = 'mini-timer-pos';
 
   @override
@@ -139,25 +144,35 @@ class _MiniTimerState extends State<MiniTimer> {
         bottom: bottom,
         height: miniTimerSize,
         child: GestureDetector(
-          // 꾹 눌러 끌기: 손가락을 따라 옮기고, 놓으면 그 자리를 기억한다
-          onLongPressStart: (_) {
+          // 잡고 끌기: 손가락이 조금(누르기 문턱) 움직이면 바로 따라 옮기고, 놓으면 그 자리를 기억한다. 움직이지 않으면 누르기
+          dragStartBehavior: DragStartBehavior.down,
+          onPanStart: (d) {
             if (s.haptics) HapticFeedback.selectionClick();
+            _dragStart = d.globalPosition;
             setState(() {
               _open = false;
               _dragFrom = (right: right, bottom: bottom);
             });
           },
-          onLongPressMoveUpdate: (d) {
+          onPanUpdate: (d) {
             final f = _dragFrom;
             if (f == null) return;
-            setState(() => _moved = (right: f.right - d.offsetFromOrigin.dx, bottom: f.bottom - d.offsetFromOrigin.dy));
+            final o = d.globalPosition - _dragStart;
+            setState(() => _moved = (right: f.right - o.dx, bottom: f.bottom - o.dy));
           },
-          onLongPressEnd: (_) {
+          onPanEnd: (_) {
+            // 마지막으로 끈 자리(다시 그리기 전에 손을 떼도 놓치지 않게)를 화면 안으로 맞춰 기억한다
+            final m = _moved;
+            final r = (m?.right ?? right).clamp(8.0, math.max(8.0, maxRight)).toDouble();
+            final b = (m?.bottom ?? bottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
             setState(() {
               _dragFrom = null;
-              _moved = (right: right, bottom: bottom);
+              _moved = (right: r, bottom: b);
             });
-            KvStore.set(_posKey, '${right.round()},${bottom.round()}').ignore();
+            KvStore.set(_posKey, '${r.round()},${b.round()}').ignore();
+          },
+          onPanCancel: () {
+            if (_dragFrom != null) setState(() => _dragFrom = null);
           },
           child: AnimatedScale(
             scale: dragging ? 1.08 : 1,
