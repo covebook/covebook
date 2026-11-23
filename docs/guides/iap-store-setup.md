@@ -196,6 +196,28 @@
      - **인증 사용**: 서비스 계정 하나를 고른다(3-5의 계정이어도 됨). 이 이메일이 `IAP_GOOGLE_PUSH_EMAIL`
      - 대상(audience): 엔드포인트 주소를 그대로 적는다. 이 값이 `IAP_GOOGLE_PUSH_AUDIENCE`
      - 오래된 프로젝트는 Pub/Sub 서비스 에이전트에 "서비스 계정 토큰 생성자" 역할이 필요할 수 있다. 저장할 때 화면이 알려 준다
+- 위 1~4는 명령으로도 된다. 정환이 `gcloud auth login`으로 로그인하면 Claude Code가 돌릴 수 있다 [Claude]
+  - 3-5의 서비스 계정 만들기도 함께 한다. **JSON 키 만들기는 빼 두었다.** 키 파일이 Claude 작업 폴더에 남지 않게 정환이 콘솔에서 만들어 KoDeploy에 바로 넣는다
+  - Play Console 초대(3-5)와 아래 Play Console 칸은 명령으로 못 한다
+
+```sh
+PROJECT=<프로젝트 ID>           # Google Cloud 프로젝트 ID
+URL=https://covebook.kodeploy.com/iap/notifications/google
+SA=covebook-iap-server@$PROJECT.iam.gserviceaccount.com
+gcloud config set project "$PROJECT"
+gcloud services enable pubsub.googleapis.com androidpublisher.googleapis.com
+gcloud iam service-accounts create covebook-iap-server --display-name="covebook IAP server"
+gcloud pubsub topics create play-rtdn
+gcloud pubsub topics add-iam-policy-binding play-rtdn \
+  --member=serviceAccount:google-play-developer-notifications@system.gserviceaccount.com \
+  --role=roles/pubsub.publisher
+gcloud pubsub subscriptions create play-rtdn-push --topic=play-rtdn \
+  --push-endpoint="$URL" --push-auth-service-account="$SA" --push-auth-token-audience="$URL"
+# 확인: 구독의 엔드포인트·인증 값
+gcloud pubsub subscriptions describe play-rtdn-push --format='value(pushConfig)'
+```
+
+  - 이렇게 하면 `IAP_GOOGLE_PUSH_AUDIENCE`는 `$URL`, `IAP_GOOGLE_PUSH_EMAIL`은 `$SA`다
 - Play Console → 수익 창출 설정 → **실시간 개발자 알림**
   - 주제 이름: `projects/<프로젝트 ID>/topics/play-rtdn`
   - 알림 종류를 고르는 칸이 있으면 구독, 일회성 상품, 무효 구매를 모두 고른다
