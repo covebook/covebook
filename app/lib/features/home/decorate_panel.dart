@@ -1,9 +1,11 @@
 // 꾸미기 화면 부품(지금 앱 features/home/DecoratePanel.tsx, 2026-10-26 꾸미기 시안을 2026-11-19 사용자 시안으로 바꿈):
 // 맨 위 줄 DecorateBar('책 배치 | 선반 | 벽지' 탭, 되돌리기·완료), 아래는 탭마다
-//  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('움직임 | 겉모습' 전환 칸, 2026-11-20 사용자)
+//  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('위치, 각도 | 디자인' 전환 칸, 2026-11-20 사용자. 이름은 2026-11-23)
 //  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
-// DecoratePanel: 고른 책 제목, '움직임 | 겉모습'. 움직임은 자세 전환 칸(책등·표지·눕힘), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
-// 겉모습은 책 측면(모든 책)과 이 책의 책 꾸미기(장정 · 갈피)로 가는 줄.
+// DecoratePanel: 고른 책 제목, '위치, 각도 | 디자인'. 위치, 각도는 자세 전환 칸(책등·표지·눕힘), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
+// 디자인은 책 옆면(단색 | 측면 | 겹무늬, 고른 책에만)과 이 책의 책 꾸미기(그림, 색상, 재질)로 가는 줄.
+// 2026-11-23 사용자: 책 옆면은 책마다 따로('가호를 눌러 연 화면이니까 여기서 고른 모양은 가호에만'), 그래서 적용 범위 글('모든 책')을 뺐다.
+// 이름도 사용자 정리대로 '움직임 | 겉모습' → '위치, 각도 | 디자인', '실물 측면' → '측면', '표지 이어 쌓기' → '겹무늬', 나열은 쉼표로.
 // 기대기는 자세처럼 전환 칸(2026-11-21 사용자 '기대기도 다른 버튼처럼'): 책등 책은 왼쪽 · 바로 · 오른쪽(방향만 고르고 각도는 옆 책과의 틈으로,
 // 기댄 각도를 아래 글로), 표지 책은 바로 · 뒤로(벽에 기대기, 사용자 '표지 쪽은 뒤로 기대기가 안 돼': 머리 손잡이를 끌어야만 됐다).
 // 막대에는 갈 수 있는 범위를 진한 띠로.
@@ -101,7 +103,7 @@ class _Sheet extends StatelessWidget {
 }
 
 /// 책 배치 탭에서 책을 고르기 전: 떠 있는 안내 하나(놓지 못한 까닭이 있으면 그 글).
-/// 책 측면 고르기는 책을 고른 뒤 '겉모습'으로 옮겼다(2026-11-20 사용자 '책 선택하면 있어야지', '책을 하나 선택하세요 뜬 다음에')
+/// 책 옆면 고르기는 책을 고른 뒤 '디자인'으로 옮겼다(그때 이름은 '겉모습')(2026-11-20 사용자 '책 선택하면 있어야지', '책을 하나 선택하세요 뜬 다음에')
 class DecorateHint extends StatelessWidget {
   const DecorateHint({super.key, required this.msg});
   final String? msg;
@@ -182,10 +184,10 @@ class SkinSheet extends StatelessWidget {
       );
 }
 
-/// 고른 책 조작부의 두 칸: 움직임(자세 · 앞뒤 · 회전/기대기) | 겉모습(책 측면 · 장정)
+/// 고른 책 조작부의 두 칸: 위치, 각도(자세 · 앞뒤 · 회전/기대기) | 디자인(책 옆면 · 이 책 꾸미기)
 enum DecoPart { move, look }
 
-/// 책 배치 탭에서 책을 골랐을 때: 제목, 전환 칸 '움직임 | 겉모습', 그 아래 고른 칸의 조작부
+/// 책 배치 탭에서 책을 골랐을 때: 제목, 전환 칸 '위치, 각도 | 디자인', 그 아래 고른 칸의 조작부
 /// (2026-11-20 사용자 '각도 같은 움직임, 책 색상이나 표면 측면 같은 거 선택하는 버튼 … 누르면 그 밑에 해당 내용들이 뜨게').
 /// 자세(책등 · 표지 · 눕힘)도 전환 칸(2026-11-20 사용자 '눕힘 세움 이런 거 버튼으로 하라 하지 않았나? 통계 캘린더 분석 같은')
 class DecoratePanel extends StatefulWidget {
@@ -238,11 +240,11 @@ class DecoratePanel extends StatefulWidget {
   final ValueChanged<double> onSpin;
   final ValueChanged<double> onDepth;
 
-  /// 책 측면(모든 책에 같이): 겉모습 칸
+  /// 고른 책의 옆면 모양(이 책에만): 디자인 칸
   final SpineLook spine;
   final ValueChanged<SpineLook> onSpine;
 
-  /// 이 책의 책 꾸미기(장정 그림 · 색상 · 재질과 갈피)로. 값 글은 짧게 '장정 · 갈피'(큰 글씨 360 폭에서 이름 '책 꾸미기'가 두 줄로 접혔다)
+  /// 이 책의 책 꾸미기(장정 그림, 색상, 재질과 갈피)로. 줄 이름 '이 책 꾸미기', 값 '그림, 색상, 재질'(2026-11-23 사용자 정리)
   final VoidCallback onBinding;
 
   /// 고른 책이 바뀌면 막대 상태를 새로
@@ -304,47 +306,54 @@ class _DecoratePanelState extends State<DecoratePanel> {
   }
 
   Widget _look(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        // 묶음 이름은 꾸미기 시안 모양(본문색 16 보통, 1c111a7 사용자 시안) 그대로: DESIGN 16장 예외(시트 안 SheetLabel 18 굵게와 다름)
-        Text('책 측면 · 모든 책', style: AppType.sub.copyWith(color: AppColors.ink)),
+        // 묶음 이름은 꾸미기 시안 모양(본문색 16 보통, 1c111a7 사용자 시안) 그대로: DESIGN 16장 예외(시트 안 SheetLabel 18 굵게와 다름).
+        // 고른 책에만 걸려 적용 범위 글은 없다(2026-11-23 사용자)
+        Text('책 옆면', style: AppType.sub.copyWith(color: AppColors.ink)),
         const SizedBox(height: Space.xs),
         Segmented<SpineLook>(
-          items: const [(SpineLook.color, '색 한 가지'), (SpineLook.photo, '실물 측면'), (SpineLook.stripe, '표지 이어 쌓기')],
+          items: const [(SpineLook.color, '단색'), (SpineLook.photo, '측면'), (SpineLook.stripe, '겹무늬')],
           value: widget.spine,
           onChange: widget.onSpine,
         ),
         const SizedBox(height: Space.s),
-        // 책 색상 · 그림 · 재질 · 갈피는 책 꾸미기(책 정보 ⋯ › 책 꾸미기와 같은 화면, 이름도 같게 2026-11-23)
-        ListItem(label: '책 꾸미기', value: '장정 · 갈피', chevron: true, onPress: widget.onBinding),
+        // 그림 · 색상 · 재질 · 갈피는 책 꾸미기(책 정보 ⋯ › 책 꾸미기와 같은 화면).
+        // '그림, 색상, 재질'은 이름 아래 회색 글: 오른쪽 값으로 두면 360 폭 기본 글씨에서도 '이 책 꾸미기'가 두 줄로 접혔다
+        ListItem(label: '이 책 꾸미기', sub: '그림, 색상, 재질', chevron: true, onPress: widget.onBinding),
       ]);
 
-  /// 제목 줄 오른쪽 '움직임 | 겉모습' 칸 폭(글자 세 자 두 칸)
-  static const _partWidth = 152.0;
+  static const _partNames = {DecoPart.move: '위치, 각도', DecoPart.look: '디자인'};
 
   @override
   Widget build(BuildContext context) {
     final big = largeText(context);
-    final part = Segmented<DecoPart>(compact: !big, items: const [(DecoPart.move, '움직임'), (DecoPart.look, '겉모습')], value: _part, onChange: (v) => setState(() => _part = v));
+    final part = Segmented<DecoPart>(compact: !big, items: [for (final e in _partNames.entries) (e.key, e.value)], value: _part, onChange: (v) => setState(() => _part = v));
     return _Sheet(
       top: 0,
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Center(
           child: Container(width: 38, height: 4.5, margin: const EdgeInsets.only(top: 10), decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3))),
         ),
-        // 제목 줄 오른쪽에 '움직임 | 겉모습'(낮은 전환 칸, 2026-11-21 사용자 '움직임 겉모습 버튼 가호랑 같은 라인 우측에').
-        // 큰 글씨: 제목 두 줄까지, 전환 칸은 아래 줄
+        // 제목 줄 오른쪽에 '위치, 각도 | 디자인'(낮은 전환 칸, 2026-11-21 사용자 '움직임 겉모습 버튼 가호랑 같은 라인 우측에', 이름은 2026-11-23).
+        // 큰 글씨이거나, 같은 줄에 두면 제목이 세 글자도 안 남을 때(좁은 화면 · 조금 키운 글씨): 제목 두 줄까지, 전환 칸은 아래 줄.
+        // 전환 칸 폭은 굵은 '위치, 각도'가 한 칸에 다 들어가게 글자 크기에 맞춘다(152로 두면 잘렸다)
         Padding(
           padding: const EdgeInsets.only(top: Space.s),
-          child: big
-              ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Text(keepAll(widget.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.pageTitle),
-                  const SizedBox(height: Space.s),
-                  part,
-                ])
-              : Row(children: [
-                  Expanded(child: Text(keepAll(widget.title), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle)),
-                  const SizedBox(width: Space.m),
-                  SizedBox(width: _partWidth, child: part),
-                ]),
+          child: LayoutBuilder(builder: (context, box) {
+            final partW = Segmented.fitWidth(context, _partNames.values);
+            final titleMin = MediaQuery.textScalerOf(context).scale(AppType.pageTitle.fontSize! * 3);
+            if (big || box.maxWidth - Space.m - partW < titleMin) {
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(keepAll(widget.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.pageTitle),
+                const SizedBox(height: Space.s),
+                part,
+              ]);
+            }
+            return Row(children: [
+              Expanded(child: Text(keepAll(widget.title), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle)),
+              const SizedBox(width: Space.m),
+              SizedBox(width: partW, child: part),
+            ]);
+          }),
         ),
         // 고른 뒤 놓지 못한 까닭: 오류 글(화면 읽기가 바로 읽는다)
         if (widget.msg != null) NoticeText(widget.msg!, error: true),

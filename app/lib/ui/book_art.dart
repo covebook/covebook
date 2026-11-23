@@ -16,6 +16,7 @@ import '../domain/geometry.dart';
 import '../domain/shelf_geom.dart';
 import '../domain/title_layout.dart';
 import '../domain/vec3.dart';
+import '../scene_config/spine_look.dart';
 import 'artwork_images.dart';
 import 'cover_photo.dart';
 import 'glyph_metrics.dart';
@@ -122,7 +123,7 @@ void drawBookArt(ui.Canvas canvas, Book3 b, BookLook look, GlyphMetrics glyphs, 
     canvas.scale(1 / pn.w, 1 / pn.h);
     // 기본 정면 장정 그림: 늘이지 않고 면을 채우고(위아래가 잘리면 위에서 focusY만큼), 제목은 그림마다 정한 색으로 위 여백에(지금 앱 CoverFaceArt)
     final art = f == FaceId.cover && look.artwork != null ? artworkImage(look.artwork!) : null;
-    final sp = f == FaceId.spine ? spineArtOf(photo) : null;
+    final sp = f == FaceId.spine ? spineArtOf(photo, spineLooks.of(b.id)) : null;
     if (art != null) {
       final r = focusedRect(art.width.toDouble(), art.height.toDouble(), pn.w, pn.h, artworkFocusY);
       canvas.drawImageRect(art, ui.Rect.fromLTWH(0, 0, art.width.toDouble(), art.height.toDouble()), ui.Rect.fromLTWH(r.x, r.y, r.width, r.height),
@@ -135,7 +136,7 @@ void drawBookArt(ui.Canvas canvas, Book3 b, BookLook look, GlyphMetrics glyphs, 
       // 표지 사진이 있으면 앞표지는 사진만(제목은 사진 안에 있다)
       drawPhotoCover(canvas, photo, pn.w, pn.h);
     } else if (sp != null) {
-      // 고른 책등 모양(실물 측면 사진·표지 이어 쌓기 줄무늬). 사진은 제목이 사진 안에 있어 쓰지 않는다
+      // 이 책에 고른 옆면 모양(측면 사진·겹무늬 줄무늬). 사진은 제목이 사진 안에 있어 쓰지 않는다
       drawSpineImage(canvas, sp.image, pn.w, pn.h);
       if (sp.ink != null && look.title.isNotEmpty) {
         final op = titleOpacity(b.roll);

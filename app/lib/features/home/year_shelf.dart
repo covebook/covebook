@@ -71,13 +71,13 @@ class _YearShelfState extends State<YearShelf> {
   @override
   void initState() {
     super.initState();
-    spineLook.addListener(_loadPhotos);
+    spineLooks.addListener(_loadPhotos);
     _load();
   }
 
   @override
   void dispose() {
-    spineLook.removeListener(_loadPhotos);
+    spineLooks.removeListener(_loadPhotos);
     for (final i in _atlases) {
       i.dispose();
     }
@@ -120,12 +120,14 @@ class _YearShelfState extends State<YearShelf> {
     _loadPhotos();
   }
 
-  /// 표지 사진: 받는 대로 다시 그린다(그 전까지는 코드로 그린 장정). 책등 모양이 바뀌어도 다시
+  /// 표지 사진: 받는 대로 다시 그린다(그 전까지는 코드로 그린 장정). 책 옆면 모양이 바뀌어도 다시
   void _loadPhotos() {
     final lib = _lib;
     if (lib == null) return;
+    // '측면'을 고른 책의 표지는 책등 사진도 받는다
+    final spineFor = {for (final b in lib.books) if (b.coverArtUri case final u? when spineLooks.of(b.id) == SpineLook.photo) u};
     for (final uri in {for (final b in lib.books) ?b.coverArtUri}) {
-      loadCoverPhoto(uri).then((p) {
+      loadCoverPhoto(uri, withSpine: spineFor.contains(uri)).then((p) {
         if (p != null && mounted) setState(() => _photos = {..._photos, uri: p});
       });
     }

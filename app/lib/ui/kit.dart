@@ -1532,6 +1532,29 @@ class Segmented<T> extends StatelessWidget {
   /// 낮은 칸(회색 칸 36): 머리줄 안처럼 옆 글자 줄과 높이를 맞출 때. 누르는 자리는 48 그대로
   final bool compact;
 
+  /// 바탕 안 양옆 여백 · 칸 안 글자 양옆 여백
+  static const _trackPad = 3.0, _cellPad = 4.0;
+
+  static TextStyle _label(bool selected) => AppType.bodySmall.copyWith(
+        fontFamily: selected ? AppFonts.uiBold : AppFonts.ui,
+        color: selected ? AppColors.ink : AppColors.inkSoft,
+      );
+
+  /// 칸 폭이 모두 같을 때 가장 긴 이름(고른 칸의 굵은 글자)이 잘리지 않는 전체 폭. 기기 글자 크기를 따른다.
+  /// 폭을 정해 둔 자리(꾸미기 제목 줄 오른쪽)에서 쓴다: 정해 둔 숫자는 글자를 조금만 키워도 잘렸다
+  static double fitWidth(BuildContext context, Iterable<String> labels) {
+    final scaler = MediaQuery.textScalerOf(context);
+    // Text처럼 둘레 기본 글자 모양(자간 등)과 합쳐 잰다
+    final style = DefaultTextStyle.of(context).style.merge(_label(true));
+    var w = 0.0;
+    for (final l in labels) {
+      final tp = TextPainter(text: TextSpan(text: l, style: style), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)..layout();
+      w = math.max(w, tp.width);
+      tp.dispose();
+    }
+    return labels.length * (w.ceilToDouble() + 2 * _cellPad) + 2 * _trackPad;
+  }
+
   // 겉모양은 회색 칸 44(고른 칸 38): 2026-11-17 사용자 '책 정보·평가·내 기록 바가 두껍다'(예전 50) → 40은 너무 얇아 조금 키움(2026-11-18 사용자 '조금만 더 키우라고').
   // 누르는 자리는 위아래 빈 4까지 48 그대로(2026-11-16 QA 영숙 F12). 큰 글씨면 칸이 글자만큼 늘어난다
   @override
@@ -1546,7 +1569,7 @@ class Segmented<T> extends StatelessWidget {
           child: DecoratedBox(decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(compact ? Shape.segmentedCompact : Shape.segmented))),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(horizontal: _trackPad),
           child: Row(
             children: [
               for (final (id, label) in items)
@@ -1563,7 +1586,7 @@ class Segmented<T> extends StatelessWidget {
                         padding: EdgeInsets.symmetric(vertical: pad),
                         child: Container(
                           constraints: BoxConstraints(minHeight: cell),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: _cellPad),
                           decoration: id == value
                               ? BoxDecoration(
                                   color: AppColors.bg,
@@ -1577,12 +1600,8 @@ class Segmented<T> extends StatelessWidget {
                             heightFactor: 1,
                             child: Opacity(
                               opacity: disabled.contains(id) && id != value ? disabledOpacity : 1,
-                              child: Text(label,
-                                  maxLines: 1,
-                                  style: AppType.bodySmall.copyWith(
-                                    fontFamily: id == value ? AppFonts.uiBold : AppFonts.ui,
-                                    color: id == value ? AppColors.ink : AppColors.inkSoft,
-                                  )),
+                              // 아주 큰 글씨에서 칸보다 긴 이름은 자르지 않고 두 줄까지 접는다(꾸미기 '위치, 각도' 2배 글씨)
+                              child: Text(label, maxLines: 2, textAlign: TextAlign.center, style: _label(id == value)),
                             ),
                           ),
                         ),

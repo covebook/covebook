@@ -10,6 +10,7 @@ import 'package:chaekjang/scene_config/skin.dart';
 import 'package:chaekjang/scene_config/spine_look.dart';
 import 'package:chaekjang/ui/keep_all.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Book _b(String id, double t) => Book(id: id, title: id, dims: BookDims(220, t, 140));
@@ -130,42 +131,63 @@ void main() {
       expect(done, 1);
     });
 
-    testWidgets('책 고르기 전: 떠 있는 안내 하나(책 측면은 책을 고른 뒤 겉모습에), 2배 글자에서도 넘치지 않는다', (tester) async {
+    testWidgets('책 고르기 전: 떠 있는 안내 하나(책 옆면은 책을 고른 뒤 디자인에), 2배 글자에서도 넘치지 않는다', (tester) async {
       await tester.pumpWidget(host(const DecorateHint(msg: null), scale: 2));
       expect(tester.takeException(), isNull);
       expect(find.text('책을 하나 골라 주세요'), findsOneWidget);
       expect(find.text('책등'), findsNothing);
-      expect(find.text('실물 측면'), findsNothing);
+      expect(find.text('측면'), findsNothing);
     });
 
-    testWidgets('고른 책: 움직임 | 겉모습 전환 칸, 겉모습에서 책 측면 · 책 꾸미기(장정 · 갈피, 2026-11-23 이름)', (tester) async {
+    testWidgets('고른 책: 위치, 각도 | 디자인 전환 칸, 디자인에서 책 옆면(단색 | 측면 | 겹무늬) · 이 책 꾸미기(2026-11-23 이름)', (tester) async {
       final picked = <SpineLook>[];
       var binding = 0;
       await tester.pumpWidget(panel(onSpine: picked.add, onBinding: () => binding++));
-      expect(find.text('움직임'), findsOneWidget);
-      expect(find.text('실물 측면'), findsNothing);
-      await tester.tap(find.text('겉모습'));
+      expect(find.text('위치, 각도'), findsOneWidget);
+      expect(find.text('측면'), findsNothing);
+      await tester.tap(find.text('디자인'));
       await tester.pump();
       expect(find.text('앞뒤'), findsNothing);
-      await tester.tap(find.text('실물 측면'));
+      expect(find.text('책 옆면'), findsOneWidget);
+      expect(find.textContaining('모든 책'), findsNothing, reason: '고른 책에만 걸려 적용 범위 글이 없다');
+      for (final o in ['단색', '측면', '겹무늬']) {
+        expect(find.text(o), findsOneWidget, reason: o);
+      }
+      await tester.tap(find.text('측면'));
       expect(picked, [SpineLook.photo]);
-      expect(find.text('이 책 장정'), findsNothing);
-      expect(find.text('장정 · 갈피'), findsOneWidget);
-      await tester.tap(find.text('책 꾸미기'));
+      expect(find.text('그림, 색상, 재질'), findsOneWidget);
+      await tester.tap(find.text('이 책 꾸미기'));
       expect(binding, 1);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('겉모습 책 꾸미기 줄: 큰 글씨(1.3배) 360 폭에서도 이름이 한 줄(2026-11-23 촬영: 값이 길어 두 줄로 접혔다)', (tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(panel(scale: 1.3));
-      await tester.tap(find.text('겉모습'));
-      await tester.pump();
-      expect(tester.getSize(find.text('책 꾸미기')).height, lessThan(45));
-      expect(tester.takeException(), isNull);
-    });
+    for (final scale in [1.0, 1.15, 1.3, 2.0]) {
+      testWidgets('글씨 $scale배 360 폭: 전환 칸 \'위치, 각도\'가 칸 안에 다 보이고, 이 책 꾸미기 줄 이름이 한 줄(설명은 아래)', (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(panel(scale: scale));
+        // 고른 칸(굵게)일 때 글자 폭이 칸 안쪽(양옆 4)보다 좁다
+        final cell = find.ancestor(of: find.text('위치, 각도'), matching: find.byType(Container)).first;
+        final text = tester.renderObject<RenderParagraph>(find.text('위치, 각도'));
+        expect(text.didExceedMaxLines, isFalse);
+        // 1.3배까지는 한 줄로 다 들어간다(2배는 두 줄로 접힌다)
+        if (scale <= 1.3) expect(text.getMaxIntrinsicWidth(double.infinity), lessThanOrEqualTo(tester.getSize(cell).width - 8));
+        // 제목이 오른쪽 칸 때문에 세 글자도 안 남지 않는다(1배: 같은 줄, 조금 키운 글씨 · 큰 글씨: 다른 줄)
+        final title = find.text(keepAll('작별하지 않는다'));
+        expect(tester.getSize(title).width, greaterThan(22 * scale * 3 - 1));
+        if (scale == 1.0) expect((tester.getCenter(title).dy - tester.getCenter(find.text('위치, 각도')).dy).abs(), lessThan(4), reason: '기본 글씨는 같은 줄');
+        await tester.tap(find.text('디자인'));
+        await tester.pump();
+        // 이름은 한 줄, '그림, 색상, 재질'은 이름 아래 한 줄(오른쪽 값으로 두면 이름이 두 줄로 접혔다)
+        // 한 줄 높이(17/25.5 · 15/22.5 × 글씨 배율)의 1.5배보다 낮다 = 한 줄
+        expect(tester.getSize(find.text('이 책 꾸미기')).height, lessThan(25.5 * scale * 1.5));
+        // 설명은 1.3배까지 한 줄(2배는 두 줄로 접힌다)
+        if (scale <= 1.3) expect(tester.getSize(find.text('그림, 색상, 재질')).height, lessThan(22.5 * scale * 1.5));
+        expect(tester.getTopLeft(find.text('그림, 색상, 재질')).dy, greaterThan(tester.getBottomLeft(find.text('이 책 꾸미기')).dy - 1));
+        expect(tester.takeException(), isNull);
+      });
+    }
 
     testWidgets('선반 탭은 선반·벽(틀), 벽지 탭은 벽지만. 고르면 그 조합을 넘긴다', (tester) async {
       final picked = <SkinChoice>[];

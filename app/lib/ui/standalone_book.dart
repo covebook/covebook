@@ -45,8 +45,11 @@ Book3 _spun(Book3 rest, double spin) {
 ui.Rect _bbox(Cam cam, Book3 b) => bookOutline(cam, Affine(1, 0, 0), b).getBounds();
 
 class _BookPainter extends CustomPainter {
-  _BookPainter(this.book, this.b, this.cam, this.px, this.photo, {this.ribbons = false});
+  _BookPainter(this.book, this.b, this.cam, this.px, this.photo, {this.ribbons = false}) : spine = spineLooks.of(book.id);
   final Book book;
+
+  /// 이 책에 고른 옆면 모양(바뀌면 다시 그린다. 표지 사진은 같아도 책등 그림이 달라진다)
+  final SpineLook spine;
   final Book3 b;
   final Cam cam;
   final Affine px;
@@ -67,30 +70,34 @@ class _BookPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BookPainter old) => old.b != b || old.book != book || old.photo != photo || old.px.s != px.s || old.ribbons != ribbons;
+  bool shouldRepaint(_BookPainter old) => old.b != b || old.book != book || old.photo != photo || old.px.s != px.s || old.ribbons != ribbons || old.spine != spine;
 }
 
-/// 표지 사진(있으면) 받기. 책등 모양(스토어)이 바뀌면 그 모양으로 다시
+/// 표지 사진(있으면) 받기. 이 책의 옆면 모양이 바뀌면 그 모양으로 다시('측면'이면 책등 사진도 받는다)
 mixin _CoverPhotoLoad<T extends StatefulWidget> on State<T> {
   CoverPhoto? photo;
   bool _ready = ShelfPainter.ready;
-  String? _uri;
+  String? _uri, _id;
 
   @override
   void initState() {
     super.initState();
-    spineLook.addListener(_again);
+    spineLooks.addListener(_again);
   }
 
   @override
   void dispose() {
-    spineLook.removeListener(_again);
+    spineLooks.removeListener(_again);
     super.dispose();
   }
 
-  void _again() => _fetch(_uri);
+  void _again() {
+    if (mounted) setState(() {});
+    _fetch(_uri);
+  }
 
-  void loadPhoto(String? uri) {
+  void loadPhoto(String? uri, String bookId) {
+    _id = bookId;
     if (!_ready) {
       ShelfPainter.load().then((_) {
         if (mounted) setState(() => _ready = true);
@@ -103,7 +110,7 @@ mixin _CoverPhotoLoad<T extends StatefulWidget> on State<T> {
   void _fetch(String? uri) {
     _uri = uri;
     if (uri == null) return;
-    loadCoverPhoto(uri).then((p) {
+    loadCoverPhoto(uri, withSpine: _id != null && spineLooks.of(_id!) == SpineLook.photo).then((p) {
       if (p != null && mounted && _uri == uri) setState(() => photo = p);
     });
   }
@@ -124,13 +131,13 @@ class _StandaloneBookState extends State<StandaloneBook> with _CoverPhotoLoad {
   @override
   void initState() {
     super.initState();
-    loadPhoto(widget.book.coverArtUri);
+    loadPhoto(widget.book.coverArtUri, widget.book.id);
   }
 
   @override
   void didUpdateWidget(StandaloneBook old) {
     super.didUpdateWidget(old);
-    if (old.book.coverArtUri != widget.book.coverArtUri) loadPhoto(widget.book.coverArtUri);
+    if (old.book.coverArtUri != widget.book.coverArtUri) loadPhoto(widget.book.coverArtUri, widget.book.id);
   }
 
   @override
@@ -169,13 +176,13 @@ class _RotatableBookState extends State<RotatableBook> with _CoverPhotoLoad {
   @override
   void initState() {
     super.initState();
-    loadPhoto(widget.book.coverArtUri);
+    loadPhoto(widget.book.coverArtUri, widget.book.id);
   }
 
   @override
   void didUpdateWidget(RotatableBook old) {
     super.didUpdateWidget(old);
-    if (old.book.coverArtUri != widget.book.coverArtUri) loadPhoto(widget.book.coverArtUri);
+    if (old.book.coverArtUri != widget.book.coverArtUri) loadPhoto(widget.book.coverArtUri, widget.book.id);
   }
 
   @override

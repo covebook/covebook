@@ -18,8 +18,8 @@ import 'library_model.dart';
 import 'placement_store.dart';
 import 'reading_store.dart';
 
-/// 로그아웃해도 남기는 기기 설정: 진동·움직임 줄이기, 고른 선반·벽지, 책 측면 모양, 표지에서 잰 색·책등 비율(공개 책 정보), 지금 앱 보기 설정
-const keepKeys = {'app-settings:v1', 'shelf-skin', 'spine-look', 'cover-accents-v2', 'yes24-spine-ratios-v1', 'view-settings:v3'};
+/// 로그아웃해도 남기는 기기 설정: 진동·움직임 줄이기, 고른 선반·벽지, 책 옆면 모양(옛 모든 책 값 · 책마다 값), 표지에서 잰 색·책등 비율(공개 책 정보), 지금 앱 보기 설정
+const keepKeys = {'app-settings:v1', 'shelf-skin', 'spine-look', 'spine-look-books', 'cover-accents-v2', 'yes24-spine-ratios-v1', 'view-settings:v3'};
 
 /// 키·값 저장에서 지울 키인지(시험용으로 따로 둔다)
 bool wipesKey(String key) => !keepKeys.contains(key);

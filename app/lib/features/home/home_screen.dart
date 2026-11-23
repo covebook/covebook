@@ -125,11 +125,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   /// 꾸미기 탭(2026-11-19 사용자 시안: 맨 위 '책 배치 | 선반 | 벽지', 머리줄 자리를 같은 높이로 덮어 책장이 밀리지 않는다)
   DecorateTab _decoTab = DecorateTab.books;
 
-  /// 이번 꾸미기의 되돌리기 차례: 배치 편집(_placeUndo 표시, 되돌리기는 PlacementStore가) · 바꾸기 전 스킨 · 바꾸기 전 책 측면
+  /// 이번 꾸미기의 되돌리기 차례: 배치 편집(_placeUndo 표시, 되돌리기는 PlacementStore가) · 바꾸기 전 스킨 · 바꾸기 전 책 옆면(책과 모양)
   final List<Object> _decoUndo = [];
   static const _placeUndo = 'place';
 
-  /// 이번 꾸미기에서 스킨·책 측면을 바꿨다: 마칠 때 빛을 새로 굽는다(고르는 동안은 그리는 값만 바꿔 바로 보인다)
+  /// 이번 꾸미기에서 스킨·책 옆면을 바꿨다: 마칠 때 빛을 새로 굽는다(고르는 동안은 그리는 값만 바꿔 바로 보인다)
   bool _skinChanged = false;
   String? _editId;
   String? _editMsg;
@@ -381,7 +381,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
 
   void _exitDecorate() {
     _clearPreview();
-    // 고른 스킨·책 측면으로 빛을 다시 굽고 시작 사진을 버린다(지난 '선반, 벽지' 화면의 적용하기와 같다)
+    // 고른 스킨·책 옆면으로 빛을 다시 굽고 시작 사진을 버린다(지난 '선반, 벽지' 화면의 적용하기와 같다)
     if (_skinChanged) {
       _skinChanged = false;
       dropHomeSnapshot();
@@ -930,15 +930,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
 
   bool get _canUndo => _decoUndo.isNotEmpty || PlacementStore.instance.canUndo;
 
-  /// 되돌리기: 이번 꾸미기에서 마지막에 바꾼 것(배치·스킨·책 측면)부터 한 번에 하나씩, 여러 번(배치는 PlacementStore가 30번까지 쌓는다,
+  /// 되돌리기: 이번 꾸미기에서 마지막에 바꾼 것(배치·스킨·책 옆면)부터 한 번에 하나씩, 여러 번(배치는 PlacementStore가 30번까지 쌓는다,
   /// 2026-11-21 사용자 '되돌리기 1번밖에 안 되는 게 좀 별론데'). 이번에 바꾼 것이 없으면 지난 배치 편집
   Future<void> _undo() async {
     final last = _decoUndo.isEmpty ? _placeUndo : _decoUndo.removeLast();
     switch (last) {
       case SkinChoice prev:
         _applySkin(prev);
-      case SpineLook prev:
-        _applySpine(prev);
+      case (String id, SpineLook prev):
+        _applySpine(id, prev);
       default:
         await PlacementStore.instance.undo();
     }
@@ -962,17 +962,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     return true;
   }
 
-  /// 책 측면 고르기(책 배치 탭): 표지 사진을 그 모양으로 다시 준비해 바로 바꿔 그린다(_spineLookChanged)
-  void _pickSpine(SpineLook next) {
-    final prev = spineLook.value;
+  /// 책 옆면 고르기(책 배치 › 디자인): 고른 책에만. 표지 사진을 그 모양으로 다시 준비해 바로 바꿔 그린다(_spineLookChanged)
+  void _pickSpine(String id, SpineLook next) {
+    final prev = spineLooks.of(id);
     if (next == prev) return;
-    _applySpine(next);
-    _decoUndo.add(prev);
+    _applySpine(id, next);
+    _decoUndo.add((id, prev));
   }
 
-  void _applySpine(SpineLook v) {
-    spineLook.value = v;
-    saveSpineLook(v);
+  void _applySpine(String id, SpineLook v) {
+    spineLooks.set(id, v);
     _skinChanged = true;
     setState(() {});
   }
@@ -1002,8 +1001,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       onFrontLean: _editFrontLean,
       onSpin: _editSpin,
       onDepth: _editDepth,
-      spine: spineLook.value,
-      onSpine: _pickSpine,
+      spine: id == null ? SpineLook.color : spineLooks.of(id),
+      onSpine: (v) {
+        if (id != null) _pickSpine(id, v);
+      },
       onBinding: () {
         if (id != null) openBindingEditor(context, id);
       },
@@ -1106,7 +1107,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     }
   }
 
-  /// 위젯에 넘길 칸(잠긴 칸 빼고 위에서 네 칸): 자를 범위, 열쇠(칸 자리·책 자리·그림에 영향 주는 책 값·스킨·책 측면·표지 사진이 왔는지),
+  /// 위젯에 넘길 칸(잠긴 칸 빼고 위에서 네 칸): 자를 범위, 열쇠(칸 자리·책 자리·그림에 영향 주는 책 값·스킨·책마다 옆면·표지 사진이 왔는지),
   /// 투명 위젯용 모양(책 윤곽·갈피 띠·선반 판 윤곽, 지금 앱 shelfCutShapes)
   List<WidgetRow> _widgetRows() {
     final g = _geom, c = _case;
@@ -1121,11 +1122,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
           final r = g.geo[i], row = c.rows[i];
           final px = Affine(s, g.m.originX + sideMargin * s, g.contentTop + r.baseline);
           final books = <List<double>>[], ribbons = <List<double>>[];
-          final sig = StringBuffer('$i|${r.top.round()}|${r.height.round()}|${(s * 1000).round()}|${g.m.originX.round()}|${skinChoice.key}|${spineLook.value.name}');
+          final sig = StringBuffer('$i|${r.top.round()}|${r.height.round()}|${(s * 1000).round()}|${g.m.originX.round()}|${skinChoice.key}');
           for (var j = 0; j < row.books.length; j++) {
             final b = row.books[j];
             final look = j < row.looks.length ? row.looks[j] : null;
-            sig.write('|${b.id},${f(b.t.x)},${f(b.t.y)},${f(b.t.z)},${f(b.roll)},${f(b.yaw)},${f(b.spin)},${f(b.pitch)},${f(b.dims.t)},${f(b.dims.h)},${f(b.dims.w)}');
+            sig.write('|${b.id},${spineLooks.of(b.id).name},${f(b.t.x)},${f(b.t.y)},${f(b.t.z)},${f(b.roll)},${f(b.yaw)},${f(b.spin)},${f(b.pitch)},${f(b.dims.t)},${f(b.dims.h)},${f(b.dims.w)}');
             if (look != null) {
               sig.write(',${look.title},${look.tone},${look.ink},${look.ribbons},${look.ribbon},${look.material},${look.artwork},${look.coverUri},${_photos.containsKey(look.coverUri)}');
             }
@@ -1407,7 +1408,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void initState() {
     super.initState();
     shelfRefresh.addListener(_refresh);
-    spineLook.addListener(_spineLookChanged);
+    spineLooks.addListener(_spineLookChanged);
     focusBookOnShelf.addListener(_focusBook);
     LibraryModel.instance.addListener(_libraryChanged);
     BookcaseStore.instance.addListener(_bookcasesChanged);
@@ -1637,7 +1638,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     );
   }
 
-  /// 책등 모양(꾸미기 '책 측면')이 바뀌었다: 표지 사진을 그 모양으로 다시 준비한다(실물 측면이면 책등 사진도 받는다). 오는 대로 바꿔 그린다
+  /// 책 옆면 모양(꾸미기 › 디자인 '책 옆면', 책마다)이 바뀌었다: 표지 사진을 그 모양으로 다시 준비한다(측면이면 책등 사진도 받는다). 오는 대로 바꿔 그린다
   void _spineLookChanged() {
     if (mounted) _loadCovers([for (final b in _libBooks) ?b.coverArtUri], again: true);
   }
@@ -1651,12 +1652,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     }
     final t0 = DateTime.now();
     var left = uris.toSet().length;
+    // '측면'을 고른 책의 표지: 책등 사진도 받는다
+    final spineFor = {for (final b in _libBooks) if (b.coverArtUri case final u? when spineLooks.of(b.id) == SpineLook.photo) u};
     for (final uri in uris.toSet()) {
       if (!again && _photos.containsKey(uri)) {
         left--;
         continue;
       }
-      loadCoverPhoto(uri).then((photo) {
+      loadCoverPhoto(uri, withSpine: spineFor.contains(uri)).then((photo) {
         if (photo != null && mounted) setState(() => _photos = {..._photos, uri: photo});
         if (--left == 0) debugPrint('[flcover] ${uris.length} covers ${DateTime.now().difference(t0).inMilliseconds}ms got ${_photos.length}');
       });
@@ -1679,7 +1682,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     _coverRetry?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     shelfRefresh.removeListener(_refresh);
-    spineLook.removeListener(_spineLookChanged);
+    spineLooks.removeListener(_spineLookChanged);
     focusBookOnShelf.removeListener(_focusBook);
     LibraryModel.instance.removeListener(_libraryChanged);
     BookcaseStore.instance.removeListener(_bookcasesChanged);
@@ -1766,7 +1769,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                       bottomInset: bottomInset,
                                       viewport: box.maxHeight,
                                       frostedFrom: lockedFrom,
-                                      look: '${skinChoice.key}|${spineLook.value.name}',
+                                      look: '${skinChoice.key}|${spineLooks.key}',
                                     ),
                                     Size(box.maxWidth, height),
                                     MediaQuery.devicePixelRatioOf(context),
@@ -2632,7 +2635,7 @@ class ShelfPainter extends CustomPainter {
         only: rows,
       );
 
-  /// 스킨·책 측면(그릴 때 셰이더 값으로 읽는다): 바뀌면 굽기를 기다리지 않고 지난 그림 위에 새 색으로 바로 다시 그린다
+  /// 스킨·책 옆면(그릴 때 셰이더 값으로 읽는다): 바뀌면 굽기를 기다리지 않고 지난 그림 위에 새 색으로 바로 다시 그린다
   /// (2026-11-15 QA: 선반·벽지 적용하기 뒤 2~4초 옛 모습이었다. 새로 구운 빛은 끝나는 대로 바뀐다)
   final String look;
 
