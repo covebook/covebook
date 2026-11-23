@@ -1,5 +1,6 @@
 // 갈피 보기(지금 앱 app/bookmark/[id].tsx): 같은 책의 갈피를 좌우로 넘기며 읽는다. 카드는 길면 세로로 스크롤.
-// 아래 막대: 책장 한켠 · 수정 · 공유. 오른쪽 위 더 보기: 수정 · 메모 포함해 공유 · 책 정보 · 삭제(갈피 색은 책 정보 › 책 꾸미기 › 갈피, 2026-11-23).
+// 아래 막대: 책장 한켠 · 수정 · 공유. 오른쪽 위 더 보기: 수정 · 메모 포함해 공유 · 삭제(갈피 색은 책 정보 › 책 꾸미기 › 갈피, 2026-11-23).
+// 카드 아래 출처(표지·제목·저자)를 누르면 그 책 화면(감상 상세의 책 줄과 같다). 그래서 더 보기의 '책 정보'는 뺐다(2026-11-24 사용자 3단계)
 // 공유는 화면 밖에 그린 같은 카드를 그림으로 떠서 공유창으로 보낸다(개인 메모는 기본 제외).
 // 문장 갈피의 공유는 두 모양 '책 페이지·종이 메모'(mark_share_sheet). 문장 없는 사진 갈피와 '메모 포함해 공유'는 같은 카드를 이미지로 뜬다
 // 2026-11-16 QA 은서 F1: 수정·삭제·공유는 늘 화면에 보이는 갈피(넘길 때마다 그 갈피 id를 기억한다). 수정에서 돌아오면 넘기기 목록을
@@ -228,11 +229,6 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
               Navigator.pop(ctx);
               _shoot(true, cur, data);
             }),
-          // 공통 규칙 9장: 책 정보 화면으로 가는 메뉴는 '책 정보'('연결된 책 열기'였다)
-          ListItem(label: '책 정보', onPress: () {
-            Navigator.pop(ctx);
-            openBook(context, cur.myBookId);
-          }),
           ListItem(
             label: '삭제',
             danger: true,
@@ -306,7 +302,7 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
                     final d = cardData(lib, list[i]);
                     return _CardPage(
                       top: scale > 1.2 ? 18 : math.max(24, math.min(62, size.height * 0.073 - 4)),
-                      child: Center(child: d == null ? const SizedBox.shrink() : BookmarkCard(data: d, showMemo: true, width: math.min(size.width, 440), seed: list[i].id)),
+                      child: Center(child: d == null ? const SizedBox.shrink() : BookmarkCard(data: d, showMemo: true, width: math.min(size.width, 440), seed: list[i].id, onBook: () => openBook(context, list[i].myBookId))),
                     );
                   },
                 ),

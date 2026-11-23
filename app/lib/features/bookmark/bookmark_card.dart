@@ -3,6 +3,7 @@
 // 2026-11-16 QA 은서 F11: 글이 있는 갈피는 원본 사진을 곁들여도 문장 갈피(문장이 주인공, 사진은 문장 아래 작게). 쪽 표기는 'p. 118' 하나로.
 // F13: 줄바꿈이 있는 글(시)은 화면 폭 때문에 접힌 줄을 들여 써 진짜 줄바꿈과 구분하고, 목록에서 줄 수를 넘으면 끝에 '…'
 // 카드의 글자 크기·색·여백 숫자는 옛 앱 화소 값 그대로(시안 99% 맞춤, docs/design/DESIGN.md 16장 예외)
+// 2026-11-24 사용자 3단계: 갈피 상세에서만 출처(표지·제목·저자)를 누르면 그 책 화면(onBook). 모양은 그대로, 화면 읽기는 '○○ 책 정보' 단추
 library;
 
 import 'dart:math' as math;
@@ -187,13 +188,16 @@ final _srcTitle = _t(AppFonts.uiBold, 15, 21, AppColors.ink);
 final _meta = _t(AppFonts.ui, 14, 20, AppColors.inkSoft);
 
 class BookmarkCard extends StatelessWidget {
-  const BookmarkCard({super.key, required this.data, required this.width, required this.seed, this.showMemo = false, this.compact = false, this.onOpen, this.saved = false, this.onToggleSaved});
+  const BookmarkCard({super.key, required this.data, required this.width, required this.seed, this.showMemo = false, this.compact = false, this.onOpen, this.saved = false, this.onToggleSaved, this.onBook});
   final BookmarkCardData data;
   final double width;
   final String seed;
   final bool showMemo, compact, saved;
   final VoidCallback? onOpen;
   final VoidCallback? onToggleSaved;
+
+  /// 출처(표지·제목·저자)를 누르면: 갈피 상세만 넘긴다(그 책 화면). 기록 탭 목록 · 공유 그림 · 보드는 넘기지 않는다
+  final VoidCallback? onBook;
 
   /// 표지는 하단의 작은 출처처럼(목록 40×56dp)
   double get _coverW => compact ? 40.0 : 56.0;
@@ -330,8 +334,17 @@ class BookmarkCard extends StatelessWidget {
     ];
   }
 
-  /// 출처: 표지 · 제목 · '저자 | 날짜'. 표지·제목·저자는 가깝게 한 묶음. 인용문만 명조이고 책 정보는 고딕, 책 이름만 조금 진하게
-  Widget _source(double hair) => Row(children: [
+  /// 출처: 표지 · 제목 · '저자 | 날짜'. 표지·제목·저자는 가깝게 한 묶음. 인용문만 명조이고 책 정보는 고딕, 책 이름만 조금 진하게.
+  /// [onBook]이 있으면 줄 전체(표지 높이, 48 넘음)가 그 책 화면 단추(모양은 그대로, 누르는 동안만 옅어진다)
+  Widget _source(double hair) {
+    final row = _sourceRow(hair);
+    final tap = onBook;
+    if (tap == null) return row;
+    // 카드 글과 합쳐 읽히지 않게 따로 한 칸(container)
+    return Semantics(container: true, button: true, label: '${data.title} 책 정보', excludeSemantics: true, onTap: tap, child: Pressable(onPress: tap, child: row));
+  }
+
+  Widget _sourceRow(double hair) => Row(children: [
         Container(
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: AppColors.line, width: hair)),
           child: ClipRRect(

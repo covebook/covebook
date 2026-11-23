@@ -158,7 +158,7 @@ void main() {
     await pumpIn(t, const BookmarkDetailScreen(id: 'm1'));
     await t.tap(label('더 보기'));
     await t.pumpAndSettle();
-    expect(find.text('책 정보'), findsOneWidget);
+    expect(find.text('책 정보'), findsNothing, reason: '3단계(2026-11-24): 카드 아래 출처를 누르면 책 화면이라 메뉴에서 뺐다');
     expect(find.text('갈피 색 바꾸기'), findsNothing);
   });
 }
