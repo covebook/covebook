@@ -2,7 +2,9 @@
 
 - 서버 PostgreSQL의 테이블과 관계, 테이블과 칸마다 그렇게 둔 이유
 - 지금은 **결제 테이블 8개**만 적었다. 다른 테이블(책, 책장, 커뮤니티, 로그인 등 V1~V20)은 아직 적지 않았다
-- 결제 테이블은 아직 PR에 있다(운영 DB에는 없음). 마이그레이션이 바뀌면 이 문서도 같이 고친다
+- V21(테이블 6개)은 main에 머지됨(2026-11-23 #21). KoDeploy 재배포 전이라 운영 DB에는 아직 없다. `iap_notices`(V22)·`iap_plans`(V23)는 아직 PR(#47·#48)
+- UUID(`token`, 예약 `id`)는 서버가 만들어 넣는다. `gen_random_uuid()`는 PostgreSQL 13부터라 쓰지 않는다(12·14·17에서 시험)
+- 마이그레이션이 바뀌면 이 문서도 같이 고친다
   - V21 (#21): `iap_account_tokens`, `iap_shelf_reservations`, `iap_products`, `iap_purchases`, `iap_subscriptions`, `iap_notifications`
   - V22 (#47): `iap_notices`
   - V23 (#48): `iap_plans`
