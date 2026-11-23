@@ -51,7 +51,7 @@ func TestAppleLookup(t *testing.T) {
 	if p.Route != RouteApple || p.TransactionID != "200" || p.OriginalTransactionID != "100" || p.AccountToken != "u-1" {
 		t.Fatalf("식별 값이 다름: %+v", p)
 	}
-	if p.Env != EnvSandbox || p.PriceMilli != 12990 || p.Currency != "USD" || p.Country != "USA" {
+	if p.Env != EnvSandbox || p.PriceMilli != 12990 || p.Currency != "USD" || p.Country != "US" {
 		t.Fatalf("환경·금액이 다름: %+v", p)
 	}
 	if !p.PurchasedAt.Equal(time.UnixMilli(1_800_000_000_000)) || p.PurchasedAt.Location() != time.UTC {

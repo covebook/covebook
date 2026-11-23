@@ -93,7 +93,7 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 		Env:                   EnvProduction,
 		PurchasedAt:           started,
 		ExpiresAt:             expires,
-		Country:               s.RegionCode,
+		Country:               Country(s.RegionCode),
 	}
 	if item.OfferDetails != nil {
 		p.PlanID = item.OfferDetails.BasePlanId
@@ -143,7 +143,7 @@ func (g *Google) fromProduct(token string, r *androidpublisher.ProductPurchaseV2
 		State:                 state,
 		Env:                   EnvProduction,
 		PurchasedAt:           bought,
-		Country:               r.RegionCode,
+		Country:               Country(r.RegionCode),
 	}
 	if r.TestPurchaseContext != nil {
 		p.Env = EnvSandbox

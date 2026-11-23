@@ -172,7 +172,7 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := iap.Purchase{Route: iap.RouteApple, TransactionID: iapTestID(t, "tx"), ProductID: shelf, AccountToken: year2026, State: iap.StatePaid, Env: iap.EnvSandbox,
-		PurchasedAt: time.Now().UTC(), Currency: "KRW", PriceMilli: 1_100_000, Country: "KOR"}
+		PurchasedAt: time.Now().UTC(), Currency: "KRW", PriceMilli: 1_100_000, Country: "KR"}
 	p.OriginalTransactionID = p.TransactionID
 
 	// 같은 거래를 동시에 여러 번 넣어도 한 번만 들어간다
