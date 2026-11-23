@@ -380,7 +380,7 @@ func TestIAPSubscriptionAndRestore(t *testing.T) {
 	if _, body = e.call("GET", "/iap/me", a, nil); body["plus"] != false {
 		t.Fatalf("옮긴 뒤에도 원래 계정에 권한이 있음: %v", body)
 	}
-	// 옮겨 받은 계정은 계정 연결 값이 옛 주인의 것이어도 그냥 제출할 수 있다(주인은 우리 표가 정한다)
+	// 옮겨 받은 계정은 계정 연결 값이 옛 주인의 것이어도 그냥 제출할 수 있다(주인은 우리 테이블이 정한다)
 	if code, body = e.submit(b, "apple", e.plus, txn, false); code != 200 || body["status"] != "already" {
 		t.Fatalf("옮겨 받은 뒤 제출: %d %v", code, body)
 	}
@@ -546,7 +546,7 @@ func TestIAPShelfYears(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
 
-	// 연도 토큰: 로그인 필요, 책장 표와 같은 연도 범위, 같은 해에는 같은 값
+	// 연도 토큰: 로그인 필요, 책장 테이블과 같은 연도 범위, 같은 해에는 같은 값
 	if code, _ := e.call("POST", "/iap/shelf-token", "", map[string]any{"year": 2026}); code != 401 {
 		t.Fatalf("로그인 없이 %d", code)
 	}

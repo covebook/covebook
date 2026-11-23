@@ -371,7 +371,7 @@ func iapPurchaseOwner(ctx context.Context, q dbtx, route iap.Route, key string) 
 	return iapOwnerOf(user, err)
 }
 
-// iapSubscriptionOwner는 구독 줄기의 지금 주인을 찾고 그 줄을 잠근다. 트랜잭션 안에서만 부른다.
+// iapSubscriptionOwner는 구독 1건의 지금 주인을 찾고 그 줄을 잠근다. 트랜잭션 안에서만 부른다.
 func iapSubscriptionOwner(ctx context.Context, tx pgx.Tx, route iap.Route, originalID string) (iapOwner, error) {
 	var user *int64
 	err := tx.QueryRow(ctx, "SELECT user_id FROM iap_subscriptions WHERE route=$1 AND original_id=$2 FOR UPDATE", string(route), originalID).Scan(&user)
