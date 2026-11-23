@@ -73,7 +73,7 @@ CREATE TABLE iap_purchases (
     confirmed_at   TIMESTAMPTZ,       -- 스토어에 확인(acknowledge·consume)을 마친 시각. 구글은 3일 안에 해야 한다. 확인이 필요 없으면 넣은 때 채운다
     currency       TEXT CHECK (currency ~ '^[A-Z]{3}$'),
     price_milli    BIGINT,
-    country        TEXT,              -- 스토어가 준 코드 그대로(애플 storefront, 구글 regionCode)
+    country        TEXT CHECK (country ~ '^[A-Z]{2}$'),  -- ISO 3166-1 두 글자(KR). 애플 storefront(KOR)는 서버가 바꿔 넣는다. 모르면 NULL
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (route, transaction_id)

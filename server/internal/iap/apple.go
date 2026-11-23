@@ -117,7 +117,7 @@ func fromApple(t *api.JWSTransaction) Purchase {
 		RevokedAt:             msTime(t.RevocationDate),
 		Currency:              t.Currency,
 		PriceMilli:            t.Price, // 애플은 이미 x1000 값으로 준다
-		Country:               t.Storefront,
+		Country:               Country(t.Storefront),
 	}
 }
 
