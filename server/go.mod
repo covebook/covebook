@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
 	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/text v0.43.0
@@ -40,7 +41,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/s2a-go v0.1.10 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.22 // indirect
 	github.com/googleapis/gax-go/v2 v2.24.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
