@@ -14,7 +14,7 @@
 --    돌아온 값으로 어느 해 책장의 칸인지 찾는다(D1). 앱이 결제 중 꺼져도, 스토어 알림으로 와도 연도를 잃지 않는다
 -- 구독을 다른 계정으로 옮겨도(D8) 이 값은 옮기지 않는다. 스토어는 옮긴 뒤에도 옛 값을 보내므로, 구독의 주인은 이 값이 아니라 iap_subscriptions.user_id가 정한다.
 CREATE TABLE iap_account_tokens (
-    token      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    token      UUID PRIMARY KEY,  -- 무작위 UUID(v4). 서버가 만들어 넣는다. gen_random_uuid()는 PostgreSQL 13부터라 쓰지 않는다
     user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     year       INT CHECK (year BETWEEN 2000 AND 9999),  -- 추가 선반을 여는 연도 책장. 구독용은 NULL
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -27,7 +27,7 @@ CREATE UNIQUE INDEX iap_account_tokens_year_idx ON iap_account_tokens (user_id, 
 -- 두 기기에서 동시에 사서 3칸을 넘는 일을 결제 전에 막는다(D1). 결제가 끝나거나 취소되면 지우고, 앱이 꺼져 남은 줄은 expires_at이 지나면 무시한다.
 -- 원장이 아니라서 지워도 된다
 CREATE TABLE iap_shelf_reservations (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id         UUID PRIMARY KEY,  -- 무작위 UUID(v4). 서버가 만든다
     user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     year       INT NOT NULL CHECK (year BETWEEN 2000 AND 9999),
     shelves    INT NOT NULL CHECK (shelves > 0),
