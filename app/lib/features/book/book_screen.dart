@@ -1,4 +1,5 @@
-// 책 정보(지금 앱 app/book/[id]/index.tsx): 표지 위 가운데 전환 칸 [책 정보 | 평가 | 내 기록]. 이어서 읽기와 갈피 남기기는 아래에 늘 보인다.
+// 책 정보(지금 앱 app/book/[id]/index.tsx): 표지 위 가운데 전환 칸 [내 기록 | 평가 | 책 정보], 열면 내 기록(2026-11-24). 이어서 읽기와 갈피 남기기는 아래에 늘 보인다.
+// 책 꾸미기는 책 정보 칸 줄, 책 공유는 머리줄 아이콘(⋯ 메뉴에서는 뺐다)
 // 날짜·쪽수·별점은 모두 선택 입력. 완독은 사용자가 정하거나, 적은 쪽(기록의 도달한 쪽 · 현재 쪽)이 마지막 쪽일 때만 자동으로 바뀐다(타이머 시간으로는 판정하지 않고, 자동으로 되돌리지 않는다. domain/reading.dart 읽기 상태 · 현재 쪽 규칙).
 // 완독한 책을 '읽는 중'·'보류'로 바꾸면 새 회차(다시 읽기)라 먼저 묻는다. 상태를 완독으로 바꾸면 평가 칸으로 넘긴다(2026-11-23)
 library;
@@ -40,7 +41,8 @@ import 'edit_book_screen.dart' show openEditBook;
 import 'labels.dart';
 import 'place_books.dart' show keptNote, keptTitle, placeWithChoice;
 
-const _views = [('info', '책 정보'), ('rate', '평가'), ('mine', '내 기록')];
+// 내 기록이 먼저(2026-11-24 사용자 2단계: [책 정보 | 평가 | 내 기록]이었고 열면 책 정보였다)
+const _views = [('mine', '내 기록'), ('rate', '평가'), ('info', '책 정보')];
 
 /// 책 정보 화면 열기
 Future<void> openBook(BuildContext context, String id) =>
@@ -60,7 +62,7 @@ class BookScreen extends StatefulWidget {
 
 class _BookScreenState extends State<BookScreen> {
   final _model = LibraryModel.instance;
-  String _tab = 'info';
+  String _tab = 'mine';
   bool _pageEdit = false;
   bool _noteEdit = false; // 평가 탭 한줄평을 고치는 중
   bool _roundEdit = false; // 내 기록 탭 읽은 기간 날짜를 고치는 중
@@ -186,7 +188,8 @@ class _BookScreenState extends State<BookScreen> {
     ]);
   }
 
-  /// 책 메뉴(지금 앱): 공유·정보 수정·책 꾸미기(장정 · 갈피 색, 2026-11-23 '장정 편집'에서 이름 바꿈)·책장에서 보기·책장에서 빼기/진열·숨기기/삭제.
+  /// 책 메뉴(지금 앱): 정보 수정·책장에서 보기·책장에서 빼기/진열·숨기기/삭제.
+  /// 책 공유는 머리줄 아이콘, 책 꾸미기는 책 정보 칸 줄에 있어 메뉴에서 뺐다(2026-11-24 사용자 2단계).
   /// 숨긴 책(연도 책장에만 남은 책, 갈피 상세에서 들어올 수 있다)은 진열 · 숨기기 대신 '다시 보이기'(내 책 › 숨긴 책과 같은 일)
   Future<void> _menu() async {
     final place = PlacementStore.instance;
@@ -198,18 +201,9 @@ class _BookScreenState extends State<BookScreen> {
     showSheet<void>(
       context,
       builder: (ctx) => ListGroup(children: [
-        // 머리 공유 아이콘 · 공유 화면 제목과 같은 이름(2026-11-19 공통 규칙: '이미지로 공유'였다)
-        ListItem(label: '책 공유', sub: '한줄평, 별점을 넣은 카드', onPress: () {
-          Navigator.pop(ctx);
-          _share();
-        }),
         ListItem(label: '책 정보 수정', onPress: () {
           Navigator.pop(ctx);
           openEditBook(context, id);
-        }),
-        ListItem(label: '책 꾸미기', onPress: () {
-          Navigator.pop(ctx);
-          openBindingEditor(context, id);
         }),
         // 책을 옮기지 않고 책장에서 그 책을 비춰 보인다(2026-11-16 QA 영숙 F8: '이동'이라 자리를 옮기는 줄 알았다)
         if (onShelf)
@@ -390,7 +384,7 @@ class _BookScreenState extends State<BookScreen> {
     );
   }
 
-  /// 책 정보 칸: 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 판매처(갈피 색은 ⋯ › 책 꾸미기 › 갈피, 2026-11-23)
+  /// 책 정보 칸: 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 책 꾸미기 · 판매처(책 꾸미기 줄은 2026-11-24 사용자 2단계: ⋯ 메뉴에 있었다. 갈피 색은 책 꾸미기 › 갈피)
   Widget _infoPane(Library lib, MyBook b, Edition e) {
     final pub = [?e.publisher, if (e.publishedAt != null && e.publishedAt!.length >= 4) e.publishedAt!.substring(0, 4)].where((x) => x.isNotEmpty).join(metaSep);
     final sized = e.widthMm != null && e.heightMm != null;
@@ -401,6 +395,7 @@ class _BookScreenState extends State<BookScreen> {
       // 비어 있는 서지 값은 모두 '미입력'(2026-11-19 공통 규칙: 판형만 '확인 전'이었다)
       ListItem(label: '판형', value: sized ? '${e.widthMm}×${e.heightMm}mm' : '미입력', sub: sized ? null : '책장에는 기본 크기로 표시해요'),
       ListItem(label: '도서 정보', value: e.source == 'search' ? e.sourceName ?? '검색' : e.source == 'photo' ? '사진으로 추가' : '직접 입력'),
+      ListItem(label: '책 꾸미기', chevron: true, onPress: () => openBindingEditor(context, id)),
       // 판매 페이지는 맨 아래(YES24 약관: 출처와 상품 링크를 함께 보인다). 앱 밖으로 나가는 줄도 꺾쇠, 열지 못하면 확인창(docs/design/DESIGN.md 10장)
       if (e.link != null) ListItem(label: '${e.sourceName ?? '판매처'}에서 보기', chevron: true, onPress: () => _openLink(e.link!)),
     ]);

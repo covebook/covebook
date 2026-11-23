@@ -316,7 +316,7 @@ class _DecoratePanelState extends State<DecoratePanel> {
           onChange: widget.onSpine,
         ),
         const SizedBox(height: Space.s),
-        // 그림 · 색상 · 재질 · 갈피는 책 꾸미기(책 정보 ⋯ › 책 꾸미기와 같은 화면).
+        // 그림 · 색상 · 재질 · 갈피는 책 꾸미기(책 정보 › 책 정보 칸 › 책 꾸미기와 같은 화면).
         // '그림, 색상, 재질'은 이름 아래 회색 글: 오른쪽 값으로 두면 360 폭 기본 글씨에서도 '이 책 꾸미기'가 두 줄로 접혔다
         ListItem(label: '이 책 꾸미기', sub: '그림, 색상, 재질', chevron: true, onPress: widget.onBinding),
       ]);

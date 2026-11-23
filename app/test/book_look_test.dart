@@ -123,14 +123,34 @@ void main() {
     expect(find.text('갈피'), findsNothing);
   });
 
-  testWidgets('책 정보: 갈피 색 줄이 없고 메뉴 이름은 책 꾸미기', (t) async {
+  testWidgets('책 화면(2026-11-24 2단계): 전환 칸 내 기록 | 평가 | 책 정보, 열면 내 기록. 책 정보 칸 도서 정보 아래 책 꾸미기 줄, ⋯ 메뉴에는 책 공유 · 책 꾸미기 없음', (t) async {
     use();
+    LibraryModel.instance.lib.editions['ed1'] = Edition(id: 'ed1', title: '소년이 온다', authors: const ['한강'], source: 'search', sourceName: 'YES24', link: 'https://example.com', pageCount: 216, createdAt: t1, updatedAt: t1);
     await pumpIn(t, BookScreen(id: 'bk1', onRead: (_) {}));
+    final x = {for (final n in ['내 기록', '평가', '책 정보']) n: t.getCenter(find.text(n).first).dx};
+    expect(x['내 기록']!, lessThan(x['평가']!));
+    expect(x['평가']!, lessThan(x['책 정보']!));
+    expect(find.text('독서 기록'), findsOneWidget, reason: '열면 내 기록 칸');
+    await t.tap(find.text('책 정보').first);
+    await t.pumpAndSettle();
     expect(find.text('갈피 색'), findsNothing);
+    final deco = find.text('책 꾸미기');
+    expect(deco, findsOneWidget);
+    expect(t.getRect(find.text('도서 정보')).top, lessThan(t.getRect(deco).top));
+    expect(t.getRect(deco).top, lessThan(t.getRect(find.text('YES24에서 보기')).top));
     await t.tap(label('더 보기'));
     await t.pumpAndSettle();
-    expect(find.text('책 꾸미기'), findsOneWidget);
+    expect(find.text('책 정보 수정'), findsOneWidget);
+    expect(find.text('책 공유'), findsNothing);
+    expect(find.text('책 꾸미기'), findsOneWidget, reason: '메뉴에는 없고 뒤 책 정보 칸의 줄 하나뿐');
     expect(find.text('장정 편집'), findsNothing);
+    Navigator.of(t.element(find.text('책 정보 수정'))).pop();
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.text('책 꾸미기'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('책 꾸미기'));
+    await t.pumpAndSettle();
+    expect(find.byType(BindingScreen), findsOneWidget, reason: '⋯ 메뉴가 열던 것과 같은 책 꾸미기 화면');
   });
 
   testWidgets('갈피 상세 ⋯ 메뉴에 갈피 색 바꾸기가 없다', (t) async {
