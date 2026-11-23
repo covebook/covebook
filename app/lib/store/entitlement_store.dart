@@ -55,7 +55,7 @@ class IapSubscription {
   /// 결제 실패 유예가 끝나는 시각(유예 중일 때만)
   final DateTime? graceUntil;
 
-  /// 결제 주기: month, year. 서버가 모르면 빈 값(요금제 주기 표 iap_plans에 줄이 없을 때)
+  /// 결제 주기: month, year. 서버가 모르면 빈 값(요금제 주기 테이블 iap_plans에 줄이 없을 때)
   final String period;
 
   static IapSubscription? from(Object? j) {
