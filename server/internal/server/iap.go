@@ -176,7 +176,7 @@ func (s *Server) iapMe(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// iapStatus는 지금 가진 것을 표에서 계산한다. 따로 저장한 값이 없다(D5).
+// iapStatus는 지금 가진 것을 테이블에서 계산한다. 따로 저장한 값이 없다(D5).
 func (s *Server) iapStatus(ctx context.Context, user int64) (map[string]any, error) {
 	plus, shelves, err := iapEntitlements(ctx, s.DB, user, s.IAPSandbox)
 	if err != nil {
@@ -287,7 +287,7 @@ func (s *Server) iapShelfRelease(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// iapValidYear는 연도 책장 표(bookcases)와 같은 범위다.
+// iapValidYear는 연도 책장 테이블(bookcases)와 같은 범위다.
 func iapValidYear(year int) bool { return year >= 2000 && year <= 9999 }
 
 // iapSubmit은 앱이 제출한 구매를 스토어에 확인하고 지급한다.
@@ -343,7 +343,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	route := store.Route()
 
-	// 1. 우리 표로 상품 종류를 정한다. 구글은 종류에 따라 조회 주소가 다르다.
+	// 1. 우리 테이블로 상품 종류를 정한다. 구글은 종류에 따라 조회 주소가 다르다.
 	products, err := iapProductSet(ctx, s.DB, route)
 	if err != nil {
 		return err
@@ -374,7 +374,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return iapStoreError(route, err)
 	}
-	// 구독은 그 거래가 아니라 구독 줄기의 지금 상태로 판단한다(갱신·유예·해지 예약이 여기에 있다).
+	// 구독은 그 거래가 아니라 구독 1건의 지금 상태로 판단한다(갱신·유예·해지 예약이 여기에 있다).
 	current := submitted
 	if asked.Kind == iap.KindSubscription {
 		if current, err = store.Subscription(storeCtx, submitted.OriginalTransactionID); err != nil {
@@ -427,7 +427,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	key := iapTransactionKey(asked.Kind, submitted)
 	shelfYear, overCap := 0, false // 추가 선반만
 	if asked.Kind == iap.KindSubscription {
-		// 같은 구독 줄기를 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다)
+		// 같은 구독 1건을 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다)
 		if err = iapLockLine(ctx, tx, route, current.OriginalTransactionID); err != nil {
 			return err
 		}
