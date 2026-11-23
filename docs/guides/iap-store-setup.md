@@ -368,7 +368,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 | `IAP_ENABLED` | `1` | |
 | `IAP_ALLOW_SANDBOX` | 시험·심사 동안 `1`, 그 뒤 정책 #31 | |
 | `IAP_RENEWAL_NOTICE_DAYS` | 연 구독 갱신 예정 고지를 며칠 전에. 비우면 14 | |
-| `ADMIN_TOKEN` | 운영 숫자 조회용(`GET /admin/iap/stats`). 이미 있으면 그대로 | |
+| `ADMIN_TOKEN` | 운영 숫자 조회용(`GET /admin/iap/stats`). 운영에 아직 없다(2026-11-23 확인). 긴 무작위 값을 새로 만들어 넣는다(`openssl rand -hex 32`) | |
 
 - 애플 키 넷은 다 넣거나 다 비운다. 구글은 `AUDIENCE`·`EMAIL`이 없으면 구글 알림 주소가 닫힌다
 - `IAP_ALLOW_SANDBOX`를 끄면 전에 준 샌드박스 권한도 사라진다
