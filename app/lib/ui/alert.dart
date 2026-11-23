@@ -16,8 +16,8 @@ import 'theme.dart';
 
 enum AlertStyle { normal, cancel, destructive }
 
-/// 회색 글자 단추(SubAction, 누르는 자리 48) 안에서 글자 줄(AppType.sub 22.5) 아래 빈 곳: 창 맨 아래가 글자 단추면 아래 여백에서 뺀다
-final textButtonInset = (Space.hit - TypeSpecs.sub.line) / 2;
+/// 회색 글자 단추(SubAction, 누르는 자리 48) 안에서 글자 줄(AppType.subLink 22.5) 아래 빈 곳: 창 맨 아래가 글자 단추면 아래 여백에서 뺀다
+final textButtonInset = (Space.hit - TypeSpecs.subLink.line) / 2;
 
 class AlertButton {
   const AlertButton(this.text, {this.onPress, this.style = AlertStyle.normal});

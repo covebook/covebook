@@ -37,7 +37,7 @@ import 'book_widgets.dart' show confirmRemoveBooks, removeBooks, removedText, un
 import 'labels.dart' show bookStatuses, dateShort, statusLabel;
 import 'place_books.dart';
 
-const _cellMin = 96.0; // 격자 칸 최소 폭: 휴대폰은 3칸, 넓은 화면은 칸을 늘린다
+const _cellMin = 80.0; // 격자 칸 최소 폭: 휴대폰은 3칸, 넓은 화면은 칸을 늘린다(96 → 80, 2026-11-24 사용자 7단계)
 const _gap = 14.0; // 격자 칸 사이(가로)
 
 /// 보기 방식은 앱을 켜 둔 동안 기억한다

@@ -22,12 +22,14 @@ import 'theme.dart';
 /// 부품에 박힌 공식 숫자는 아래 이름으로 따로 둔다(ListRow · Top · BottomSheet · BottomCTA · Border)
 abstract final class Space {
   /// 화면 좌우 24 = TDS ListRow horizontalPadding medium(기본) 24 · Border padding24
-  static const page = 24.0, section = 40.0, group = 28.0, item = 12.0, tight = 8.0;
+  /// 구역 사이 section 40 → 32(2026-11-24 사용자 7단계)
+  static const page = 24.0, section = 32.0, group = 28.0, item = 12.0, tight = 8.0;
   static const xs = 4.0, s = 8.0, m = 12.0, l = 16.0, xl = 28.0, xxl = 40.0;
   static const touch = 44.0;
 
-  /// 한 화면 안 구역 사이(책 정보의 독서 기록 · 읽은 기간 · 남긴 갈피, 통계 그래프 사이). 같은 종류 구역은 이 간격만 쓴다(2026-11-18)
-  static const block = 48.0;
+  /// 한 화면 안 구역 사이(책 정보의 독서 기록 · 읽은 기간 · 남긴 갈피, 통계 그래프 사이). 같은 종류 구역은 이 간격만 쓴다(2026-11-18).
+  /// 48 → 32(2026-11-24 사용자 7단계)
+  static const block = 32.0;
 
   /// 촘촘한 정보 줄 높이(내 기록의 시간대 · 읽은 시간 줄)
   static const dense = 32.0;
@@ -226,12 +228,12 @@ abstract final class IconSize {
 /// 책 표지 크기(폭, 유일한 정의, docs/design/DESIGN.md 3장)
 abstract final class CoverSize {
   /// 책 한 줄(BookRow): 작게 40(고르기 · 선택 · 바코드 · 가져오기 · 읽기 목록 · 통계) · 보통 64(검색 결과 · 감상 목록) · 크게 80(내 책 목록)
-  static const row = 40.0, result = 64.0, list = 80.0;
+  static const row = 40.0, result = 64.0, list = 64.0; // list 80 → 64(2026-11-24 사용자 7단계)
 
   /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 120, 책 확인(추가 전) 120.
   /// 책 정보 수정은 표지 위 끝 = '제목' 이름 줄 위, 아래 끝 = '저자' 칸 아래가 되는 폭(옆 두 칸 높이 [editHeight] × [ratio] ≈ 127.8,
   /// 2026-11-21 사용자 '책이랑 옆에 쓰는 거랑 라인이 안 맞아': 120이라 표지가 저자 칸보다 짧았다)
-  static const head = 140.0, feature = 120.0, confirm = 120.0, edit = editHeight * ratio;
+  static const head = 120.0, feature = 120.0, confirm = 120.0, edit = editHeight * ratio; // head 140 → 120(2026-11-24 사용자 7단계)
 
   /// 책 정보 수정 표지 옆 두 칸(이름 줄 24 + 8 + 입력칸 ControlSize.field, 사이 Space.xl 28) 높이 = 표지 높이
   static const editHeight = 2 * (24.0 + Space.s + ControlSize.field) + Space.xl;
@@ -2601,7 +2603,7 @@ class SelectField extends StatelessWidget {
 }
 
 /// 글자 버튼 = TDS TextButton variant clear(기본, 밑줄 없음) · size medium(= t5, 'Migrate to v2.x' TextButton 표, AppType.link).
-/// 색: 갈색 = 이어서 할 일(TDS 글자 단추 · 더 보기 blue500 자리), 회색 grey600 = 조심스러운 일(회색은 작고 보통 굵기 AppType.sub 15). 눌림은 옅어짐(공식 없음 → 우리 값)
+/// 색: 갈색 = 이어서 할 일(TDS 글자 단추 · 더 보기 blue500 자리), 회색 grey600 = 조심스러운 일(회색은 작고 보통 굵기 AppType.subLink 15). 눌림은 옅어짐(공식 없음 → 우리 값)
 /// 큰 단추 바로 아래 보조 행동(계속 추가 · 장정 직접 고르기 · 보관만 하기 · 취소).
 /// 간격(Space.xs) · 옅은 글자 · 누르는 높이 48을 한 곳에서 정한다(2026-11-18 사용자: 화면마다 간격·글자색·단추 모양이 달랐다)
 class SubAction extends StatelessWidget {
@@ -2654,11 +2656,11 @@ class TextLink extends StatelessWidget {
                 // 가운데 정렬은 양옆 8을 누르는 자리로 둔다(지금 앱 hitSlop 8). 왼쪽 정렬은 글자가 위 글줄과 맞게 여백 없이
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: start ? 0 : 8),
-                  // 회색 글자 단추(soft: 장정 직접 고르기 · 계속 추가 · 나중에 정하기 · 조건 지우기 · 원문 보기 …)는 작고 보통 굵기 sub 15(토스 '평생 수수료 무료'처럼,
+                  // 회색 글자 단추(soft: 장정 직접 고르기 · 계속 추가 · 나중에 정하기 · 조건 지우기 · 원문 보기 …)는 작고 보통 굵기 subLink 15(토스 '평생 수수료 무료'처럼,
                   // 2026-11-21 사용자 '서브 글씨들 토스랑 다르게 너무 두껍지 않나 크기랑 반영해서'). 갈색 · 본문색 · 주의색 글자 단추는 link 17 굵게
                   child: Center(widthFactor: 1, child: WordText(label,
                       style: soft && !danger
-                          ? AppType.sub.copyWith(fontFamily: bold ? AppFonts.uiTitle : null)
+                          ? AppType.subLink.copyWith(fontFamily: bold ? AppFonts.uiTitle : null)
                           : AppType.link.copyWith(
                               fontFamily: bold ? AppFonts.uiTitle : null,
                               color: danger ? AppColors.danger : ink ? AppColors.ink : null,

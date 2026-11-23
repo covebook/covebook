@@ -347,7 +347,7 @@ class _BookScreenState extends State<BookScreen> {
               child: Semantics(header: true, child: Text(e.title, textAlign: TextAlign.center, style: AppType.bookHeadTitle)),
             ),
             if (e.authors.isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(authorLine(e.authors), textAlign: TextAlign.center, style: AppType.bookAuthor)),
+              Padding(padding: const EdgeInsets.only(top: Space.xs), child: Text(authorLine(e.authors), textAlign: TextAlign.center, style: AppType.bookHeadAuthor)),
             // 숨긴 책이면 그렇다고 한 줄(메뉴에 '다시 보이기')
             if (b.hiddenAt != null) const NoticeText('숨긴 책이라 내 책 목록에는 보이지 않아요.', center: true),
             ReaderRating(data: reviews.data),

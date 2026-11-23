@@ -228,9 +228,11 @@ abstract final class TypeSpecs {
   static const hero = TypeSpec(AppFonts.uiTitle, 30, 40, color: AppColors.title);
   /// 탭 첫 화면 제목: Top.TitleParagraph 기본 size 22 = t3 Bold grey800
   /// (11-19 사용자 '토스 앱에 저렇게 큰 거 없는 거 같은데': 28은 Top의 선택지일 뿐이라 기본값 22로)
-  static const title = TypeSpec(AppFonts.uiTitle, 22, 31, color: AppColors.title);
+  /// (2026-11-24 사용자 7단계 토스 앱 실측: 22/31 → 20/29)
+  static const title = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 머리줄 왼쪽 제목(책 추가 등): Top 기본 t3 Bold grey800
-  static const pageTitle = TypeSpec(AppFonts.uiTitle, 22, 31, color: AppColors.title);
+  /// (2026-11-24 사용자 7단계 토스 앱 실측: 22/31 → 20/29)
+  static const pageTitle = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 밀어 넣은 화면 위 줄 가운데 제목: TDS에 내비게이션 바 없음 → 우리 크기 18 SemiBold, 줄 높이는 표의 st9
   static const navTitle = TypeSpec(AppFonts.uiBold, 18, 27);
   /// 시트 · 확인창 · 빈 화면 제목, 큰 카드 제목: t4 Bold grey800(BottomSheet.Header · AlertDialog/ConfirmDialog.Title)
@@ -238,7 +240,8 @@ abstract final class TypeSpecs {
   /// 빈 화면 · 검색 0건 · 조건 0건 제목(Empty): t5 SemiBold grey600. 먹색 굵은 제목이 너무 진했다(2026-11-20 사용자 '색 너무 진하지 않나')
   static const emptyTitle = TypeSpec(AppFonts.uiBold, 17, 25.5, color: AppColors.inkSoft);
   /// 구역 제목(H2 · SectionHead · 달력 달): ListHeader.TitleParagraph t4 Bold grey800
-  static const section = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
+  /// (2026-11-24 사용자 7단계: 20/29 → 17/25.5, 굵기 · 색 그대로)
+  static const section = TypeSpec(AppFonts.uiTitle, 17, 25.5, color: AppColors.title);
   /// 묶음 이름(ListGroup · FilterGroup · SheetLabel): ListHeader.TitleParagraph t5 Bold grey800(공식 예시 BasicHeaders)
   static const listHeader = TypeSpec(AppFonts.uiTitle, 17, 25.5, color: AppColors.title);
   /// 목록 줄 이름(설정 · 메뉴 · 이름+값): t5 Regular grey900
@@ -248,7 +251,10 @@ abstract final class TypeSpecs {
   /// 본문: t5 Regular grey900(일반 본문)
   static const body = TypeSpec(AppFonts.ui, 17, 25.5);
   /// 설명(값 · 출처 · 시트 부제목 · 안내): t6 Regular grey600(BottomSheet.HeaderDescription · Dialog 설명 색)
-  static const sub = TypeSpec(AppFonts.ui, 15, 22.5, color: AppColors.inkSoft);
+  /// (2026-11-24 사용자 7단계: 설명 글만 15/22.5 → 13/19.5. 누르는 회색 글자 단추는 subLink 15 그대로)
+  static const sub = TypeSpec(AppFonts.ui, 13, 19.5, color: AppColors.inkSoft);
+  /// 누르는 회색 글자 단추(TextLink(soft) · SubAction): 설명(sub)이 13이 되며 따로 둔 역할, 15 그대로(2026-11-24 사용자 7단계)
+  static const subLink = TypeSpec(AppFonts.ui, 15, 22.5, color: AppColors.inkSoft);
   /// 부제 · 오른쪽 값(탭 머리 부제 · 목록 줄 오른쪽 값 · 구역 머리 오른쪽 글자): t6 Regular grey700(Top.SubtitleParagraph · ListHeader.RightText)
   static const secondary = TypeSpec(AppFonts.ui, 15, 22.5, color: AppColors.inkSub);
   /// 확인창 설명: t6 Medium grey600(AlertDialog/ConfirmDialog.Description 기본값)
@@ -282,11 +288,14 @@ abstract final class TypeSpecs {
   /// 하단 탭 이름(아이콘 아래, 2026-11-24 사용자 6단계 '글자 11'): TDS 표 밖(최소 t7 13) → 우리 값. 색은 그 탭 아이콘 색(고른 탭은 tabInk)
   static const tabLabel = TypeSpec(AppFonts.uiMedium, 11, 14, color: AppColors.tabInkSoft);
   /// 감상 읽기 화면의 감상 제목(값은 탭 첫 화면 제목과 같지만 감상만 바꿀 수 있게): t3 Bold grey800
-  static const essayTitle = TypeSpec(AppFonts.uiTitle, 22, 31, color: AppColors.title);
+  /// (2026-11-24 사용자 7단계 토스 앱 실측: 22/31 → 20/29)
+  static const essayTitle = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면): t3 Bold grey800
-  static const introTitle = TypeSpec(AppFonts.uiTitle, 22, 31, color: AppColors.title);
+  /// (2026-11-24 사용자 7단계 토스 앱 실측: 22/31 → 20/29)
+  static const introTitle = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 사람 이름(독자 프로필 닉네임): t3 Bold grey800
-  static const profileName = TypeSpec(AppFonts.uiTitle, 22, 31, color: AppColors.title);
+  /// (2026-11-24 사용자 7단계 토스 앱 실측: 22/31 → 20/29)
+  static const profileName = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 약관 · 처리방침 조 제목: st10 SemiBold
   static const legalHeading = TypeSpec(AppFonts.uiBold, 16, 24);
   /// 갈피 문장(명조): 내용 글꼴이라 TDS UI 글자가 아니다(우리 값)
@@ -295,7 +304,8 @@ abstract final class TypeSpecs {
   static const reading = TypeSpec(AppFonts.reading, 17, 30);
   // 책 · 기록 역할: 값이 위 일반 역할과 같아도 따로 둔다(책 제목만, 기록 시간만 고칠 수 있게)
   /// 책 제목 · 책 정보 머리 가운데(표지 아래): t3 Bold grey800(머리줄 제목과 같은 단계)
-  static const bookHeadTitle = TypeSpec(AppFonts.uiTitle, 22, 31, color: AppColors.title);
+  /// (2026-11-24 사용자 7단계 토스 앱 실측: 22/31 → 20/29)
+  static const bookHeadTitle = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 책 제목 · 읽기 탭 '최근 읽던 책' 큰 카드: t4 Bold grey800
   static const bookFeatureTitle = TypeSpec(AppFonts.uiTitle, 20, 29, color: AppColors.title);
   /// 책 제목 · 저장했어요 창(독서 저장 뒤, 사용자 시안): t4 Bold grey800
@@ -304,8 +314,10 @@ abstract final class TypeSpecs {
   static const bookTitle = TypeSpec(AppFonts.uiBold, 17, 25.5);
   /// 책 제목 · 내 책 격자 표지 아래: t7 grey900
   static const bookGridTitle = TypeSpec(AppFonts.ui, 13, 19.5);
-  /// 작가 · 책 줄 둘째 줄('작가 | 출판사', '작가 | 상태'), 책 정보 머리 작가: t6 grey600
-  static const bookAuthor = TypeSpec(AppFonts.ui, 15, 22.5, color: AppColors.inkSoft);
+  /// 작가 · 책 줄 둘째 줄('작가 | 출판사', '작가 | 상태')과 그 밖의 쓰임: 13/19.5 grey700(2026-11-24 사용자 7단계: 15/22.5 grey600이었다)
+  static const bookAuthor = TypeSpec(AppFonts.ui, 13, 19.5, color: AppColors.inkSub);
+  /// 작가 · 책 정보 머리(표지 아래 가운데): 15/22.5 grey600 그대로(2026-11-24 사용자 7단계: 다른 작가 줄만 13)
+  static const bookHeadAuthor = TypeSpec(AppFonts.ui, 15, 22.5, color: AppColors.inkSoft);
   /// 작가 · 내 책 격자 표지 아래 둘째 줄: t7 grey600
   static const bookGridAuthor = TypeSpec(AppFonts.ui, 13, 19.5, color: AppColors.inkSoft, tabular: true);
   /// 한줄평 · 책 줄 셋째 줄(한줄평 · 미리보기 · 진행): t7 grey600
@@ -339,6 +351,7 @@ abstract final class TypeSpecs {
     'rowStrong': rowStrong,
     'body': body,
     'sub': sub,
+    'subLink': subLink,
     'secondary': secondary,
     'dialogBody': dialogBody,
     'caption': caption,
@@ -367,6 +380,7 @@ abstract final class TypeSpecs {
     'bookTitle': bookTitle,
     'bookGridTitle': bookGridTitle,
     'bookAuthor': bookAuthor,
+    'bookHeadAuthor': bookHeadAuthor,
     'bookGridAuthor': bookGridAuthor,
     'bookNote': bookNote,
     'review': review,
@@ -397,6 +411,7 @@ abstract final class AppType {
   static TextStyle get rowStrong => TypeSpecs.rowStrong.style;
   static TextStyle get body => TypeSpecs.body.style;
   static TextStyle get sub => TypeSpecs.sub.style;
+  static TextStyle get subLink => TypeSpecs.subLink.style;
   static TextStyle get secondary => TypeSpecs.secondary.style;
   static TextStyle get dialogBody => TypeSpecs.dialogBody.style;
   static TextStyle get caption => TypeSpecs.caption.style;
@@ -425,6 +440,7 @@ abstract final class AppType {
   static TextStyle get bookTitle => TypeSpecs.bookTitle.style;
   static TextStyle get bookGridTitle => TypeSpecs.bookGridTitle.style;
   static TextStyle get bookAuthor => TypeSpecs.bookAuthor.style;
+  static TextStyle get bookHeadAuthor => TypeSpecs.bookHeadAuthor.style;
   static TextStyle get bookGridAuthor => TypeSpecs.bookGridAuthor.style;
   static TextStyle get bookNote => TypeSpecs.bookNote.style;
   static TextStyle get review => TypeSpecs.review.style;

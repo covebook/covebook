@@ -39,7 +39,7 @@ void main() {
     expect(sub.style?.color, AppColors.inkSoft);
   });
 
-  testWidgets('회색 글자 단추(SubAction · TextLink soft)는 작고 보통 굵기 sub 15, 갈색 글자 단추는 link 17', (t) async {
+  testWidgets('회색 글자 단추(SubAction · TextLink soft)는 작고 보통 굵기 subLink 15(설명 sub가 13이 되어도 그대로, 2026-11-24 7단계), 갈색 글자 단추는 link 17', (t) async {
     await t.pumpWidget(MaterialApp(
       home: Scaffold(
         body: Column(children: [
@@ -50,8 +50,9 @@ void main() {
     ));
     TextStyle? styleOf(String s) => t.widget<RichText>(find.descendant(of: find.text(s), matching: find.byType(RichText)).first).text.style;
     final sub = styleOf('장정 직접 고르기');
-    expect(sub?.fontSize, AppType.sub.fontSize);
-    expect(sub?.fontFamily, AppType.sub.fontFamily);
+    expect(sub?.fontSize, AppType.subLink.fontSize);
+    expect(sub?.fontFamily, AppType.subLink.fontFamily);
+    expect(AppType.subLink.fontSize, greaterThan(AppType.sub.fontSize!), reason: '누르는 회색 글자는 설명(13)보다 크다');
     expect(sub?.color, AppColors.inkSoft);
     expect(styleOf('저장')?.fontSize, AppType.link.fontSize);
   });

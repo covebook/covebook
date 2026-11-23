@@ -66,17 +66,18 @@
   --ck-type-score: 700 36px/44px var(--ck-font-ui);
   --ck-type-figure: 700 24px/33px var(--ck-font-ui);
   --ck-type-hero: 700 30px/40px var(--ck-font-ui);
-  --ck-type-title: 700 22px/31px var(--ck-font-ui);
-  --ck-type-page-title: 700 22px/31px var(--ck-font-ui);
+  --ck-type-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-page-title: 700 20px/29px var(--ck-font-ui);
   --ck-type-nav-title: 600 18px/27px var(--ck-font-ui);
   --ck-type-heading: 700 20px/29px var(--ck-font-ui);
   --ck-type-empty-title: 600 17px/25.5px var(--ck-font-ui);
-  --ck-type-section: 700 20px/29px var(--ck-font-ui);
+  --ck-type-section: 700 17px/25.5px var(--ck-font-ui);
   --ck-type-list-header: 700 17px/25.5px var(--ck-font-ui);
   --ck-type-row: 400 17px/25.5px var(--ck-font-ui);
   --ck-type-row-strong: 600 17px/25.5px var(--ck-font-ui);
   --ck-type-body: 400 17px/25.5px var(--ck-font-ui);
-  --ck-type-sub: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-sub: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-sub-link: 400 15px/22.5px var(--ck-font-ui);
   --ck-type-secondary: 400 15px/22.5px var(--ck-font-ui);
   --ck-type-dialog-body: 500 15px/22.5px var(--ck-font-ui);
   --ck-type-caption: 400 13px/19.5px var(--ck-font-ui);
@@ -93,18 +94,19 @@
   --ck-type-body-small: 400 15px/22.5px var(--ck-font-ui);
   --ck-type-micro: 400 13px/19.5px var(--ck-font-ui);
   --ck-type-tab-label: 500 11px/14px var(--ck-font-ui);
-  --ck-type-essay-title: 700 22px/31px var(--ck-font-ui);
-  --ck-type-intro-title: 700 22px/31px var(--ck-font-ui);
-  --ck-type-profile-name: 700 22px/31px var(--ck-font-ui);
+  --ck-type-essay-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-intro-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-profile-name: 700 20px/29px var(--ck-font-ui);
   --ck-type-legal-heading: 600 16px/24px var(--ck-font-ui);
   --ck-type-quote: 400 16px/27px var(--ck-font-reading);
   --ck-type-reading: 400 17px/30px var(--ck-font-reading);
-  --ck-type-book-head-title: 700 22px/31px var(--ck-font-ui);
+  --ck-type-book-head-title: 700 20px/29px var(--ck-font-ui);
   --ck-type-book-feature-title: 700 20px/29px var(--ck-font-ui);
   --ck-type-book-saved-title: 700 20px/29px var(--ck-font-ui);
   --ck-type-book-title: 600 17px/25.5px var(--ck-font-ui);
   --ck-type-book-grid-title: 400 13px/19.5px var(--ck-font-ui);
-  --ck-type-book-author: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-book-author: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-book-head-author: 400 15px/22.5px var(--ck-font-ui);
   --ck-type-book-grid-author: 400 13px/19.5px var(--ck-font-ui);
   --ck-type-book-note: 400 13px/19.5px var(--ck-font-ui);
   --ck-type-review: 400 17px/25.5px var(--ck-font-ui);
@@ -115,7 +117,7 @@
 
   /* 간격(Space) */
   --ck-space-page: 24px;
-  --ck-space-section: 40px;
+  --ck-space-section: 32px;
   --ck-space-group: 28px;
   --ck-space-item: 12px;
   --ck-space-tight: 8px;
@@ -126,7 +128,7 @@
   --ck-space-xl: 28px;
   --ck-space-xxl: 40px;
   --ck-space-touch: 44px;
-  --ck-space-block: 48px;
+  --ck-space-block: 32px;
   --ck-space-dense: 32px;
   --ck-space-hit: 48px;
   --ck-space-row-s: 8px;
@@ -196,8 +198,8 @@
   --ck-nav-bar: 60px;
   --ck-cover-row: 40px;
   --ck-cover-result: 64px;
-  --ck-cover-list: 80px;
-  --ck-cover-head: 140px;
+  --ck-cover-list: 64px;
+  --ck-cover-head: 120px;
   --ck-cover-feature: 120px;
   --ck-cover-confirm: 120px;
   --ck-cover-edit: 127.84px;
@@ -244,6 +246,7 @@
 .ck-type-row-strong { font: var(--ck-type-row-strong); color: var(--ck-ink); }
 .ck-type-body { font: var(--ck-type-body); color: var(--ck-ink); }
 .ck-type-sub { font: var(--ck-type-sub); color: var(--ck-ink-soft); }
+.ck-type-sub-link { font: var(--ck-type-sub-link); color: var(--ck-ink-soft); }
 .ck-type-secondary { font: var(--ck-type-secondary); color: var(--ck-ink-sub); }
 .ck-type-dialog-body { font: var(--ck-type-dialog-body); color: var(--ck-ink-soft); }
 .ck-type-caption { font: var(--ck-type-caption); color: var(--ck-ink-soft); }
@@ -271,7 +274,8 @@
 .ck-type-book-saved-title { font: var(--ck-type-book-saved-title); color: var(--ck-title); }
 .ck-type-book-title { font: var(--ck-type-book-title); color: var(--ck-ink); }
 .ck-type-book-grid-title { font: var(--ck-type-book-grid-title); color: var(--ck-ink); }
-.ck-type-book-author { font: var(--ck-type-book-author); color: var(--ck-ink-soft); }
+.ck-type-book-author { font: var(--ck-type-book-author); color: var(--ck-ink-sub); }
+.ck-type-book-head-author { font: var(--ck-type-book-head-author); color: var(--ck-ink-soft); }
 .ck-type-book-grid-author { font: var(--ck-type-book-grid-author); color: var(--ck-ink-soft); font-variant-numeric: tabular-nums; }
 .ck-type-book-note { font: var(--ck-type-book-note); color: var(--ck-ink-soft); }
 .ck-type-review { font: var(--ck-type-review); color: var(--ck-ink); }

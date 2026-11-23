@@ -43,12 +43,12 @@
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
 | `AppType.hero` | 30/40 | Bold | title | 화면에 하나뿐인 큰 이름(로그인 '책장 한켠') |
-| `AppType.title` | 22/31 | Bold | title | 탭 첫 화면 왼쪽 큰 제목 `Screen(back: false, title:)` |
-| `AppType.pageTitle` | 22/31 | Bold | title | 머리줄 왼쪽 큰 제목(책 추가·꾸미기) |
+| `AppType.title` | 20/29 | Bold | title | 탭 첫 화면 큰 제목 자리(지금은 화면 읽기 머리만, 6단계) (2026-11-24 7단계: 22/31 → 20/29) |
+| `AppType.pageTitle` | 20/29 | Bold | title | 머리줄 왼쪽 큰 제목(책 추가·꾸미기) (2026-11-24 7단계: 22/31 → 20/29) |
 | `AppType.navTitle` | 18/27 | SemiBold | ink | 밀어 넣은 화면 위 줄 가운데 제목 `NavBar` |
 | `AppType.heading` | 20/29 | Bold | title | 시트·확인창 제목, 큰 카드 제목 |
 | `AppType.emptyTitle` | 17/25.5 | SemiBold | inkSoft | 화면 전체 빈 상태 · 검색 0건 · 조건 0건 제목 `Empty`(2026-11-20 사용자 '색 너무 진하지 않나': 먹색 20 Bold였다) |
-| `AppType.section` | 20/29 | Bold | title | 구역 제목 `SectionHead` |
+| `AppType.section` | 17/25.5 | Bold | title | 구역 제목 `SectionHead`(2026-11-24 7단계: 20/29 → 17/25.5. 바로 아래 책 제목과 붙으면 크기 대신 위아래 간격으로 나눈다) |
 | `AppType.count` | 15/22.5 | Medium | inkSoft | 구역 제목 옆 개수('갈피  3') |
 | `AppType.listHeader` | 17/25.5 | Bold | title | 묶음 이름(`ListGroup`·`FilterGroup`·`SheetLabel`) |
 
@@ -59,7 +59,8 @@
 | `AppType.row` | 17/25.5 | 보통 | ink | 목록 줄 이름(설정·메뉴·이름+값) `ListItem` |
 | `AppType.rowStrong` | 17/25.5 | SemiBold | ink | 굵은 줄 이름(시트 안 묶음 이름 `SheetLabel`) |
 | `AppType.body` | 17/25.5 | 보통 | ink | 본문 |
-| `AppType.sub` | 15/22.5 | 보통 | inkSoft | 보조 글(값·설명·출처·안내), 회색 글자 단추(`TextLink(soft)` · `SubAction`). 오류는 `danger`로 색만 |
+| `AppType.sub` | 13/19.5 | 보통 | inkSoft | 보조 글(값·설명·출처·안내). 오류는 `danger`로 색만(2026-11-24 7단계: 15/22.5 → 13/19.5, 설명 글만) |
+| `AppType.subLink` | 15/22.5 | 보통 | inkSoft | 누르는 회색 글자 단추(`TextLink(soft)` · `SubAction`): 설명이 13이 되며 따로 둔 역할, 15 그대로(2026-11-24) |
 | `AppType.secondary` | 15/22.5 | 보통 | inkSub | 부제·오른쪽 값(탭 머리 부제·`ListItem` 값·`SectionHead` 링크) |
 | `AppType.dialogBody` | 15/22.5 | Medium | inkSoft | 확인창 설명(`appAlert`) |
 | `AppType.caption` | 13/19.5 | 보통 | inkSoft | 작은 보조 글(묶음 이름 `ListGroup`·메타) |
@@ -68,9 +69,9 @@
 | `AppType.labelStrong` | 16/24 | SemiBold | ink | 굵은 작은 이름(카드 제목·닉네임·필터 칸) |
 | `AppType.micro` | 13/19.5 | 보통 | inkSoft | 아주 작은 표시(그래프 눈금·배지), 숫자 폭 고정 |
 | `AppType.tabLabel` | 11/14 | Medium | tabInkSoft | 하단 탭 아이콘 아래 이름(고른 탭은 `tabInk`, 2026-11-24). 글자 배율은 `TabBarStyle.labelScaleMax` 1.3까지 |
-| `AppType.essayTitle` | 22/31 | Bold | title | 감상 읽기 화면의 감상 제목 |
-| `AppType.introTitle` | 22/31 | Bold | title | 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면) |
-| `AppType.profileName` | 22/31 | Bold | title | 사람 이름(독자 프로필 닉네임) |
+| `AppType.essayTitle` | 20/29 | Bold | title | 감상 읽기 화면의 감상 제목 (2026-11-24 7단계: 22/31 → 20/29) |
+| `AppType.introTitle` | 20/29 | Bold | title | 밀어 넣은 화면 본문 맨 위 큰 안내 제목(책 목록 가져오기 첫 화면) (2026-11-24 7단계: 22/31 → 20/29) |
+| `AppType.profileName` | 20/29 | Bold | title | 사람 이름(독자 프로필 닉네임) (2026-11-24 7단계: 22/31 → 20/29) |
 | `AppType.legalHeading` | 16/24 | SemiBold | ink | 약관 · 처리방침 조 제목 |
 | `AppType.quote` | 16/27 | 명조 | ink | 갈피 문장 |
 | `AppType.reading` | 17/30 | 명조 | ink | 감상 등 긴 글 본문 |
@@ -106,11 +107,12 @@
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
 | `AppType.bookTitle` | 17/25.5 | SemiBold | ink | **책 제목 기본.** 책 한 줄 `BookRow`(고르기·검색 결과·내 책 목록·기록 줄), 책 확인, 시트 머리 |
-| `AppType.bookHeadTitle` | 22/31 | Bold | title | 책 정보 머리(표지 아래 가운데) |
+| `AppType.bookHeadTitle` | 20/29 | Bold | title | 책 정보 머리(표지 아래 가운데) (2026-11-24 7단계: 22/31 → 20/29) |
 | `AppType.bookFeatureTitle` | 20/29 | Bold | title | 읽기 탭 '최근 읽던 책' 큰 카드 |
 | `AppType.bookSavedTitle` | 20/29 | Bold | title | 저장했어요 창(사용자 시안) |
 | `AppType.bookGridTitle` | 13/19.5 | 보통 | ink | 내 책 격자 표지 아래 |
-| `AppType.bookAuthor` | 15/22.5 | 보통 | inkSoft | **작가 줄 기본.** 책 줄 둘째 줄('작가 \| 출판사', '작가 \| 상태'), 책 정보 머리 작가 |
+| `AppType.bookAuthor` | 13/19.5 | 보통 | inkSub | **작가 줄 기본.** 책 줄 둘째 줄('작가 \| 출판사', '작가 \| 상태')과 그 밖의 쓰임(2026-11-24 7단계: 15/22.5 inkSoft → 13/19.5 inkSub) |
+| `AppType.bookHeadAuthor` | 15/22.5 | 보통 | inkSoft | 책 정보 머리 작가만(15 그대로, 2026-11-24) |
 | `AppType.bookGridAuthor` | 13/19.5 | 보통 | inkSoft | 내 책 격자 둘째 줄 |
 | `AppType.bookNote` | 13/19.5 | 보통 | inkSoft | 한줄평 · 책 줄 셋째 줄(한줄평·미리보기·진행) |
 | `AppType.review` | 17/25.5 | 보통 | ink | 한줄평 · 평가 탭 본문. 비었을 때 안내는 `AppType.sub` |
@@ -128,13 +130,13 @@
 |---|---|---|
 | `CoverSize.row` | 40 | 작게: 책 고르기·여러 권 선택·바코드·가져오기·읽기 목록·통계 기록 |
 | `CoverSize.result` | 64 | 보통: 검색 결과·감상 목록 |
-| `CoverSize.list` | 80 | 크게: 내 책 목록(글 위쪽 맞춤) |
+| `CoverSize.list` | 64 | 크게: 내 책 목록(글 위쪽 맞춤, 2026-11-24 7단계: 80 → 64) |
 
 ### 3-3. 그 밖의 표지 크기(폭, 높이는 책 비율)
 
 | 이름 | 폭 | 쓰는 곳 |
 |---|---|---|
-| `CoverSize.head` | 140 | 책 정보 머리 |
+| `CoverSize.head` | 120 | 책 정보 머리(2026-11-24 7단계: 140 → 120) |
 | `CoverSize.feature` | 120 | 읽기 탭 '최근 읽던 책' |
 | `CoverSize.confirm` | 120 | 책 확인(추가 전) |
 | `CoverSize.edit` | 127.84 | 책 정보 수정(표지 옆 제목 · 저자, 2026-11-21 시안). 표지 위 끝 = '제목' 이름 줄 위, 아래 끝 = '저자' 칸 아래(높이 `CoverSize.editHeight` × 0.68, 2026-11-21 사용자 '책이랑 옆에 쓰는 거랑 라인이 안 맞아': 120이라 표지가 저자 칸보다 짧았다) |
@@ -192,7 +194,7 @@
 | 2 | `Btn` danger | 옅은 주의색 바탕(`dangerWeak`), `danger` 글자(TDS danger weak) | 지우기로 가는 단추(메뉴 · 줄 안) |
 | 2 | `Btn` dangerFill | `danger` 채움, 흰 글자(TDS danger fill) | 지우기를 확정하는 단추(삭제 확인 시트 · 확인창) |
 | 3 | `Btn` ghost | 바탕 없음 | 어두운 읽기 장면 위 보조 |
-| 4 | `TextLink` | 글자만, 밑줄 없음, 누르는 자리 48 | 머리줄 '취소'·'완료'(ink, 고르기 모드 '취소'만 오른쪽 주의색 danger), 다른 곳으로 가는 보조·구역 링크(soft, 회색), 그 밖 갈색. 회색(soft)은 작고 보통 굵기 `AppType.sub` 15(토스 '평생 수수료 무료'처럼, 2026-11-21 사용자 '서브 글씨들 토스랑 다르게 너무 두껍지 않나'), 나머지는 `AppType.link` 17 굵게 |
+| 4 | `TextLink` | 글자만, 밑줄 없음, 누르는 자리 48 | 머리줄 '취소'·'완료'(ink, 고르기 모드 '취소'만 오른쪽 주의색 danger), 다른 곳으로 가는 보조·구역 링크(soft, 회색), 그 밖 갈색. 회색(soft)은 작고 보통 굵기 `AppType.subLink` 15(토스 '평생 수수료 무료'처럼, 2026-11-21 사용자 '서브 글씨들 토스랑 다르게 너무 두껍지 않나'), 나머지는 `AppType.link` 17 굵게 |
 | 4 | `SubAction` | 회색 `TextLink`, 위 4 | 큰 단추 바로 아래 보조 행동(장정 직접 고르기 · 계속 추가 · 보관만 하기), 확인창 맨 아래 '취소'(행동 둘 + 취소 · 셋 이상일 때 `appAlert`가 둔다) |
 
 - 둘을 나란히 둘 때는 왼쪽 secondary, 오른쪽 primary.
@@ -246,7 +248,7 @@
 | 탭 첫 화면 머리 | 다섯 탭 첫 화면에는 왼쪽 위 큰 제목이 없다(하단바에 이름, 2026-11-24 사용자 6단계): 제목은 화면 읽기 머리로만 남고 그 자리는 위 여백 4(`TabHeader.paddingTop`)뿐이라 다섯 탭 첫 줄이 같은 높이(상태 표시줄 아래 4)에서 시작한다. 첫 줄은 책장 '해 · 꾸미기 · 책장에 꽂기 · 내 정보', 내 책 상태 탭(둘째 줄 '책 N권' · 검색 · 보기 · 필터 · ＋, 고르는 중 'N권 선택' · '취소'), 읽기 오늘 줄, 기록 '갈피 \| 감상'(오른쪽 검색 · ＋), 통계 '캘린더 \| 분석'. 검색을 켜면 맨 위 한 줄에 검색칸(`headerField`). 밀어 넣은 화면의 가운데 제목은 그대로. 좌우 24 | `Screen(back: false, title:, hideTitle: true)` |
 | 밀어 넣은 화면 머리 | 가운데 `navTitle`, 줄 높이 60, 뒤로 꺾쇠 28 | `NavBar` |
 | 구역 제목 | `section`, 오른쪽 개수 `count`, 오른쪽 링크는 회색 보통 글자(`sub`) + 꺾쇠·누르는 자리 48, 링크 앞에 글자 하나 더(꺾쇠 없음, 책 정보 독서 기록 '추가', 2026-11-23), 아래 설명 한 줄 `sub` | `SectionHead(note:, extra:)` |
-| 구역 사이 | `Space.block` 48 | — |
+| 구역 사이 | `Space.block` 32 | — |
 | 설정형 묶음 이름 | `caption` 회색, 아래 4 | `ListGroup(title:)` |
 | 시트 안 묶음 이름 | `rowStrong`, 아래 12 | `SheetLabel` |
 | 설정·메뉴 줄 | 이름 `row`, 값 `sub`, 보이는 높이 50 | `ListItem` |
@@ -279,8 +281,8 @@
 | 이름 | 값 | 언제 |
 |---|---|---|
 | `Space.page` | 24 | 화면 좌우 여백 |
-| `Space.section` | 40 | 큰 묶음 사이(시트·설정 화면 안 큰 묶음) |
-| `Space.block` | 48 | 한 화면 안 구역 사이(책 정보 독서 기록·읽은 기간·갈피) |
+| `Space.section` | 32 | 큰 묶음 사이(시트·설정 화면 안 큰 묶음, 2026-11-24 7단계: 40 → 32) |
+| `Space.block` | 32 | 한 화면 안 구역 사이(책 정보 독서 기록·읽은 기간·갈피, 2026-11-24 7단계: 48 → 32) |
 | `Space.group` | 28 | 같은 구역 안 무리 사이 |
 | `Space.item` | 12 | 줄·항목 사이 |
 | `Space.tight` | 8 | 붙어 있는 것 사이 |
