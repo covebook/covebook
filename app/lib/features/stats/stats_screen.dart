@@ -5,6 +5,8 @@
 // 책 줄은 누르면 책 정보, 기록 줄 읽은 시간은 책 정보 독서 기록과 같은 recordDuration, 큰 숫자는 formatDuration('0분')
 // 2026-11-20 토스 공식+(사용자 비교 댓글): 회색 바탕 + 좌우 끝까지 붙인 흰 띠(Band, 이 화면만), 맨 위 줄 '통계 · 모든 책' 아래
 // 가운데 '‹ 2026년 11월 ›' → 캘린더|분석 순서, 기간 고르기(월별 · 연도별)는 뺐다(늘 한 달), 분석 맨 위 숫자 셋(읽은 시간 · 읽은 날 · 독서 횟수) 한 줄
+// 2026-11-24 사용자 '모든 책 선택은 저 사이로 추가해줘': 통계 탭도 책 고르기를 맨 위 줄 오른쪽 '모든 책 ⌄' 대신 한 책으로 연 독서 기록과 같은 테두리 칸으로
+// (캘린더는 달력과 그날 기록 머리 사이, 분석은 달 바로 아래). 고르면 칸에 표지 · 책 이름(검정) · 저자(작은 회색)
 library;
 
 import 'package:flutter/material.dart';
@@ -113,9 +115,9 @@ class _StatsScreenState extends State<StatsScreen> {
     final todayDay = today(now);
     final bookName = bookTitle(lib, book);
 
-    // 한 책으로 연 독서 기록: 폭 가득 '표지 + 책 이름  저자' 고르는 칸(누르면 책 고르기 시트, 2026-11-21 사용자 '좌우 꽉 찬 썸네일이랑 이름 넣는 박스').
+    // 책 고르는 칸: 폭 가득 '표지 + 책 이름  저자'(누르면 책 고르기 시트, 2026-11-21 사용자 '좌우 꽉 찬 썸네일이랑 이름 넣는 박스').
     // 자리는 맨 위가 아니라 캘린더는 그날 기록 머리('11월 18일 목요일') 바로 위, 분석은 달('2026년 11월') 바로 아래(같은 날 사용자).
-    // 위 줄 오른쪽 '책 이름 ⌄'는 통계 탭에만
+    // 통계 탭도 같은 칸(2026-11-24 사용자: 위 줄 오른쪽 '모든 책 ⌄'였다)
     Widget bookBox({double top = 0, double bottom = Space.l}) => Padding(
           padding: EdgeInsets.only(top: top),
           child: SelectField(
@@ -144,14 +146,15 @@ class _StatsScreenState extends State<StatsScreen> {
       ),
       _periodBar(now),
       // 분석: 달 바로 아래 책 칸. 날짜 바로 밑에는 회색 띠를 두지 않는다(2026-11-20 사용자 '이 날짜 밑에는 회색선 없애')
-      if (_view == 'records' && !widget.tab) bookBox(top: Space.s, bottom: 0),
+      if (_view == 'records') bookBox(top: Space.s, bottom: 0),
       if (_view == 'calendar') ...[
         // 캘린더는 회색 띠 · 흰 상자 없이 흰 바탕 그대로(2026-11-20 사용자 '캘린더 쪽은 회색선 넣어서 박스 모양 안 만들어도', '분석 쪽만 그렇게').
         // 달 아래 여백은 달 위 여백과 같게(전환 칸 → 달 Space.s, 달 → 달력 Space.s, 2026-11-20 사용자 '년도랑 월 위아래 여백 맞춰')
         const SizedBox(height: Space.s),
         ReadingCalendar(lib: lib, y: _y, m: _m, days: days, selected: selected, today: todayDay, onSelect: (d) => setState(() => _picked = d)),
         // 캘린더: 그날 기록 머리 바로 위 책 칸(달력과는 구역 사이만큼)
-        if (!widget.tab) ...[const SizedBox(height: Space.xl), bookBox(bottom: Space.xl)] else const SizedBox(height: Space.block),
+        const SizedBox(height: Space.xl),
+        bookBox(bottom: Space.xl),
         if (selected != null)
           ..._dayRecords(lib, selected, selMs, [for (final s in sessions) if (sessionDay(s).startsWith(selected)) s], book)
         else
@@ -180,13 +183,6 @@ class _StatsScreenState extends State<StatsScreen> {
     return Screen(
       back: !widget.tab,
       title: widget.tab ? '통계' : '독서 기록',
-      // 누르는 자리 48이 되며 위 빈 자리를 10 → 2로 줄여 글자 자리는 그대로. 한 책으로 연 독서 기록은 맨 위 책 칸으로 고른다
-      right: widget.tab
-          ? Padding(
-              padding: const EdgeInsets.only(top: Space.xs / 2, right: 10),
-              child: FilterButton(label: bookName ?? '모든 책', active: book != null, onPress: () => _pickBook(lib)),
-            )
-          : null,
       // 떠 있는 하단바 아래까지 내용이 내려가게
       bottomPad: widget.tab ? TabBarStyle.contentPad - Space.section : 0,
       // 바탕은 흰색. 띠 사이 회색은 띠(Band)가 위에 깐다

@@ -123,6 +123,9 @@ void main() {
     await t.tap(label('1일, 기록 없음'));
     await t.pumpAndSettle();
     expect(find.text('독서 기록 추가'), findsOneWidget);
+    // 달력 아래 책 고르는 칸(2026-11-24)만큼 내려가 있어 보이게 민다
+    await t.ensureVisible(find.text('독서 기록 추가'));
+    await t.pumpAndSettle();
     await t.tap(find.text('독서 기록 추가'));
     await t.pumpAndSettle();
     expect(find.text('기록 저장'), findsOneWidget);

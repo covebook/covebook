@@ -9,6 +9,7 @@ import 'package:chaekjang/features/stats/stats_screen.dart';
 import 'package:chaekjang/features/stats/stats_widgets.dart';
 import 'package:chaekjang/store/library_model.dart';
 import 'package:chaekjang/ui/kit.dart';
+import 'package:chaekjang/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -130,6 +131,35 @@ void main() {
     // 한 권이면 '많이 읽은 책'(늘 그 책 한 줄)은 없고, 달 완독은 '이 책 전체'와 같은 '회'
     expect(find.text('많이 읽은 책'), findsNothing);
     expect(find.text('0권'), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('통계 탭 책 고르기: 맨 위 줄 오른쪽이 아니라 달력과 그날 기록 머리 사이 테두리 칸, 고르면 책 이름(검정) · 저자(작고 회색) (2026-11-24)', (t) async {
+    await pump(t, const StatsScreen(tab: true));
+    await t.pumpAndSettle();
+    expect(find.byType(FilterButton), findsNothing, reason: '위 줄 오른쪽 모든 책 ⌄는 없다');
+    final box = find.byType(SelectField);
+    expect(t.widget<SelectField>(box).outlined, isTrue);
+    expect(find.descendant(of: box, matching: plain('모든 책')), findsOneWidget);
+    // 달력 아래, 그날 기록 머리 위
+    expect(t.getRect(find.byType(ReadingCalendar)).bottom, lessThan(t.getRect(box).top));
+    final head = find.textContaining('일요일');
+    if (head.evaluate().isNotEmpty) expect(t.getRect(box).bottom, lessThan(t.getRect(head.first).top));
+    // 분석: 달 바로 아래
+    await t.tap(find.text('분석'));
+    await t.pumpAndSettle();
+    expect(find.byType(SelectField), findsOneWidget);
+
+    await t.pumpWidget(const SizedBox()); // 같은 화면 상태를 다시 쓰지 않게(고른 책은 처음 열 때 읽는다)
+    await pump(t, const StatsScreen(tab: true, initialBook: 'bk1'));
+    await t.pumpAndSettle();
+    // 앞 것은 표지(꾸민 표지 그림 속 제목), 마지막이 칸 글자
+    final title = find.descendant(of: find.byType(SelectField), matching: find.text('데미안')).last;
+    final author = find.descendant(of: find.byType(SelectField), matching: find.text('헤르만 헤세'));
+    final ts = t.widget<Text>(title).style!, as = t.widget<Text>(author).style!;
+    expect(ts.color, AppColors.ink);
+    expect(as.color, AppColors.inkSoft);
+    expect(as.fontSize!, lessThan(ts.fontSize!));
     expect(t.takeException(), isNull);
   });
 }
