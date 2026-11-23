@@ -23,6 +23,7 @@ import '../book/add_book_screen.dart' show openAddBook;
 import '../book/book_screen.dart';
 import '../bookmark/book_picker.dart';
 import '../stats/chart_data.dart' show dayTitle;
+import '../stats/session_edit_screen.dart' show openSessionAdd;
 import '../stats/stats_screen.dart';
 import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';
@@ -185,18 +186,37 @@ class _ReadListState extends State<ReadList> {
     );
   }
 
-  /// 오늘 날짜와 오늘 총 시간(제목 바로 아래 한 줄). 날짜 글자는 앱 공통 날짜 머리 함수(DESIGN 4장 dayTitle)
+  /// 오늘 날짜와 오늘 총 시간(제목 바로 아래 한 줄). 날짜 글자는 앱 공통 날짜 머리 함수(DESIGN 4장 dayTitle).
+  /// '오늘 총 N'을 누르면 오늘 날짜로 독서 기록 추가(타이머 없이 읽은 시간, 2026-11-23 사용자): 누를 수 있다는 표시는 값 뒤 회색 작은 ＋ 하나, 누르는 높이 48
   Widget _todayLine(String date, _Today t) {
     final day = dayTitle(date);
-    return Semantics(
-      label: '$day, 오늘 총 ${formatDuration(t.total)}${t.active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}',
-      excludeSemantics: true,
-      child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-        Expanded(child: Text(day, style: AppType.sub.copyWith(color: AppColors.ink))),
-        Text('오늘 총 ', style: AppType.sub),
-        Text(formatDuration(t.total), style: AppType.rowStrong.tnum),
-      ]),
-    );
+    final total = '오늘 총 ${formatDuration(t.total)}${t.active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}';
+    void add() => openSessionAdd(context, day: date);
+    return Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+      Expanded(child: Text(day, style: AppType.sub.copyWith(color: AppColors.ink))),
+      Semantics(
+        button: true,
+        label: '$total, 독서 기록 추가',
+        onTap: add,
+        excludeSemantics: true,
+        child: Pressable(
+          onPress: add,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.hit),
+            // 글자는 누르는 칸 가운데(왼쪽 날짜와는 글자 바닥선으로 맞는다)
+            child: Center(
+              widthFactor: 1,
+              child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: [
+                // '오늘 총'과 값은 한 글줄(바닥선 맞춤), ＋는 그 글줄 가운데
+                Text.rich(TextSpan(text: '오늘 총 ', style: AppType.sub, children: [TextSpan(text: formatDuration(t.total), style: AppType.rowStrong.tnum)])),
+                const SizedBox(width: Space.xs),
+                const LucideIcon('Plus', size: IconSize.small, color: AppColors.icon),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    ]);
   }
 
   /// 최근 읽던 책 큰 카드(표지 120 · 제목 21 · 오늘 시간 · 이어서 읽기): 사용자 시안의 큰 카드라 책 줄(BookRow)로 바꾸지 않는다

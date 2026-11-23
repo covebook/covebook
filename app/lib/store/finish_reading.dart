@@ -12,7 +12,7 @@ import 'settings_store.dart';
 
 /// startPage: 이번 독서를 시작한 쪽, pagesRead: 도달한 쪽. 둘 다 있을 때만 화면이 분량을 센다
 Future<void> saveFinishedReading(FinishDraft draft, {num? startPage, num? pagesRead, String? memo}) async {
-  if (draft.myBookId == null) _markNoBookDay(draft);
+  if (draft.myBookId == null) _markNoBookDay(today(DateTime.parse(draft.startedAt)));
   await LibraryModel.instance.addSession(SessionInput(
     id: draft.id,
     myBookId: draft.myBookId,
@@ -81,10 +81,18 @@ Future<String?> saveAndStartOther(String? nextBookId) async {
   return draft.id;
 }
 
+/// 직접 추가한 독서 기록 저장(2026-11-23 사용자: 타이머를 켜지 않고 읽은 사람도 기록을 쉽게): 타이머 저장과 같은 길
+/// (addSession: 책이 있으면 회차를 확보하고 읽기 전 → 읽는 중, 도달한 쪽은 현재 쪽을 앞으로만). 책 없이 오늘 읽은 기록이면
+/// 타이머처럼 읽기 탭에 '책 없이 읽기' 줄을 띄운다(지난 날 기록은 오늘 줄과 상관없어 남기지 않는다). 새 기록 id를 돌려준다
+Future<String> saveManualReading(SessionInput input) async {
+  final day = today(DateTime.parse(input.startedAt));
+  if (input.myBookId == null && day == today()) _markNoBookDay(day);
+  return LibraryModel.instance.addSession(input);
+}
+
 /// 책 없이 읽어 저장한 날(설정 noBookDay)을 남긴다. 읽기 탭은 그날만 오늘 책 없는 시간으로 '책 없이 읽기' 줄을 띄운다:
 /// 책을 지워 책 연결이 빈 독서 시간만으로는 줄이 생기지 않게(2026-11-16 QA 현우 F4)
-void _markNoBookDay(FinishDraft draft) {
-  final day = today(DateTime.parse(draft.startedAt));
+void _markNoBookDay(String day) {
   final s = SettingsStore.instance;
   if (s.loaded && s.noBookDay == day) return;
   s.load().then((_) {

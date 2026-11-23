@@ -31,7 +31,7 @@ import '../reading/reading_screen.dart' show ElapsedTicker;
 import '../reading/start_book.dart' show startReadingBook;
 import '../record/essay_screens.dart' show EssayRow, openNewEssay;
 import '../stats/chart_data.dart' show timeLabel, timeRange;
-import '../stats/session_edit_screen.dart' show openSessionEdit;
+import '../stats/session_edit_screen.dart' show openSessionAdd, openSessionEdit;
 import '../stats/stats_screen.dart';
 import 'binding_screen.dart' show openBindingEditor;
 import 'book_share_screen.dart' show openBookShare;
@@ -663,8 +663,11 @@ class _BookScreenState extends State<BookScreen> {
     final act = ReadingStore.instance.active;
     final live = act != null && act.myBookId == id ? act : null;
     return [
+      // 머리 오른쪽 '추가'(타이머 없이 읽은 시간을 이 책으로, 2026-11-23 사용자) · '전체 보기'(기록이 있을 때)
       SectionHead(
         title: '독서 기록',
+        extra: '추가',
+        onExtra: () => openSessionAdd(context, bookId: id),
         link: recent.isNotEmpty ? '전체 보기' : null,
         chevron: true,
         linkLabel: '독서 기록 전체 보기',

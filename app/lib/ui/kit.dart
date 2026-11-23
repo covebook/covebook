@@ -2649,7 +2649,7 @@ class TextLink extends StatelessWidget {
 /// 제목 아래 설명 DescriptionParagraph(t6 grey600, descriptionPosition bottom), 오른쪽 RightArrow(글자 t6 grey700 · 화살표 grey400).
 /// 머리줄 높이는 글 높이만 차지해 제목과 내용 사이가 좁다(2026-11-17 시안)
 class SectionHead extends StatelessWidget {
-  const SectionHead({super.key, required this.title, this.count, this.note, this.link, this.onLink, this.chevron = false, this.linkLabel});
+  const SectionHead({super.key, required this.title, this.count, this.note, this.link, this.onLink, this.chevron = false, this.linkLabel, this.extra, this.onExtra});
   final String title;
   final String? count, link;
 
@@ -2660,6 +2660,10 @@ class SectionHead extends StatelessWidget {
 
   /// 화면 읽기 이름(없으면 '제목 링크')
   final String? linkLabel;
+
+  /// 링크 앞 글자 하나 더(같은 글자 · 꺾쇠 없음, 화면 읽기는 '제목 글자'): 책 정보 독서 기록 '추가 · 전체 보기'(2026-11-23)
+  final String? extra;
+  final VoidCallback? onExtra;
 
   @override
   Widget build(BuildContext context) => Row(crossAxisAlignment: note != null ? CrossAxisAlignment.start : CrossAxisAlignment.center, children: [
@@ -2674,6 +2678,24 @@ class SectionHead extends StatelessWidget {
             if (note != null) Padding(padding: const EdgeInsets.only(top: 2), child: WordText(note!, style: AppType.sub)),
           ]),
         ),
+        if (extra != null && onExtra != null)
+          Semantics(
+            button: true,
+            label: '$title $extra',
+            excludeSemantics: true,
+            onTap: onExtra,
+            child: Pressable(
+              onPress: onExtra,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: Space.hit, minWidth: Space.hit),
+                child: Padding(
+                  // 다음 링크와 사이(글자 사이 12)
+                  padding: EdgeInsets.only(right: link != null && onLink != null ? Space.m : 0),
+                  child: Center(widthFactor: 1, child: Text(extra!, style: AppType.secondary)),
+                ),
+              ),
+            ),
+          ),
         if (link != null && onLink != null)
           Semantics(
             button: true,

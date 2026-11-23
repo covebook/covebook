@@ -17,7 +17,7 @@ import '../../ui/theme.dart';
 import '../book/book_screen.dart' show openBook;
 import '../bookmark/book_picker.dart' show pickBook;
 import 'chart_data.dart';
-import 'session_edit_screen.dart' show openSessionEdit;
+import 'session_edit_screen.dart' show openSessionEdit, openSessionAdd;
 import 'stats_widgets.dart';
 
 /// 책 줄 오른쪽 읽은 시간: 책 정보 › 내 기록의 독서 기록 줄과 같은 역할(recordDuration 18 보통, 숫자 폭 고정. 굵은 rowStrong이었다).
@@ -104,7 +104,8 @@ class _StatsScreenState extends State<StatsScreen> {
     final bars = monthBars(sessions, _y, _m);
     final days = booksByDay(sessions);
     final lastKey = bars.reversed.where((b) => b.ms > 0).firstOrNull?.key;
-    final selected = _picked != null && bars.any((b) => b.key == _picked && b.ms > 0) ? _picked : lastKey;
+    // 고른 날: 캘린더는 기록 없는 날도 고를 수 있다(그날 '독서 기록 추가', 2026-11-23). 분석 그래프는 기록 있는 날만
+    final selected = _picked != null && bars.any((b) => b.key == _picked && (b.ms > 0 || _view == 'calendar')) ? _picked : lastKey;
     final selMs = bars.where((b) => b.key == selected).firstOrNull?.ms ?? 0;
     final activeDays = sessions.map(sessionDay).toSet().length;
     final thisPeriod = _y == now.year && _m == now.month;
@@ -152,7 +153,7 @@ class _StatsScreenState extends State<StatsScreen> {
         // 캘린더: 그날 기록 머리 바로 위 책 칸(달력과는 구역 사이만큼)
         if (!widget.tab) ...[const SizedBox(height: Space.xl), bookBox(bottom: Space.xl)] else const SizedBox(height: Space.block),
         if (selected != null)
-          ..._dayRecords(lib, selected, selMs, [for (final s in sessions) if (sessionDay(s).startsWith(selected)) s])
+          ..._dayRecords(lib, selected, selMs, [for (final s in sessions) if (sessionDay(s).startsWith(selected)) s], book)
         else
           Empty(
             title: '$periodName에는 독서 기록이 없어요',
@@ -211,10 +212,13 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   /// 캘린더에서 고른 날(달)의 기록 줄. 머리는 분석 쪽 그래프 머리와 같은 모양(제목 19 · 오른쪽 굵은 시간, 2026-11-19 공통 규칙: 여기만 회색 16이었다)
-  List<Widget> _dayRecords(Library lib, String selected, num selMs, List<Session> selSessions) => [
-        StatHead(title: dayTitle(selected), top: formatDuration(selMs)),
+  /// 그날 기록(캘린더에서 고른 날): 머리(날짜 · 그날 총 시간) · 기록 줄들 · 맨 아래 '독서 기록 추가'(그 날짜로, 한 책으로 연 화면이면 그 책으로, 2026-11-23).
+  /// 기록 없는 날은 머리와 '독서 기록 추가'만(제목과 줄만으로 뜻이 통해 안내 글은 두지 않는다, DESIGN 11장)
+  List<Widget> _dayRecords(Library lib, String selected, num selMs, List<Session> selSessions, String? book) => [
+        StatHead(title: dayTitle(selected), top: selMs > 0 ? formatDuration(selMs) : null),
         const SizedBox(height: Space.s),
         for (final s in selSessions) _sessionRow(lib, s),
+        ListItem(label: '독서 기록 추가', chevron: true, onPress: () => openSessionAdd(context, bookId: book, day: selected)),
       ];
 
   /// 기록 한 줄(책 줄 BookRow 작게): 시간대 · 오른쪽 읽은 시간(일시정지가 있었으면 아래 '일시정지 시간 제외'). 누르면 기록 수정

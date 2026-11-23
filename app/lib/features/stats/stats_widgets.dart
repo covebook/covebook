@@ -81,13 +81,15 @@ class _DayCell extends StatelessWidget {
     final label = row != null
         ? '$n일, ${titles.isNotEmpty ? '${titles.first}${row!.books.length > 1 ? ' 외 ${row!.books.length - 1}권' : ''}, ' : ''}${formatDuration(row!.ms)}'
         : '$n일, 기록 없음';
+    // 기록이 없는 날도 오늘까지는 누른다(그날 독서 기록 추가, 2026-11-23). 앞날은 누르지 않는다
+    final can = row != null || day.compareTo(todayKey()) <= 0;
     return Semantics(
       button: true,
       selected: selected,
-      enabled: row != null,
+      enabled: can,
       label: label,
       child: Pressable(
-        onPress: row == null ? null : () => onSelect(day),
+        onPress: can ? () => onSelect(day) : null,
         child: SizedBox(
           width: cell,
           child: Column(children: [

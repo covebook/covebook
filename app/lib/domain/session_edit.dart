@@ -43,6 +43,29 @@ int? _positive(String v) {
   return v.trim().isNotEmpty && n != null && n.isFinite && n > 0 ? n.round() : null;
 }
 
+/// 직접 추가하는 기록의 독서 시간 최대(분): 그날 안에 들어야 한다
+const manualMaxMinutes = 24 * 60;
+
+/// 직접 추가하는 기록의 독서 시간(분 칸 값 → ms). 비었거나 0 이하 · 하루보다 길면 null
+int? manualDurationMs(String minutes) {
+  final m = num.tryParse(minutes.trim());
+  if (m == null || !m.isFinite || m <= 0 || m > manualMaxMinutes) return null;
+  return (m * 60000).round();
+}
+
+/// 직접 추가한 기록의 시작 · 끝(시작 시각은 묻지 않는다, 2026-11-23 사용자): 오늘이면 지금에서 독서 시간을 뺀 때 시작해 지금 끝나고,
+/// 지난 날이면 그날 21시에 시작한다. 어느 쪽이든 그날 안(0시~24시)에 들게 맞춘다(늦게 끝나면 앞으로 당기고, 0시 앞이면 0시부터)
+({String startedAt, String endedAt}) manualSessionTimes(String day, int durationMs, DateTime now) {
+  final d = day.split('-').map(int.parse).toList();
+  final dayStart = DateTime(d[0], d[1], d[2]).millisecondsSinceEpoch;
+  final dayEnd = DateTime(d[0], d[1], d[2] + 1).millisecondsSinceEpoch;
+  final isToday = today(now) == day;
+  var start = isToday ? now.millisecondsSinceEpoch - durationMs : DateTime(d[0], d[1], d[2], 21).millisecondsSinceEpoch;
+  if (start + durationMs > dayEnd) start = dayEnd - durationMs;
+  if (start < dayStart) start = dayStart;
+  return (startedAt: _iso(start), endedAt: _iso(start + durationMs));
+}
+
 /// 고친 칸만 수정에 넣는다. 고친 칸이 형식에 맞지 않으면 null(저장 막기)
 SessionPatch? sessionEditPatch(Session s, SessionForm initial, SessionForm form) {
   final patch = <String, Object?>{};
