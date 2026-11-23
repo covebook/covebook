@@ -1,6 +1,7 @@
 // 선반 밖의 책 한 권(지금 앱 ui/book3d/StandaloneBook.tsx: 서랍·상세·장정 편집): 선반과 같은 책 그림·빛 셰이더로 그리되 둘레가 없는 열린 방
 // (판·벽 그늘 없음, 구운 하늘 가림 없이 그 자리에서 빛을 계산한다). 카메라는 기본 보기 각, 눈은 그 책 가운데.
-// RotatableBook: 손가락으로 좌우로 돌려 보는 책(장정 편집 미리보기). 표지 전시 자세에서 세로축으로만 돈다(spin, −70~95°)
+// RotatableBook: 손가락으로 좌우로 돌려 보는 책(책 꾸미기 미리보기). 표지 전시 자세에서 세로축으로만 돈다(spin, −70~95°).
+// 선반 밖 책은 갈피 탭을 그리지 않는다(갈피 수 표시라서). 책 꾸미기 › 갈피에서만 고른 색을 보이려고 그린다(ribbons, 선반과 같은 탭 그림 · 빛, 가림 없음)
 library;
 
 import 'dart:math' as math;
@@ -20,6 +21,7 @@ import '../scene_config/spine_look.dart';
 import 'bake.dart' show emptyImage;
 import 'cover_photo.dart';
 import 'outline.dart' show seedOf;
+import 'ribbons.dart' show drawRibbons, openTabLoss;
 import 'scene.dart';
 import 'theme.dart' show cssShadow;
 
@@ -43,12 +45,15 @@ Book3 _spun(Book3 rest, double spin) {
 ui.Rect _bbox(Cam cam, Book3 b) => bookOutline(cam, Affine(1, 0, 0), b).getBounds();
 
 class _BookPainter extends CustomPainter {
-  _BookPainter(this.book, this.b, this.cam, this.px, this.photo);
+  _BookPainter(this.book, this.b, this.cam, this.px, this.photo, {this.ribbons = false});
   final Book book;
   final Book3 b;
   final Cam cam;
   final Affine px;
   final CoverPhoto? photo;
+
+  /// 갈피 탭도 그린다(책 꾸미기 › 갈피 미리보기)
+  final bool ribbons;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -57,10 +62,12 @@ class _BookPainter extends CustomPainter {
     // 선반 밖 표지: 갈피 탭은 선반에서 갈피 수를 보여 주는 표시라 빼고 그린다(지금 앱 noRibbon)
     final look = lookOf(book);
     drawBook(canvas, slots, cam, px, _openRoom, b, look.lightAlbedo, const {}, emptyImage, seedOf(b.id), look: look, glyphs: glyphs, photo: photo);
+    final tab = ShelfPainter.tabSlots;
+    if (ribbons && tab != null) drawRibbons(canvas, tab, cam, px, _openRoom, b, look, openTabLoss(b));
   }
 
   @override
-  bool shouldRepaint(_BookPainter old) => old.b != b || old.book != book || old.photo != photo || old.px.s != px.s;
+  bool shouldRepaint(_BookPainter old) => old.b != b || old.book != book || old.photo != photo || old.px.s != px.s || old.ribbons != ribbons;
 }
 
 /// 표지 사진(있으면) 받기. 책등 모양(스토어)이 바뀌면 그 모양으로 다시
@@ -142,11 +149,14 @@ class _StandaloneBookState extends State<StandaloneBook> with _CoverPhotoLoad {
 
 /// 손가락으로 좌우로 돌려 보는 책 한 권(장정 편집 미리보기). frontWidth: 정면 폭(dp)
 class RotatableBook extends StatefulWidget {
-  const RotatableBook({super.key, required this.book, required this.frontWidth, this.initialSpin = 30, this.shadow = false});
+  const RotatableBook({super.key, required this.book, required this.frontWidth, this.initialSpin = 30, this.shadow = false, this.ribbons = false});
   final Book book;
   final double frontWidth;
   final double initialSpin;
   final bool shadow;
+
+  /// 갈피 탭도 그린다(책 꾸미기 › 갈피, 책의 quotes 수만큼)
+  final bool ribbons;
 
   @override
   State<RotatableBook> createState() => _RotatableBookState();
@@ -200,7 +210,7 @@ class _RotatableBookState extends State<RotatableBook> with _CoverPhotoLoad {
                   ),
                 ),
               ),
-            Positioned.fill(child: CustomPaint(painter: _BookPainter(widget.book, _spun(rest, _spin), cam, px, photo))),
+            Positioned.fill(child: CustomPaint(painter: _BookPainter(widget.book, _spun(rest, _spin), cam, px, photo, ribbons: widget.ribbons))),
           ]),
         ),
       ),

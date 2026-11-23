@@ -245,15 +245,22 @@ class LibraryModel extends ChangeNotifier {
     await commitLib(next);
     return id;
   }
-
-  /// 장정 바꾸기(지금 앱 setBinding): 그 책의 장정을 고른 값으로(없으면 새로). 재질·표지 그림이 비면 예전 값도 지운다
-  Future<void> setBinding(String myBookId, BindingDraft v) {
-    final b = lib.books[myBookId];
+  /// 책 꾸미기 저장(지금 앱 setBinding + 갈피 색): 장정(binding, 고쳤을 때만. 그 책의 장정을 고른 값으로, 없으면 새로. 재질·표지 그림이 비면 예전 값도 지운다)과
+  /// 갈피 색(ribbonColor, 바꿨을 때만, null = 표지에서 고른 색)을 한 번에(한 트랜잭션)
+  Future<void> setBookLook(String myBookId, {BindingDraft? binding, Object? ribbonColor = _keep}) {
+    var b = lib.books[myBookId];
     if (b == null) return Future.value();
     final t = nowIso();
-    final bd = _bindingOf(myBookId, v, b.bindingId == null ? null : lib.bindings[b.bindingId], t);
-    return commitLib(lib.copy(bindings: {...lib.bindings, bd.id: bd}, books: {...lib.books, myBookId: b.patch(bindingId: bd.id, updatedAt: t)}));
+    var bindings = lib.bindings;
+    if (binding != null) {
+      final bd = _bindingOf(myBookId, binding, b.bindingId == null ? null : lib.bindings[b.bindingId], t);
+      bindings = {...bindings, bd.id: bd};
+      b = b.patch(bindingId: bd.id, updatedAt: t);
+    }
+    if (!identical(ribbonColor, _keep)) b = b.patch(ribbonColor: ribbonColor, updatedAt: t);
+    return commitLib(lib.copy(bindings: bindings, books: {...lib.books, myBookId: b}));
   }
+
 
   Binding _bindingOf(String myBookId, BindingDraft v, Binding? old, String t) => Binding(
         id: old?.id ?? newId('bd'),

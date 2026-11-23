@@ -138,7 +138,7 @@ void main() {
       expect(find.text('실물 측면'), findsNothing);
     });
 
-    testWidgets('고른 책: 움직임 | 겉모습 전환 칸, 겉모습에서 책 측면 · 이 책 장정', (tester) async {
+    testWidgets('고른 책: 움직임 | 겉모습 전환 칸, 겉모습에서 책 측면 · 책 꾸미기(장정 · 갈피, 2026-11-23 이름)', (tester) async {
       final picked = <SpineLook>[];
       var binding = 0;
       await tester.pumpWidget(panel(onSpine: picked.add, onBinding: () => binding++));
@@ -149,8 +149,21 @@ void main() {
       expect(find.text('앞뒤'), findsNothing);
       await tester.tap(find.text('실물 측면'));
       expect(picked, [SpineLook.photo]);
-      await tester.tap(find.text('이 책 장정'));
+      expect(find.text('이 책 장정'), findsNothing);
+      expect(find.text('장정 · 갈피'), findsOneWidget);
+      await tester.tap(find.text('책 꾸미기'));
       expect(binding, 1);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('겉모습 책 꾸미기 줄: 큰 글씨(1.3배) 360 폭에서도 이름이 한 줄(2026-11-23 촬영: 값이 길어 두 줄로 접혔다)', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(panel(scale: 1.3));
+      await tester.tap(find.text('겉모습'));
+      await tester.pump();
+      expect(tester.getSize(find.text('책 꾸미기')).height, lessThan(45));
       expect(tester.takeException(), isNull);
     });
 

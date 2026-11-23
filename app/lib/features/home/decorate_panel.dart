@@ -3,7 +3,7 @@
 //  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('움직임 | 겉모습' 전환 칸, 2026-11-20 사용자)
 //  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
 // DecoratePanel: 고른 책 제목, '움직임 | 겉모습'. 움직임은 자세 전환 칸(책등·표지·눕힘), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
-// 겉모습은 책 측면(모든 책)과 이 책 장정 편집으로 가는 줄.
+// 겉모습은 책 측면(모든 책)과 이 책의 책 꾸미기(장정 · 갈피)로 가는 줄.
 // 기대기는 자세처럼 전환 칸(2026-11-21 사용자 '기대기도 다른 버튼처럼'): 책등 책은 왼쪽 · 바로 · 오른쪽(방향만 고르고 각도는 옆 책과의 틈으로,
 // 기댄 각도를 아래 글로), 표지 책은 바로 · 뒤로(벽에 기대기, 사용자 '표지 쪽은 뒤로 기대기가 안 돼': 머리 손잡이를 끌어야만 됐다).
 // 막대에는 갈 수 있는 범위를 진한 띠로.
@@ -242,7 +242,7 @@ class DecoratePanel extends StatefulWidget {
   final SpineLook spine;
   final ValueChanged<SpineLook> onSpine;
 
-  /// 이 책 장정 편집(그림 · 색상 · 재질)으로
+  /// 이 책의 책 꾸미기(장정 그림 · 색상 · 재질과 갈피)로. 값 글은 짧게 '장정 · 갈피'(큰 글씨 360 폭에서 이름 '책 꾸미기'가 두 줄로 접혔다)
   final VoidCallback onBinding;
 
   /// 고른 책이 바뀌면 막대 상태를 새로
@@ -313,8 +313,8 @@ class _DecoratePanelState extends State<DecoratePanel> {
           onChange: widget.onSpine,
         ),
         const SizedBox(height: Space.s),
-        // 책 색상 · 그림 · 재질은 이 책의 장정(책 정보 › 장정 편집과 같은 화면)
-        ListItem(label: '이 책 장정', value: '그림 · 색상 · 재질', chevron: true, onPress: widget.onBinding),
+        // 책 색상 · 그림 · 재질 · 갈피는 책 꾸미기(책 정보 ⋯ › 책 꾸미기와 같은 화면, 이름도 같게 2026-11-23)
+        ListItem(label: '책 꾸미기', value: '장정 · 갈피', chevron: true, onPress: widget.onBinding),
       ]);
 
   /// 제목 줄 오른쪽 '움직임 | 겉모습' 칸 폭(글자 세 자 두 칸)

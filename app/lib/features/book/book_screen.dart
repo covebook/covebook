@@ -9,7 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../domain/color.dart';
 import '../../domain/layout.dart' show placementOf;
 import '../../domain/library.dart';
 import '../../store/library_model.dart';
@@ -24,7 +23,6 @@ import '../bookmark/board_screen.dart' show openBookmarkBoard;
 import '../bookmark/bookmark_detail_screen.dart' show openBookmark;
 import '../bookmark/new_bookmark_screen.dart';
 import '../bookmark/photo_plate.dart' show BookmarkPhoto;
-import '../bookmark/ribbon_color_sheet.dart';
 import '../community/book_reviews.dart';
 import '../home/home_screen.dart' show showBookOnShelf;
 import '../../domain/reading.dart' show clock;
@@ -186,7 +184,7 @@ class _BookScreenState extends State<BookScreen> {
     ]);
   }
 
-  /// 책 메뉴(지금 앱): 공유·정보 수정·장정 편집·책장에서 보기·책장에서 빼기/진열·숨기기/삭제.
+  /// 책 메뉴(지금 앱): 공유·정보 수정·책 꾸미기(장정 · 갈피 색, 2026-11-23 '장정 편집'에서 이름 바꿈)·책장에서 보기·책장에서 빼기/진열·숨기기/삭제.
   /// 숨긴 책(연도 책장에만 남은 책, 갈피 상세에서 들어올 수 있다)은 진열 · 숨기기 대신 '다시 보이기'(내 책 › 숨긴 책과 같은 일)
   Future<void> _menu() async {
     final place = PlacementStore.instance;
@@ -207,7 +205,7 @@ class _BookScreenState extends State<BookScreen> {
           Navigator.pop(ctx);
           openEditBook(context, id);
         }),
-        ListItem(label: '장정 편집', onPress: () {
+        ListItem(label: '책 꾸미기', onPress: () {
           Navigator.pop(ctx);
           openBindingEditor(context, id);
         }),
@@ -390,7 +388,7 @@ class _BookScreenState extends State<BookScreen> {
     );
   }
 
-  /// 책 정보 칸: 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 갈피 색 · 판매처
+  /// 책 정보 칸: 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 판매처(갈피 색은 ⋯ › 책 꾸미기 › 갈피, 2026-11-23)
   Widget _infoPane(Library lib, MyBook b, Edition e) {
     final pub = [?e.publisher, if (e.publishedAt != null && e.publishedAt!.length >= 4) e.publishedAt!.substring(0, 4)].where((x) => x.isNotEmpty).join(metaSep);
     final sized = e.widthMm != null && e.heightMm != null;
@@ -401,20 +399,6 @@ class _BookScreenState extends State<BookScreen> {
       // 비어 있는 서지 값은 모두 '미입력'(2026-11-19 공통 규칙: 판형만 '확인 전'이었다)
       ListItem(label: '판형', value: sized ? '${e.widthMm}×${e.heightMm}mm' : '미입력', sub: sized ? null : '책장에는 기본 크기로 표시해요'),
       ListItem(label: '도서 정보', value: e.source == 'search' ? e.sourceName ?? '검색' : e.source == 'photo' ? '사진으로 추가' : '직접 입력'),
-      ListItem(
-        label: '갈피 색',
-        sub: b.ribbonColor != null ? '직접 고른 색' : '표지에서 고른 색',
-        onPress: () => showRibbonColorSheet(context, id),
-        right: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: hexColor(paperColors(ribbonOf(lib, id), id).tape),
-            border: Border.all(color: AppColors.line, width: Hairline.of(context) * 2),
-          ),
-        ),
-      ),
       // 판매 페이지는 맨 아래(YES24 약관: 출처와 상품 링크를 함께 보인다). 앱 밖으로 나가는 줄도 꺾쇠, 열지 못하면 확인창(docs/design/DESIGN.md 10장)
       if (e.link != null) ListItem(label: '${e.sourceName ?? '판매처'}에서 보기', chevron: true, onPress: () => _openLink(e.link!)),
     ]);

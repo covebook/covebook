@@ -1,5 +1,5 @@
 // 갈피 보기(지금 앱 app/bookmark/[id].tsx): 같은 책의 갈피를 좌우로 넘기며 읽는다. 카드는 길면 세로로 스크롤.
-// 아래 막대: 책장 한켠 · 수정 · 공유. 오른쪽 위 더 보기: 수정 · 메모 포함해 공유 · 갈피 색 · 책 정보 · 삭제.
+// 아래 막대: 책장 한켠 · 수정 · 공유. 오른쪽 위 더 보기: 수정 · 메모 포함해 공유 · 책 정보 · 삭제(갈피 색은 책 정보 › 책 꾸미기 › 갈피, 2026-11-23).
 // 공유는 화면 밖에 그린 같은 카드를 그림으로 떠서 공유창으로 보낸다(개인 메모는 기본 제외).
 // 문장 갈피의 공유는 두 모양 '책 페이지·종이 메모'(mark_share_sheet). 문장 없는 사진 갈피와 '메모 포함해 공유'는 같은 카드를 이미지로 뜬다
 // 2026-11-16 QA 은서 F1: 수정·삭제·공유는 늘 화면에 보이는 갈피(넘길 때마다 그 갈피 id를 기억한다). 수정에서 돌아오면 넘기기 목록을
@@ -34,7 +34,6 @@ import 'mark_share_sheet.dart' show showMarkShareSheet;
 import 'mark_text.dart';
 import 'page_photo.dart';
 import 'photo_plate.dart';
-import 'ribbon_color_sheet.dart';
 
 /// 갈피 카드에 넣을 값(상세 · 기록 탭 목록이 같은 것을 쓴다). short: 목록 날짜(dateShort), 아니면 상세 날짜(dateLong)
 BookmarkCardData? cardData(Library lib, Bookmark m, {bool short = false}) {
@@ -229,10 +228,6 @@ class _BookmarkDetailScreenState extends State<BookmarkDetailScreen> {
               Navigator.pop(ctx);
               _shoot(true, cur, data);
             }),
-          ListItem(label: '갈피 색 바꾸기', onPress: () {
-            Navigator.pop(ctx);
-            showRibbonColorSheet(context, cur.myBookId);
-          }),
           // 공통 규칙 9장: 책 정보 화면으로 가는 메뉴는 '책 정보'('연결된 책 열기'였다)
           ListItem(label: '책 정보', onPress: () {
             Navigator.pop(ctx);

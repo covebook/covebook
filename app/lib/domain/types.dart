@@ -96,6 +96,31 @@ class Book {
 
   /// 시안 그림 표지(새 서재 예시 책: night·forest·sunset, assets/reference). 있으면 앞표지는 그 그림
   final String? reference;
+
+  /// 갈피(색 · 수)만 바꾼 같은 책(책 꾸미기 › 갈피 미리보기)
+  Book withRibbon(String? color, int count) => Book(
+        id: id,
+        title: title,
+        author: author,
+        themeColor: themeColor,
+        heightClass: heightClass,
+        thicknessClass: thicknessClass,
+        coverAspectRatio: coverAspectRatio,
+        physical: physical,
+        coverUri: coverUri,
+        inkColor: inkColor,
+        dims: dims,
+        coverArtUri: coverArtUri,
+        ribbonColor: color,
+        titleTop: titleTop,
+        quotes: count,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        material: material,
+        coverArtId: coverArtId,
+        plainCover: plainCover,
+        reference: reference,
+      );
 }
 
 /// 책 하나의 자리(선반 안에서)

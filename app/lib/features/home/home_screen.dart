@@ -2660,6 +2660,9 @@ class ShelfPainter extends CustomPainter {
 
   /// 책 셰이더·제목 글꼴(선반 밖에서 한 권만 그릴 때도 쓴다)
   static ShaderSlots? get bookSlots => _book;
+
+  /// 갈피 탭 셰이더(책 꾸미기 › 갈피 미리보기 책도 쓴다)
+  static ShaderSlots? get tabSlots => _tab;
   static GlyphMetrics? get glyphs => _glyphs;
 
   /// 그리기 셰이더가 다 올라왔는지(그림으로 굳히기 전에 본다)

@@ -409,7 +409,7 @@ void drawRow(
     final photo = look?.coverUri == null ? null : photos[look!.coverUri];
     drawBook(canvas, book, c, px, row.env.u, b, albedo, spots3, atlas, seedOf(b.id), look: look, glyphs: glyphs, photo: photo, key: bookKeys[b.id]);
     // 갈피 탭(책 위에, 같은 차례)
-    if (tab != null && look != null) drawRibbons(canvas, tab, c, px, row, b, look, row.tabLoss[b.id]);
+    if (tab != null && look != null) drawRibbons(canvas, tab, c, px, row.env.u, b, look, row.tabLoss[b.id]);
   }
   if (frosted) canvas.restore();
 }
