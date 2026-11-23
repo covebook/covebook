@@ -21,6 +21,7 @@
 | 7 | 서버 알림 주소, 키 발급 | 사람 | |
 | 8 | 서버 PR 머지 → KoDeploy 환경 변수 → 재배포 → DB 상품 줄 | 사람(KoDeploy) + Claude | |
 | 9 | 샌드박스 시험 | 사람 + Claude | 점검표 4장 |
+| 0 | KoDeploy 확인: 서버가 잠드는지, 한 대인지, 백업, Cloudflare | 사람 | 8장. 결과에 따라 다른 일이 바뀌니 먼저 |
 
 - 정환이 Claude Code에 넘길 값: 7장 표
 - 같은 이름을 양쪽에 똑같이 쓴다: 상품 ID, 요금제 ID
@@ -295,6 +296,29 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 | `ADMIN_TOKEN` | 운영 숫자 조회용. 이미 있으면 그대로 | |
 
 - Claude Code에 알려 줄 것은 값이 아니라 "넣었다"와 실제로 만든 상품 ID·요금제 ID뿐이다
+
+## 8. 서버 호스팅(KoDeploy) 확인
+
+- 우리 서버는 KoDeploy에 있고(`https://covebook.kodeploy.com`), 앞에 Cloudflare가 있다. 애플·구글 알림은 이 주소로 오는 웹훅이다
+- 2026-11-23에 밖에서 확인한 것
+
+| 확인할 것 | 결과 | 왜 중요한가 |
+|---|---|---|
+| HTTPS, TLS 1.2 이상 | 통과. TLS 1.2·1.3 되고 1.1은 거절. Let's Encrypt 인증서(2027-01-20까지, 자동 갱신으로 보임) | 애플 알림 주소의 조건 |
+| 응답 속도 | `/healthz` 0.36초 | 알림에 몇 초 안에 답해야 함 |
+| 브라우저가 아닌 POST | **일부 막힘.** 프로그램 이름(User-Agent)이 `Java/1.7`·`Java/1.8`이면 Cloudflare가 403(오류 1010)으로 막음. `Java/17`, `Go-http-client`, `curl`, 구글 이름 등은 서버까지 닿음 | 애플·구글이 어떤 이름으로 보내는지는 확인 안 됨. 막히면 알림이 하나도 안 옴 |
+| 서버가 잠드는가 | 밖에서 알 수 없음. **KoDeploy에서 확인** [사람] | 정기 대조(1분마다)가 서버 안에서 돈다. 잠들면 알림 처리, 구글 3일 확인 기한, 갱신 고지가 멈춤 |
+| 서버가 한 대인가 | 밖에서 알 수 없음. KoDeploy에서 확인 [사람] | 제출 횟수 제한(1분 30번)이 서버 메모리 기준. 여러 대면 느슨해짐. 정기 대조는 DB 잠금으로 한 곳만 돌아 괜찮음 |
+| DB 백업 | KoDeploy에서 확인 [사람] | 결제 기록 5년 보관 |
+| Cloudflare 설정을 누가 바꿀 수 있나 | `kodeploy.com`은 KoDeploy 쪽 도메인으로 보임. 우리가 못 바꿀 수 있음 [사람] | 아래 "막히면" |
+
+- 알림이 막히는지 보는 법 (서버 PR 머지와 키 설정 뒤)
+  - 애플: App Store Connect의 테스트 알림, 또는 App Store Server API의 "테스트 알림 요청"
+  - 구글: Play Console의 "테스트 알림 보내기"
+  - 서버 로그에 받은 기록이 없고 스토어 쪽에 실패가 남으면 Cloudflare를 의심한다
+- 막히면
+  - Cloudflare에서 `/iap/notifications/*` 경로를 보안 검사(브라우저 무결성 검사, 봇 차단)에서 빼는 규칙을 만든다. Cloudflare를 가진 쪽(KoDeploy 운영자)에게 부탁해야 할 수 있다
+  - 그게 안 되면 우리가 가진 도메인을 KoDeploy 서버에 연결해 알림 주소로 쓴다. 알림 주소는 콘솔에서 언제든 바꿀 수 있다
 
 ## 출처
 
