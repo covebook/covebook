@@ -233,7 +233,7 @@ func TestGoogleParseNotice(t *testing.T) {
 	if err != nil || n.Type != "product/1" || *n.Target != (Ref{Kind: KindProduct, ID: "tok2"}) || n.OriginalID != "" {
 		t.Fatalf("상품 알림: %+v %v", n, err)
 	}
-	// 환불: 구독이면 구독 줄기로, 한 번 사는 상품이면 상품으로
+	// 환불: 구독이면 구독 1건로, 한 번 사는 상품이면 상품으로
 	n, err = g.ParseNotice(googlePush("m-3", `{"packageName":"app.covebook","voidedPurchaseNotification":{"purchaseToken":"tok3","orderId":"GPA.1","productType":1,"refundType":1}}`))
 	if err != nil || !n.Voided || n.OrderID != "GPA.1" || *n.Target != (Ref{Kind: KindSubscription, ID: "tok3"}) || n.OriginalID != "tok3" {
 		t.Fatalf("구독 환불: %+v %v", n, err)

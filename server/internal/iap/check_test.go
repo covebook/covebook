@@ -23,7 +23,7 @@ func TestCheck(t *testing.T) {
 		t.Fatalf("허용했는데 샌드박스가 막힘: %v", err)
 	}
 
-	// 표 하나에 경우를 늘어놓고 같은 코드로 돌린다(Go에서 흔한 모양)
+	// 테이블 하나에 경우를 늘어놓고 같은 코드로 돌린다(Go에서 흔한 모양)
 	cases := []struct {
 		name   string
 		change func(*Purchase) // 정상 거래에서 한 군데만 바꾼다
