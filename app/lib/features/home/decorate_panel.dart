@@ -571,3 +571,50 @@ class _DepthSliderState extends State<_DepthSlider> {
     ]);
   }
 }
+
+/// 책을 끄는 동안 화면 아래 빼기 자리(2026-11-24 사용자 '책 옮길 때 하단 쪽으로 넣으면 삭제되게, 흰색 x에 주변에 그라데이션').
+/// 흰 X 둘레로 어두운 빛이 둥글게 번져 사라진다(단색 원이 아니다). 책이 그 위에 오면 번짐이 짙어지고 X가 커진다.
+/// 놓으면 책장에서 뺀다(책은 내 책에 남고 토스트로 되돌린다). 누르는 자리는 없다(끄는 손가락 자리로만 본다)
+class RemoveZone extends StatelessWidget {
+  const RemoveZone({super.key, required this.active, required this.centerFromBottom});
+  final bool active;
+
+  /// 이 칸 아래 끝에서 X 가운데까지
+  final double centerFromBottom;
+
+  /// 번지는 빛 지름(누르는 자리 48의 세 배쯤)
+  static const _glow = Space.hit * 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final speed = reduce ? Duration.zero : const Duration(milliseconds: 140);
+    final c = AppColors.toast.withValues(alpha: active ? 0.8 : 0.55);
+    return Stack(children: [
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: centerFromBottom - _glow / 2,
+        height: _glow,
+        child: Center(
+          child: AnimatedContainer(
+            duration: speed,
+            width: _glow,
+            height: _glow,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [c, c.withValues(alpha: 0)], stops: const [0.2, 1]),
+            ),
+            child: Center(
+              child: AnimatedScale(
+                duration: speed,
+                scale: active ? 1.25 : 1,
+                child: const LucideIcon('X', size: IconSize.back, color: AppColors.white, stroke: IconSize.markStroke),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
+}
