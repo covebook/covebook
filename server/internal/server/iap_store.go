@@ -267,7 +267,7 @@ func iapTransactionKey(kind iap.Kind, p iap.Purchase) string {
 
 // iapRevokePurchase는 환불·취소를 원장에 남긴다. 줄을 지우지 않는다. 바뀐 줄이 있으면 true다.
 // 같은 SQL 문에서 환불 고지(T9)도 쓴다: 상태만 바뀌고 고지가 빠지는 일이 없게 한다(주인이 있는 줄만).
-// 선반은 거래마다, 구독은 구독 줄기마다 한 번 알린다. 3칸을 넘게 산 선반 거래(over_cap)는 알리지 않는다.
+// 선반은 거래마다, 구독은 구독 1건마다 한 번 알린다. 3칸을 넘게 산 선반 거래(over_cap)는 알리지 않는다.
 func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transactionID string, at time.Time) (bool, error) {
 	var changed int
 	err := q.QueryRow(ctx, `WITH r AS (
