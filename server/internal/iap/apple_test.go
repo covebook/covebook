@@ -187,7 +187,7 @@ func TestAppleParseNotice(t *testing.T) {
 	if n.Target == nil || *n.Target != (Ref{Kind: KindSubscription, ID: "300"}) || n.OriginalID != "100" {
 		t.Fatalf("대상: %+v %s", n.Target, n.OriginalID)
 	}
-	// 한 번 사는 상품의 알림(환불 등)은 구독 줄기가 없다
+	// 한 번 사는 상품의 알림(환불 등)은 구독 1건가 없다
 	n, err = notice(appstore.SubscriptionNotificationV2DecodedPayload{NotificationType: "REFUND", NotificationUUID: "u-2", Data: data}, &api.JWSTransaction{TransactionID: "400", Type: api.Consumable}, nil)
 	if err != nil || *n.Target != (Ref{Kind: KindProduct, ID: "400"}) || n.OriginalID != "" || n.Type != "REFUND" {
 		t.Fatalf("상품 알림: %+v %v", n, err)

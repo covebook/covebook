@@ -358,8 +358,8 @@ func (s *Server) iapBasics(ctx context.Context, store iap.Store, p iap.Purchase)
 	return iap.Check(p, iap.Expect{BundleID: store.AppID(), Products: products, AccountTokens: []string{strings.ToLower(p.AccountToken)}, AllowSandbox: s.IAPSandbox})
 }
 
-// iapSyncSubscription은 구독 줄기를 스토어에 다시 묻고 우리 표를 그 답으로 맞춘다.
-//   - 줄이 있으면 상태만 고친다. 주인은 그대로다(주인은 우리 표가 정한다. 스토어의 계정 연결 값은 옮긴 뒤에도 옛 값이다).
+// iapSyncSubscription은 구독 1건을 스토어에 다시 묻고 우리 테이블을 그 답으로 맞춘다.
+//   - 줄이 있으면 상태만 고친다. 주인은 그대로다(주인은 우리 테이블이 정한다. 스토어의 계정 연결 값은 옮긴 뒤에도 옛 값이다).
 //   - 줄이 없으면(앱이 제출하기 전에 알림이 먼저 옴, 앱 밖 구매) 계정 연결 값으로 주인을 찾아 만든다. 못 찾으면 만들지 않는다.
 func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, originalID string) (string, error) {
 	route := store.Route()

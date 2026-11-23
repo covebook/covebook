@@ -134,7 +134,7 @@ func iapCatchUpSince(ctx context.Context, q dbtx, route iap.Route, now time.Time
 }
 
 // iapCatchUp은 스토어가 가진 목록으로 빠진 것을 메운다. 실패해도 다른 대조는 계속 돈다.
-//   - 알림 이력: 우리가 못 받은 알림을 알림 표에 넣는다. 처리는 이어지는 알림 처리 단계가 한다. 이미 받은 것은 유일 키가 거른다.
+//   - 알림 이력: 우리가 못 받은 알림을 알림 테이블에 넣는다. 처리는 이어지는 알림 처리 단계가 한다. 이미 받은 것은 유일 키가 거른다.
 //   - 무효 구매 목록: 환불을 원장에 반영한다. 환불 알림이 빠졌을 때의 대비다.
 func (s *Server) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 	now := time.Now().UTC()
@@ -228,7 +228,7 @@ type iapBacklog struct {
 	FailedNotices        int   `json:"failedNotifications"`    // 처리에 실패해 다시 시도할 알림
 	Unconfirmed          int   `json:"unconfirmedPurchases"`   // 지급했는데 스토어 확인을 못 마친 구매(구글은 3일 안에 해야 한다)
 	OldestPendingSecs    int64 `json:"oldestPendingSeconds"`   // 가장 오래 기다린 알림의 나이
-	Subscriptions        int   `json:"activeSubscriptions"`    // 지금 유효한 구독 줄기(운영 환경)
+	Subscriptions        int   `json:"activeSubscriptions"`    // 지금 유효한 구독 1건(운영 환경)
 	RevokedPurchases     int   `json:"revokedPurchases30Days"` // 최근 30일에 환불된 거래
 	ShelfOverCap         int   `json:"shelfOverCap"`           // 한 연도 책장에서 3칸을 넘게 사서 칸을 주지 않은 거래 중 돈이 아직 돌아가지 않은 것(운영 환경). 애플 거래와 구글 환불 요청 실패(D1)
 	ShelfOverCapRefunded int   `json:"shelfOverCapRefunded"`   // 넘게 산 구글 거래 중 서버가 환불을 요청한 것(운영 환경)
