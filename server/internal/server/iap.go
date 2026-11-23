@@ -421,7 +421,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	key := iapTransactionKey(asked.Kind, submitted)
 	shelfYear, overCap := 0, false // 추가 선반만
 	if asked.Kind == iap.KindSubscription {
-		// 같은 구독 줄기를 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다)
+		// 같은 구독 1건을 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다)
 		if err = iapLockLine(ctx, tx, route, current.OriginalTransactionID); err != nil {
 			return err
 		}
