@@ -1,9 +1,9 @@
 -- 인앱결제(ADR-0002). 거래 원장, 구독 상태, 받은 알림, 파는 상품, 계정 연결 값.
 -- 규칙
---  * 권한은 저장하지 않는다. plus 여부와 연도 책장마다의 선반 칸 수는 아래 표에서 계산한다(D5).
---  * 결제 경로(route)는 문자열 값이다('apple', 'google'). 새 경로가 생겨도 표를 고치지 않게 CHECK를 두지 않는다(D19).
+--  * 권한은 저장하지 않는다. plus 여부와 연도 책장마다의 선반 칸 수는 아래 테이블에서 계산한다(D5).
+--  * 결제 경로(route)는 문자열 값이다('apple', 'google'). 새 경로가 생겨도 테이블을 고치지 않게 CHECK를 두지 않는다(D19).
 --  * 거래·구독은 계정을 지워도 남긴다(거래 기록 보존, ADR-0003). 그래서 user_id는 ON DELETE SET NULL이다.
---    다른 표는 CASCADE로 지워지지만 이 두 표는 유저 연결만 끊긴다.
+--    다른 테이블은 CASCADE로 지워지지만 이 두 테이블은 유저 연결만 끊긴다.
 --  * 시각은 전부 UTC(TIMESTAMPTZ). 만료 판단은 서버 시계로 한다(D23).
 --  * 금액은 통화 1단위 = 1000인 정수(D20). 구글 구매 조회에는 금액이 없어 NULL이다.
 
@@ -55,7 +55,7 @@ CREATE TABLE iap_purchases (
     id             BIGSERIAL PRIMARY KEY,
     route          TEXT   NOT NULL,
     transaction_id TEXT   NOT NULL,   -- 애플: 거래 ID. 구글 한 번 사는 상품: 구매 토큰. 구글 구독: 주문 ID(없으면 구매 토큰)
-    original_id    TEXT   NOT NULL,   -- 구독 줄기를 묶는 값. 애플: 원 거래 ID. 구글: 구매 토큰
+    original_id    TEXT   NOT NULL,   -- 구독 1건을 묶는 값. 애플: 원 거래 ID. 구글: 구매 토큰
     user_id        BIGINT REFERENCES users(id) ON DELETE SET NULL,
     account_token  UUID,              -- 스토어가 돌려준 계정 연결 값. 없는 구매도 있다
     shelf_year     INT,               -- 추가 선반이 열린 연도 책장. 넣을 때 계정 연결 값에서 찾아 적는다(값을 지워도 남게). 구독·연도 모름은 NULL
@@ -115,7 +115,7 @@ CREATE TABLE iap_notifications (
     -- 알림에서 꺼낸 "다시 물어볼 대상". 처리할 때 원문을 다시 풀지 않게 받을 때 적어 둔다. 상태는 여기에 없다(스토어에 다시 묻는다)
     target_kind     TEXT CHECK (target_kind IN ('subscription', 'product')),
     target_id       TEXT,            -- 애플: 거래 ID. 구글: 구매 토큰
-    original_id     TEXT,            -- 구독 줄기. 구독 알림이 아니면 NULL
+    original_id     TEXT,            -- 구독 1건. 구독 알림이 아니면 NULL
     order_id        TEXT,            -- 구글 환불 알림의 주문 ID
     result          TEXT NOT NULL DEFAULT 'received' CHECK (result IN ('received', 'processed', 'ignored', 'failed')),
     error           TEXT,

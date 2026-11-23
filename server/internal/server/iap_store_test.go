@@ -12,7 +12,7 @@ import (
 	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
 )
 
-// 결제 표와 저장소 함수 시험. 실제 PostgreSQL이 있어야 돈다(TEST_DATABASE_URL).
+// 결제 테이블과 저장소 함수 시험. 실제 PostgreSQL이 있어야 돈다(TEST_DATABASE_URL).
 func iapTestDB(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -154,7 +154,7 @@ func TestIAPShelfToken(t *testing.T) {
 	if ok, err := iapOwnsToken(ctx, db, user, next); err != nil || !ok {
 		t.Fatal("연도용 값이 유저의 값으로 안 보임", ok, err)
 	}
-	// 책장 표와 같은 범위만 받는다
+	// 책장 테이블과 같은 범위만 받는다
 	if _, err := iapShelfToken(ctx, db, user, 1999); err == nil {
 		t.Fatal("1999년 값이 만들어짐")
 	}

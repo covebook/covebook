@@ -98,7 +98,7 @@ type Notice struct {
 	SentAt     time.Time // 스토어가 알림을 만든 시각
 	Test       bool      // 연결 확인용 알림. 처리할 것이 없다
 	Target     *Ref      // 다시 물어볼 거래. 없으면 nil
-	OriginalID string    // 구독 줄기. Subscription에 넘길 값. 구독 알림이 아니면 빈 값
+	OriginalID string    // 구독 1건. Subscription에 넘길 값. 구독 알림이 아니면 빈 값
 	OrderID    string    // 구글 환불 알림의 주문 ID
 	Voided     bool      // 구글의 환불·취소 알림
 }
