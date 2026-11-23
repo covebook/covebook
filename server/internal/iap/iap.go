@@ -5,7 +5,10 @@ package iap
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
+
+	"golang.org/x/text/language"
 )
 
 // Route는 결제 경로다. DB의 결제 경로 칸에 이 문자열이 그대로 들어간다(ADR-0002 D19).
@@ -66,7 +69,7 @@ type Purchase struct {
 	AutoRenew             bool      // 자동 갱신이 켜져 있는가. false면 해지 예약. Subscription으로 물었을 때만 믿는다
 	Currency              string    // ISO 4217. 구글 구매 조회에는 없어서 비어 있다
 	PriceMilli            int64     // 금액 x 1000 (ADR-0002 D20). 구글은 0
-	Country               string    // 판매 국가. 스토어가 준 코드 그대로
+	Country               string    // 판매 국가. ISO 3166-1 두 글자(KR). 모르는 코드는 빈 값
 }
 
 // ErrNotFound는 스토어에 그 거래가 없다는 뜻이다. 통신 실패와 구분해서 다룬다.
@@ -98,7 +101,22 @@ type Notice struct {
 	SentAt     time.Time // 스토어가 알림을 만든 시각
 	Test       bool      // 연결 확인용 알림. 처리할 것이 없다
 	Target     *Ref      // 다시 물어볼 거래. 없으면 nil
-	OriginalID string    // 구독 줄기. Subscription에 넘길 값. 구독 알림이 아니면 빈 값
+	OriginalID string    // 구독 1건. Subscription에 넘길 값. 구독 알림이 아니면 빈 값
 	OrderID    string    // 구글 환불 알림의 주문 ID
 	Voided     bool      // 구글의 환불·취소 알림
+}
+
+// Country는 스토어가 준 나라 코드를 ISO 3166-1 두 글자로 맞춘다.
+// 애플 storefront는 세 글자(KOR), 구글 regionCode는 두 글자(KR)라 그대로 넣으면 같은 나라가 둘로 나뉜다.
+// 모르는 코드는 빈 값이다(저장할 때 NULL). 나라 코드는 지급 판단에 쓰지 않는다.
+func Country(code string) string {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "XKS" { // 애플의 코소보. ISO에 없는 코드라 라이브러리가 모른다. 구글은 XK
+		return "XK"
+	}
+	r, err := language.ParseRegion(code)
+	if err != nil || !r.IsCountry() {
+		return ""
+	}
+	return r.String()
 }
