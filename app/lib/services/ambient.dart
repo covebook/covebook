@@ -1,5 +1,5 @@
 // 환경음(ASMR) 재생(지금 앱 services/ambient.ts). 독서 타이머와 따로 움직인다(소리만 들어도 독서 시간은 쌓이지 않는다).
-// 음원은 Freesound 녹음을 모노 22kHz로 줄이고 이음매를 섞은 반복용 WAV(assets/sounds/provenance.json). 실제 재생 여부는 플레이어 상태로만 표시한다.
+// 음원은 반복용 WAV(assets/sounds/provenance.json): 빗소리는 Freesound 녹음을 모노 22kHz로 줄이고 이음매를 섞은 것, 벽난로는 사용자가 준 반복 음원(2026-11-23)을 빗소리 크기에 맞춘 것. 실제 재생 여부는 플레이어 상태로만 표시한다.
 // 화면을 꺼도 이어 듣고 잠금 화면에 '빗소리 · 책장 한켠'처럼 보인다(just_audio_background)
 library;
 
