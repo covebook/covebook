@@ -702,11 +702,12 @@ class _BookScreenState extends State<BookScreen> {
             onTap: add,
             child: Pressable(
               onPress: add,
+              // '+' 그림 오른쪽 끝을 위 '전체 보기 ›' 꺾쇠 그림 끝에 맞춘다(2026-11-24 사용자 '+ 위치가 열이 안 맞잖아': 누르는 자리 가운데라 15 안쪽이었다)
               child: Padding(
-                padding: const EdgeInsets.only(bottom: Space.m),
+                padding: const EdgeInsets.only(bottom: Space.m, right: _plusRight),
                 child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SizedBox(height: lineH, child: const Center(child: OverflowBox(maxHeight: IconSize.base, child: LucideIcon('Plus', color: AppColors.icon)))),
+                  alignment: Alignment.bottomRight,
+                  child: SizedBox(height: lineH, child: const OverflowBox(maxHeight: IconSize.base, alignment: Alignment.centerRight, child: LucideIcon('Plus', color: AppColors.icon))),
                 ),
               ),
             ),
@@ -962,3 +963,7 @@ List<({String day, List<Session> items})> _byDay(List<Session> list) {
   }
   return out;
 }
+
+/// 독서 기록 횟수 줄 '+' 칸 오른쪽 여백: '+' 그림 오른쪽 끝이 위 '전체 보기 ›' 꺾쇠 그림 끝과 같은 세로줄에 오게.
+/// lucide 24칸 기준 그림 오른쪽 끝(선 굵기 반 포함): 꺾쇠 15.8, '+' 19.8. 꺾쇠는 칸 24, '+'는 칸 22로 그린다
+const _plusRight = IconSize.chevron * (24 - 15.8) / 24 - IconSize.base * (24 - 19.8) / 24;

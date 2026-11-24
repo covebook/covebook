@@ -7,7 +7,7 @@ import 'package:chaekjang/features/book/book_screen.dart';
 import 'package:chaekjang/features/stats/session_edit_screen.dart';
 import 'package:chaekjang/features/stats/stats_screen.dart';
 import 'package:chaekjang/store/library_model.dart';
-import 'package:chaekjang/ui/kit.dart' show Field, LucideIcon, Stars;
+import 'package:chaekjang/ui/kit.dart' show Field, IconSize, LucideIcon, SectionHead, Stars;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -118,6 +118,10 @@ void main() {
     expect(plus.size, const Size(48, 48));
     expect((icon.center.dy - line.center.dy).abs(), lessThan(1), reason: '횟수 줄 가운데');
     expect(plus.left, greaterThan(line.right - 0.5));
+    // '+' 그림 오른쪽 끝 = 위 '전체 보기 ›' 꺾쇠 그림 끝(같은 세로줄, 2026-11-24 사용자 '+ 위치가 열이 안 맞잖아'). lucide 24칸에서 그림 끝 '+' 19.8 · 꺾쇠 15.8
+    // (기록이 없으면 꺾쇠가 없어서 꺾쇠 칸 자리 = 구역 머리 오른쪽 끝에서 잰다)
+    final right = t.getRect(find.byType(SectionHead).first).right;
+    expect(icon.left + icon.width * 19.8 / 24, closeTo(right - IconSize.chevron + IconSize.chevron * 15.8 / 24, 0.5));
     await t.tap(label('독서 기록 추가'));
     await t.pumpAndSettle();
     expect(find.text('독서 기록 추가'), findsOneWidget);
