@@ -142,8 +142,9 @@ void main() {
     final box = find.byType(SelectField);
     expect(t.widget<SelectField>(box).outlined, isTrue);
     expect(find.descendant(of: box, matching: plain('모든 책')), findsOneWidget);
-    // 달력 아래, 그날 기록 머리 위
+    // 달력 아래, 그날 기록 머리 위. 달력과 칸 사이 16(2026-11-24 사용자 '여기 간격 좀 줄이는 게': 28이었다)
     expect(t.getRect(find.byType(ReadingCalendar)).bottom, lessThan(t.getRect(box).top));
+    expect(t.getRect(box).top - t.getRect(find.byType(ReadingCalendar)).bottom, closeTo(Space.l, 0.5));
     final head = find.textContaining('일요일');
     if (head.evaluate().isNotEmpty) expect(t.getRect(box).bottom, lessThan(t.getRect(head.first).top));
     // 분석: 달 바로 아래

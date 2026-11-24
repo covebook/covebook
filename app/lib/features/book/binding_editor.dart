@@ -4,7 +4,7 @@
 // - 색상: 표지 색(많은 순서) + 이 책 추천 색 + 모든 색 + 직접 고르기(R · G · B 막대와 색 코드, 2026-11-21 사용자 '표지색 rgb 고를 수 있게').
 //   고른 색에 테두리와 체크. 추천 장정으로 되돌리기
 // - 재질: 고운 종이·린넨·매끈 무광·줄무늬 종이 + 책등 글자 배치
-// - 갈피(책 꾸미기만, onRibbon이 있을 때. 책이 아직 없는 책 추가 확인에는 없다): 표지에서 고른 색(자동) · 표지 색 · 다른 색.
+// - 갈피(책 꾸미기만, onRibbon이 있을 때. 책이 아직 없는 책 추가 확인에는 없다): 자동(표지에서 고른 색) · 표지 색 · 다른 색.
 //   미리보기 책 머리에 갈피 탭을 고른 색으로 그린다(2026-11-23 사용자: 갈피 색 시트를 장정 편집 안으로, 저장도 함께)
 // 탭을 바꿔도 고르던 값은 그대로다(값은 부르는 쪽이 가진다). 고르면 사용자 장정(source 'custom')
 library;
@@ -429,8 +429,11 @@ class _BindingEditorState extends State<BindingEditor> {
           padding: const EdgeInsets.only(top: Space.l),
           child: WordText('이 책의 갈피 모두가 같은 색으로 바뀌어요(책장 위 갈피 끈과 갈피 카드).', style: AppType.sub),
         ),
-        const H2('자동'),
-        FilterOption(label: '표지에서 고른 색', selected: picked == null, onPress: () => pick(null)),
+        // 자동은 한 줄(2026-11-24 사용자 '자동이랑 표지에서 고른 색이 같은 건데 왜 따로': 묶음 이름 '자동' 아래 '표지에서 고른 색' 줄이었다)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: FilterOption(label: '자동', selected: picked == null, onPress: () => pick(null)),
+        ),
         if (fromCover.isNotEmpty) ...[const H2('표지 색'), swatches(fromCover, '표지 색')],
         const H2('다른 색'),
         swatches(ribbonPalette, '갈피 색'),

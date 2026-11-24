@@ -198,11 +198,15 @@ abstract final class ControlSize {
   /// 작은 돌아가는 원(단추 · 칸 · 줄 안 진행) 20, 굵기 2
   static const spinner = 20.0, spinnerStroke = 2.0;
 
+  /// 테두리 아이콘 단추(IconBtn(outlined:))의 보이는 칸 40(작은 단추 buttonS와 같은 높이, 누르는 자리는 48 그대로):
+  /// 책 시트 휴지통(2026-11-24 사용자 '아이콘에 배경 말고 회색 선, 네모에 모서리 둥근')
+  static const iconBox = 40.0;
+
   static const all = <String, double>{
     'buttonL': buttonL, 'buttonM': buttonM, 'buttonS': buttonS, 'field': field, 'fieldMultiline': fieldMultiline, 'search': search, 'choice': choice,
     'segment': segment, 'segmentPad': segmentPad, 'segmentInset': segmentInset,
     'segmentCompact': segmentCompact, 'segmentCompactPad': segmentCompactPad, 'segmentCompactInset': segmentCompactInset, 'toggleWidth': toggleWidth, 'toggleHeight': toggleHeight, 'toggleKnob': toggleKnob,
-    'radio': radio, 'choiceBadge': choiceBadge, 'spinner': spinner, 'spinnerStroke': spinnerStroke,
+    'radio': radio, 'choiceBadge': choiceBadge, 'spinner': spinner, 'spinnerStroke': spinnerStroke, 'iconBox': iconBox,
   };
 }
 
@@ -1067,11 +1071,15 @@ class _DotLoaderState extends State<DotLoader> with SingleTickerProviderStateMix
 /// 아이콘 단추 = TDS Icon Button variant clear(기본): 바탕 없이 아이콘만, 누른 동안 바탕 색 greyOpacity100이 보인다.
 /// 바탕 모양 · 크기는 공식 없음 → 누르는 자리(48) 원. 누르는 자리 48(2026-11-16 QA 영숙 F12). 화면 읽기에서는 이름 하나만 가진 버튼(TDS: aria-label 필수)
 class IconBtn extends StatefulWidget {
-  const IconBtn({super.key, required this.label, required this.onPress, required this.child, this.disabled = false});
+  const IconBtn({super.key, required this.label, required this.onPress, required this.child, this.disabled = false, this.outlined = false});
   final String label;
   final VoidCallback onPress;
   final Widget child;
   final bool disabled;
+
+  /// 회색 선(line 1) 둥근 네모(Shape.button 10) 칸 40(ControlSize.iconBox) 안 아이콘, 바탕 없음. 누르면 칸 안이 옅은 회색.
+  /// 글자 단추 옆에 홀로 놓여 아이콘만으로는 누르는 것인지 덜 보이는 자리(책 시트 휴지통, 2026-11-24 사용자)
+  final bool outlined;
 
   @override
   State<IconBtn> createState() => _IconBtnState();
@@ -1098,12 +1106,29 @@ class _IconBtnState extends State<IconBtn> {
           onTapCancel: on ? () => setState(() => _down = false) : null,
           onTapUp: on ? (_) => setState(() => _down = false) : null,
           onTap: on ? widget.onPress : null,
-          child: Container(
-            width: Space.hit,
-            height: Space.hit,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: _down && on ? AppColors.greyOpacity100 : null),
-            child: Center(child: widget.child),
-          ),
+          child: widget.outlined
+              ? SizedBox(
+                  width: Space.hit,
+                  height: Space.hit,
+                  child: Center(
+                    child: Container(
+                      width: ControlSize.iconBox,
+                      height: ControlSize.iconBox,
+                      decoration: BoxDecoration(
+                        color: _down && on ? AppColors.greyOpacity100 : null,
+                        borderRadius: BorderRadius.circular(Shape.button),
+                        border: Border.all(color: AppColors.line),
+                      ),
+                      child: Center(child: widget.child),
+                    ),
+                  ),
+                )
+              : Container(
+                  width: Space.hit,
+                  height: Space.hit,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: _down && on ? AppColors.greyOpacity100 : null),
+                  child: Center(child: widget.child),
+                ),
         ),
       ),
     );
@@ -1452,10 +1477,14 @@ class _RealCoverState extends State<RealCover> {
 /// 이름 t5 grey900(+ 아래 설명 t6 grey600) · 오른쪽 값 t6 grey700(ListHeader.RightText 기본 색) · 화살표 grey400(다른 화면으로 넘어가는 줄에만).
 /// 구분선: TDS 기본은 indented지만 none도 공식 선택지('연결된 느낌') → 지금 앱처럼 줄 사이 선 없음. 누르면 회색 터치 바탕
 class ListItem extends StatelessWidget {
-  const ListItem({super.key, required this.label, this.sub, this.value, this.onPress, this.danger = false, this.chevron = false, this.right, this.icon, this.selected});
+  const ListItem({super.key, required this.label, this.sub, this.value, this.onPress, this.danger = false, this.chevron = false, this.right, this.icon, this.selected, this.oneLine = false});
   final String label;
   final String? sub;
   final String? value;
+
+  /// 이름과 값을 늘 한 줄로: 이름은 다 보이게(줄 폭의 70%까지), 값은 남은 폭에서 끝을 '…'로(화면 읽기는 값 전체). sub는 쓰지 않는다.
+  /// 값이 설명일 때만 쓴다(가격 · 날짜처럼 잘리면 안 되는 값은 두 줄로 늘어나는 기본 모양). 꾸미기 '이 책 꾸미기  그림, 색상, 재질'(2026-11-24 사용자 '우측에 있게 하고 한 줄로')
+  final bool oneLine;
   final VoidCallback? onPress;
   final bool danger;
   final bool chevron;
@@ -1488,6 +1517,25 @@ class ListItem extends StatelessWidget {
             children: [
               // 왼쪽 그림(계정 줄의 회사 로고 36): 그림 + 12
               if (icon != null) Padding(padding: const EdgeInsets.only(right: Space.m), child: ExcludeSemantics(child: icon)),
+              if (oneLine && value != null)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: Space.rowM, bottom: Space.rowM, right: right != null || chevron ? 12 : 0),
+                    child: ExcludeSemantics(
+                      child: LayoutBuilder(
+                        builder: (_, c) => Row(children: [
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: c.maxWidth * 0.7),
+                            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.row.copyWith(color: danger ? AppColors.danger : null)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: AppType.secondary)),
+                        ]),
+                      ),
+                    ),
+                  ),
+                )
+              else
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(top: Space.rowM, bottom: Space.rowM, right: right != null || value != null || chevron ? 12 : 0),
@@ -1502,7 +1550,7 @@ class ListItem extends StatelessWidget {
                   ),
                 ),
               ),
-              if (value != null)
+              if (value != null && !oneLine)
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.55),
                   child: Padding(
@@ -2677,7 +2725,7 @@ class TextLink extends StatelessWidget {
 /// 제목 아래 설명 DescriptionParagraph(t6 grey600, descriptionPosition bottom), 오른쪽 RightArrow(글자 t6 grey700 · 화살표 grey400).
 /// 머리줄 높이는 글 높이만 차지해 제목과 내용 사이가 좁다(2026-11-17 시안)
 class SectionHead extends StatelessWidget {
-  const SectionHead({super.key, required this.title, this.count, this.note, this.link, this.onLink, this.chevron = false, this.linkLabel, this.extra, this.onExtra});
+  const SectionHead({super.key, required this.title, this.count, this.note, this.link, this.onLink, this.chevron = false, this.linkLabel});
   final String title;
   final String? count, link;
 
@@ -2688,10 +2736,6 @@ class SectionHead extends StatelessWidget {
 
   /// 화면 읽기 이름(없으면 '제목 링크')
   final String? linkLabel;
-
-  /// 링크 앞 글자 하나 더(같은 글자 · 꺾쇠 없음, 화면 읽기는 '제목 글자'): 책 정보 독서 기록 '추가 · 전체 보기'(2026-11-23)
-  final String? extra;
-  final VoidCallback? onExtra;
 
   @override
   Widget build(BuildContext context) => Row(crossAxisAlignment: note != null ? CrossAxisAlignment.start : CrossAxisAlignment.center, children: [
@@ -2706,24 +2750,6 @@ class SectionHead extends StatelessWidget {
             if (note != null) Padding(padding: const EdgeInsets.only(top: 2), child: WordText(note!, style: AppType.sub)),
           ]),
         ),
-        if (extra != null && onExtra != null)
-          Semantics(
-            button: true,
-            label: '$title $extra',
-            excludeSemantics: true,
-            onTap: onExtra,
-            child: Pressable(
-              onPress: onExtra,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: Space.hit, minWidth: Space.hit),
-                child: Padding(
-                  // 다음 링크와 사이(글자 사이 12)
-                  padding: EdgeInsets.only(right: link != null && onLink != null ? Space.m : 0),
-                  child: Center(widthFactor: 1, child: Text(extra!, style: AppType.secondary)),
-                ),
-              ),
-            ),
-          ),
         if (link != null && onLink != null)
           Semantics(
             button: true,

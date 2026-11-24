@@ -2467,7 +2467,7 @@ const _headerArt = headerArtSize;
 const _headerPitch = 52.0;
 const _headerLastCenter = 36.0;
 
-/// 시험용: 책장 머리줄(해 · 아이콘 한 줄)
+/// 시험용: 책장 머리줄(보이는 글자 없이 오른쪽 아이콘 셋)
 @visibleForTesting
 Widget homeHeaderForTest({required int year, VoidCallback? onDecorate, VoidCallback? onAdd}) => _Header(year: year, status: '', onDecorate: onDecorate, onAdd: onAdd);
 
@@ -2487,7 +2487,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      // 머리줄 아래 여백 4. 해 한 줄과 오른쪽 아이콘이 같은 줄(세로 가운데). 굵기는 보통(2026-11-15 사용자 '두께는 전이 나은 느낌').
+      // 머리줄 아래 여백 4. 오른쪽 아이콘 셋만 보인다(왼쪽 빈 자리는 화면 읽기 머리 · 측정 메뉴 길게 누르기)
       // 오른쪽은 아이콘 누르는 칸이 그림 칸보다 양옆으로 넓은 만큼(_HeaderIcons.slop) 덜 비운다: 그림 자리는 그대로
       padding: EdgeInsets.fromLTRB(TabHeader.paddingH, TabHeader.paddingTop, _headerLastCenter - Space.hit / 2, _headerBottom),
       child: SizedBox(
@@ -2495,7 +2495,8 @@ class _Header extends StatelessWidget {
         child: Row(
         children: [
           Expanded(
-            // 보이는 글자는 해뿐이지만 화면 읽기는 탭 제목 머리 '나의 책장, 2026'(2026-11-16 QA 영숙 F9 · 2026-11-24 6단계). 길게 누르기는 측정 메뉴라 화면 읽기에서 뺀다
+            // 보이는 글자는 없다(2026-11-24 사용자 '2026도 없애버려': 제목에 이어 해도 뺌). 화면 읽기는 탭 제목 머리 '나의 책장, 2026'
+            // (2026-11-16 QA 영숙 F9 · 2026-11-24 6단계). 지난 책장은 벽에 새긴 해가 그대로 있다. 길게 누르기는 측정 메뉴라 화면 읽기에서 뺀다
             child: Semantics(
               container: true,
               header: true,
@@ -2503,13 +2504,11 @@ class _Header extends StatelessWidget {
               excludeSemantics: true,
               child: GestureDetector(
                 excludeFromSemantics: true,
+                // 빈 자리라 측정 메뉴가 있을 때만 누름을 받는다(아니면 아래로 지나간 책장 누르기를 막지 않게)
+                behavior: onLongPress != null ? HitTestBehavior.opaque : HitTestBehavior.deferToChild,
                 onLongPress: onLongPress,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  // 굽기 시간 툴팁은 측정용이라 시험 빌드(QA_FRAMES)에서만: 출시 빌드 사용자에게 개발 숫자를 보이지 않는다.
-                  // 해는 부제 모양 그대로(TDS Top.SubtitleParagraph size 15: t6 regular grey700)
-                  child: qaFrames ? Tooltip(message: status, child: Text('$year', style: AppType.secondary, maxLines: 1)) : Text('$year', style: AppType.secondary, maxLines: 1),
-                ),
+                // 굽기 시간 툴팁은 측정용이라 시험 빌드(QA_FRAMES)에서만: 출시 빌드 사용자에게 개발 숫자를 보이지 않는다
+                child: qaFrames ? Tooltip(message: status, child: const SizedBox.expand()) : const SizedBox.expand(),
               ),
             ),
           ),

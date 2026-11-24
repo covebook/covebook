@@ -87,7 +87,9 @@ void main() {
     }
     await t.tap(find.text('갈피'));
     await t.pumpAndSettle();
-    expect(find.text('표지에서 고른 색'), findsOneWidget);
+    // 자동은 한 줄(묶음 이름 '자동' 아래 '표지에서 고른 색' 줄이 따로 있었다, 2026-11-24 사용자)
+    expect(find.text('자동'), findsOneWidget);
+    expect(find.text('표지에서 고른 색'), findsNothing);
     await t.ensureVisible(label('갈피 색 7'));
     await t.tap(label('갈피 색 7'));
     await t.pumpAndSettle();

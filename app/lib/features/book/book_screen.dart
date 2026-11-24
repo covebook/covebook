@@ -663,51 +663,82 @@ class _BookScreenState extends State<BookScreen> {
     // 지금 재는 독서(저장 전): 맨 위에 '지금 읽는 중 · 시작 시각부터' + 흐르는 시간. 누르면 읽기 장면으로(2026-11-19 사용자 '타이머 읽었는데 바로 기록이 안 돼')
     final act = ReadingStore.instance.active;
     final live = act != null && act.myBookId == id ? act : null;
+    // 횟수 · 총 시간 한 줄(2026-11-18 사용자 시안: '9회, 총 41분' — 쉼표는 사용자 예외). 기록이 없으면 그 자리에 빈 글
+    final summary = recent.isNotEmpty || readMs > 0
+        ? [if (recent.isNotEmpty) '${recent.length}회', '총 ${formatDuration(readMs)}', if (done > 0) '완독 $done회'].join(', ')
+        : live != null
+            ? '아직 저장한 기록이 없어요'
+            : '타이머로 읽으면 여기에 쌓여요';
+    void add() => openSessionAdd(context, bookId: id);
+    // 횟수 줄 글 높이: '+'를 그 줄 가운데에 둔다(두 줄로 접히면 마지막 줄)
+    final lineH = MediaQuery.textScalerOf(context).scale(AppType.sub.fontSize!) * (AppType.sub.height ?? 1);
     return [
-      // 머리 오른쪽 '추가'(타이머 없이 읽은 시간을 이 책으로, 2026-11-23 사용자) · '전체 보기'(기록이 있을 때)
-      SectionHead(
-        title: '독서 기록',
-        extra: '추가',
-        onExtra: () => openSessionAdd(context, bookId: id),
-        link: recent.isNotEmpty ? '전체 보기' : null,
-        chevron: true,
-        linkLabel: '독서 기록 전체 보기',
-        onLink: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsScreen(tab: false, initialBook: id))),
-      ),
-      // 횟수·총 시간은 '독서 기록' 아래 한 줄(2026-11-18 사용자 시안: '9회, 총 41분' — 쉼표는 사용자 예외)
-      if (recent.isNotEmpty || readMs > 0)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xs),
-          child: Text([if (recent.isNotEmpty) '${recent.length}회', '총 ${formatDuration(readMs)}', if (done > 0) '완독 $done회'].join(', '), style: AppType.sub),
-        ),
-      if (live != null)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.m),
+      // 머리 오른쪽은 '전체 보기'(기록이 있을 때)만, '+'(타이머 없이 읽은 시간을 이 책으로)는 횟수 줄 맨 오른쪽
+      // (2026-11-24 사용자 '추가는 … 2회 총 2분 라인 맨 오른쪽에 +로': 머리 오른쪽 '추가 · 전체 보기'였다).
+      // '+' 누르는 자리 48이 칸 밖으로 나가면 눌리지 않아 머리 · 횟수 줄 · 그 아래 틈(Space.m)을 한 Stack에 넣는다. 위쪽은 머리 아래 빈 자리에 걸친다
+      Stack(children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SectionHead(
+            title: '독서 기록',
+            link: recent.isNotEmpty ? '전체 보기' : null,
+            chevron: true,
+            linkLabel: '독서 기록 전체 보기',
+            onLink: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsScreen(tab: false, initialBook: id))),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.xs, bottom: Space.m, right: Space.hit),
+            child: WordText(summary, style: AppType.sub),
+          ),
+        ]),
+        Positioned(
+          right: 0,
+          bottom: 0,
+          width: Space.hit,
+          height: Space.hit,
           child: Semantics(
             button: true,
-            label: '지금 읽는 중, ${timeLabel(DateTime.parse(live.startedAt))}부터, 읽기 화면으로',
+            label: '독서 기록 추가',
             excludeSemantics: true,
-            onTap: () => startReadingBook(context, id),
+            onTap: add,
             child: Pressable(
-              onPress: () => startReadingBook(context, id),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: Space.dense),
-                child: Row(children: [
-                  Expanded(child: MetaText(['지금 읽는 중', '${timeLabel(DateTime.parse(live.startedAt))}부터'].join(metaSep), style: AppType.sub)),
-                  ElapsedTicker(running: live.runningSince != null, builder: (ms) => Text(clock(ms), style: AppType.row.tnum)),
-                ]),
+              onPress: add,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: Space.m),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizedBox(height: lineH, child: const Center(child: OverflowBox(maxHeight: IconSize.base, child: LucideIcon('Plus', color: AppColors.icon)))),
+                ),
               ),
             ),
           ),
         ),
-      if (recent.isEmpty && live == null)
-        const EmptyLine('타이머로 읽으면 여기에 쌓여요')
-      else
+      ]),
+      // 위 틈은 횟수 줄 아래(Space.m, 위 Stack 안)
+      if (live != null)
+        Semantics(
+          button: true,
+          label: '지금 읽는 중, ${timeLabel(DateTime.parse(live.startedAt))}부터, 읽기 화면으로',
+          excludeSemantics: true,
+          onTap: () => startReadingBook(context, id),
+          child: Pressable(
+            onPress: () => startReadingBook(context, id),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: Space.dense),
+              child: Row(children: [
+                Expanded(child: MetaText(['지금 읽는 중', '${timeLabel(DateTime.parse(live.startedAt))}부터'].join(metaSep), style: AppType.sub)),
+                ElapsedTicker(running: live.runningSince != null, builder: (ms) => Text(clock(ms), style: AppType.row.tnum)),
+              ]),
+            ),
+          ),
+        ),
+      // 기록이 없을 때 글은 위 횟수 줄 자리에
+      if (recent.isNotEmpty)
         // 같은 날짜는 묶고(날짜 한 줄 아래 시간대는 연하게, 읽은 시간은 오른쪽에 진하게), 구분선 없이 날짜 사이 여백으로(2026-11-17 시안). 최근 5개
-        for (final g in _byDay(recent.take(5).toList()))
+        for (final (gi, g) in _byDay(recent.take(5).toList()).indexed)
           Padding(
-            // 머리–첫 날짜 8 → 12(2026-11-18 사용자 '줄 위치가 좀 더 밑으로': 시안은 머리와 첫 날짜 사이가 더 넓다)
-            padding: const EdgeInsets.only(top: Space.m),
+            // 머리–첫 날짜 8 → 12(2026-11-18 사용자 '줄 위치가 좀 더 밑으로': 시안은 머리와 첫 날짜 사이가 더 넓다).
+            // 첫 날짜 위 12는 횟수 줄 아래(위 Stack 안)
+            padding: EdgeInsets.only(top: gi == 0 && live == null ? 0 : Space.m),
             // 그날 기록이 하나면 날짜 · 시간대 두 줄을 한 줄로 누르고, 읽은 시간은 두 줄 세로 가운데(DESIGN 7장 '두 줄 줄의 오른쪽 값',
             // 2026-11-20 사용자 '20분 같은 시간은 11월 9일이랑 그 밑에 오후 라인 중앙'). 여럿이면 날짜 아래 시간대 줄마다 오른쪽에
             child: g.items.length == 1

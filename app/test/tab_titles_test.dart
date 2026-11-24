@@ -140,20 +140,20 @@ void main() {
     expect(t.getRect(find.byType(SearchField)).bottom, lessThanOrEqualTo(t.getRect(find.text('갈피').first).top + 1));
   });
 
-  testWidgets('책장 머리: 나의 책장 글자 없이 해(왼쪽)와 아이콘 셋(오른쪽)이 한 줄, 화면 읽기 머리는 나의 책장, 2026, 높이는 homeHeaderHeight', (t) async {
+  testWidgets('책장 머리: 보이는 글자 없이(나의 책장 · 해 없음, 2026-11-24 사용자 \'2026도 없애버려\') 오른쪽 아이콘 셋, 화면 읽기 머리는 나의 책장, 2026, 높이는 homeHeaderHeight', (t) async {
     await _view(t);
     var added = 0;
     await t.pumpWidget(_app(Scaffold(body: Align(alignment: Alignment.topCenter, child: homeHeaderForTest(year: 2026, onAdd: () => added++)))));
     expect(find.text('나의 책장'), findsNothing);
-    expect(find.text('2026'), findsOneWidget);
+    expect(find.text('2026'), findsNothing);
     expect(find.bySemanticsLabel('나의 책장, 2026'), findsOneWidget);
-    final year = t.getRect(find.text('2026'));
+    final year = t.getRect(find.bySemanticsLabel('나의 책장, 2026'));
     expect(year.left, closeTo(TabHeader.paddingH, 1));
     for (final l in ['꾸미기', '책장에 꽂기', '내 정보']) {
       final r = t.getRect(find.bySemanticsLabel(l));
       expect(r.width, Space.hit, reason: l);
       expect(r.left, greaterThan(360 / 2), reason: '$l 은 오른쪽');
-      expect((r.center.dy - year.center.dy).abs(), lessThan(2), reason: '$l 은 해와 같은 줄');
+      expect((r.center.dy - year.center.dy).abs(), lessThan(2), reason: '$l 은 머리줄 가운데');
     }
     expect(t.getSize(find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Header')).height, closeTo(homeHeaderHeight, 0.5));
     // 누르기는 아이콘 줄 전체 칸이 받는다(화면 읽기 칸은 자리만)

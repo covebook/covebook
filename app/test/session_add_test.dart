@@ -7,7 +7,7 @@ import 'package:chaekjang/features/book/book_screen.dart';
 import 'package:chaekjang/features/stats/session_edit_screen.dart';
 import 'package:chaekjang/features/stats/stats_screen.dart';
 import 'package:chaekjang/store/library_model.dart';
-import 'package:chaekjang/ui/kit.dart' show Field, Stars;
+import 'package:chaekjang/ui/kit.dart' show Field, LucideIcon, Stars;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -106,10 +106,18 @@ void main() {
     expect(today(DateTime.parse(s.startedAt)), today());
   });
 
-  testWidgets('책 정보 › 내 기록 › 독서 기록 머리 \'추가\'는 그 책이 골라진 추가 화면', (t) async {
+  testWidgets('책 정보 › 내 기록 › 독서 기록 횟수 줄 맨 오른쪽 \'+\'는 그 책이 골라진 추가 화면(머리에는 전체 보기만, 2026-11-24 사용자)', (t) async {
     await pumpIn(t, BookScreen(id: 'bk1', onRead: (_) {}));
     await t.tap(find.text('내 기록'));
     await t.pumpAndSettle();
+    expect(find.text('추가'), findsNothing, reason: '머리 오른쪽 글자 추가는 없다');
+    // '+'는 횟수 줄('N회, 총 …' 또는 빈 글)과 같은 줄 맨 오른쪽, 누르는 자리 48
+    final plus = t.getRect(label('독서 기록 추가'));
+    final line = t.getRect(find.byWidgetPredicate((w) => w is Text && (w.data ?? '').contains(RegExp(r'총 |타이머로 읽으면'))).first);
+    final icon = t.getRect(find.descendant(of: label('독서 기록 추가'), matching: find.byType(LucideIcon)));
+    expect(plus.size, const Size(48, 48));
+    expect((icon.center.dy - line.center.dy).abs(), lessThan(1), reason: '횟수 줄 가운데');
+    expect(plus.left, greaterThan(line.right - 0.5));
     await t.tap(label('독서 기록 추가'));
     await t.pumpAndSettle();
     expect(find.text('독서 기록 추가'), findsOneWidget);

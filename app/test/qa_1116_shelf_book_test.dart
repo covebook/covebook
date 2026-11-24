@@ -162,7 +162,7 @@ void main() {
     });
 
     for (final scale in [1.0, 1.15, 1.3, 2.0]) {
-      testWidgets('글씨 $scale배 360 폭: 전환 칸 \'위치, 각도\'가 칸 안에 다 보이고, 이 책 꾸미기 줄 이름이 한 줄(설명은 아래)', (tester) async {
+      testWidgets('글씨 $scale배 360 폭: 전환 칸 \'위치, 각도\'가 칸 안에 다 보이고, 이 책 꾸미기 줄은 이름 · 설명(오른쪽)이 한 줄', (tester) async {
         tester.view.physicalSize = const Size(1080, 2400);
         tester.view.devicePixelRatio = 3;
         addTearDown(tester.view.reset);
@@ -179,12 +179,15 @@ void main() {
         if (scale == 1.0) expect((tester.getCenter(title).dy - tester.getCenter(find.text('위치, 각도')).dy).abs(), lessThan(4), reason: '기본 글씨는 같은 줄');
         await tester.tap(find.text('디자인'));
         await tester.pump();
-        // 이름은 한 줄, '그림, 색상, 재질'은 이름 아래 한 줄(오른쪽 값으로 두면 이름이 두 줄로 접혔다)
-        // 한 줄 높이(17/25.5 · 15/22.5 × 글씨 배율)의 1.5배보다 낮다 = 한 줄
+        // 이름 · 설명 둘 다 한 줄, 설명은 같은 줄 오른쪽(2026-11-24 사용자 '왼쪽 사진처럼 우측에 있게 하고 한 줄로': 이름 아래였다).
+        // 이름은 다 보이고, 칸이 모자라면 설명 끝이 '…'
+        // (시험 글꼴은 글자마다 1em이라 실제 글꼴보다 넓다: 실제 360dp 1.3배 화면은 에뮬 사진으로 본다)
+        final name = tester.renderObject<RenderParagraph>(find.text('이 책 꾸미기'));
+        if (scale <= 1.3) expect(name.didExceedMaxLines, isFalse, reason: '이름은 잘리지 않는다');
         expect(tester.getSize(find.text('이 책 꾸미기')).height, lessThan(25.5 * scale * 1.5));
-        // 설명은 1.3배까지 한 줄(2배는 두 줄로 접힌다)
-        if (scale <= 1.3) expect(tester.getSize(find.text('그림, 색상, 재질')).height, lessThan(22.5 * scale * 1.5));
-        expect(tester.getTopLeft(find.text('그림, 색상, 재질')).dy, greaterThan(tester.getBottomLeft(find.text('이 책 꾸미기')).dy - 1));
+        expect(tester.getSize(find.text('그림, 색상, 재질')).height, lessThan(22.5 * scale * 1.5));
+        expect((tester.getCenter(find.text('그림, 색상, 재질')).dy - tester.getCenter(find.text('이 책 꾸미기')).dy).abs(), lessThan(2), reason: '같은 줄');
+        expect(tester.getRect(find.text('그림, 색상, 재질')).left, greaterThan(tester.getRect(find.text('이 책 꾸미기')).right));
         expect(tester.takeException(), isNull);
       });
     }

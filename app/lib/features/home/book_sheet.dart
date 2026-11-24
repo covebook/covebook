@@ -1,11 +1,13 @@
 // 책장에서 책을 짧게 누르면 아래에서 올라오는 책 정보 시트(지금 앱 features/home/BookSheet.tsx, 2026-10-31 책장 시안).
 // 왼쪽 작은 표지(실제 표지 사진, 없거나 못 읽으면 이 책의 장정 정면 + '꾸민 표지'), 오른쪽 제목·읽기 상태·한 줄 감상·최근 메모,
 // 아래 '책 정보 보기'(주요 큰 단추)와 보조 둘 '갈피 남기기 | 읽기 시작(이어서 읽기)'(글자만, 옛 시안 그대로. 책 정보 아래 두 단추와 같은 순서).
-// '책장에서 빼기'는 표지 · 제목 줄 오른쪽 아래, '책 정보 보기' 바로 위 회색 휴지통 아이콘 단추(화면 읽기 이름 '책장에서 빼기').
+// '책장에서 빼기'는 표지 · 제목 줄 오른쪽 아래, '책 정보 보기' 바로 위 휴지통 단추(회색 선 둥근 네모, 2026-11-24 사용자. 화면 읽기 이름 '책장에서 빼기').
 // 2026-11-23 손잡이 줄 오른쪽 글자 단추로 옮겼다가 줄이 48로 높아져 시트가 올라와 보여 2026-11-24 사용자 '버튼 우측 바로 위에 쓰레기 아이콘으로'. 손잡이 줄은 옛 높이로.
 // 선반은 그대로 보이게 바탕을 어둡게 덮지 않는다.
 // 배치 조작은 꾹 눌러 꾸미기에서
 library;
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -28,8 +30,11 @@ import '../reading/start_book.dart' show startReadingBook;
 import '../stats/stats_widgets.dart' show CoverImage;
 import '../bookmark/new_bookmark_screen.dart';
 
-/// 빼기 아이콘(누르는 자리 48, 그림 22)이 표지 · 제목 줄 아래 틈으로 내려가는 만큼: 그림 아래 끝이 줄 아래 끝(표지 아래)과 맞는다
-const _trashDrop = (Space.hit - IconSize.base) / 2;
+/// 빼기 단추(누르는 자리 48, 테두리 칸 40)가 표지 · 제목 줄 아래 틈으로 내려가는 만큼: 칸 아래 끝이 줄 아래 끝(표지 아래)과 맞는다
+const _trashDrop = (Space.hit - ControlSize.iconBox) / 2;
+
+/// 맨 아래 글자 줄(누르는 자리 48)에서 글 아래 빈 몫: 이만큼은 시스템 아래 띠에 걸쳐도 글자가 띠 위에 남는다
+const _actionsSlack = Space.m;
 
 /// 표지 폭: 내 책 목록 표지와 같은 80(시안 실측 104였는데 시트가 아래로 너무 길었다, 2026-11-20 사용자 '여기도 밑으로 너무 기네')
 const _coverW = CoverSize.list;
@@ -82,7 +87,9 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
           borderRadius: BorderRadius.vertical(top: Radius.circular(Shape.sheet)),
           boxShadow: [BoxShadow(color: Color(0x1A6F5843), blurRadius: 16, offset: Offset(0, -2))],
         ),
-        padding: EdgeInsets.fromLTRB(Space.page + 4, 0, Space.page + 4, insets.bottom + 14),
+        // 아래 여백: 맨 아래 글자 줄(누르는 자리 48)의 글 아래 빈 12만 시스템 아래 띠에 걸친다(글자는 띠 위).
+        // 2026-11-24 사용자 '이어서 읽기 밑에 하단 여백 줄이라': 띠 + 14였다(에뮬 360dp에서 글 아래 흰 곳 약 52 → 26)
+        padding: EdgeInsets.fromLTRB(Space.page + 4, 0, Space.page + 4, math.max(insets.bottom - _actionsSlack, Space.xs)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -189,10 +196,13 @@ Future<void> showBookSheet(BuildContext context, String bookId, {Library? view, 
                           // 2026-11-24 사용자 '왤케 올라와있지 … 버튼 우측 바로 위에 쓰레기 아이콘으로': 손잡이 줄 글자 단추(줄이 48로 높아졌다)에서 옮김
                           if (canRemove)
                             Positioned(
-                              right: 0,
+                              // 보이는 칸(40) 오른쪽 끝을 책 정보 보기 단추 끝에 맞춘다(누르는 자리 48 중 바깥 4는 칸 밖이라 안 눌린다)
+                              right: -_trashDrop,
                               bottom: 0,
                               child: IconBtn(
                                 label: '책장에서 빼기',
+                                // 회색 선 둥근 네모(2026-11-24 사용자 '아이콘에 배경 말고 회색 선 넣어 줘, 네모에 모서리 둥근')
+                                outlined: true,
                                 onPress: () async {
                                   Navigator.pop(ctx);
                                   final place = PlacementStore.instance;

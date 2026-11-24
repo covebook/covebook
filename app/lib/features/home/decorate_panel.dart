@@ -317,8 +317,9 @@ class _DecoratePanelState extends State<DecoratePanel> {
         ),
         const SizedBox(height: Space.s),
         // 그림 · 색상 · 재질 · 갈피는 책 꾸미기(책 정보 › 책 정보 칸 › 책 꾸미기와 같은 화면).
-        // '그림, 색상, 재질'은 이름 아래 회색 글: 오른쪽 값으로 두면 360 폭 기본 글씨에서도 '이 책 꾸미기'가 두 줄로 접혔다
-        ListItem(label: '이 책 꾸미기', sub: '그림, 색상, 재질', chevron: true, onPress: widget.onBinding),
+        // '그림, 색상, 재질'은 오른쪽 값, 이름과 한 줄(2026-11-24 사용자 '왼쪽 사진처럼 우측에 있게 하고 한 줄로': 이름 아래 두었었다).
+        // 칸이 모자라면 값 끝을 '…'로 줄인다(이름은 다 보이게, ListItem.oneLine)
+        ListItem(label: '이 책 꾸미기', value: '그림, 색상, 재질', oneLine: true, chevron: true, onPress: widget.onBinding),
       ]);
 
   static const _partNames = {DecoPart.move: '위치, 각도', DecoPart.look: '디자인'};
