@@ -475,25 +475,30 @@ abstract final class Motion {
   static const wiggleDx = 8.0;
 }
 
-/// 하단 탭 바(알약): 양옆 15, 높이 58, 아래 틈 4, 안쪽 좌우 9, 아이콘 23, 그림자 0 3 14 rgba(25,31,40,.13).
+/// 하단 탭 바(알약): 양옆 12, 높이 56, 아래 틈 4, 안쪽 좌우 9, 아이콘 22, 그림자 0 3 14 rgba(25,31,40,.13). 2026-11-24 토스증권 하단바 사진 참고(전에는 15 · 58 · 23).
 /// TDS에는 하단 탭이 없다(앱인토스 UI/UX 가이드: '토스에서 제공하는 플로팅 형태 유지 · 탭 2~5개'). 지금 앱 탭 바가 이미 떠 있는 알약 · 5개라 값은 우리 값 그대로
 abstract final class TabBarStyle {
-  static const height = 58.0;
+  /// 알약 높이(2026-11-24 사용자 '토스증권 하단바 참고': 그 사진 360dp 기준 56)
+  static const height = 56.0;
 
-  /// 탭 바가 차지하는 높이(지금 앱 navigation.height: 알약 + 틈). 작은 타이머·목록 아래 여백의 기준
-  static const navHeight = 66.0;
+  /// 탭 바가 차지하는 높이(알약 56 + 틈 8). 작은 타이머 · 목록 아래 여백의 기준
+  static const navHeight = 64.0;
 
   /// 탭 화면 내용 아래 여백(지금 앱 TAB_CONTENT_PAD)
   static const contentPad = navHeight + 40;
-  static const side = 15.0;
+
+  /// 알약 좌우 여백(토스증권 사진 12)
+  static const side = 12.0;
   static const gap = 4.0;
   static const paddingX = 9.0;
-  static const icon = 23.0;
 
-  /// 아이콘과 이름 사이(아이콘 23 + 2 + 이름 줄 14 = 39, 막대 58 안 가운데)
-  static const labelGap = 2.0;
+  /// 아이콘 칸 높이(토스증권 사진: 그림 높이 약 20 → 우리 아이콘 칸 22)
+  static const icon = 22.0;
 
-  /// 큰 글씨에서도 이름이 막대(58)를 넘지 않게 이름 글자 배율 상한(1.3배: 23 + 2 + 18.2 = 43)
+  /// 아이콘과 이름 사이(토스증권 사진: 그림 끝 ~ 글자 위 7. 아이콘 22 + 4 + 이름 줄 14 = 40, 알약 56 안 가운데)
+  static const labelGap = 4.0;
+
+  /// 큰 글씨에서도 이름이 알약(56)을 넘지 않게 이름 글자 배율 상한(1.3배: 22 + 4 + 18.2 = 44.2)
   static const labelScaleMax = 1.3;
   static const shadow = BoxShadow(color: Color(0x21191F28), offset: Offset(0, 3), blurRadius: 14);
 

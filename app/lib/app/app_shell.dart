@@ -398,7 +398,8 @@ class _AppShellState extends State<AppShell> {
                         child: Row(
                           children: [
                             // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 아래 글자는 같은 이름이라 읽지 않는다.
-                            // 아이콘 아래 이름(2026-11-24 사용자 6단계): 글자 11, 색은 아이콘과 같게(고른 탭은 진하게). 막대 58 · 아이콘 23은 그대로, 큰 글씨는 1.3배까지
+                            // 아이콘 아래 이름(2026-11-24 사용자 6단계): 글자 11, 색은 아이콘과 같게(고른 탭은 진하게). 큰 글씨는 1.3배까지.
+                            // 크기는 토스증권 하단바 사진에 맞춤(같은 날): 알약 56 · 좌우 12 · 아이콘 22 · 아이콘과 이름 사이 4
                             for (var i = 0; i < _tabs.length; i++)
                               Expanded(child: TabBarItem(label: _tabs[i].label, icon: _tabs[i].icon, selected: i == _index, onTap: () => tap(i))),
                           ],
@@ -417,7 +418,7 @@ class _AppShellState extends State<AppShell> {
 }
 
 /// 하단 탭 하나: 아이콘과 그 아래 이름(2026-11-24 사용자 6단계: 글자 11, 색은 아이콘과 같게, 고른 탭은 진하게).
-/// 막대 58 · 아이콘 23은 그대로, 이름 글자 배율은 1.3배까지(큰 글씨에서도 막대를 넘지 않게).
+/// 알약 56 · 아이콘 22 · 사이 4(토스증권 하단바 사진 참고, 같은 날), 이름 글자 배율은 1.3배까지(큰 글씨에서도 알약을 넘지 않게).
 /// 화면 읽기: 탭마다 이름 하나 · 버튼 · 고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 아래 글자는 같은 이름이라 따로 읽지 않는다
 class TabBarItem extends StatelessWidget {
   const TabBarItem({super.key, required this.label, required this.icon, required this.selected, required this.onTap});

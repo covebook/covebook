@@ -192,7 +192,7 @@
   --ck-icon: 22px;
   --ck-icon-chevron: 24px;
   --ck-icon-stroke: 1.6px;
-  --ck-icon-tab-bar: 23px;
+  --ck-icon-tab-bar: 22px;
   --ck-icon-back: 28px;
   --ck-icon-mark: 20px;
   --ck-nav-bar: 60px;
@@ -211,10 +211,10 @@
   --ck-cover-post: 36px;
   --ck-cover-swatch: 22px;
   --ck-cover-ratio: 0.68;
-  --ck-tabbar-height: 58px;
-  --ck-tabbar-nav-height: 66px;
-  --ck-tabbar-content-pad: 106px;
-  --ck-tabbar-side: 15px;
+  --ck-tabbar-height: 56px;
+  --ck-tabbar-nav-height: 64px;
+  --ck-tabbar-content-pad: 104px;
+  --ck-tabbar-side: 12px;
   --ck-tabbar-gap: 4px;
   --ck-tabbar-padding-x: 9px;
   --ck-tabbar-fade: 72px;
