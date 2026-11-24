@@ -27,7 +27,6 @@ import '../../ui/alert.dart';
 import '../../ui/book_visual.dart';
 import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
-import '../../ui/tab_icons.dart' show shelfIcon;
 import '../../ui/theme.dart';
 import '../bookmark/bookmark_detail_screen.dart' show openBookmark;
 import 'add_book_screen.dart' show openAddBook;
@@ -583,9 +582,6 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
   }
 }
 
-/// 책장에 있는 책 표시(표지 오른쪽 아래 흰 동그라미)
-const _shelfBadge = 30.0;
-
 enum _CellState { normal, free, picked }
 
 /// 격자 한 칸(줄이 아니라 칸이라 BookRow가 아니다): 표지 + 제목·저자 한 줄씩. 고르는 중: 표지 오른쪽 위 모서리에 고르는 원, 고른 책은 테마색 테두리.
@@ -647,23 +643,8 @@ class _GridCell extends StatelessWidget {
                       child: RadioMark(on: state == _CellState.picked),
                     ),
                   ),
-                if (shelf && state == _CellState.normal)
-                  Positioned(
-                    left: r.edge + r.w - _shelfBadge * 0.7,
-                    top: r.edge + r.h - _shelfBadge * 0.7,
-                    child: ExcludeSemantics(
-                      child: Container(
-                        width: _shelfBadge,
-                        height: _shelfBadge,
-                        decoration: const BoxDecoration(
-                          color: AppColors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: Color(0x1F191F28), offset: Offset(0, 1), blurRadius: 4)],
-                        ),
-                        child: Center(child: shelfIcon(AppColors.ink, size: _shelfBadge * 0.6)),
-                      ),
-                    ),
-                  ),
+                // 책장 표시는 꽂기 시트와 같은 부품(shelfBadgeOn)
+                if (shelf && state == _CellState.normal) shelfBadgeOn(r),
               ]),
               Padding(
                 padding: const EdgeInsets.only(top: Space.s),

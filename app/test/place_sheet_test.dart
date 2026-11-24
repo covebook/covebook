@@ -1,5 +1,5 @@
 // 책장에 꽂기(2026-11-24 사용자 시안): 홈 '+' 시트에서 책장에 없는 책을 끌어 원하는 자리에 꽂는다(placeFromDrawer).
-// 시트는 책장에 없는 책이 앞, 책장에 있는 책은 끝 + 책장 표시. '목록 보기'는 책 추가 화면. 책을 끌 때 아래 흰 X(RemoveZone)에 놓으면 책장에서 뺀다
+// 시트는 책장에 없는 책이 앞, 책장에 있는 책은 끝 + 책장 표시. '목록 보기'는 책 추가 화면. 책을 끌 때 아래 빼기 자리(RemoveZone: 흰 빛 + 검은 X, 2026-11-24)에 놓으면 책장에서 뺀다
 import 'dart:ui' as ui;
 
 import 'package:chaekjang/domain/layout.dart';
@@ -8,6 +8,9 @@ import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/domain/types.dart';
 import 'package:chaekjang/features/home/decorate_panel.dart' show RemoveZone;
 import 'package:chaekjang/features/home/place_sheet.dart';
+import 'package:chaekjang/ui/book_visual.dart' show shelfBadgeSize;
+import 'package:chaekjang/ui/kit.dart' show LucideIcon;
+import 'package:chaekjang/ui/theme.dart' show AppColors;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -120,6 +123,10 @@ void main() {
         expect(r.events, ['list']);
         expect(find.bySemanticsLabel('데미안, 책장에 있어요'), findsOneWidget);
         expect(find.bySemanticsLabel('싯다르타, 위로 끌어 책장에 꽂기'), findsOneWidget);
+        // 책장 표시는 내 책 목록과 같은 부품(흰 동그라미 30 · 진한 책장 그림, 2026-11-24 사용자 '내 책 목록에 아이콘 있잖아'): 책장에 있는 책에만 하나
+        final badge = find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == shelfBadgeSize && (w.decoration as BoxDecoration?)?.shape == BoxShape.circle);
+        expect(badge, findsOneWidget);
+        expect((t.widget<Container>(badge).decoration! as BoxDecoration).color, AppColors.white);
         // 책장에 있는 책(데미안)이 맨 오른쪽
         final x = {for (final s in ['가호', '싯다르타', '데미안']) s: t.getCenter(find.text(s).last).dx};
         expect(x['싯다르타']!, lessThan(x['가호']!));
@@ -148,7 +155,7 @@ void main() {
     });
   });
 
-  testWidgets('빼기 자리: 흰 X, 책이 위에 오면 커진다', (t) async {
+  testWidgets('빼기 자리: 흰 빛 + 검은 X(2026-11-24 사용자 \'흰색 그라데이션에 검은색 x\'), 책이 위에 오면 커진다', (t) async {
     Future<double> scaleOf(bool active) async {
       await t.pumpWidget(MaterialApp(home: Scaffold(body: SizedBox(height: 300, child: RemoveZone(active: active, centerFromBottom: 100)))));
       await t.pumpAndSettle();
@@ -156,6 +163,11 @@ void main() {
     }
 
     expect(await scaleOf(false), 1);
+    expect(t.widget<LucideIcon>(find.byType(LucideIcon)).color, AppColors.ink, reason: '검은 X');
+    // 안쪽 빛은 흰색(가운데 흰색 → 투명)
+    final glow = t.widgetList<AnimatedContainer>(find.byType(AnimatedContainer)).map((c) => (c.decoration! as BoxDecoration).gradient! as RadialGradient).toList();
+    expect(glow.last.colors.first.toARGB32() | 0xFF000000, AppColors.white.toARGB32());
+    expect(glow.last.colors.last.a, 0);
     expect(await scaleOf(true), greaterThan(1));
   });
 }

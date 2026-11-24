@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../domain/geometry.dart';
 import '../domain/library.dart';
 import 'kit.dart';
+import 'tab_icons.dart' show shelfIcon;
 import 'theme.dart';
 
 const _bookPad = 4.0; // 캔버스 여백(DU): 갈피·가장자리가 잘리지 않게
@@ -22,6 +23,28 @@ const _estimated = (widthMm: 128.0, heightMm: 188.0); // 판형을 모를 때(�
   final scale = width / (fw + _bookPad * 2);
   return (edge: _bookPad * scale, w: fw * scale, h: fh * scale);
 }
+
+/// 책장에 꽂힌 책 표시: 흰 동그라미 30 안 진한 책장 그림(하단 '책장' 탭 그림) + 옅은 그림자, 표지 오른쪽 아래 모서리에 0.7만큼 걸친다.
+/// 내 책 격자 · 책장에 꽂기 시트가 같이 쓴다(2026-11-24 사용자 '내 책 목록에 아이콘 있잖아': 꽂기 시트에 작은 회색 그림을 따로 그렸었다)
+const shelfBadgeSize = 30.0;
+
+/// 표지 칸(coverRect) 위에 얹는 책장 표시(Stack 안, 화면 읽기는 칸 이름이 맡는다)
+Widget shelfBadgeOn(({double edge, double w, double h}) r) => Positioned(
+      left: r.edge + r.w - shelfBadgeSize * 0.7,
+      top: r.edge + r.h - shelfBadgeSize * 0.7,
+      child: ExcludeSemantics(
+        child: Container(
+          width: shelfBadgeSize,
+          height: shelfBadgeSize,
+          decoration: const BoxDecoration(
+            color: AppColors.white,
+            shape: BoxShape.circle,
+            boxShadow: [BoxShadow(color: Color(0x1F191F28), offset: Offset(0, 1), blurRadius: 4)],
+          ),
+          child: Center(child: shelfIcon(AppColors.ink, size: shelfBadgeSize * 0.6)),
+        ),
+      ),
+    );
 
 class BookVisual extends StatelessWidget {
   const BookVisual({super.key, required this.lib, required this.id, required this.width, this.uniform = false});
