@@ -93,10 +93,11 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
   Widget build(BuildContext context) {
     final list = widget.list, cancel = widget.cancel;
     final actions = list.where((b) => b != cancel).toList();
-    // ConfirmDialog 단추 크기 large(CancelButton · ConfirmButton 기본값). 지우기 확인은 danger fill
+    // ConfirmDialog 단추 크기 large(CancelButton · ConfirmButton 기본값). 지우기 확인도 테마색 채움(primary):
+    // 2026-11-21 사용자 '이런 거 테마색으로 하라고!!!'(감상 삭제 창의 빨간 채움 단추). 삭제 시트(61)와 같다. 하는 일은 단추 이름('삭제')이 말한다
     Widget btn(AlertButton b, String kind) => Btn(label: b.text, kind: kind, size: 'large', onPress: () => Navigator.pop(context, b));
-    String kindOf(AlertButton b, {bool first = true}) => b.style == AlertStyle.destructive ? 'dangerFill' : first ? 'primary' : 'secondary';
-    String leftKind(AlertButton b) => b.style == AlertStyle.destructive ? 'dangerFill' : 'secondary';
+    String kindOf(AlertButton b, {bool first = true}) => b.style == AlertStyle.destructive || first ? 'primary' : 'secondary';
+    String leftKind(AlertButton b) => b.style == AlertStyle.destructive ? 'primary' : 'secondary';
 
     // 아래 끝이 글자 단추('취소'만 아래에 따로 있는 창)인지: 행동 둘 + 취소, 또는 늘 쌓는 창의 취소. 단추 하나 · 둘(좌우)은 칠한 단추
     final endsWithText = cancel != null && (actions.length >= 2 || widget.stacked);

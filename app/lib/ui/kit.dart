@@ -931,7 +931,6 @@ class H2 extends StatelessWidget {
 ///  - 'secondary'  흰 바탕 + 회색 선(AppColors.line) · 진회색 글자: ConfirmDialog 취소 단추 · BottomCTA.Double 왼쪽 단추.
 ///                 TDS dark weak(반투명 회색 바탕) 대신 원래 앱의 회색 선 단추(2026-11-20 사용자 '회색 배경 말고 지금까지 쓰던 회색 선으로 전부')
 ///  - 'danger'     danger weak(옅은 주의색 바탕 · 주의색 글자)
-///  - 'dangerFill' danger fill(주의색 채움 · 흰 글자): 지우기를 확정하는 단추
 ///  - 'ghost'      글자 단추(TDS TextButton)
 /// 눌림: 바탕 위에 딤 레이어(--button-pressed-background-color · --button-pressed-opacity). 꺼짐: 바탕 · 글자 투명도.
 /// 불러오는 중: 점 3개가 차례로 움직이고 단추 폭은 그대로(Button 절 '로딩').
@@ -968,7 +967,6 @@ class _BtnState extends State<Btn> {
       'primary' => (AppColors.accent, AppColors.onAccent),
       'secondary' => (AppColors.bg, AppColors.title),
       'danger' => (AppColors.dangerWeak, AppColors.danger),
-      'dangerFill' => (AppColors.danger, AppColors.onAccent),
       _ => (Colors.transparent, AppColors.inkSoft),
     };
     final h = Btn.heightOf(widget.size);

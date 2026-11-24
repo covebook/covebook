@@ -1,5 +1,6 @@
 // 독서 실행 화면(지금 앱 features/reading/ReadingScreen.tsx): 장면이 화면 대부분, 아래 조작부는 위에서부터 연결된 책 · 시간 · [분위기 | 재생/일시정지 | 목표] 한 줄.
 // 분위기 = 장면+환경음 한 세트. 조작부를 접으면 [스피커 · 밝은 시간 · 재생·일시정지]가 남는다(다시 열어도 타이머는 멈추지 않는다).
+// 일시정지를 누르면 멈추고 이 화면을 닫아 시작한 화면으로 돌아간다(2026-11-24 사용자). 멈춘 독서는 작은 타이머 · 읽기 탭에서 이어 읽는다.
 // 스피커를 누르면 그 줄 위에 왼쪽부터 차는 소리 막대가 열리고, 한 번 더 누르거나 막대를 맨 왼쪽까지 내리면 음소거.
 // 장면은 옆으로 밀어 바꾼다(접었을 때 아래 점이 지금 장면). 소리만 듣기(soundOnly)는 타이머 없이 소리만: 독서 시간으로 기록하지 않는다
 library;
@@ -187,8 +188,13 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
       _audio.playing ? _audio.pause() : _audio.play(_settings.scene);
     } else if (_reading.active == null) {
       _start();
+    } else if (_reading.running) {
+      pauseReading();
+      // 일시정지하면 읽기 화면을 닫고 시작한 자리로 돌아간다(2026-11-24 사용자 '타이머 일시정지 하면 밖으로 나오게').
+      // 멈춘 독서는 그 화면의 작은 타이머 · 읽기 탭 카드에서 이어 읽는다. 펼친 조작부 · 접은 조작부의 단추가 같다
+      _leave();
     } else {
-      _reading.running ? pauseReading() : unawaited(resumeReadingOrTell(context));
+      unawaited(resumeReadingOrTell(context));
     }
   }
 

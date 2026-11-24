@@ -24,6 +24,18 @@ void main() {
     expect(CoverSize.edit / CoverSize.ratio, closeTo(CoverSize.editHeight, 0.001));
   });
 
+  testWidgets('삭제 확인창의 삭제 단추는 빨간 채움이 아니라 테마색 채움(2026-11-21 사용자 \'이런 거 테마색으로 하라고!!!\')', (t) async {
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (c) => TextButton(
+          onPressed: () => appAlert(c, '이 감상을 삭제할까요?', '되돌릴 수 없어요.', [const AlertButton('취소', style: AlertStyle.cancel), const AlertButton('삭제', style: AlertStyle.destructive)]),
+          child: const Text('열기'),
+        )))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    final del = t.widget<Btn>(find.ancestor(of: find.text('삭제'), matching: find.byType(Btn)));
+    expect(del.kind, 'primary');
+    expect(t.widget<Btn>(find.ancestor(of: find.text('취소'), matching: find.byType(Btn))).kind, 'secondary');
+  });
+
   testWidgets('입력칸(Field) 한 줄 높이는 ControlSize.field 48', (t) async {
     await t.pumpWidget(MaterialApp(home: Scaffold(body: SizedBox(width: 300, child: Field(label: '쪽수', value: '', unit: '쪽', onChange: (_) {})))));
     final box = find.descendant(of: find.byType(Field), matching: find.byType(Container)).first;
