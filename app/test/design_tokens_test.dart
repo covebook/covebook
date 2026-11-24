@@ -119,6 +119,8 @@ Map<String, Object> buildTokens() => {
       'gap': TabBarStyle.gap,
       'paddingX': TabBarStyle.paddingX,
       'fade': TabBarStyle.fade,
+      'iconStroke': TabBarStyle.iconStroke,
+      'iconFillStroke': TabBarStyle.iconFillStroke,
     }),
   },
   'opacity': {'pressed': pressOpacity, 'disabled': disabledOpacity},

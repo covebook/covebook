@@ -1,6 +1,6 @@
 // 표지 사진을 앞표지 면에 꽉 채워 그린다: 그림 바깥 흰 여백은 표지가 아니라서 빼고(whiteMat), 채도는 사진 책 규칙(0.85)으로.
 // 지금 앱 ui/book3d/art.tsx PhotoCover와 domain/cover-url whiteMat을 옮긴 것.
-// 책 옆면 모양(scene_config/spine_look, 책마다)에 쓰는 그림도 함께 둔다: 측면(YES24 책등 사진)·겹무늬(앞표지 가장자리 줄무늬)
+// 책 옆면 모양(scene_config/spine_look, 책마다)에 쓰는 그림도 함께 둔다: 실물(YES24 책등 사진)·겹무늬(앞표지 가장자리 줄무늬)
 library;
 
 import 'dart:math' as math;
@@ -106,14 +106,14 @@ const _stripeW = 0.012;
   return (pixels: out, acc: acc, rows: hh);
 }
 
-/// 표지 사진 한 장(그림 + 흰 여백) + 옆면 모양에 쓰는 그림(줄무늬, 측면이면 책등 사진)
+/// 표지 사진 한 장(그림 + 흰 여백) + 옆면 모양에 쓰는 그림(줄무늬, 실물이면 책등 사진)
 class CoverPhoto {
   const CoverPhoto(this.image, this.mat, {this.stripe, this.spine});
   final ui.Image image;
   final CoverMat mat;
   final SpineStripe? stripe;
 
-  /// YES24 책등 사진('측면'을 골랐고 좁고 긴 그림이 있을 때만)
+  /// YES24 책등 사진('실물'을 골랐고 좁고 긴 그림이 있을 때만)
   final ui.Image? spine;
 
   static Future<CoverPhoto> of(ui.Image image, {ui.Image? spine}) async {
@@ -147,7 +147,7 @@ class CoverPhoto {
 
 final _made = <String, Future<CoverPhoto?>>{};
 
-/// 표지 사진(주소)을 받아 그릴 준비를 한다: 흰 여백·줄무늬를 재고, [withSpine](이 표지의 책 가운데 '측면'을 고른 책이 있으면)이면 YES24 책등 사진도 받는다.
+/// 표지 사진(주소)을 받아 그릴 준비를 한다: 흰 여백·줄무늬를 재고, [withSpine](이 표지의 책 가운데 '실물'을 고른 책이 있으면)이면 YES24 책등 사진도 받는다.
 /// 같은 주소·같은 모양은 한 번만(못 받았으면 다음에 다시)
 Future<CoverPhoto?> loadCoverPhoto(String uri, {bool withSpine = false}) {
   final key = '$uri|${withSpine ? 's' : ''}';

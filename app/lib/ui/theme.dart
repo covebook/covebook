@@ -495,6 +495,11 @@ abstract final class TabBarStyle {
   /// 아이콘 칸 높이(토스증권 사진: 그림 높이 약 20 → 우리 아이콘 칸 22)
   static const icon = 22.0;
 
+  /// 탭 아이콘 윤곽선 굵기(28칸 그림 기준, 22 아이콘에서 약 1.6dp). 2026-11-25 사용자 '하단바 아이콘 선 두께 조금 줄여봐'로 2.4 → 2.0.
+  /// 고른 탭의 찬 모양은 그대로(찬 모양 테두리는 `iconFillStroke`)
+  static const iconStroke = 2.0;
+  static const iconFillStroke = 2.4;
+
   /// 아이콘과 이름 사이(토스증권 사진: 그림 끝 ~ 글자 위 7. 아이콘 22 + 4 + 이름 줄 14 = 40, 알약 56 안 가운데)
   static const labelGap = 4.0;
 

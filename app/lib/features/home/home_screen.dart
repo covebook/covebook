@@ -1816,7 +1816,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     );
   }
 
-  /// 책 옆면 모양(꾸미기 › 디자인 '책 옆면', 책마다)이 바뀌었다: 표지 사진을 그 모양으로 다시 준비한다(측면이면 책등 사진도 받는다). 오는 대로 바꿔 그린다
+  /// 책 옆면 모양(꾸미기 › 디자인 '책 옆면', 책마다)이 바뀌었다: 표지 사진을 그 모양으로 다시 준비한다(실물이면 책등 사진도 받는다). 오는 대로 바꿔 그린다
   void _spineLookChanged() {
     if (mounted) _loadCovers([for (final b in _libBooks) ?b.coverArtUri], again: true);
   }
@@ -1830,7 +1830,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     }
     final t0 = DateTime.now();
     var left = uris.toSet().length;
-    // '측면'을 고른 책의 표지: 책등 사진도 받는다
+    // '실물'을 고른 책의 표지: 책등 사진도 받는다
     final spineFor = {for (final b in _libBooks) if (b.coverArtUri case final u? when spineLooks.of(b.id) == SpineLook.photo) u};
     for (final uri in uris.toSet()) {
       if (!again && _photos.containsKey(uri)) {

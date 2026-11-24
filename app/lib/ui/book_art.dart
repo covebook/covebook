@@ -136,7 +136,7 @@ void drawBookArt(ui.Canvas canvas, Book3 b, BookLook look, GlyphMetrics glyphs, 
       // 표지 사진이 있으면 앞표지는 사진만(제목은 사진 안에 있다)
       drawPhotoCover(canvas, photo, pn.w, pn.h);
     } else if (sp != null) {
-      // 이 책에 고른 옆면 모양(측면 사진·겹무늬 줄무늬). 사진은 제목이 사진 안에 있어 쓰지 않는다
+      // 이 책에 고른 옆면 모양(실물 사진·겹무늬 줄무늬). 사진은 제목이 사진 안에 있어 쓰지 않는다
       drawSpineImage(canvas, sp.image, pn.w, pn.h);
       if (sp.ink != null && look.title.isNotEmpty) {
         final op = titleOpacity(b.roll);

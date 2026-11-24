@@ -219,6 +219,8 @@
   --ck-tabbar-gap: 4px;
   --ck-tabbar-padding-x: 9px;
   --ck-tabbar-fade: 72px;
+  --ck-tabbar-icon-stroke: 2px;
+  --ck-tabbar-icon-fill-stroke: 2.4px;
   --ck-press-opacity: 0.55;
   --ck-disabled-opacity: 0.4;
 

@@ -73,7 +73,7 @@ class _BookPainter extends CustomPainter {
   bool shouldRepaint(_BookPainter old) => old.b != b || old.book != book || old.photo != photo || old.px.s != px.s || old.ribbons != ribbons || old.spine != spine;
 }
 
-/// 표지 사진(있으면) 받기. 이 책의 옆면 모양이 바뀌면 그 모양으로 다시('측면'이면 책등 사진도 받는다)
+/// 표지 사진(있으면) 받기. 이 책의 옆면 모양이 바뀌면 그 모양으로 다시('실물'이면 책등 사진도 받는다)
 mixin _CoverPhotoLoad<T extends StatefulWidget> on State<T> {
   CoverPhoto? photo;
   bool _ready = ShelfPainter.ready;

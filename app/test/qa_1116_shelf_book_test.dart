@@ -136,24 +136,25 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('책을 하나 골라 주세요'), findsOneWidget);
       expect(find.text('책등'), findsNothing);
-      expect(find.text('측면'), findsNothing);
+      expect(find.text('실물'), findsNothing);
     });
 
-    testWidgets('고른 책: 위치, 각도 | 디자인 전환 칸, 디자인에서 책 옆면(단색 | 측면 | 겹무늬) · 이 책 꾸미기(2026-11-23 이름)', (tester) async {
+    testWidgets('고른 책: 위치, 각도 | 디자인 전환 칸, 디자인에서 책 옆면(단색 | 실물 | 겹무늬, 2026-11-25 측면 → 실물) · 이 책 꾸미기(2026-11-23 이름)', (tester) async {
       final picked = <SpineLook>[];
       var binding = 0;
       await tester.pumpWidget(panel(onSpine: picked.add, onBinding: () => binding++));
       expect(find.text('위치, 각도'), findsOneWidget);
-      expect(find.text('측면'), findsNothing);
+      expect(find.text('실물'), findsNothing);
       await tester.tap(find.text('디자인'));
       await tester.pump();
       expect(find.text('앞뒤'), findsNothing);
       expect(find.text('책 옆면'), findsOneWidget);
       expect(find.textContaining('모든 책'), findsNothing, reason: '고른 책에만 걸려 적용 범위 글이 없다');
-      for (final o in ['단색', '측면', '겹무늬']) {
+      for (final o in ['단색', '실물', '겹무늬']) {
         expect(find.text(o), findsOneWidget, reason: o);
       }
-      await tester.tap(find.text('측면'));
+      expect(find.text('측면'), findsNothing, reason: "2026-11-25 사용자 '측면 말고 실물로'");
+      await tester.tap(find.text('실물'));
       expect(picked, [SpineLook.photo]);
       expect(find.text('그림, 색상, 재질'), findsOneWidget);
       await tester.tap(find.text('이 책 꾸미기'));

@@ -3,9 +3,10 @@
 //  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('위치, 각도 | 디자인' 전환 칸, 2026-11-20 사용자. 이름은 2026-11-23)
 //  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
 // DecoratePanel: 고른 책 제목, '위치, 각도 | 디자인'. 위치, 각도는 자세 전환 칸(책등·표지·눕힘), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
-// 디자인은 책 옆면(단색 | 측면 | 겹무늬, 고른 책에만)과 이 책의 책 꾸미기(그림, 색상, 재질)로 가는 줄.
+// 디자인은 책 옆면(단색 | 실물 | 겹무늬, 고른 책에만)과 이 책의 책 꾸미기(그림, 색상, 재질)로 가는 줄.
 // 2026-11-23 사용자: 책 옆면은 책마다 따로('가호를 눌러 연 화면이니까 여기서 고른 모양은 가호에만'), 그래서 적용 범위 글('모든 책')을 뺐다.
 // 이름도 사용자 정리대로 '움직임 | 겉모습' → '위치, 각도 | 디자인', '실물 측면' → '측면', '표지 이어 쌓기' → '겹무늬', 나열은 쉼표로.
+// 2026-11-25 사용자 '책 옆면에 측면 말고 실물로': '측면' → '실물'(YES24 책등 사진 그대로).
 // 기대기는 자세처럼 전환 칸(2026-11-21 사용자 '기대기도 다른 버튼처럼'): 책등 책은 왼쪽 · 바로 · 오른쪽(방향만 고르고 각도는 옆 책과의 틈으로,
 // 기댄 각도를 아래 글로), 표지 책은 바로 · 뒤로(벽에 기대기, 사용자 '표지 쪽은 뒤로 기대기가 안 돼': 머리 손잡이를 끌어야만 됐다).
 // 막대에는 갈 수 있는 범위를 진한 띠로.
@@ -311,7 +312,7 @@ class _DecoratePanelState extends State<DecoratePanel> {
         Text('책 옆면', style: AppType.sub.copyWith(color: AppColors.ink)),
         const SizedBox(height: Space.xs),
         Segmented<SpineLook>(
-          items: const [(SpineLook.color, '단색'), (SpineLook.photo, '측면'), (SpineLook.stripe, '겹무늬')],
+          items: const [(SpineLook.color, '단색'), (SpineLook.photo, '실물'), (SpineLook.stripe, '겹무늬')],
           value: widget.spine,
           onChange: widget.onSpine,
         ),

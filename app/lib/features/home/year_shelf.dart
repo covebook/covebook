@@ -124,7 +124,7 @@ class _YearShelfState extends State<YearShelf> {
   void _loadPhotos() {
     final lib = _lib;
     if (lib == null) return;
-    // '측면'을 고른 책의 표지는 책등 사진도 받는다
+    // '실물'을 고른 책의 표지는 책등 사진도 받는다
     final spineFor = {for (final b in lib.books) if (b.coverArtUri case final u? when spineLooks.of(b.id) == SpineLook.photo) u};
     for (final uri in {for (final b in lib.books) ?b.coverArtUri}) {
       loadCoverPhoto(uri, withSpine: spineFor.contains(uri)).then((p) {
