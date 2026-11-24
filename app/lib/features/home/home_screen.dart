@@ -581,16 +581,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   bool _overRemove = false;
 
   /// 빼기 자리: 화면 아래(안전 영역 위)에서 X 가운데까지, 손가락이 X 가운데에서 이 거리 안이면 빼기 자리 위
-  static const _removeLift = Space.hit + Space.xl;
-  static const _removeHit = Space.hit + Space.l;
+  static const _removeLift = RemoveZone.lift;
 
   /// 손가락(화면 좌표)이 빼기 자리 위인지
-  bool _isOverRemove(Offset? global) {
-    if (global == null || !mounted) return false;
-    final mq = MediaQuery.of(context);
-    final c = Offset(mq.size.width / 2, mq.size.height - mq.padding.bottom - _removeLift);
-    return (global - c).distance < _removeHit;
-  }
+  bool _isOverRemove(Offset? global) => global != null && mounted && RemoveZone.isOver(MediaQuery.of(context), global);
 
   /// 끄는 책 그림(아래 그늘·책 모양을 들 때 한 번 굳힌다): 프레임마다는 옮겨 놓기만 한다
   /// (전에는 프레임마다 그늘을 흐리고 책장 그림 전체를 책 윤곽으로 잘라 그렸다)
@@ -1898,9 +1892,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     final snap = _snap;
     // 지금 책장 쪽(머리글 불투명도: 모아 보기로 줄이면 사라진다)
     // 지금 앱: 스크롤 영역은 상태 표시줄 아래부터(위로 올라간 책은 상태 표시줄 밑에서 잘린다)
-    Widget shelfPage(double headerOpacity) => ClipRect(
-                clipper: _BelowTop(pad.top),
-                child: LayoutBuilder(
+    // 상태 표시줄 칸은 맨 윗줄 벽만 그대로 그린 띠(멈춰 있다): 바탕 색 한 장이면 종이 결이 상태 표시줄 아래에서 시작해 금이 보였다(2026-11-25).
+    // 밀어 올리면 책은 그 띠 밑으로 들어간다(결끼리 맞닿아 금이 보이지 않는다). 쪽 안에 있어 모아 보기에서 쪽과 함께 작아진다
+    Widget shelfPage(double headerOpacity) => LayoutBuilder(
                   builder: (context, box) {
                     // 꾸미는 동안 머리줄 자리는 꾸미기 맨 위 줄(같은 높이)이 덮는다: 책장 자리는 그대로
                     final contentTop = pad.top + homeHeaderHeight;
@@ -1917,7 +1911,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                     final height = math.max(box.maxHeight, last == null ? 0.0 : contentTop + last.top + last.height + tail + (_decorating ? panelH : 0));
                     final lockedFrom = n - _lockedCount;
                     _geom = (m: m, geo: geo, contentTop: contentTop, lockedFrom: lockedFrom);
-                    return NotificationListener<ScrollStartNotification>(
+                    final strip = ShelfPainter(
+                      rows: _shown?.rows ?? _case!.rows,
+                      atlases: _shown?.atlases ?? _atlases,
+                      rowSpots: _shown?.spots ?? _rowSpots,
+                      spaces: _spaces,
+                      keys: _shown?.keys ?? _keys,
+                      contentTop: contentTop,
+                      bottomInset: bottomInset,
+                      viewport: box.maxHeight,
+                      frostedFrom: lockedFrom,
+                      look: '${skinChoice.key}|${spineLooks.key}',
+                      only: const {0},
+                      wallOnly: true,
+                    );
+                    return Stack(children: [
+                    ClipRect(
+                    clipper: _BelowTop(pad.top),
+                    child: NotificationListener<ScrollStartNotification>(
                       onNotification: (_) {
                         if (!_frozen) setState(() => _frozen = true);
                         return false;
@@ -2111,10 +2122,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                           ),
                         ),
                       ),
-                    );
+                    ),
+                    ),
+                    if (pad.top > 0)
+                      Positioned(left: 0, right: 0, top: 0, height: pad.top, child: IgnorePointer(child: ClipRect(child: CustomPaint(painter: strip)))),
+                    ]);
                   },
-                ),
-              );
+                );
     // 꾸미는 동안은 책장을 조금 위로(꾸미기 맨 위 줄이 머리줄보다 낮다: 줄과 책장 사이가 넓었다, 2026-11-20 사용자 '밑에 책장 조금 위로 올려').
     // 배치(줄 높이 · 굽기)는 그대로 두고 그린 자리만 옮긴다(누르기 · 끌기도 같이 옮겨진다)
     Widget liftedPage(double headerOpacity) => TweenAnimationBuilder<double>(
@@ -2140,7 +2154,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         _exitDecorate();
       },
       child: ColoredBox(
-      color: AppColors.bg,
+      // 책장 화면 바탕은 벽지 색(상태 표시줄 · 머리줄 · 하단바 뒤까지, 2026-11-25 사용자). 흰 벽이면 흰색 그대로
+      color: shelfWallColor,
       child: Stack(
         children: [
           // 시작 사진(지금 앱 LoadingScreen 스냅샷): 진짜 책장이 준비될 때까지 지난번에 굳힌 책장 그림을 먼저 보인다
@@ -2187,7 +2202,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment(0, -1 + 2 * TabBarStyle.fade / (pad.bottom + TabBarStyle.gap + TabBarStyle.height + TabBarStyle.fade)),
-                    colors: [for (final a in _fadeStops) Color.fromRGBO(255, 255, 255, a.$2)],
+                    colors: [for (final a in _fadeStops) shelfWallColor.withValues(alpha: a.$2)],
                     stops: [for (final a in _fadeStops) a.$1],
                   ),
                 ),
@@ -2195,14 +2210,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
             ),
           ),
           if (_decorating) ...[
-            // 맨 위 줄: 머리줄 자리(같은 높이, 흰 바탕으로 덮어 밀린 책장이 비치지 않게)
+            // 맨 위 줄: 머리줄 자리(같은 높이, 벽지 색 바탕으로 덮어 밀린 책장이 비치지 않게)
             Positioned(
               left: 0,
               right: 0,
               top: 0,
               height: pad.top + decoBarHeight,
               child: ColoredBox(
-                color: AppColors.bg,
+                color: shelfWallColor,
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(TabHeader.paddingH, pad.top, TabHeader.paddingH, 0),
                   child: Align(child: DecorateBar(tab: _decoTab, onTab: _setDecoTab, canUndo: _canUndo, onUndo: _undo, onDone: _exitDecorate)),
@@ -2735,10 +2750,14 @@ class ShelfPainter extends CustomPainter {
     this.frostedFrom = 1 << 30,
     this.look = '',
     this.only,
+    this.wallOnly = false,
   });
 
   /// 이 차례 줄만 그린다(null이면 모두). 끄는 동안 굳힌 그림 위에 바뀐 줄만 덧그릴 때
   final Set<int>? only;
+
+  /// 구멍 밖 평평한 벽만 그린다(상태 표시줄 칸: 맨 윗줄 벽을 결까지 그대로 잇는다, 2026-11-25)
+  final bool wallOnly;
 
   /// 그 줄들이 그리는 세로 띠(그리는 면 px, paint와 같은 줄 자리 계산)
   (double, double) bandOf(Set<int> which, Size size) {
@@ -2747,9 +2766,9 @@ class ShelfPainter extends CustomPainter {
     var lo = double.infinity, hi = double.negativeInfinity;
     for (final i in which) {
       if (i < 0 || i >= geo.length) continue;
-      final r = geo[i];
-      lo = math.min(lo, contentTop + math.max(0.0, r.top - headDu * m.scale));
-      hi = math.max(hi, contentTop + r.top + r.height + shelfCastExtent * m.scale);
+      final (y0, y1) = _band(i, geo[i], m.scale, size.height);
+      lo = math.min(lo, contentTop + y0);
+      hi = math.max(hi, contentTop + y1);
     }
     if (lo > hi) return (0, 0);
     return (lo.floorToDouble(), math.min(size.height, hi.ceilToDouble()));
@@ -2794,7 +2813,8 @@ class ShelfPainter extends CustomPainter {
     for (final i in which.toList()..sort()) {
       if (i < 0 || i >= geo.length || i >= rows.length) continue;
       final r = geo[i];
-      final y0 = contentTop + math.max(0.0, r.top - headDu * m.scale), y1 = math.min(size.height, contentTop + r.top + r.height + shelfCastExtent * m.scale);
+      final band = _band(i, r, m.scale, size.height);
+      final y0 = contentTop + band.$1, y1 = math.min(size.height, contentTop + band.$2);
       if (y1 <= y0) continue;
       if (whole || !identical(at(base.atlases, i), at(atlases, i)) || at(base.keys, i) != at(keys, i) || !identical(at(base.bookKeys, i), at(bookKeys, i))) {
         out.add(Rect.fromLTRB(0, y0, size.width, y1));
@@ -2860,6 +2880,12 @@ class ShelfPainter extends CustomPainter {
   /// 줄 자리를 정하는 화면 높이(스크롤해도 줄 자리는 화면 기준, 지금 앱 computeRows)
   final double? viewport;
 
+  /// i번째 줄이 그리는 세로 띠(contentTop 기준). 머리 위 headDu ~ 판 밑 그늘, 맨 윗줄은 그리는 면 위 끝부터 · 맨 아랫줄은 아래 끝까지(벽을 늘린 몫)
+  (double, double) _band(int i, RowGeom r, double scale, double height) => (
+        i == 0 ? -contentTop : math.max(0.0, r.top - headDu * scale),
+        i == rows.length - 1 ? math.max(height - contentTop, r.top + r.height + shelfCastExtent * scale) : r.top + r.height + shelfCastExtent * scale,
+      );
+
   /// 이 차례부터는 잠긴 칸(책을 흐리게)
   final int frostedFrom;
 
@@ -2914,9 +2940,9 @@ class ShelfPainter extends CustomPainter {
       final r = geo[i];
       if (only != null && !only!.contains(i)) continue;
       final px = pxOf(r);
-      // 줄 캔버스(지금 앱 RowCanvas): 칸 위로 맨 윗줄 벽 끝까지, 아래로 판 밑 벽까지. 윗선반 판 윤곽 안은 비운다(그 판이 보인다)
-      final y0 = math.max(0.0, r.top - headDu * m.scale);
-      final y1 = r.top + r.height + shelfCastExtent * m.scale;
+      // 줄 캔버스(지금 앱 RowCanvas): 칸 위로 맨 윗줄 벽 끝까지, 아래로 판 밑 벽까지. 윗선반 판 윤곽 안은 비운다(그 판이 보인다).
+      // 맨 윗줄은 그리는 면 위 끝(머리줄 뒤)까지, 맨 아랫줄은 아래 끝(하단바 뒤)까지 벽을 늘린다(2026-11-25 벽지가 위에서 끊기지 않게)
+      final (y0, y1) = _band(i, r, m.scale, size.height);
       canvas.save();
       final area = Path()..addRect(Rect.fromLTRB(0, contentY + y0, size.width, contentY + y1));
       final up = i > 0 ? plankOutlinePath((v) => toPx(cam, pxOf(geo[i - 1]), v), m.scale) : null;
@@ -2937,6 +2963,10 @@ class ShelfPainter extends CustomPainter {
         tab: _tab,
         bookKeys: i < bookKeys.length ? bookKeys[i] : const {},
         frosted: i >= frostedFrom,
+        // 늘릴 길이는 넉넉히(원근으로 벽 면 배율이 조금 달라도 끝까지 덮게). 그리는 면 밖은 잘린다
+        wallAbove: i == 0 ? (contentY + r.top) / m.scale * 1.2 + headDu : 0,
+        wallBelow: i == rows.length - 1 ? (y1 - r.top - r.height) / m.scale * 1.2 + headDu : 0,
+        wallOnly: wallOnly,
       );
       canvas.restore();
       if (contentY + y0 > size.height) break;
@@ -2955,5 +2985,6 @@ class ShelfPainter extends CustomPainter {
       old.viewport != viewport ||
       old.frostedFrom != frostedFrom ||
       old.look != look ||
+      old.wallOnly != wallOnly ||
       !setEquals(old.only, only);
 }

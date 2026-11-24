@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 import '../../domain/bookcase.dart';
 import '../../store/settings_store.dart' show SettingsStore;
 import '../../ui/engraved_year.dart';
-import '../../ui/theme.dart';
+import '../../ui/scene.dart' show shelfWallColor;
 import 'home_screen.dart' show homeHeaderHeight;
 import 'year_shelf.dart';
 
@@ -254,7 +254,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
           child: Transform(
             transform: frame(k),
             // 보이지 않는 쪽은 누를 수 없고 화면 읽기에서도 뺀다
-            child: IgnorePointer(ignoring: !active, child: ExcludeSemantics(excluding: !active, child: ColoredBox(color: AppColors.bg, child: child))),
+            child: IgnorePointer(ignoring: !active, child: ExcludeSemantics(excluding: !active, child: ColoredBox(color: shelfWallColor, child: child))),
           ),
         ));
       }

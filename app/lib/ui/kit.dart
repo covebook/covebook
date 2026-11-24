@@ -234,10 +234,10 @@ abstract final class CoverSize {
   /// 책 한 줄(BookRow): 작게 40(고르기 · 선택 · 바코드 · 가져오기 · 읽기 목록 · 통계) · 보통 64(검색 결과 · 감상 목록) · 크게 80(내 책 목록)
   static const row = 40.0, result = 64.0, list = 64.0; // list 80 → 64(2026-11-24 사용자 7단계)
 
-  /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 120, 책 확인(추가 전) 120.
+  /// 한 화면 하나뿐인 큰 표지: 책 정보 머리 140, 읽기 탭 '최근 읽던 책' 92(2026-11-25 사용자 시안 '썸네일 저 정도로 줄이고' ≈ 91, 120에서. 높이 135가 제목 한 줄 · 저자 · 시간 · 단추 133보다 커서 단추 아래 끝 = 표지 아래 끝), 책 확인(추가 전) 120.
   /// 책 정보 수정은 표지 위 끝 = '제목' 이름 줄 위, 아래 끝 = '저자' 칸 아래가 되는 폭(옆 두 칸 높이 [editHeight] × [ratio] ≈ 127.8,
   /// 2026-11-21 사용자 '책이랑 옆에 쓰는 거랑 라인이 안 맞아': 120이라 표지가 저자 칸보다 짧았다)
-  static const head = 120.0, feature = 120.0, confirm = 120.0, edit = editHeight * ratio; // head 140 → 120(2026-11-24 사용자 7단계)
+  static const head = 120.0, feature = 92.0, confirm = 120.0, edit = editHeight * ratio; // head 140 → 120(2026-11-24 사용자 7단계)
 
   /// 책 정보 수정 표지 옆 두 칸(이름 줄 24 + 8 + 입력칸 ControlSize.field, 사이 Space.xl 28) 높이 = 표지 높이
   static const editHeight = 2 * (24.0 + Space.s + ControlSize.field) + Space.xl;
@@ -2664,7 +2664,7 @@ class SubAction extends StatelessWidget {
 }
 
 class TextLink extends StatelessWidget {
-  const TextLink({super.key, required this.label, required this.onPress, this.soft = false, this.disabled = false, this.start = false, this.ink = false, this.bold = false, this.danger = false});
+  const TextLink({super.key, required this.label, required this.onPress, this.soft = false, this.disabled = false, this.start = false, this.end = false, this.bottom = false, this.ink = false, this.bold = false, this.danger = false});
 
   /// 본문 색(내 책 '선택', 2026-11-17 시안)
   final bool ink;
@@ -2681,6 +2681,12 @@ class TextLink extends StatelessWidget {
   /// 가운데가 아니라 왼쪽에 글자 폭만큼(지금 앱 alignSelf: 'flex-start')
   final bool start;
 
+  /// 오른쪽 끝에 글자 폭만큼(글자 끝 = 내용 오른쪽 끝, 옆 여백 없이. 읽기 탭 '시간 추가', 2026-11-25)
+  final bool end;
+
+  /// 글자를 누르는 칸(48) 아래 끝에: 왼쪽 글줄과 바닥을 맞출 때(같은 글꼴 · 1.5배 줄 간격이라 바닥선이 1dp 안으로 맞는다)
+  final bool bottom;
+
   @override
   Widget build(BuildContext context) => Semantics(
         container: true,
@@ -2692,8 +2698,8 @@ class TextLink extends StatelessWidget {
         child: Opacity(
           opacity: disabled ? disabledOpacity : 1,
           child: Align(
-            alignment: start ? Alignment.centerLeft : Alignment.center,
-            widthFactor: start ? 1 : null,
+            alignment: start ? Alignment.centerLeft : end ? Alignment.centerRight : Alignment.center,
+            widthFactor: start || end ? 1 : null,
             child: Pressable(
               onPress: disabled ? null : onPress,
               child: ConstrainedBox(
@@ -2701,10 +2707,10 @@ class TextLink extends StatelessWidget {
                 constraints: const BoxConstraints(minHeight: Space.hit),
                 // 가운데 정렬은 양옆 8을 누르는 자리로 둔다(지금 앱 hitSlop 8). 왼쪽 정렬은 글자가 위 글줄과 맞게 여백 없이
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: start ? 0 : 8),
+                  padding: EdgeInsets.symmetric(horizontal: start || end ? 0 : 8),
                   // 회색 글자 단추(soft: 장정 직접 고르기 · 계속 추가 · 나중에 정하기 · 조건 지우기 · 원문 보기 …)는 작고 보통 굵기 subLink 15(토스 '평생 수수료 무료'처럼,
                   // 2026-11-21 사용자 '서브 글씨들 토스랑 다르게 너무 두껍지 않나 크기랑 반영해서'). 갈색 · 본문색 · 주의색 글자 단추는 link 17 굵게
-                  child: Center(widthFactor: 1, child: WordText(label,
+                  child: Align(alignment: bottom ? Alignment.bottomCenter : Alignment.center, widthFactor: 1, child: WordText(label,
                       style: soft && !danger
                           ? AppType.subLink.copyWith(fontFamily: bold ? AppFonts.uiTitle : null)
                           : AppType.link.copyWith(

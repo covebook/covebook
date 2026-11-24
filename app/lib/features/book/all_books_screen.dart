@@ -623,6 +623,8 @@ class _GridCell extends StatelessWidget {
             width: width,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Stack(clipBehavior: Clip.none, children: [
+                // 책장 표시: 표지 밑 선반 판(표지보다 먼저 = 뒤에, 2026-11-25 사용자. 전에는 오른쪽 아래 흰 원 + 책장 그림)
+                if (shelf) shelfPlankUnder(r),
                 BookVisual(lib: lib, id: book.id, width: width, uniform: true),
                 if (state == _CellState.picked)
                   Positioned(
@@ -632,8 +634,7 @@ class _GridCell extends StatelessWidget {
                     height: r.h + 4,
                     child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: AppColors.accent, width: 2), borderRadius: BorderRadius.circular(5))),
                   ),
-                // 공용 고르는 원(24)은 표지 오른쪽 위 모서리에 걸친다: 원 가운데가 모서리 쪽(2026-11-20 사용자 '체크표시 원을 좀 더 오른쪽으로 해서 모서리로').
-                // 책장 배지(오른쪽 아래)와 같은 걸침(0.7)
+                // 공용 고르는 원(24)은 표지 오른쪽 위 모서리에 걸친다: 원 가운데가 모서리 쪽(2026-11-20 사용자 '체크표시 원을 좀 더 오른쪽으로 해서 모서리로'), 걸침 0.7
                 if (state != _CellState.normal)
                   Positioned(
                     left: r.edge + r.w - ControlSize.radio * 0.7,
@@ -643,11 +644,10 @@ class _GridCell extends StatelessWidget {
                       child: RadioMark(on: state == _CellState.picked),
                     ),
                   ),
-                // 책장 표시(shelfBadgeOn: 흰 원 30 · 진한 책장 그림)
-                if (shelf && state == _CellState.normal) shelfBadgeOn(r),
               ]),
+              // 판이 있든 없든 같은 틈(한 줄 제목이 나란히): 판 몫만큼 더
               Padding(
-                padding: const EdgeInsets.only(top: Space.s),
+                padding: EdgeInsets.only(top: Space.s + shelfPlankBelow(r)),
                 child: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookGridTitle),
               ),
               // 저자가 길어도 '| 책장' 같은 뒤 표시는 잘리지 않게 저자만 줄인다(2026-11-16 QA 현우 F14: 'Antoine de Saint…'에서 책장 표시가 사라졌다)

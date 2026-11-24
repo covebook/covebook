@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../domain/geometry.dart';
 import '../domain/library.dart';
+import '../scene_config/skin.dart' show skinPlank;
 import 'kit.dart';
-import 'tab_icons.dart' show shelfIcon;
 import 'theme.dart';
 
 const _bookPad = 4.0; // 캔버스 여백(DU): 갈피·가장자리가 잘리지 않게
@@ -24,27 +24,74 @@ const _estimated = (widthMm: 128.0, heightMm: 188.0); // 판형을 모를 때(�
   return (edge: _bookPad * scale, w: fw * scale, h: fh * scale);
 }
 
-/// 책장에 꽂힌 책 표시(내 책 격자): 흰 동그라미 30 안 진한 책장 그림(하단 '책장' 탭 그림) + 옅은 그림자, 표지 오른쪽 아래 모서리에 0.7만큼 걸친다.
-/// 책장에 꽂기 시트는 작은 흰 원 안 회색 선 그림(2026-11-24 이 배지로 맞췄다가 사용자 '전이 낫다'로 되돌림)
-const shelfBadgeSize = 30.0;
+/// 책장에 꽂힌 책 표시(내 책 격자 · 책장에 꽂기 시트): 표지 밑에 선반 판 한 토막. 표지가 판 윗면에 서 있고(표지 아래 끝 = 윗면 가운데),
+/// 판은 표지보다 양옆으로 표지 폭의 7% 길다. 색은 지금 책장 선반 색(skinPlank): 앞면은 그 색, 윗면은 밝게, 아래로 옅은 그늘.
+/// 2026-11-25 사용자 '책장에 있다는 표시 원 안에 책장 아이콘 넣지 말고 사진처럼 넣은 책 밑에 선반 디자인'(전에는 표지 오른쪽 아래 흰 원 + 책장 그림)
+({double ext, double top, double front, double shadow}) _plankOf(double coverW) =>
+    (ext: coverW * 0.07, top: coverW * 0.06, front: coverW * 0.055, shadow: coverW * 0.05);
 
-/// 표지 칸(coverRect) 위에 얹는 책장 표시(Stack 안, 화면 읽기는 칸 이름이 맡는다)
-Widget shelfBadgeOn(({double edge, double w, double h}) r) => Positioned(
-      left: r.edge + r.w - shelfBadgeSize * 0.7,
-      top: r.edge + r.h - shelfBadgeSize * 0.7,
-      child: ExcludeSemantics(
-        child: Container(
-          width: shelfBadgeSize,
-          height: shelfBadgeSize,
-          decoration: const BoxDecoration(
-            color: AppColors.white,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Color(0x1F191F28), offset: Offset(0, 1), blurRadius: 4)],
-          ),
-          child: Center(child: shelfIcon(AppColors.ink, size: shelfBadgeSize * 0.6)),
-        ),
-      ),
+/// 표지 칸(coverRect) 밑에 까는 선반 판(Stack 안, 표지 그림보다 먼저 = 뒤에. 화면 읽기는 칸 이름이 맡는다)
+Widget shelfPlankUnder(({double edge, double w, double h}) r) {
+  final p = _plankOf(r.w);
+  return Positioned(
+    left: r.edge - p.ext,
+    top: r.edge + r.h - p.top / 2,
+    width: r.w + p.ext * 2,
+    height: p.top + p.front + p.shadow,
+    child: ShelfPlank(top: p.top, front: p.front, shadow: p.shadow),
+  );
+}
+
+/// 선반 판 한 토막(윗면 top · 앞면 front · 아래 그늘 shadow 높이). 꾸밈 그림이라 누르기 · 화면 읽기에서 빠진다
+class ShelfPlank extends StatelessWidget {
+  const ShelfPlank({super.key, required this.top, required this.front, required this.shadow});
+  final double top, front, shadow;
+
+  @override
+  Widget build(BuildContext context) =>
+      IgnorePointer(child: ExcludeSemantics(child: CustomPaint(painter: _PlankPainter(Color(0xFF000000 | skinPlank.color), top, front, shadow))));
+}
+
+/// 선반 판(그늘까지)이 책 그림 칸(BookVisual) 아래로 나가는 길이: 아래 글자와의 틈을 이만큼 더 둔다(판이 없는 칸도 같은 줄에 맞게 함께)
+double shelfPlankBelow(({double edge, double w, double h}) r) {
+  final p = _plankOf(r.w);
+  return (p.top / 2 + p.front + p.shadow - r.edge).clamp(0, double.infinity).toDouble();
+}
+
+class _PlankPainter extends CustomPainter {
+  _PlankPainter(this.color, this.top, this.front, this.shadow);
+  final Color color;
+  final double top, front, shadow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final r = Radius.circular(front * 0.35);
+    // 판 밑 그늘(바닥에 닿는 옅은 번짐)
+    canvas.drawRRect(
+      RRect.fromLTRBR(front * 0.4, top + front * 0.4, w - front * 0.4, top + front + shadow * 0.4, r),
+      Paint()
+        ..color = const Color(0x2E573F28)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadow * 0.45),
     );
+    // 앞면: 선반 색, 아래로 조금 어둡게
+    canvas.drawRRect(
+      RRect.fromLTRBAndCorners(0, top * 0.5, w, top + front, bottomLeft: r, bottomRight: r),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [color, Color.lerp(color, const Color(0xFF3B2A1C), 0.1)!],
+        ).createShader(Rect.fromLTRB(0, top, w, top + front)),
+    );
+    // 윗면: 밝게(위에서 빛), 앞 모서리에 아주 옅은 밝은 줄
+    canvas.drawRRect(RRect.fromLTRBAndCorners(0, 0, w, top, topLeft: r, topRight: r), Paint()..color = Color.lerp(color, const Color(0xFFFFFFFF), 0.45)!);
+    canvas.drawRect(Rect.fromLTRB(0, top - 0.6, w, top), Paint()..color = Color.lerp(color, const Color(0xFFFFFFFF), 0.65)!);
+  }
+
+  @override
+  bool shouldRepaint(_PlankPainter old) => old.color != color || old.top != top || old.front != front || old.shadow != shadow;
+}
 
 class BookVisual extends StatelessWidget {
   const BookVisual({super.key, required this.lib, required this.id, required this.width, this.uniform = false});

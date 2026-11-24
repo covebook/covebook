@@ -15,7 +15,6 @@ import '../../ui/book_cover.dart' show bookTitle;
 import '../../ui/book_visual.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
-import '../../ui/tab_icons.dart' show shelfIcon;
 import '../../ui/theme.dart';
 
 /// 시트에 보이는 책 한 권(책장에 있는지)
@@ -94,27 +93,19 @@ class _PlaceSheetState extends State<PlaceSheet> {
     final lib = widget.lib;
     final title = bookTitle(lib, it.id) ?? '';
     final key = _covers.putIfAbsent(it.id, GlobalKey.new);
+    final rect = coverRect(null, null, CoverSize.place, uniform: true);
     final cover = Stack(clipBehavior: Clip.none, children: [
+      // 이미 책장에 있는 책: 표지 밑 선반 판(내 책 격자와 같은 표시, 2026-11-25 사용자 '원 안 책장 아이콘 말고 책 밑에 선반 디자인').
+      // 들어 올리는 그림(RepaintBoundary)에는 들어가지 않게 표지 뒤에 따로
+      if (it.onShelf) shelfPlankUnder(rect),
       // 모두 같은 크기 틀(가장 큰 책에 맞춰 아래로 정렬하면 작은 책 위가 크게 비었다)
       RepaintBoundary(key: key, child: BookVisual(lib: lib, id: it.id, width: CoverSize.place, uniform: true)),
-      // 이미 책장에 있는 책: 표지 오른쪽 아래 책장 표시. 작은 흰 원 안 회색 선 그림(표지를 가리지 않게 작고 옅게).
-      // 2026-11-24 내 책 격자와 같은 흰 원 30 배지로 바꿨다가 사용자 '전이 낫다'로 되돌림(내 책 격자는 그 배지 그대로)
-      if (it.onShelf)
-        Positioned(
-          right: -Space.xs,
-          bottom: -Space.xs,
-          child: Container(
-            padding: const EdgeInsets.all(Space.xs),
-            decoration: const BoxDecoration(color: AppColors.bg, shape: BoxShape.circle, boxShadow: [Shape.floatShadow]),
-            child: shelfIcon(AppColors.icon, size: IconSize.small),
-          ),
-        ),
     ]);
     final body = SizedBox(
       width: CoverSize.place,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         cover,
-        const SizedBox(height: Space.s),
+        SizedBox(height: Space.s + shelfPlankBelow(rect)),
         Text(keepAll(title), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: AppType.bookGridTitle),
       ]),
     );
@@ -167,10 +158,16 @@ class _PlaceSheetState extends State<PlaceSheet> {
                 onVerticalDragEnd: (d) {
                   if ((d.primaryVelocity ?? 0) > 0) widget.onClose();
                 },
+                // 손잡이 칸 16: 시트 위 끝에서 8에 막대, 바로 아래 제목 줄(공용 시트 appSheet와 같은 자리).
+                // 2026-11-25 사용자 '책장에 꽂기 위에 간격이 너무 긴데 하단 팝업창 높이 좀만 내려': 칸 24(막대가 가운데)였다. 시트가 8 낮아지고 막대 ~ 제목 글자 틈이 약 18 → 12
                 child: SizedBox(
-                  height: Space.l + Space.s,
-                  child: Center(
-                    child: Container(width: 38, height: 4.5, decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3))),
+                  height: Space.l,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: Space.s),
+                      child: Container(width: 38, height: 4.5, decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3))),
+                    ),
                   ),
                 ),
               ),
@@ -182,7 +179,9 @@ class _PlaceSheetState extends State<PlaceSheet> {
                 TextLink(label: '목록 보기', soft: true, onPress: widget.onList),
               ]),
             ),
-            const SizedBox(height: Space.l),
+            // 제목 줄(누르는 높이 48이라 글 아래 약 8이 이미 빈다) ~ 표지 8: 2026-11-25 사용자 '하단 팝업창 높이 좀만 내려'(16이었다).
+            // 표지 밑 선반 판 몫이 아래에 더 붙어 시트가 다시 높아지지 않게 여기서 줄인다
+            const SizedBox(height: Space.s),
             if (items.isEmpty)
               const Padding(padding: EdgeInsets.symmetric(horizontal: Space.page), child: EmptyLine('아직 내 책이 없어요'))
             else

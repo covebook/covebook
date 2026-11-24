@@ -1,5 +1,5 @@
 // 책장에 꽂기(2026-11-24 사용자 시안): 홈 '+' 시트에서 책장에 없는 책을 끌어 원하는 자리에 꽂는다(placeFromDrawer).
-// 시트는 책장에 없는 책이 앞, 책장에 있는 책은 끝 + 책장 표시. '목록 보기'는 책 추가 화면. 책을 끌 때 아래 빼기 자리(RemoveZone: 흰 빛 + 검은 X, 2026-11-24)에 놓으면 책장에서 뺀다
+// 시트는 책장에 없는 책이 앞, 책장에 있는 책은 끝 + 표지 밑 선반 판(2026-11-25). '목록 보기'는 책 추가 화면. 책을 끌 때 아래 빼기 자리(RemoveZone: 흰 빛 + 검은 X, 2026-11-24)에 놓으면 책장에서 뺀다
 import 'dart:ui' as ui;
 
 import 'package:chaekjang/domain/layout.dart';
@@ -8,7 +8,7 @@ import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/domain/types.dart';
 import 'package:chaekjang/features/home/decorate_panel.dart' show RemoveZone;
 import 'package:chaekjang/features/home/place_sheet.dart';
-import 'package:chaekjang/ui/book_visual.dart' show shelfBadgeSize;
+import 'package:chaekjang/ui/book_visual.dart' show BookVisual, ShelfPlank, coverRect;
 import 'package:chaekjang/ui/kit.dart' show LucideIcon, Space;
 import 'package:chaekjang/ui/theme.dart' show AppColors;
 import 'package:flutter/material.dart';
@@ -123,10 +123,20 @@ void main() {
         expect(r.events, ['list']);
         expect(find.bySemanticsLabel('데미안, 책장에 있어요'), findsOneWidget);
         expect(find.bySemanticsLabel('싯다르타, 위로 끌어 책장에 꽂기'), findsOneWidget);
-        // 책장 표시는 작은 흰 원 안 회색 선 그림(2026-11-24 내 책 격자 배지로 맞췄다가 사용자 '전이 낫다'): 책장에 있는 책에만 하나
-        final badge = find.byWidgetPredicate((w) => w is Container && w.padding == const EdgeInsets.all(Space.xs) && (w.decoration as BoxDecoration?)?.shape == BoxShape.circle);
-        expect(badge, findsOneWidget);
-        expect(find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == shelfBadgeSize), findsNothing, reason: '내 책 격자 배지(30)가 아니다');
+        // 책장 표시는 표지 밑 선반 판(2026-11-25 사용자 '원 안 책장 아이콘 말고 책 밑에 선반 디자인'): 책장에 있는 책에만 하나, 흰 원 배지는 없다
+        final plank = find.byType(ShelfPlank);
+        expect(plank, findsOneWidget);
+        expect(find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.shape == BoxShape.circle), findsNothing);
+        final bv = t.getRect(find.descendant(of: find.bySemanticsLabel('데미안, 책장에 있어요'), matching: find.byType(BookVisual)));
+        final cr = coverRect(null, null, bv.width, uniform: true);
+        final cover = Rect.fromLTWH(bv.left + cr.edge, bv.top + cr.edge, cr.w, cr.h);
+        final p = t.getRect(plank);
+        expect(p.left, lessThan(cover.left), reason: '판이 표지보다 양옆으로 길다');
+        expect(p.right, greaterThan(cover.right));
+        expect(p.top, lessThan(cover.bottom), reason: '표지가 판 윗면에 서 있다');
+        expect(p.bottom, greaterThan(cover.bottom));
+        // 판이 없는 책과 제목 줄 높이가 같다
+        expect(t.getRect(find.text('데미안').last).top, closeTo(t.getRect(find.text('가호').last).top, 0.01));
         // 책장에 있는 책(데미안)이 맨 오른쪽
         final x = {for (final s in ['가호', '싯다르타', '데미안']) s: t.getCenter(find.text(s).last).dx};
         expect(x['싯다르타']!, lessThan(x['가호']!));
@@ -146,6 +156,20 @@ void main() {
       await t.drag(find.bySemanticsLabel('데미안, 책장에 있어요'), const Offset(0, -200));
       await t.pump();
       expect(r.events, isEmpty);
+    });
+
+    testWidgets('손잡이 칸 16(막대는 위 끝에서 8), 바로 아래 제목 줄: 시트가 전(24)보다 8 낮다(2026-11-25 사용자)', (t) async {
+      await pumpSheet(t);
+      final handle = find.bySemanticsLabel('책장에 꽂기 닫기');
+      final h = t.getRect(handle);
+      expect(h.height, Space.l);
+      final bar = find.descendant(of: handle, matching: find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == 38));
+      expect(t.getRect(bar).top - h.top, closeTo(Space.s, 0.01));
+      final row = find.ancestor(of: find.text('책장에 꽂기'), matching: find.byType(Row)).first;
+      expect(t.getRect(row).top, closeTo(h.bottom, 0.01));
+      // 제목 줄 ~ 표지 8(16이었다): 표지 밑 판 몫이 붙어도 시트가 전보다 낮다
+      final cover = find.descendant(of: find.bySemanticsLabel('데미안, 책장에 있어요'), matching: find.byType(BookVisual));
+      expect(t.getRect(cover).top - t.getRect(row).bottom, closeTo(Space.s, 0.01));
     });
 
     testWidgets('손잡이를 누르면 닫는다', (t) async {

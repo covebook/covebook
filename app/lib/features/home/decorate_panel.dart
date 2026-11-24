@@ -589,6 +589,13 @@ class RemoveZone extends StatelessWidget {
   /// 번지는 빛 지름(누르는 자리 48의 세 배쯤)
   static const _glow = Space.hit * 3;
 
+  /// 화면 아래(안전 영역 위)에서 X 가운데까지. 손가락이 X 가운데에서 [hit] 안이면 빼기 자리 위(책 끌기 · 작은 타이머 끌기가 같이 쓴다)
+  static const lift = Space.hit + Space.xl;
+  static const hit = Space.hit + Space.l;
+
+  /// 손가락(화면 좌표)이 빼기 자리 위인지
+  static bool isOver(MediaQueryData mq, Offset global) => (global - Offset(mq.size.width / 2, mq.size.height - mq.padding.bottom - lift)).distance < hit;
+
   @override
   Widget build(BuildContext context) {
     final reduce = MediaQuery.disableAnimationsOf(context);

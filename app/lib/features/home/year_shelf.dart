@@ -267,7 +267,7 @@ class _YearShelfState extends State<YearShelf> {
     return RepaintBoundary(
       key: _shot,
       child: ColoredBox(
-        color: AppColors.bg,
+        color: shelfWallColor,
         child: ClipRect(
           clipper: _BelowTop(pad.top),
           child: LayoutBuilder(builder: (context, box) {
