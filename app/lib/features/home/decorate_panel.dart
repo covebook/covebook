@@ -574,7 +574,8 @@ class _DepthSliderState extends State<_DepthSlider> {
 }
 
 /// 책을 끄는 동안 화면 아래 빼기 자리(2026-11-24 사용자 '책 옮길 때 하단 쪽으로 넣으면 삭제되게, 흰색 x에 주변에 그라데이션').
-/// 검은 X 둘레로 흰 빛이 둥글게 번져 사라진다(같은 날 사용자 '흰색 그라데이션에 검은색 x가 낫지 않나': 어두운 빛 + 흰 X였다).
+/// 회색 X 둘레로 흰 빛이 둥글게 번져 사라진다(같은 날 사용자 '흰색 그라데이션에 검은색 x가 낫지 않나': 어두운 빛 + 흰 X였다 →
+/// 검은 X를 보고 '검은 거 말고 회색': 선 아이콘 색 AppColors.icon).
 /// 흰 빛 밑에 옅은 회색 그늘을 한 겹 더 깔아 밝은 책장 위에서도 자리가 보인다. 책이 그 위에 오면 흰 빛 · 그늘이 짙어지고 X가 커진다.
 /// 놓으면 책장에서 뺀다(책은 내 책에 남고 토스트로 되돌린다). 누르는 자리는 없다(끄는 손가락 자리로만 본다)
 class RemoveZone extends StatelessWidget {
@@ -619,7 +620,7 @@ class RemoveZone extends StatelessWidget {
                 child: AnimatedScale(
                   duration: speed,
                   scale: active ? 1.25 : 1,
-                  child: const LucideIcon('X', size: IconSize.back, color: AppColors.ink, stroke: IconSize.markStroke),
+                  child: const LucideIcon('X', size: IconSize.back, color: AppColors.icon, stroke: IconSize.markStroke),
                 ),
               ),
             ),

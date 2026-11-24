@@ -9,7 +9,7 @@ import 'package:chaekjang/domain/types.dart';
 import 'package:chaekjang/features/home/decorate_panel.dart' show RemoveZone;
 import 'package:chaekjang/features/home/place_sheet.dart';
 import 'package:chaekjang/ui/book_visual.dart' show shelfBadgeSize;
-import 'package:chaekjang/ui/kit.dart' show LucideIcon;
+import 'package:chaekjang/ui/kit.dart' show LucideIcon, Space;
 import 'package:chaekjang/ui/theme.dart' show AppColors;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -123,10 +123,10 @@ void main() {
         expect(r.events, ['list']);
         expect(find.bySemanticsLabel('데미안, 책장에 있어요'), findsOneWidget);
         expect(find.bySemanticsLabel('싯다르타, 위로 끌어 책장에 꽂기'), findsOneWidget);
-        // 책장 표시는 내 책 목록과 같은 부품(흰 동그라미 30 · 진한 책장 그림, 2026-11-24 사용자 '내 책 목록에 아이콘 있잖아'): 책장에 있는 책에만 하나
-        final badge = find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == shelfBadgeSize && (w.decoration as BoxDecoration?)?.shape == BoxShape.circle);
+        // 책장 표시는 작은 흰 원 안 회색 선 그림(2026-11-24 내 책 격자 배지로 맞췄다가 사용자 '전이 낫다'): 책장에 있는 책에만 하나
+        final badge = find.byWidgetPredicate((w) => w is Container && w.padding == const EdgeInsets.all(Space.xs) && (w.decoration as BoxDecoration?)?.shape == BoxShape.circle);
         expect(badge, findsOneWidget);
-        expect((t.widget<Container>(badge).decoration! as BoxDecoration).color, AppColors.white);
+        expect(find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == shelfBadgeSize), findsNothing, reason: '내 책 격자 배지(30)가 아니다');
         // 책장에 있는 책(데미안)이 맨 오른쪽
         final x = {for (final s in ['가호', '싯다르타', '데미안']) s: t.getCenter(find.text(s).last).dx};
         expect(x['싯다르타']!, lessThan(x['가호']!));
@@ -163,7 +163,7 @@ void main() {
     }
 
     expect(await scaleOf(false), 1);
-    expect(t.widget<LucideIcon>(find.byType(LucideIcon)).color, AppColors.ink, reason: '검은 X');
+    expect(t.widget<LucideIcon>(find.byType(LucideIcon)).color, AppColors.icon, reason: '회색 X(같은 날 사용자 \'검은 거 말고 회색\')');
     // 안쪽 빛은 흰색(가운데 흰색 → 투명)
     final glow = t.widgetList<AnimatedContainer>(find.byType(AnimatedContainer)).map((c) => (c.decoration! as BoxDecoration).gradient! as RadialGradient).toList();
     expect(glow.last.colors.first.toARGB32() | 0xFF000000, AppColors.white.toARGB32());

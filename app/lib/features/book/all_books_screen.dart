@@ -643,7 +643,7 @@ class _GridCell extends StatelessWidget {
                       child: RadioMark(on: state == _CellState.picked),
                     ),
                   ),
-                // 책장 표시는 꽂기 시트와 같은 부품(shelfBadgeOn)
+                // 책장 표시(shelfBadgeOn: 흰 원 30 · 진한 책장 그림)
                 if (shelf && state == _CellState.normal) shelfBadgeOn(r),
               ]),
               Padding(

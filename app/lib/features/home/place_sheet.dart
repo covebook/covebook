@@ -15,6 +15,7 @@ import '../../ui/book_cover.dart' show bookTitle;
 import '../../ui/book_visual.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
+import '../../ui/tab_icons.dart' show shelfIcon;
 import '../../ui/theme.dart';
 
 /// 시트에 보이는 책 한 권(책장에 있는지)
@@ -93,12 +94,21 @@ class _PlaceSheetState extends State<PlaceSheet> {
     final lib = widget.lib;
     final title = bookTitle(lib, it.id) ?? '';
     final key = _covers.putIfAbsent(it.id, GlobalKey.new);
-    final e = lib.editions[lib.books[it.id]?.editionId];
     final cover = Stack(clipBehavior: Clip.none, children: [
       // 모두 같은 크기 틀(가장 큰 책에 맞춰 아래로 정렬하면 작은 책 위가 크게 비었다)
       RepaintBoundary(key: key, child: BookVisual(lib: lib, id: it.id, width: CoverSize.place, uniform: true)),
-      // 이미 책장에 있는 책: 표지 오른쪽 아래 책장 표시(내 책 목록과 같은 부품, 2026-11-24 사용자 '내 책 목록에 아이콘 있잖아')
-      if (it.onShelf) shelfBadgeOn(coverRect(e?.widthMm, e?.heightMm, CoverSize.place, uniform: true)),
+      // 이미 책장에 있는 책: 표지 오른쪽 아래 책장 표시. 작은 흰 원 안 회색 선 그림(표지를 가리지 않게 작고 옅게).
+      // 2026-11-24 내 책 격자와 같은 흰 원 30 배지로 바꿨다가 사용자 '전이 낫다'로 되돌림(내 책 격자는 그 배지 그대로)
+      if (it.onShelf)
+        Positioned(
+          right: -Space.xs,
+          bottom: -Space.xs,
+          child: Container(
+            padding: const EdgeInsets.all(Space.xs),
+            decoration: const BoxDecoration(color: AppColors.bg, shape: BoxShape.circle, boxShadow: [Shape.floatShadow]),
+            child: shelfIcon(AppColors.icon, size: IconSize.small),
+          ),
+        ),
     ]);
     final body = SizedBox(
       width: CoverSize.place,
