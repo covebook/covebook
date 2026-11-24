@@ -172,13 +172,13 @@
 | 시각 칸 · 'HH:MM' 값 | 값은 'HH:MM'으로 두고 보이는 글자는 '오후 9:05' | `hmLabel`·`clockText` (`ui/kit.dart`) |
 | 달 이름 | '2026년 11월'(통계 머리) | `monthTitle` (`features/stats/chart_data.dart`) |
 
-독서 기록 줄(책 정보 '독서 기록')은 날짜로 묶는다: 날짜 머리 `AppType.recordDay` 17/25.5, 그 아래 시간대 `AppType.recordRange` 15/22.5 회색, 오른쪽 읽은 시간 `AppType.recordDuration` 17/25.5(숫자 폭 고정). 줄 높이 최소 `Space.dense`.
+독서 기록 줄(책 정보 '독서 기록')은 날짜로 묶는다: 날짜 머리 `AppType.recordDay` 15/22.5, 그 아래 시간대 `AppType.recordRange` 13/19.5 회색, 오른쪽 읽은 시간 `AppType.recordDuration` 15/22.5(숫자 폭 고정). 줄 높이 최소 `Space.dense`. 구역 제목(`section` 17 굵게)보다 한 단계 작게 둔다(2026-11-24 사용자: 날짜 · 읽은 시간이 17이라 제목이 더 작아 보였다. 전에는 17 · 15 · 17).
 
 | 역할 | 크기/줄 | 굵기 | 색 | 언제 |
 |---|---|---|---|---|
-| `AppType.recordDay` | 17/25.5 | 보통 | ink | 기록 묶음 날짜 머리('11월 17일') |
-| `AppType.recordRange` | 15/22.5 | 보통 | inkSoft | 기록 시간대('오후 9:05-9:30') |
-| `AppType.recordDuration` | 17/25.5 | 보통 | ink | 기록 한 줄 읽은 시간('38분') |
+| `AppType.recordDay` | 15/22.5 | 보통 | ink | 기록 묶음 날짜 머리('11월 17일'). 구역 제목 17보다 한 단계 작게(2026-11-24) |
+| `AppType.recordRange` | 13/19.5 | 보통 | inkSoft | 기록 시간대('오후 9:05-9:30') |
+| `AppType.recordDuration` | 15/22.5 | 보통 | ink | 기록 한 줄 읽은 시간('38분'), 통계 책 줄 오른쪽 시간도 같은 역할 |
 
 - 정보 사이는 옅은 세로줄 `metaSep`(' \| ', 색 `metaBar`). 그릴 때는 늘 `MetaText`(화면 읽기는 쉼표로 읽는다).
 - 개수는 '갈피 N개', '책 N권' 어순.

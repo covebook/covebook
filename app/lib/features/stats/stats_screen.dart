@@ -22,7 +22,7 @@ import 'chart_data.dart';
 import 'session_edit_screen.dart' show openSessionEdit, openSessionAdd;
 import 'stats_widgets.dart';
 
-/// 책 줄 오른쪽 읽은 시간: 책 정보 › 내 기록의 독서 기록 줄과 같은 역할(recordDuration 18 보통, 숫자 폭 고정. 굵은 rowStrong이었다).
+/// 책 줄 오른쪽 읽은 시간: 책 정보 › 내 기록의 독서 기록 줄과 같은 역할(recordDuration 15 보통, 숫자 폭 고정. 굵은 rowStrong이었다).
 /// 쓸 때마다 읽는다(모듈 final은 화소 맞춤 배율을 놓친다)
 TextStyle get _rowValue => AppType.recordDuration;
 

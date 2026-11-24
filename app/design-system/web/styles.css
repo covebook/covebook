@@ -110,9 +110,9 @@
   --ck-type-book-grid-author: 400 13px/19.5px var(--ck-font-ui);
   --ck-type-book-note: 400 13px/19.5px var(--ck-font-ui);
   --ck-type-review: 400 17px/25.5px var(--ck-font-ui);
-  --ck-type-record-day: 400 17px/25.5px var(--ck-font-ui);
-  --ck-type-record-range: 400 15px/22.5px var(--ck-font-ui);
-  --ck-type-record-duration: 400 17px/25.5px var(--ck-font-ui);
+  --ck-type-record-day: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-record-range: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-record-duration: 400 15px/22.5px var(--ck-font-ui);
   --ck-type-input: 400 16px/normal var(--ck-font-ui);
 
   /* 간격(Space) */

@@ -745,7 +745,7 @@ class _BookScreenState extends State<BookScreen> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: Space.dense),
                       child: Row(children: [
-                        // 다른 화면 기록 줄과 같은 크기(시간대 16 · 읽은 시간 18, 2026-11-18 사용자 '독서 기록 글자가 좀 작다')
+                        // 다른 화면 기록 줄과 같은 역할(시간대 recordRange 13 · 읽은 시간 recordDuration 15, 2026-11-24 구역 제목 17보다 한 단계 작게)
                         Expanded(child: Text(timeRange(x.startedAt, x.endedAt), style: AppType.recordRange)),
                         // 읽은 시간은 위 날짜('11월 17일')와 같은 글자(2026-11-18 사용자 '20분 글씨체 너무 두껍다')
                         Text(formatDuration(x.durationMs), style: AppType.recordDuration),

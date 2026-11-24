@@ -19,6 +19,20 @@ void main() {
     expect(TypeSpecs.bookAuthor.color, AppColors.inkSub);
   });
 
+  test('독서 기록 줄(2026-11-24 사용자): 날짜 · 읽은 시간 15/22.5, 시간대 13/19.5로 구역 제목 17보다 한 단계 작게. 굵기 · 색 그대로', () {
+    expect(sz(TypeSpecs.recordDay), (15, 22.5));
+    expect(sz(TypeSpecs.recordDuration), (15, 22.5));
+    expect(sz(TypeSpecs.recordRange), (13, 19.5));
+    expect(TypeSpecs.recordDay.size, lessThan(TypeSpecs.section.size));
+    for (final t in [TypeSpecs.recordDay, TypeSpecs.recordDuration, TypeSpecs.recordRange]) {
+      expect(t.family, AppFonts.ui, reason: '굵기 그대로(보통)');
+    }
+    expect(TypeSpecs.recordDay.color, AppColors.ink);
+    expect(TypeSpecs.recordDuration.color, AppColors.ink);
+    expect(TypeSpecs.recordRange.color, AppColors.inkSoft);
+    expect(TypeSpecs.recordDuration.tabular, isTrue, reason: '숫자 폭 고정 그대로');
+  });
+
   test('따로 둔 역할: 누르는 회색 글자 단추 15, 책 화면 머리 저자 15/22.5 inkSoft', () {
     expect(sz(TypeSpecs.subLink), (15, 22.5));
     expect(TypeSpecs.subLink.color, AppColors.inkSoft);

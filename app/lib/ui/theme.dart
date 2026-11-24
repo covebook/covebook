@@ -324,12 +324,12 @@ abstract final class TypeSpecs {
   static const bookNote = TypeSpec(AppFonts.ui, 13, 19.5, color: AppColors.inkSoft);
   /// 한줄평 · 평가 탭 본문: t5
   static const review = TypeSpec(AppFonts.ui, 17, 25.5);
-  /// 날짜 · 독서 기록 묶음 머리('11월 17일'): t5
-  static const recordDay = TypeSpec(AppFonts.ui, 17, 25.5);
-  /// 시간 · 독서 기록 시간대('오후 9:05-9:30'): t6 grey600
-  static const recordRange = TypeSpec(AppFonts.ui, 15, 22.5, color: AppColors.inkSoft);
-  /// 시간 · 독서 기록 한 줄의 읽은 시간('38분'): t5
-  static const recordDuration = TypeSpec(AppFonts.ui, 17, 25.5, tabular: true);
+  /// 날짜 · 독서 기록 묶음 머리('11월 17일'): t6. 구역 제목(section 17 굵게)보다 한 단계 작게(2026-11-24 사용자: 17이면 제목이 더 작아 보였다, 전에는 t5 17)
+  static const recordDay = TypeSpec(AppFonts.ui, 15, 22.5);
+  /// 시간 · 독서 기록 시간대('오후 9:05-9:30'): t7 grey600(날짜보다 한 단계 아래, 2026-11-24 전에는 t6 15)
+  static const recordRange = TypeSpec(AppFonts.ui, 13, 19.5, color: AppColors.inkSoft);
+  /// 시간 · 독서 기록 한 줄의 읽은 시간('38분'): t6, 날짜와 같은 크기(2026-11-24 전에는 t5 17)
+  static const recordDuration = TypeSpec(AppFonts.ui, 15, 22.5, tabular: true);
 
   /// 이름 → 값(토큰 내보내기 · 검사용, 위 역할을 모두 담는다)
   static const all = <String, TypeSpec>{
