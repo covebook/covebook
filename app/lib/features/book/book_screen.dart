@@ -476,7 +476,8 @@ class _BookScreenState extends State<BookScreen> {
     final essays = _model.essaysOf(id);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Center(child: Semantics(label: '내 별점, 나만 봐요', child: Stars(value: b.rating, onChange: (v) => _model.updateBook(id, rating: v)))),
-      const SizedBox(height: Space.xl),
+      // 별점 아래 28 → 16(2026-11-24 사용자: 한줄평 제목 줄 48 안 빈 자리까지 더하면 별과 제목이 멀었다)
+      const SizedBox(height: Space.l),
       SectionHead(
         title: '한줄평',
         link: _noteEdit ? '완료' : (note.isEmpty ? '쓰기' : '수정'),

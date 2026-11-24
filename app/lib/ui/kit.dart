@@ -22,14 +22,14 @@ import 'theme.dart';
 /// 부품에 박힌 공식 숫자는 아래 이름으로 따로 둔다(ListRow · Top · BottomSheet · BottomCTA · Border)
 abstract final class Space {
   /// 화면 좌우 24 = TDS ListRow horizontalPadding medium(기본) 24 · Border padding24
-  /// 구역 사이 section 40 → 32(2026-11-24 사용자 7단계)
-  static const page = 24.0, section = 32.0, group = 28.0, item = 12.0, tight = 8.0;
+  /// 구역 사이 section 40 → 32(2026-11-24 사용자 7단계) → 24(같은 날: 구역 제목 줄이 누르는 자리 때문에 48이라 실제 틈이 55~65로 보였다. 토스 실측 47~57)
+  static const page = 24.0, section = 24.0, group = 28.0, item = 12.0, tight = 8.0;
   static const xs = 4.0, s = 8.0, m = 12.0, l = 16.0, xl = 28.0, xxl = 40.0;
   static const touch = 44.0;
 
   /// 한 화면 안 구역 사이(책 정보의 독서 기록 · 읽은 기간 · 남긴 갈피, 통계 그래프 사이). 같은 종류 구역은 이 간격만 쓴다(2026-11-18).
-  /// 48 → 32(2026-11-24 사용자 7단계)
-  static const block = 32.0;
+  /// 48 → 32(2026-11-24 사용자 7단계) → 24(같은 날: 구역 제목 줄 48 안 빈 자리까지 더해 내용과 다음 제목 사이가 토스 실측 47~57에 가깝게)
+  static const block = 24.0;
 
   /// 촘촘한 정보 줄 높이(내 기록의 시간대 · 읽은 시간 줄)
   static const dense = 32.0;

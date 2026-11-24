@@ -43,9 +43,9 @@ void main() {
     expect([TypeSpecs.display.size, TypeSpecs.displayUnit.size, TypeSpecs.timer.size, TypeSpecs.clock.size, TypeSpecs.score.size, TypeSpecs.figure.size], [48, 22, 64, 36, 36, 24]);
   });
 
-  test('간격 · 표지: 구역 사이 32, 줄 · 좌우 여백 · 단추 높이 그대로, 내 책 목록 표지 64, 책 화면 머리 표지 120', () {
-    expect(Space.section, 32);
-    expect(Space.block, 32);
+  test('간격 · 표지: 구역 사이 24(7단계 32 → 같은 날 24), 줄 · 좌우 여백 · 단추 높이 그대로, 내 책 목록 표지 64, 책 화면 머리 표지 120', () {
+    expect(Space.section, 24);
+    expect(Space.block, 24);
     expect(Space.page, 24);
     expect(CoverSize.list, 64);
     expect(CoverSize.head, 120);

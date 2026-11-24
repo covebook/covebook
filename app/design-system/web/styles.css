@@ -117,7 +117,7 @@
 
   /* 간격(Space) */
   --ck-space-page: 24px;
-  --ck-space-section: 32px;
+  --ck-space-section: 24px;
   --ck-space-group: 28px;
   --ck-space-item: 12px;
   --ck-space-tight: 8px;
@@ -128,7 +128,7 @@
   --ck-space-xl: 28px;
   --ck-space-xxl: 40px;
   --ck-space-touch: 44px;
-  --ck-space-block: 32px;
+  --ck-space-block: 24px;
   --ck-space-dense: 32px;
   --ck-space-hit: 48px;
   --ck-space-row-s: 8px;
