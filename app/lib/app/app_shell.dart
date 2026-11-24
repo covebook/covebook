@@ -37,6 +37,7 @@ import '../ui/tab_icons.dart';
 import '../ui/kit.dart' show Pressable;
 import '../ui/theme.dart';
 import 'app_nav.dart';
+import 'idle_bars.dart';
 import 'startup.dart';
 
 const _app = MethodChannel('app.covebook/app');
@@ -160,11 +161,15 @@ class _AppShellState extends State<AppShell> {
     _select(t);
   }
 
-  void _select(int i) => setState(() {
-        _index = i;
-        _opened.add(i);
-        MiniTimerPlace.instance.setTab(tabPaths[i]);
-      });
+  void _select(int i) {
+    setState(() {
+      _index = i;
+      _opened.add(i);
+      MiniTimerPlace.instance.setTab(tabPaths[i]);
+    });
+    // 가만히 있으면 아래를 비우는 건 책장 탭만(다른 탭으로 가면 올리고 재지 않는다)
+    i == AppTab.shelf ? IdleBars.instance.poke() : IdleBars.instance.stop();
+  }
 
   void _shelfChanged() {
     if (shelfReady.value) _dropCover();
@@ -204,6 +209,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
+    IdleBars.instance.stop();
     AppNav.instance.removeListener(_nav);
     ReadingStore.instance.removeListener(_readingChanged);
     shelfReady.removeListener(_shelfChanged);
@@ -378,15 +384,22 @@ class _AppShellState extends State<AppShell> {
                 ),
             ],
           ),
-          ValueListenableBuilder<bool>(
-            valueListenable: tabBarHidden,
-            builder: (context, hidden, _) => hidden || keyboard
+          // 책장 탭에서 가만히 있으면(IdleBars) 아래로 미끄러져 내려간다. 내려간 동안은 누르기 · 화면 읽기에서 빠진다
+          ListenableBuilder(
+            listenable: Listenable.merge([tabBarHidden, IdleBars.instance]),
+            builder: (context, _) => tabBarHidden.value || keyboard
                 ? const SizedBox.shrink()
-                : Positioned(
+                : AnimatedPositioned(
+                    duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
                     left: TabBarStyle.side,
                     right: TabBarStyle.side,
-                    bottom: bottom + TabBarStyle.gap,
+                    bottom: IdleBars.instance.down ? -(TabBarStyle.height + TabBarStyle.gap * 4) : bottom + TabBarStyle.gap,
                     height: TabBarStyle.height,
+                    child: IgnorePointer(
+                    ignoring: IdleBars.instance.down,
+                    child: ExcludeSemantics(
+                    excluding: IdleBars.instance.down,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: AppColors.white,
@@ -405,6 +418,8 @@ class _AppShellState extends State<AppShell> {
                           ],
                         ),
                       ),
+                    ),
+                    ),
                     ),
                   ),
           ),

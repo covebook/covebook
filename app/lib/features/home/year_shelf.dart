@@ -10,6 +10,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../app/idle_bars.dart';
 import '../../domain/bookcase.dart';
 import '../../domain/book3.dart' show corners;
 import '../../domain/camera.dart';
@@ -227,7 +228,9 @@ class _YearShelfState extends State<YearShelf> {
 
   @override
   Widget build(BuildContext context) {
-    final pad = MediaQuery.paddingOf(context);
+    // 아래 안전 여백은 시스템 아래 막대를 숨긴 동안에도 숨기기 전 값(책장 줄 자리가 바뀌지 않게, IdleBars)
+    final pad0 = MediaQuery.paddingOf(context);
+    final pad = pad0.copyWith(bottom: IdleBars.instance.stableBottom(pad0.bottom));
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final year = widget.bookcase.year;
     final lib = _lib;

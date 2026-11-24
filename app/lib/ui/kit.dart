@@ -484,12 +484,11 @@ class NavBar extends StatelessWidget {
 /// 화면 아래에 붙인 단추 줄 바로 위 흰 그라데이션 높이(2026-11-20 사용자 '윗부분은 살짝 그라데이션')
 const footerFade = Space.page;
 
-/// 화면 틀(Screen)의 키보드 자리: 실제 키보드 높이, 또는 입력칸을 막 눌러 키보드가 올라오는 중이면 지난번 키보드 높이(처음에는 화면 높이의 0.38)만큼
-/// 미리 비우고 입력칸을 그 위로 부드럽게 올린다. 키보드 높이가 오면(멈추면) 그 값으로 바꾼다.
-/// 까닭: 키보드 높이를 다 올라온 뒤에야 앱에 알려 주는 기기에서는 입력칸이 키보드에 가렸다가 0.7초쯤 뒤 화면이 한 번에 튀어 올랐다
-/// (2026-11-21 사용자 '한줄 메모 눌러서 키보드 올라올 때 드드득 하면서 걸리면서 올라와', 에뮬 녹화: 키보드는 1.38~1.74초, 화면은 2.50초에 331화소 한 번에).
-/// 높이를 매 프레임 알려 주는 기기에서도 올라오는 동안 틀이 그대로라 프레임마다 다시 배치하지 않는다.
-/// 키보드가 뜨지 않으면(물리 키보드 · 떠 있는 키보드) 1.5초 뒤 비운 자리를 거둔다
+/// 화면 틀(Screen)의 키보드 자리. 몸통(내용 · 스크롤)은 키보드가 다 올라와 멈춘 높이로 한 번만 다시 배치하고([builder]의 keyboard),
+/// 올라오고 내려가는 동안은 아래 단추 줄만 키보드를 따라 그림만 옮긴다([KeyboardFollow]). 키보드가 닫히기 시작하면 몸통은 바로 펼친다.
+/// 2026-11-25 사용자 '갈피 남기기 같은 거 할 때 키보드 올라오는 거랑 버튼 0.1초씩 렉': 전에는 입력칸을 누르는 순간 지난 키보드 높이만큼
+/// 미리 비워(단추가 키보드보다 먼저 올라갔다) 키보드가 멈추면 실제 높이로 한 번 더 바꿨다(2026-11-21 '드드득' 대책). 프레임마다 몸통을
+/// 다시 배치하면 버벅여서(11-21) 몸통은 멈춘 뒤 한 번, 단추 줄은 그림 옮기기만 프레임마다 한다
 class KeyboardSpace extends StatefulWidget {
   const KeyboardSpace({super.key, required this.builder});
   final Widget Function(BuildContext context, double keyboard) builder;
@@ -497,87 +496,114 @@ class KeyboardSpace extends StatefulWidget {
   /// 마지막으로 멈춘 키보드 높이(앱을 켠 뒤 아직 없으면 0)
   static double last = 0;
 
+  /// 키보드 높이가 이만큼 바뀌지 않으면 멈췄다고 본다(키보드가 프레임마다 높이를 알리는 기기는 다 올라온 뒤 한 번)
+  static const settleAfter = Duration(milliseconds: 80);
+
   @override
   State<KeyboardSpace> createState() => _KeyboardSpaceState();
 }
 
 class _KeyboardSpaceState extends State<KeyboardSpace> {
-  double _reserve = 0;
-  bool _seen = false;
-  FocusNode? _focus;
-  Timer? _giveUp, _settle;
+  /// 몸통을 배치한 키보드 높이
+  double _settled = 0;
+  double _now = 0;
+  Timer? _settle;
 
-  @override
-  void initState() {
-    super.initState();
-    FocusManager.instance.addListener(_focusChanged);
-  }
+  /// 몸통(같은 높이 동안은 같은 위젯을 돌려 프레임마다 다시 만들지 않는다)
+  Widget? _body;
 
   @override
   void dispose() {
-    FocusManager.instance.removeListener(_focusChanged);
-    _giveUp?.cancel();
     _settle?.cancel();
     super.dispose();
   }
 
-  /// 이 화면 안의 입력칸에 초점이 왔는지
-  bool _mine(FocusNode f) {
-    final c = f.context;
-    if (c == null || !c.mounted || c.findAncestorStateOfType<EditableTextState>() == null) return false;
-    return identical(c.findAncestorStateOfType<_KeyboardSpaceState>(), this);
-  }
-
-  void _focusChanged() {
-    final f = FocusManager.instance.primaryFocus;
-    if (!mounted || identical(f, _focus)) return;
-    _focus = f;
-    _giveUp?.cancel();
-    final open = MediaQuery.viewInsetsOf(context).bottom > 0;
-    if (f == null || open || !_mine(f)) {
-      if (_reserve != 0) setState(() => _reserve = 0);
-      return;
-    }
-    _seen = false;
-    setState(() => _reserve = KeyboardSpace.last > 0 ? KeyboardSpace.last : MediaQuery.sizeOf(context).height * 0.38);
-    // 줄어든 화면에 맞춰 입력칸을 비운 자리 위로(가려질 때만 움직인다). 입력칸 아래로 누르는 자리(48)만큼 더 보이게:
-    // 키보드 높이가 오면 입력칸이 스스로 커서 아래를 그만큼(여백 20 + 손잡이) 띄우려고 한 번 더 튀었다(2026-11-21 녹화: 102화소)
-    final reduce = MediaQuery.disableAnimationsOf(context);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 그사이 화면이 닫혔거나 입력칸이 사라졌으면 그만(닫힌 칸의 그림을 찾으면 오류였다)
-      final c = f.context;
-      if (!mounted || _reserve == 0 || c == null || !c.mounted) return;
-      final ro = c.findRenderObject();
-      if (ro is! RenderBox || !ro.attached) return;
-      ro.showOnScreen(
-        rect: Offset.zero & Size(ro.size.width, ro.size.height + kMinInteractiveDimension),
-        duration: reduce ? Duration.zero : const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-      );
-    });
-    _giveUp = Timer(const Duration(milliseconds: 1500), () {
-      if (mounted && !_seen && _reserve != 0) setState(() => _reserve = 0);
-    });
+  @override
+  void didUpdateWidget(KeyboardSpace old) {
+    super.didUpdateWidget(old);
+    _body = null;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final k = MediaQuery.viewInsetsOf(context).bottom;
-    if (k <= 0) return;
-    _seen = true;
-    // 키보드 높이가 멈추면 그 값을 기억하고 미리 비운 자리를 거둔다(실제 높이로)
+    final was = _now;
+    _now = k;
+    if (k == was) return;
     _settle?.cancel();
-    _settle = Timer(const Duration(milliseconds: 200), () {
-      if (!mounted) return;
-      final now = MediaQuery.viewInsetsOf(context).bottom;
-      if (now > 0) KeyboardSpace.last = now;
-      if (_reserve != 0) setState(() => _reserve = 0);
-    });
+    // 닫히기 시작했거나 다 닫혔다: 몸통은 바로 펼친다(단추 줄은 키보드를 따라 내려간다)
+    if (k < was && k < _settled) {
+      _settled = 0;
+      _body = null;
+      return;
+    }
+    if (k <= 0) return;
+    // 올라오는 중: 멈추면(또는 지난번 높이에 닿으면) 그 높이로 몸통을 한 번 배치하고, 초점 입력칸이 가려졌으면 그 위로 올린다
+    void settle() {
+      if (!mounted || _now <= 0 || _now == _settled) return;
+      KeyboardSpace.last = _now;
+      setState(() {
+        _settled = _now;
+        _body = null;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _revealFocus());
+    }
+
+    if (KeyboardSpace.last > 0 && k >= KeyboardSpace.last) {
+      // 다 올라왔다(지난번과 같은 높이): 다음 프레임에 바로
+      WidgetsBinding.instance.addPostFrameCallback((_) => settle());
+    } else {
+      _settle = Timer(KeyboardSpace.settleAfter, settle);
+    }
+  }
+
+  /// 이 화면 안 입력칸에 초점이 있으면 그 칸(아래로 누르는 자리 48만큼 더)이 보이게 부드럽게 올린다(가려질 때만 움직인다)
+  void _revealFocus() {
+    final f = FocusManager.instance.primaryFocus;
+    final c = f?.context;
+    if (!mounted || c == null || !c.mounted || c.findAncestorStateOfType<EditableTextState>() == null) return;
+    if (!identical(c.findAncestorStateOfType<_KeyboardSpaceState>(), this)) return;
+    final ro = c.findRenderObject();
+    if (ro is! RenderBox || !ro.attached) return;
+    ro.showOnScreen(
+      rect: Offset.zero & Size(ro.size.width, ro.size.height + kMinInteractiveDimension),
+      duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, math.max(MediaQuery.viewInsetsOf(context).bottom, _reserve));
+  Widget build(BuildContext context) => _body ??= _KeyboardBody(keyboard: _settled, builder: widget.builder);
+}
+
+/// 몸통: 키보드 높이(멈춘 값)가 바뀔 때만 다시 만든다(KeyboardSpace가 같은 위젯을 돌려준다)
+class _KeyboardBody extends StatelessWidget {
+  const _KeyboardBody({required this.keyboard, required this.builder});
+  final double keyboard;
+  final Widget Function(BuildContext context, double keyboard) builder;
+
+  @override
+  Widget build(BuildContext context) => builder(context, keyboard);
+}
+
+/// 키보드를 따라 그림만 옮긴다(배치는 그대로): 몸통이 [settled] 높이로 배치된 동안 키보드가 그보다 높으면 그만큼 위로, 낮으면 아래로.
+/// 아래 단추 줄처럼 키보드 위에 붙어 있어야 하는 것만 감싼다. 이 위젯만 프레임마다 다시 그린다
+class KeyboardFollow extends StatelessWidget {
+  const KeyboardFollow({super.key, required this.settled, required this.child, this.lift = 0});
+  final double settled;
+  final Widget child;
+
+  /// 몸통이 키보드 없이 배치된 동안(settled 0) 키보드가 이만큼은 올라와야 따라 오른다: 아래 단추 줄이 키보드 없이 비워 둔 안전 영역 몫
+  /// (키보드가 그 띠를 먼저 덮는다). 다 올라와 멈추면 그 몫은 몸통 배치에서 빠진다
+  final double lift;
+
+  @override
+  Widget build(BuildContext context) {
+    final k = MediaQuery.viewInsetsOf(context).bottom;
+    final dy = settled > 0 ? k - settled : math.max(0.0, k - lift);
+    return dy == 0 ? child : Transform.translate(offset: Offset(0, -dy), child: child);
+  }
 }
 
 class Screen extends StatelessWidget {
@@ -641,12 +667,15 @@ class Screen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => KeyboardSpace(builder: _build);
 
-  // keyboard: 키보드 자리(실제 키보드 높이, 입력칸을 막 눌렀으면 미리 비운 높이, KeyboardSpace)
+  // keyboard: 몸통을 배치한 키보드 높이(다 올라와 멈춘 값, KeyboardSpace). 올라오는 동안 아래 단추 줄은 KeyboardFollow가 따라 옮긴다
   Widget _build(BuildContext context, double keyboard) {
-    // 키보드가 열리면 아래 안전 여백 대신 키보드 높이만큼 비운다(키보드가 열리면 paddingOf 아래는 0이 된다)
-    final insets = MediaQuery.paddingOf(context);
-    // 아래 단추 줄을 화면 아래에 붙이나: 스크롤하지 않는 화면, 또는 pinFooter(기본)이고 키보드가 닫혀 있을 때
-    final footerFixed = footer != null && (!scroll || (pinFooter && keyboard == 0));
+    // 키보드가 열리면 아래 안전 여백 대신 키보드 높이만큼 비운다. 안전 여백은 키보드에 따라 바뀌지 않는 viewPadding으로 읽고
+    // 키보드가 멈춘 뒤(keyboard > 0)에만 뺀다: paddingOf는 키보드가 오르는 첫 프레임들마다 줄어 몸통을 매번 다시 배치했다
+    final insets = MediaQuery.viewPaddingOf(context);
+    final safeBottom = keyboard > 0 ? 0.0 : insets.bottom;
+    // 아래 단추 줄을 화면 아래에 붙이나: 스크롤하지 않는 화면, 또는 pinFooter(기본). 키보드가 열려도 키보드 바로 위에 붙어 함께 오르내린다
+    // (2026-11-25 사용자 '키보드 올라오는 거랑 버튼 렉': 전에는 키보드가 열리면 내용 끝으로 옮겨 단추가 한 번 튀었다)
+    final footerFixed = footer != null && (!scroll || pinFooter);
     // 밀어 넣은 화면은 모두 가운데 작은 제목(2026-11-17 사용자: 가운데 제목이면 깔끔). 큰 왼쪽 제목은 탭 첫 화면에만 남긴다.
     // 부제목은 내용 맨 위 한 줄로 옮긴다
     final bar = topBar ?? back;
@@ -737,7 +766,7 @@ class Screen extends StatelessWidget {
             listenable: ReadingStore.instance,
             builder: (context, _) {
               // 붙인 단추 줄이 아래 안전 영역을 맡으면 내용 아래는 그만큼 덜 비운다
-              final pad = EdgeInsets.only(bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + (footerFixed ? 0 : insets.bottom));
+              final pad = EdgeInsets.only(bottom: Space.section + bottomPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0) + (footerFixed ? 0 : safeBottom));
               if (pinnedSliver == null) {
                 return SingleChildScrollView(
                   padding: pad,
@@ -787,13 +816,18 @@ class Screen extends StatelessWidget {
                   : body,
             ),
             if (footerFixed)
-              // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
-              FooterReport(
-                child: Container(
-                  color: AppColors.bg,
-                  // TDS BottomCTA: 아래 여백 = max(안전 영역, 20)(hasSafeAreaPadding 기본 true). 위 12는 공식 없음 → 우리 값
-                  padding: EdgeInsets.fromLTRB(Space.page, 12, Space.page, math.max(insets.bottom, Space.ctaBottom)),
-                  child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer))),
+              // 키보드가 오르내리는 동안 단추 줄은 키보드를 따라 그림만 옮긴다(몸통은 멈춘 뒤 한 번 배치)
+              KeyboardFollow(
+                settled: keyboard,
+                lift: math.max(insets.bottom, Space.ctaBottom) - Space.ctaBottom,
+                // 작은 타이머가 이 버튼 줄 위에 뜨도록 높이를 알린다(store/mini_timer_store setFooter)
+                child: FooterReport(
+                  child: Container(
+                    color: AppColors.bg,
+                    // TDS BottomCTA: 아래 여백 = max(안전 영역, 20)(hasSafeAreaPadding 기본 true). 위 12는 공식 없음 → 우리 값
+                    padding: EdgeInsets.fromLTRB(Space.page, 12, Space.page, math.max(safeBottom, Space.ctaBottom)),
+                    child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: contentMax), child: SizedBox(width: double.infinity, child: footer))),
+                  ),
                 ),
               ),
           ],

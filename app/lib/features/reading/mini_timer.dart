@@ -3,7 +3,10 @@
 // 시간을 다시 누르거나 바깥을 누르면 접힌다(타이머·환경음 상태는 그대로). 시간은 같은 누적 값을 1초마다 다시 그릴 뿐 따로 재지 않는다.
 // 읽기 화면·읽기 탭(책마다 흐르는 시간이 보인다)에서는 띄우지 않는다. 하단 탭·키보드·안전 영역과 겹치지 않게 둔다.
 // 잡고 끌면 바로 자리를 옮긴다(2026-11-24 사용자 '꾹 누르면 움직이게 말고 그냥 잡고 움직이면 바로 움직이게'. 11-17에는 꾹 눌러야 옮겨졌다).
-// 움직이지 않고 떼면 누르기(펼치기 · 접기 · 단추)는 그대로. 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다
+// 움직이지 않고 떼면 누르기(펼치기 · 접기 · 단추)는 그대로. 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다.
+// 끄는 동안은 책 끌기처럼 화면 아래 가운데에 빼기 자리(RemoveZone)가 뜨고, 거기에 놓으면 독서를 일시정지하고 작은 타이머를 숨긴다
+// (2026-11-25 사용자 '타이머 드래그할 수 있잖아 지금 책처럼 가운데 아래로 끌면 없어지게 해줘 멈추고'). 시간은 그대로 남아 읽기 탭에서 이어 읽고,
+// 다시 재기 시작하면 다시 나타난다. 토스트 '되돌리기'로 바로 되살린다
 library;
 
 import 'dart:async';
@@ -14,6 +17,7 @@ import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
+import '../../app/idle_bars.dart';
 import '../../db/kv_store.dart';
 import '../../domain/library.dart' show formatDurationPrecise;
 import '../../domain/reading.dart';
@@ -23,7 +27,9 @@ import '../../store/settings_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
+import '../../ui/feedback.dart' show showToast;
 import '../../ui/theme.dart';
+import '../home/decorate_panel.dart' show RemoveZone;
 import 'play_icons.dart';
 import 'reading_screen.dart';
 
@@ -75,26 +81,76 @@ class _MiniTimerState extends State<MiniTimer> {
   Offset _dragStart = Offset.zero;
   static const _posKey = 'mini-timer-pos';
 
+  /// 끄는 손가락이 아래 빼기 자리 위인지
+  bool _over = false;
+
+  /// 끄는 동안 '가만히 있으면 내리기'를 붙잡았나
+  bool _holdingBars = false;
+
+  void _releaseBars() {
+    if (!_holdingBars) return;
+    _holdingBars = false;
+    IdleBars.instance.release();
+  }
+
+  /// 빼기 자리에 놓아 숨긴 독서(Active.id). 그 독서가 멈춰 있는 동안 숨기고, 다시 재기 시작하면 잊는다
+  String? _dismissed;
+  static const _dismissKey = 'mini-timer-dismissed';
+
   @override
   void initState() {
     super.initState();
     _reading.addListener(_changed);
     _place.addListener(_changed);
+    IdleBars.instance.addListener(_changed);
     KvStore.get(_posKey).then((v) {
       final p = v?.split(',').map(double.tryParse).toList();
       if (mounted && p != null && p.length == 2 && !p.contains(null)) setState(() => _moved = (right: p[0]!, bottom: p[1]!));
+    }).ignore();
+    KvStore.get(_dismissKey).then((v) {
+      if (mounted && v != null && v.isNotEmpty) setState(() => _dismissed = v);
     }).ignore();
   }
 
   @override
   void dispose() {
+    _releaseBars();
     _reading.removeListener(_changed);
     _place.removeListener(_changed);
+    IdleBars.instance.removeListener(_changed);
     super.dispose();
   }
 
   void _changed() {
+    // 다시 재기 시작했거나 다른 독서가 되면 숨긴 표시를 잊는다
+    if (_dismissed != null && (_reading.running || _reading.active?.id != _dismissed)) {
+      _dismissed = null;
+      KvStore.remove(_dismissKey).ignore();
+    }
     if (mounted) setState(() {});
+  }
+
+  /// 빼기 자리에 놓았다: 재는 중이면 일시정지하고 숨긴다(시간은 그대로). 자리는 끌기 전 자리로 둔다
+  void _dismiss(({double right, double bottom}) before) {
+    final id = _reading.active?.id;
+    if (id == null) return;
+    final wasRunning = _reading.running;
+    setState(() {
+      _dragFrom = null;
+      _over = false;
+      _moved = before;
+      _dismissed = id;
+    });
+    if (wasRunning) pauseReading();
+    KvStore.set(_dismissKey, id).ignore();
+    final ctx = widget.navigator.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    showToast(ctx, '타이머를 멈췄어요. 읽기 탭에서 이어서 읽을 수 있어요.', action: '되돌리기', onAction: () {
+      if (!mounted) return;
+      setState(() => _dismissed = null);
+      KvStore.remove(_dismissKey).ignore();
+      if (wasRunning) unawaited(_resume());
+    });
   }
 
   @override
@@ -103,7 +159,10 @@ class _MiniTimerState extends State<MiniTimer> {
     final keyboard = mq.viewInsets.bottom > 0;
     final path = _place.path;
     // hidden(책장 꾸미기 조작부)은 탭 화면이 맨 위일 때만: 그 위에 밀어 넣은 화면에서는 보인다(2026-11-16 QA 현우 F9)
-    final hidden = _reading.active == null || _reading.stale || miniTimerHidden(path) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
+    final dismissed = _dismissed != null && _dismissed == _reading.active?.id && !_reading.running;
+    // 책장 탭에서 가만히 있어 아래를 비운 동안(IdleBars)도 숨긴다(책장만 보이게, 2026-11-25)
+    final idle = IdleBars.instance.down && _place.route == '/' && _place.tab == '/';
+    final hidden = _reading.active == null || _reading.stale || dismissed || idle || miniTimerHidden(path) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
     // 화면이 바뀌거나 숨으면 접어 둔다(다시 나타날 때 늘 원)
     final key = '$path|$hidden';
     if (key != _lastKey) {
@@ -126,20 +185,34 @@ class _MiniTimerState extends State<MiniTimer> {
     final s = SettingsStore.instance;
     final reduce = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && mq.disableAnimations);
     final onTabs = _place.route == '/' && _tabs.contains(path);
-    final minBottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? _place.footer ?? mq.padding.bottom) + _gap;
+    final restBottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? _place.footer ?? mq.padding.bottom) + _gap;
+    // 끄는 동안은 하단 탭 위까지 내려가 아래 빼기 자리에 닿을 수 있다(놓으면 다시 탭 위로)
+    final minBottom = _dragFrom != null ? mq.padding.bottom + 8 : restBottom;
     // 옮긴 자리: 화면 안, 하단 탭·고정 단추 위, 상태 표시줄 아래로만
     final maxRight = mq.size.width - timeW - (_open ? _actionsW : 0) - 8;
     final maxBottom = mq.size.height - mq.padding.top - miniTimerSize - 8;
     final double right = (_moved?.right ?? 16.0).clamp(8.0, math.max(8.0, maxRight)).toDouble();
-    final double bottom = (_moved?.bottom ?? minBottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
+    final double bottom = (_moved?.bottom ?? restBottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
     final dragging = _dragFrom != null;
     // 테두리는 화소 2개
     final hair = 2 * Hairline.of(context);
     final speed = reduce ? Duration.zero : const Duration(milliseconds: 180);
+    // 있다 없다 하는 겹(빼기 자리 · 접기 칸)에는 키를 단다: 없으면 끄는 도중 타이머 누르기 층이 새로 만들어져 끌기가 끊긴다
     return Stack(children: [
+      // 끄는 동안 화면 아래 가운데 빼기 자리(책 끌기와 같은 모양 · 자리)
+      if (dragging)
+        Positioned(
+          key: const ValueKey('remove'),
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: mq.padding.bottom + RemoveZone.lift * 2,
+          child: IgnorePointer(child: RemoveZone(active: _over, centerFromBottom: mq.padding.bottom + RemoveZone.lift)),
+        ),
       // 펼친 동안 바깥을 누르면 접는다(아래 화면은 눌리지 않는다)
-      if (_open) Positioned.fill(child: Semantics(button: true, label: '작은 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
+      if (_open) Positioned.fill(key: const ValueKey('close'), child: Semantics(button: true, label: '작은 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
       Positioned(
+        key: const ValueKey('timer'),
         right: right,
         bottom: bottom,
         height: miniTimerSize,
@@ -148,6 +221,11 @@ class _MiniTimerState extends State<MiniTimer> {
           dragStartBehavior: DragStartBehavior.down,
           onPanStart: (d) {
             if (s.haptics) HapticFeedback.selectionClick();
+            // 끄는 동안은 책장 탭의 '가만히 있으면 내리기'를 붙잡는다(타이머가 손가락 아래에서 사라지지 않게)
+            if (!_holdingBars) {
+              _holdingBars = true;
+              IdleBars.instance.hold();
+            }
             _dragStart = d.globalPosition;
             setState(() {
               _open = false;
@@ -158,21 +236,39 @@ class _MiniTimerState extends State<MiniTimer> {
             final f = _dragFrom;
             if (f == null) return;
             final o = d.globalPosition - _dragStart;
-            setState(() => _moved = (right: f.right - o.dx, bottom: f.bottom - o.dy));
+            final over = RemoveZone.isOver(mq, d.globalPosition);
+            if (over && !_over && s.haptics) HapticFeedback.selectionClick();
+            setState(() {
+              _moved = (right: f.right - o.dx, bottom: f.bottom - o.dy);
+              _over = over;
+            });
           },
           onPanEnd: (_) {
-            // 마지막으로 끈 자리(다시 그리기 전에 손을 떼도 놓치지 않게)를 화면 안으로 맞춰 기억한다
+            _releaseBars();
+            final f = _dragFrom;
+            if (_over && f != null) {
+              _dismiss(f);
+              return;
+            }
+            // 마지막으로 끈 자리(다시 그리기 전에 손을 떼도 놓치지 않게)를 화면 안으로 맞춰 기억한다(하단 탭 · 고정 단추 위로)
             final m = _moved;
             final r = (m?.right ?? right).clamp(8.0, math.max(8.0, maxRight)).toDouble();
-            final b = (m?.bottom ?? bottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
+            final b = (m?.bottom ?? bottom).clamp(restBottom, math.max(restBottom, maxBottom)).toDouble();
             setState(() {
               _dragFrom = null;
+              _over = false;
               _moved = (right: r, bottom: b);
             });
             KvStore.set(_posKey, '${r.round()},${b.round()}').ignore();
           },
           onPanCancel: () {
-            if (_dragFrom != null) setState(() => _dragFrom = null);
+            _releaseBars();
+            if (_dragFrom != null) {
+              setState(() {
+                _dragFrom = null;
+                _over = false;
+              });
+            }
           },
           child: AnimatedScale(
             scale: dragging ? 1.08 : 1,
