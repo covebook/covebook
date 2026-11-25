@@ -11,7 +11,8 @@ final _sampleId = RegExp(r'^home-reference-b\d{2}(-\d+)?$');
 
 bool isSampleBookId(String id) => _sampleId.hasMatch(id);
 
-/// 예시 책장 자리의 시각. 이 시각인 배치는 서버에 올리지 않고(services/sync), 서버에서 받은 배치가 늘 이긴다.
+/// 손대지 않은 첫 배치(예전 예시 책장 자리, 지금은 빈 서재의 빈 선반 세 칸 store/first_shelf)의 시각.
+/// 이 시각인 배치는 서버에 올리지 않고(services/sync), 서버에서 받은 배치가 늘 이긴다.
 /// 새 폰에서 기존 계정으로 들어오면, 받기 전에 깔린 예시 자리가 '방금 고친 배치'로 올라가 진짜 책장을 덮을 수 있었다(2026-11-16).
 /// 예시를 치운 배치도 이 시각을 그대로 둔다(치운 것만으로 서버 책장을 덮지 않게)
 const exampleLayoutAt = '1970-01-01T00:00:00.000Z';
