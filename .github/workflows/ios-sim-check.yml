@@ -1,10 +1,16 @@
 name: "iOS: simulator screenshot"
 # 아이폰에서만 생기는 화면 문제를 리눅스에서 볼 수 없어 만든 점검(2026-11-25 아이폰 책장 깨짐: Metal 버퍼 칸 31개 제한을 여기서 확인했다).
 # 접는 기종(iPhone Duo)은 화면이 둘이라 사진이 안 찍혀 iPhone 17을 고른다.
-# 시험 서재(QA_SEED_LIB)로 시뮬레이터에서 앱을 켜고, 시간별 사진과 앱 로그를 Actions 결과물(ios-sim)로 남긴다.
+# 시험 서재(QA_SEED_LIB, 입력 seed=none이면 빈 서재)로 시뮬레이터에서 앱을 켜고, 시간별 사진과 앱 로그를 Actions 결과물(ios-sim)로 남긴다.
 # 시뮬레이터도 Impeller Metal로 그린다(셰이더 제한은 기기와 같다). 속도는 기기와 다르다.
 on:
   workflow_dispatch:
+    inputs:
+      seed:
+        description: '서재: qa = 시험 서재(책 19권), none = 빈 서재(처음 켠 사람)'
+        type: choice
+        options: [qa, none]
+        default: qa
 permissions:
   contents: read
 concurrency:
@@ -29,7 +35,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Build for simulator
-        run: flutter build ios --simulator --debug --dart-define=QA_SEED_LIB=true --dart-define=QA_FRAMES=true
+        run: flutter build ios --simulator --debug --dart-define=QA_SEED_LIB=${{ inputs.seed == 'none' && 'false' || 'true' }} --dart-define=QA_FRAMES=true
       - name: Boot simulator
         run: |
           OUT=$RUNNER_TEMP/ios-sim
