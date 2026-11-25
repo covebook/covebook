@@ -47,8 +47,6 @@ class Book {
     this.finishedAt,
     this.material,
     this.coverArtId,
-    this.plainCover = false,
-    this.reference,
   });
 
   final String id;
@@ -91,12 +89,6 @@ class Book {
   /// 고른 기본 정면 장정 그림(cover-artworks id). 있으면 실제 표지 사진 대신 이 그림
   final String? coverArtId;
 
-  /// 앞표지에 제목을 쓰지 않는다(새 서재 예시 책 일부, 지금 앱 art.plainCover)
-  final bool plainCover;
-
-  /// 시안 그림 표지(새 서재 예시 책: night·forest·sunset, assets/reference). 있으면 앞표지는 그 그림
-  final String? reference;
-
   /// 갈피(색 · 수)만 바꾼 같은 책(책 꾸미기 › 갈피 미리보기)
   Book withRibbon(String? color, int count) => Book(
         id: id,
@@ -118,8 +110,6 @@ class Book {
         finishedAt: finishedAt,
         material: material,
         coverArtId: coverArtId,
-        plainCover: plainCover,
-        reference: reference,
       );
 }
 

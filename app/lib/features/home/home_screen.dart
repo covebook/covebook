@@ -2470,7 +2470,7 @@ void showBookOnShelf(BuildContext context, String id) {
 
 /// 줄 책들의 그림 재료 열쇠(제목·색·갈피·재질·표지 사진 주소). 굽기 열쇠에 들지 않는 책 모습
 String _looksSig(RowCase r) => [
-      for (final l in r.looks) '${l.title}|${l.face}|${l.tone}|${l.ink}|${l.titleTop}|${l.coverUri}|${l.ribbons}|${l.ribbon}|${l.material}|${l.artwork}|${l.reference}|${l.plainCover}',
+      for (final l in r.looks) '${l.title}|${l.face}|${l.tone}|${l.ink}|${l.titleTop}|${l.coverUri}|${l.ribbons}|${l.ribbon}|${l.material}|${l.artwork}',
     ].join(';');
 
 /// 책장에 보이는 서재 값만 모은 열쇠(장정·판본은 고친 때, 갈피 수·갈피 색·숨김). 이것이 바뀌면 홈이 줄을 다시 만든다

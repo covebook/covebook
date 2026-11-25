@@ -18,7 +18,7 @@ import '../domain/sync.dart';
 import '../store/bookcase_store.dart';
 import '../store/files.dart' show imageDir;
 import '../store/library_model.dart';
-import '../store/first_shelf.dart' show exampleLayoutAt;
+import '../domain/sample_cleanup.dart' show exampleLayoutAt;
 import '../store/library_store.dart' show layoutState, markBookcasesSynced, readBookcases, saveRemoteLayout, unsyncedBookcaseIds, writeBookcase;
 import '../store/local_reset.dart';
 import '../store/placement_store.dart';
