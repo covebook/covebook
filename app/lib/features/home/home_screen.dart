@@ -1697,8 +1697,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       probeRow(),
     ]);
     await ShelfPainter.load();
-    final gridSlots = _gridSlots ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/grid.frag'), gridUniformNames);
-    final bakeSlots = _bakeSlots ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/bake.frag'), bakeUniformNames);
+    final gridSlots = _gridSlots ??= await ShaderSlots.load('shaders/grid.frag', gridUniformNames);
+    final bakeSlots = _bakeSlots ??= await ShaderSlots.load('shaders/bake.frag', bakeUniformNames);
     final loadMs = DateTime.now().difference(t0).inMilliseconds;
 
     await loadBakeCache();
@@ -2959,9 +2959,9 @@ class ShelfPainter extends CustomPainter {
 
   /// 그리기 셰이더는 한 번만 올린다(미리 컴파일돼 있다)
   static Future<void> load() async {
-    _lit ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/lit.frag'), litUniformNames);
-    _book ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/book.frag'), bookUniformNames);
-    _tab ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/tab.frag'), tabUniformNames);
+    _lit ??= await ShaderSlots.load('shaders/lit.frag', litUniformNames);
+    _book ??= await ShaderSlots.load('shaders/book.frag', bookUniformNames);
+    _tab ??= await ShaderSlots.load('shaders/tab.frag', tabUniformNames);
     _glyphs ??= await GlyphMetrics.load(titleFontAsset);
     // 기본 정면 장정 그림(고른 책의 앞표지)
     await loadArtworkImages();

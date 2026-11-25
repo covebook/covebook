@@ -12,6 +12,7 @@ import 'dart:ui' as ui;
 import '../domain/shelf_row.dart';
 import '../domain/vec3.dart';
 import '../gen/light_uniforms.g.dart' as cal;
+import '../gen/packed_uniforms.g.dart';
 
 /// 굽기에 쓰는 값(지금은 줄마다 둘레·상자·면. 맞추기 값은 lib/gen/light_uniforms.g.dart)
 class BakeCase {
@@ -70,15 +71,22 @@ const _atlasW = 512;
 /// 셰이더 uniform의 자리 번호를 프로그램마다 한 번만 구해 둔다.
 /// Flutter의 이름으로 넣는 API(getUniformVec3·getUniformVec4Array)는 부를 때마다 슬롯 객체를 만드는데,
 /// 배열은 원소마다 배열 전체 길이만큼 만든다(box[160] 한 번에 160×640개). 면마다 부르면 그것만으로 몇 초가 간다.
-/// 자리 번호는 프로그램마다 고정이므로 한 번 구해 두고 setFloat으로 바로 넣는다(그냥 Float32List 쓰기라 값싸다)
+/// 자리 번호는 프로그램마다 고정이므로 한 번 구해 두고 setFloat으로 바로 넣는다(그냥 Float32List 쓰기라 값싸다).
+/// 낱개 uniform은 vec4 배열 uP 하나로 묶여 있다(tool/pack_uniforms.dart, 아이폰 Metal 버퍼 칸 31개 제한): 그 이름은 uP 시작 + 표의 자리
 class ShaderSlots {
-  ShaderSlots(this.prog, List<String> names) {
+  ShaderSlots(this.prog, List<String> names, {Map<String, int> packed = const {}}) {
     final sh = prog.fragmentShader();
+    final base = packed.isEmpty ? 0 : sh.getUniformFloat(packedUniformName, 0).shaderIndex;
     for (final n in names) {
-      _at[n] = sh.getUniformFloat(n, 0).shaderIndex;
+      final o = packed[n];
+      _at[n] = o != null ? base + o : sh.getUniformFloat(n, 0).shaderIndex;
     }
     sh.dispose();
   }
+
+  /// 미리 컴파일된 셰이더(pubspec shaders)를 올리고 자리를 구한다
+  static Future<ShaderSlots> load(String asset, List<String> names) async =>
+      ShaderSlots(await ui.FragmentProgram.fromAsset(asset), names, packed: packedUniforms[asset] ?? const {});
 
   final ui.FragmentProgram prog;
   final Map<String, int> _at = {};

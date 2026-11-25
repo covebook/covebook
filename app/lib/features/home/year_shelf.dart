@@ -91,8 +91,8 @@ class _YearShelfState extends State<YearShelf> {
     final shelves = placeShelves(lib, frozen: true);
     final c = BakeCase([for (var i = 0; i < shelves.length; i++) rowFromBooks(shelves[i], lib.books, rowSpace, top: i == 0, last: i == shelves.length - 1)]);
     await ShelfPainter.load();
-    _gridSlots ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/grid.frag'), gridUniformNames);
-    _bakeSlots ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/bake.frag'), bakeUniformNames);
+    _gridSlots ??= await ShaderSlots.load('shaders/grid.frag', gridUniformNames);
+    _bakeSlots ??= await ShaderSlots.load('shaders/bake.frag', bakeUniformNames);
     final images = <ui.Image>[], spots = <List<Spot>>[], spaces = <double>[], keys = <({PlaneKey wall, PlaneKey floor})>[], bookKeys = <Map<String, BookKey>>[];
     for (final r in c.rows) {
       // 지금 책장과 같은 줄이면 담아 둔 그림을 쓴다(row_bake)

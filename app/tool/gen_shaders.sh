@@ -59,3 +59,8 @@ cat > lib/gen/bake_shader_hash.g.dart <<DART
 const bakeShaderHash = '$H';
 DART
 echo "[bake] $H"
+
+echo "== 낱개 uniform 묶기(아이폰 Metal 버퍼 칸 31개 제한)"
+# 굽기 셰이더 지문은 묶기 전 GLSL로 낸다(위): 묶기는 값을 바꾸지 않아 이미 구운 그림을 그대로 쓴다
+PATH=$FLUTTER_BIN:$PATH dart run tool/pack_uniforms.dart lib/gen/packed_uniforms.g.dart \
+  shaders/lit.frag shaders/book.frag shaders/bake.frag shaders/grid.frag shaders/tab.frag

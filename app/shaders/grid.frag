@@ -7,7 +7,10 @@ layout(location = 0) out vec4 fragColor;
 
 
 
-  uniform vec3 env;
+  // 낱개 uniform을 묶은 것(tool/pack_uniforms.dart): 아이폰 Metal은 버퍼 칸이 31개까지라 낱개로는 셰이더가 만들어지지 않는다.
+  // 아래 같은 이름의 전역 변수들은 main() 맨 앞에서 채운다
+  uniform vec4 uP[12];
+  vec3 env; // uP@0
 
   const float PI = 3.14159265;
   const float AMB = 0.620000000;
@@ -18,7 +21,7 @@ layout(location = 0) out vec4 fragColor;
   const vec3 LU = vec3(-0.102940441, 0.173648178, -0.979412873);
   // 맞추기 값(스킨마다 다르다: 스토어에서 색을 고르면 셰이더를 다시 만들지 않고 값만 바꾼다, light-model lightSet().u)
   // 카메라 기준 빛(벽 대표 자리 빛 / 노출 기준 CAM.gain, 반사광을 장면 밝기로)
-  uniform vec3 ECAM;
+  vec3 ECAM; // uP@3
   const float LELEV = 0.175474740;
   const float LRAD = 0.104719755;
   const float LAZ = -0.104719755;
@@ -35,13 +38,13 @@ layout(location = 0) out vec4 fragColor;
   const int ENV_COLS = 18;
   const float FARV = 10000.0000;
   // 둘레 면 밝기(선형 RGB: 반사율 × 받는 빛)와 속지 반사율(되비침): 맞추기 값. 속지 색(그림이 칠하는 색)은 스킨과 상관없다
-  uniform vec3 RADF;
-  uniform vec3 RADU;
-  uniform vec3 RADW;
-  uniform vec3 RADE;
-  uniform vec3 RADSL;
-  uniform vec3 RADSR;
-  uniform vec3 PAPER;
+  vec3 RADF; // uP@6
+  vec3 RADU; // uP@9
+  vec3 RADW; // uP@12
+  vec3 RADE; // uP@15
+  vec3 RADSL; // uP@18
+  vec3 RADSR; // uP@21
+  vec3 PAPER; // uP@24
   const vec3 PAPER_COLOR = vec3(0.883179738, 0.859173570, 0.796916543);
   const float EDGER = 3.05000000;
   const float SEAMR = 5.33750000;
@@ -351,21 +354,21 @@ layout(location = 0) out vec4 fragColor;
 
 
   uniform vec4 box[160];
-  uniform float nBox;
+  float nBox; // uP@27
 
 
   uniform sampler2D grid;
-  uniform vec2 gridSize;   // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다)
-  uniform mat3 gridMat;    // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬)
-  uniform float gridDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)      // 빛 격자 그림(GRID_SCALE), gridOn < 0.5면 읽지 않는다(가리개는 가림 없는 받는 빛: 격자 풀기 첫 번)
-  uniform float gridOn;
-  uniform float gridNx;     // 둘레 면 가로 칸 수(책이 없으면 1)
+  vec2 gridSize; // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다) uP@28
+  mat3 gridMat; // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬) uP@30
+  float gridDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)      // 빛 격자 그림(GRID_SCALE), gridOn < 0.5면 읽지 않는다(가리개는 가림 없는 받는 빛: 격자 풀기 첫 번) uP@39
+  float gridOn; // uP@40
+  float gridNx; // 둘레 면 가로 칸 수(책이 없으면 1) uP@41
   const float GN = 8.0;
   const float ENY = 16.0;
   const float GSCALE = 1.50000000;
   const float ENVL = 175.375000;
-  uniform vec3 ALB_WALL;   // 맞추기 값(벽·판 반사율)
-  uniform vec3 ALB_PLANK;
+  vec3 ALB_WALL; // 맞추기 값(벽·판 반사율) uP@42
+  vec3 ALB_PLANK; // uP@45
 vec4 _grid(vec2 q) {
   vec3 t = gridMat * vec3(q, 1.0);
   vec2 uv = (t.xy / t.z) / gridSize;
@@ -771,6 +774,23 @@ vec4 _grid(vec2 q) {
   }
   
 void main() {
+  env = uP[0].xyz;
+  ECAM = vec3(uP[0].w, uP[1].xy);
+  RADF = vec3(uP[1].zw, uP[2].x);
+  RADU = uP[2].yzw;
+  RADW = uP[3].xyz;
+  RADE = vec3(uP[3].w, uP[4].xy);
+  RADSL = vec3(uP[4].zw, uP[5].x);
+  RADSR = uP[5].yzw;
+  PAPER = uP[6].xyz;
+  nBox = uP[6].w;
+  gridSize = uP[7].xy;
+  gridMat = mat3(vec3(uP[7].zw, uP[8].x), uP[8].yzw, uP[9].xyz);
+  gridDecal = uP[9].w;
+  gridOn = uP[10].x;
+  gridNx = uP[10].y;
+  ALB_WALL = vec3(uP[10].zw, uP[11].x);
+  ALB_PLANK = uP[11].yzw;
   vec2 pc = FlutterFragCoord().xy;
 
     float ix = floor(pc.x);
