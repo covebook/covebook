@@ -1,5 +1,6 @@
 name: "iOS: simulator screenshot"
-# 아이폰에서만 생기는 화면 문제를 리눅스에서 볼 수 없어 만든 점검(2026-11-25 아이폰 책장 깨짐).
+# 아이폰에서만 생기는 화면 문제를 리눅스에서 볼 수 없어 만든 점검(2026-11-25 아이폰 책장 깨짐: Metal 버퍼 칸 31개 제한을 여기서 확인했다).
+# 접는 기종(iPhone Duo)은 화면이 둘이라 사진이 안 찍혀 iPhone 17을 고른다.
 # 시험 서재(QA_SEED_LIB)로 시뮬레이터에서 앱을 켜고, 시간별 사진과 앱 로그를 Actions 결과물(ios-sim)로 남긴다.
 # 시뮬레이터도 Impeller Metal로 그린다(셰이더 제한은 기기와 같다). 속도는 기기와 다르다.
 on:
@@ -37,7 +38,8 @@ jobs:
           UDID=$(xcrun simctl list devices available -j | python3 -c "
           import json, sys
           d = json.load(sys.stdin)['devices']
-          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          phones = [x for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Duo' not in x['name']]
+          print(next((x for x in phones if x['name'] == 'iPhone 17'), phones[0])['udid'])")
           echo "UDID=$UDID" >> "$GITHUB_ENV"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
@@ -49,7 +51,7 @@ jobs:
           t=0
           for at in 10 25 45 75 120; do
             sleep $((at - t)); t=$at
-            xcrun simctl io "$UDID" screenshot "$OUT/shot-${at}s.png" || true
+            xcrun simctl io "$UDID" screenshot "$OUT/shot-${at}s.png" || xcrun simctl io "$UDID" screenshot --display=1 "$OUT/shot-${at}s.png" || true
           done
           xcrun simctl spawn "$UDID" log show --last 5m --style compact --predicate 'process == "Runner"' > "$OUT/system.log" 2>&1 || true
           grep -n -i -E "impeller|metal|shader|buffer|error|flbake|fltotal|flwarm" "$OUT/console.log" "$OUT/system.log" | head -300 || true
