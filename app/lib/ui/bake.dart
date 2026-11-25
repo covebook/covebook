@@ -152,6 +152,36 @@ Future<void> initBake() async {
   _empty = await done.future;
 }
 
+/// 셰이더를 처음 그릴 때 기기가 하는 컴파일을 미리 해 둔다: 1×1 그림에 섞기 방식마다 한 번씩 그려 본다.
+/// 아이폰(Impeller Metal)은 셰이더를 처음 그리는 순간 Metal 소스(벽·판 셰이더는 45만 자)를 기기에서 컴파일해 그 프레임이 멈춘다.
+/// 시험 서재 시뮬레이터에서 책장이 처음 보이는 프레임이 3.6초 걸렸다(2026-11-26). 시작 그림이 떠 있는 동안으로 옮긴다.
+/// samplers: 그 셰이더의 그림 칸 수(빈 그림으로 채운다)
+Future<void> warmShaders(List<(ShaderSlots, int)> list) async {
+  final rec = ui.PictureRecorder();
+  final canvas = ui.Canvas(rec);
+  final used = <ui.FragmentShader>[];
+  for (final (slots, samplers) in list) {
+    for (final blend in const [ui.BlendMode.srcOver, ui.BlendMode.multiply, ui.BlendMode.colorDodge, ui.BlendMode.plus]) {
+      final sh = slots.shader();
+      for (var i = 0; i < samplers; i++) {
+        sh.setImageSampler(i, _empty, filterQuality: ui.FilterQuality.low);
+      }
+      canvas.drawRect(const ui.Rect.fromLTWH(0, 0, 1, 1), ui.Paint()
+        ..shader = sh
+        ..blendMode = blend);
+      used.add(sh);
+    }
+  }
+  final pic = rec.endRecording();
+  final img = await pic.toImage(1, 1);
+  await settle(img);
+  img.dispose();
+  pic.dispose();
+  for (final sh in used) {
+    sh.dispose();
+  }
+}
+
 /// 그림이 실제로 그려질 때까지 기다린다. 그림을 읽는 1×1 그림을 하나 더 만들어 GPU가 이 그림을 끝내게 한다
 /// (지금 앱이 굽고 나서 1화소를 읽어 기다리는 것과 같은 뜻. 그냥 두면 GPU 일이 나중으로 밀려 시간이 작게 나온다)
 Future<void> settle(ui.Image img) async {

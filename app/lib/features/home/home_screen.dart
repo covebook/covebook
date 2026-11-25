@@ -2946,6 +2946,7 @@ class ShelfPainter extends CustomPainter {
   static ShaderSlots? _book;
   static ShaderSlots? _tab;
   static GlyphMetrics? _glyphs;
+  static Future<void>? _warm;
 
   /// 책 셰이더·제목 글꼴(선반 밖에서 한 권만 그릴 때도 쓴다)
   static ShaderSlots? get bookSlots => _book;
@@ -2962,6 +2963,9 @@ class ShelfPainter extends CustomPainter {
     _lit ??= await ShaderSlots.load('shaders/lit.frag', litUniformNames);
     _book ??= await ShaderSlots.load('shaders/book.frag', bookUniformNames);
     _tab ??= await ShaderSlots.load('shaders/tab.frag', tabUniformNames);
+    // 처음 그릴 때의 셰이더 컴파일을 책장이 보이기 전에(아이폰에서 첫 책장 프레임이 몇 초 멈췄다). 그림 칸: 벽·판 3 · 책 3 · 갈피 0
+    _warm ??= warmShaders([(_lit!, 3), (_book!, 3), (_tab!, 0)]);
+    await _warm;
     _glyphs ??= await GlyphMetrics.load(titleFontAsset);
     // 기본 정면 장정 그림(고른 책의 앞표지)
     await loadArtworkImages();
