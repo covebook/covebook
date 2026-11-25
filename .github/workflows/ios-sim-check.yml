@@ -19,7 +19,6 @@ jobs:
         working-directory: app
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
-      OUT: ${{ runner.temp }}/ios-sim
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
@@ -32,6 +31,7 @@ jobs:
         run: flutter build ios --simulator --debug --dart-define=QA_SEED_LIB=true --dart-define=QA_FRAMES=true
       - name: Boot simulator
         run: |
+          OUT=$RUNNER_TEMP/ios-sim
           mkdir -p "$OUT"
           xcrun simctl list devices available > "$OUT/devices.txt"
           UDID=$(xcrun simctl list devices available -j | python3 -c "
@@ -43,6 +43,7 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
       - name: Run app and take screenshots
         run: |
+          OUT=$RUNNER_TEMP/ios-sim
           xcrun simctl install "$UDID" build/ios/iphonesimulator/Runner.app
           xcrun simctl launch --console "$UDID" app.covebook > "$OUT/console.log" 2>&1 &
           t=0
