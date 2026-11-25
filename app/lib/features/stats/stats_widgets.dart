@@ -22,7 +22,7 @@ TextStyle get _small => AppType.micro;
 
 
 // ---------- 달력 ----------
-const _maxLayers = 4, _stepX = 4.0, _stepY = 2.0, _coverH = 46.0, _coverRatio = 1.42, _numH = 24.0;
+const _maxLayers = 4, _stepX = 4.0, _stepY = 2.0, _coverH = 46.0, _coverRatio = 1.42, _numH = 24.0, _pad = 6.0;
 
 class ReadingCalendar extends StatelessWidget {
   const ReadingCalendar({super.key, required this.lib, required this.y, required this.m, required this.days, required this.selected, required this.today, required this.onSelect});
@@ -45,16 +45,26 @@ class ReadingCalendar extends StatelessWidget {
               decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.track, width: 0.5))),
               child: Row(children: [for (final d in weekdays) SizedBox(width: cell, child: Text(d, textAlign: TextAlign.center, style: _small))]),
             ),
-            // 주 사이에만 선(맨 아래 선은 없다: 아래 구역 선과 겹쳐 두 줄로 보였다, 2026-11-17 사용자 댓글)
+            // 주 사이에만 선(맨 아래 선은 없다: 아래 구역 선과 겹쳐 두 줄로 보였다, 2026-11-17 사용자 댓글).
+            // 표지가 하나도 없는 주는 날짜 숫자만큼 낮게(누르는 높이 48), 그 주에 기록이 생기면 표지 자리만큼 높아진다
+            // (2026-11-25 사용자 '좀 줄이고 추가하면 늘리는 거': 전에는 주마다 표지 자리를 늘 비워 두어 빈 주가 떠 보였다)
             for (final (wi, week) in weeks.indexed)
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 6),
                 decoration: wi == weeks.length - 1 ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 0.5))),
                 child: Row(children: [
                   for (final day in week)
                     day == null
                         ? SizedBox(width: cell)
-                        : _DayCell(lib: lib, day: day, row: days[day], cell: cell, selected: selected == day, today: today == day, onSelect: onSelect),
+                        : _DayCell(
+                            lib: lib,
+                            day: day,
+                            row: days[day],
+                            cell: cell,
+                            covers: week.any((d) => d != null && days[d] != null),
+                            selected: selected == day,
+                            today: today == day,
+                            onSelect: onSelect,
+                          ),
                 ]),
               ),
           ]);
@@ -63,11 +73,14 @@ class ReadingCalendar extends StatelessWidget {
 }
 
 class _DayCell extends StatelessWidget {
-  const _DayCell({required this.lib, required this.day, required this.row, required this.cell, required this.selected, required this.today, required this.onSelect});
+  const _DayCell({required this.lib, required this.day, required this.row, required this.cell, required this.covers, required this.selected, required this.today, required this.onSelect});
   final Library lib;
   final String day;
   final DayBooks? row;
   final double cell;
+
+  /// 이 주에 표지가 하나라도 있으면 표지 자리를 둔다(없으면 날짜 숫자 줄만, 누르는 높이 48)
+  final bool covers;
   final bool selected, today;
   final ValueChanged<String> onSelect;
 
@@ -90,8 +103,10 @@ class _DayCell extends StatelessWidget {
       label: label,
       child: Pressable(
         onPress: can ? () => onSelect(day) : null,
-        child: SizedBox(
+        child: Container(
           width: cell,
+          // 위아래 6은 칸 안에 둔다(누르는 자리가 줄 높이 전체: 빈 주도 48)
+          padding: EdgeInsets.only(top: _pad, bottom: covers ? _pad : Space.hit - _pad - _numH),
           child: Column(children: [
             SizedBox(
               height: _numH,
@@ -109,20 +124,22 @@ class _DayCell extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 2),
-            SizedBox(
-              height: _coverH + (_maxLayers - 1) * _stepY,
-              child: Stack(children: [
-                // 뒤 책부터 그린다
-                for (final (i, id) in ids.indexed.toList().reversed)
-                  Positioned(
-                    right: side + i * _stepX,
-                    top: i * _stepY,
-                    child: _Paper(lib: lib, id: id, w: w, h: _coverH),
-                  ),
-                if (ids.isEmpty && row != null) Positioned(right: side, top: 0, child: _Paper(w: w, h: _coverH)),
-              ]),
-            ),
+            if (covers) ...[
+              const SizedBox(height: 2),
+              SizedBox(
+                height: _coverH + (_maxLayers - 1) * _stepY,
+                child: Stack(children: [
+                  // 뒤 책부터 그린다
+                  for (final (i, id) in ids.indexed.toList().reversed)
+                    Positioned(
+                      right: side + i * _stepX,
+                      top: i * _stepY,
+                      child: _Paper(lib: lib, id: id, w: w, h: _coverH),
+                    ),
+                  if (ids.isEmpty && row != null) Positioned(right: side, top: 0, child: _Paper(w: w, h: _coverH)),
+                ]),
+              ),
+            ],
           ]),
         ),
       ),

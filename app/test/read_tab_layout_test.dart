@@ -1,5 +1,6 @@
 // 읽기 탭 배치(2026-11-25 사용자 시안): 맨 위 날짜 아래 '오늘 읽은 시간 N', 오른쪽 '시간 추가'(그 줄 바닥에 맞춘 회색 글자 단추),
 // 최근 읽던 책 표지 92 · 제목은 표지 위 끝 줄 · 오늘 시간은 단추 오른쪽 위 · 단추 아래 끝은 표지 아래 끝, '+ 책 추가'는 목록 아래
+import 'dart:math' as math;
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/reading/read_list.dart';
 import 'package:chaekjang/store/library_model.dart';
@@ -78,6 +79,16 @@ void main() {
     final time = find.text('10분').first;
     expect(t.getRect(time).right, closeTo(b.right, 0.5));
     expect(t.getRect(time).bottom, lessThanOrEqualTo(b.top));
+  });
+
+  testWidgets('카드 위 이름 글자(최근 읽던 책)는 없고 오늘 줄과 표지 사이 28', (t) async {
+    await pump(t);
+    expect(find.text('최근 읽던 책'), findsNothing);
+    expect(find.text('잠깐 멈춘 책'), findsNothing);
+    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '));
+    final c = t.getRect(find.bySemanticsLabel('아몬드 책 정보'));
+    final add = t.getRect(find.text('시간 추가'));
+    expect(c.top - math.max(t.getRect(line).bottom, add.bottom), closeTo(Space.xl, 1.5));
   });
 
   testWidgets('목록 위 + 없이 목록 아래 + 책 추가(+ 획 왼쪽 끝 = 표지 줄 왼쪽 끝)', (t) async {

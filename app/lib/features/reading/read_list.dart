@@ -209,7 +209,7 @@ class _ReadListState extends State<ReadList> {
     ]);
   }
 
-  /// 최근 읽던 책 큰 카드(표지 120 · 제목 21 · 오늘 시간 · 이어서 읽기): 사용자 시안의 큰 카드라 책 줄(BookRow)로 바꾸지 않는다
+  /// 최근 읽던 책 큰 카드(표지 92 · 제목 · 오늘 시간 · 이어서 읽기, 위에 이름 글자 없음): 사용자 시안의 큰 카드라 책 줄(BookRow)로 바꾸지 않는다
   List<Widget> _featured(Library lib, _Today t, String? featured) {
     final active = t.active;
     final running = _reading.running;
@@ -222,8 +222,9 @@ class _ReadListState extends State<ReadList> {
     final title = _titleOf(lib, featured), author = bookAuthor(lib, featured);
     void open() => featured == null ? null : openBook(context, featured);
     return [
-      // 위아래 간격은 시안처럼 촘촘하게(2026-11-18 사용자 '간격이 좀 이상하네')
-      Padding(padding: const EdgeInsets.only(top: Space.l, bottom: Space.m), child: Text(fActive ? (running ? '읽는 중' : '잠깐 멈춘 책') : '최근 읽던 책', style: AppType.sub)),
+      // 카드 위 '최근 읽던 책 · 읽는 중 · 잠깐 멈춘 책' 글자는 없다(2026-11-25 사용자 시안 · '지워'). 재는 중인지는 단추 이름과 시간 글자로 보인다.
+      // 오늘 줄과 표지 사이는 구역 사이보다 조금 넓게(시안 ≈ 36)
+      const SizedBox(height: Space.xl),
       // 표지 92(2026-11-25 사용자 '썸네일 저 정도로 줄이고, 줄이면서 버튼 좌우 길이 늘려'), 제목은 표지 위 끝 줄에서(사용자 '썸네일 상단 라인에 맞춰'),
       // 오늘 시간은 전처럼 단추 오른쪽 위, 단추 아래 끝은 표지 아래 끝. 글이 표지보다 길면(큰 글씨 · 두 줄 제목) 줄이 그만큼 길어지고 표지는 위에 붙는다
       IntrinsicHeight(
