@@ -13,7 +13,13 @@ const t1 = '2026-11-16T01:00:00.000Z';
 
 Library lib() {
   final now = DateTime.now().toUtc();
-  String at(int min) => now.subtract(Duration(minutes: min)).toIso8601String();
+  // 오늘 기록이어야 한다: 자정 직후(00:00~00:30)에 돌리면 '30분 전'이 어제가 되어 '오늘 10분'이 안 보였다(2026-11-26 00:22)
+  final local = DateTime.now();
+  final today = DateTime(local.year, local.month, local.day).toUtc();
+  String at(int min) {
+    final t = now.subtract(Duration(minutes: min));
+    return (t.isBefore(today) ? today : t).toIso8601String();
+  }
   return Library(
     editions: {
       'ed1': Edition(id: 'ed1', title: '아몬드', authors: const ['손원평'], source: 'photo', createdAt: t1, updatedAt: t1),
