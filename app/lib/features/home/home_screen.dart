@@ -16,8 +16,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction, OrdinalSortKey, SemanticsService;
 
 import '../../app/idle_bars.dart';
-import '../onboarding/onboarding.dart';
-import '../../ui/book_cover.dart' show bookTitle;
 import '../../services/qa_probe.dart';
 import '../../services/cover_colors.dart';
 import '../../ui/alert.dart' show appAlert;
@@ -378,69 +376,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         place.route == '/' &&
         place.tab == '/' &&
         !place.modal &&
-        !Onboarding.instance.active &&
         !MediaQuery.accessibleNavigationOf(context);
-  }
-
-  // ---------- 처음 쓰는 사람 안내(온보딩, 2026-11-25 사용자) ----------
-  /// 첫 책 추가 단계에서 하단 탭을 숨겼나(책 한 권은 꼭 추가: 다른 탭으로 빠지지 않게)
-  bool _onbHidTabs = false;
-
-  /// 지금 안내 단계(안내 중이 아니면 null). 저장하지 않고 서재 · 책장 · 꾸미기 상태로 정한다
-  OnbStep? _onbStep() {
-    final o = Onboarding.instance;
-    if (!o.active) return null;
-    final lib = LibraryModel.instance.lib;
-    if (!Onboarding.hasBooks(lib)) return OnbStep.add;
-    final l = PlacementStore.instance.layout;
-    final onShelf = l != null && lib.books.values.any((b) => b.hiddenAt == null && placementOf(l, b.id) != null);
-    if (!onShelf) return OnbStep.place;
-    if (!_decorating) return OnbStep.decorate;
-    if (_editId == null) return OnbStep.select;
-    return o.changed ? OnbStep.finish : OnbStep.rotate;
-  }
-
-  void _onbChanged() {
-    if (!mounted) return;
-    final add = _onbStep() == OnbStep.add;
-    if (add && !_onbHidTabs) {
-      _onbHidTabs = true;
-      tabBarHidden.value = true;
-    } else if (!add && _onbHidTabs) {
-      _onbHidTabs = false;
-      if (!_decorating && !_placeOpen) tabBarHidden.value = false;
-    }
-    setState(() {});
-  }
-
-  /// 안내 겹: 첫 단계는 덮개 + 카드, 그 뒤는 가리키는 말풍선
-  Widget? _onbLayer(EdgeInsets pad) {
-    final step = _onbStep();
-    if (step == null) return null;
-    final t = Onboarding.instance.targets;
-    // 머리 아이콘 줄(꾸미기 · 책장에 꽂기 · 내 정보) 안에서 i번째 아이콘 자리
-    Rect? icon(int i) {
-      final r = t['header-icons'];
-      return r == null ? null : Rect.fromCenter(center: Offset(r.left + Space.hit / 2 + i * _headerPitch, r.center.dy), width: Space.hit, height: Space.hit);
-    }
-
-    final id = _editId;
-    final title = id == null ? null : bookTitle(LibraryModel.instance.lib, id);
-    final named = title == null ? '' : '『$title』 ';
-    return switch (step) {
-      OnbStep.add => OnboardingWelcome(onAdd: () => openAddBook(context)),
-      OnbStep.place => _placeOpen
-          ? CoachBubble(text: '표지를 위로 끌어 책장 빈 자리에 놓아요', target: t['place-sheet'])
-          : CoachBubble(text: '책장에 꽂기를 눌러 첫 책을 책장에 꽂아요', target: icon(1), below: true),
-      OnbStep.decorate => CoachBubble(text: '첫 책이 책장에 꽂혔어요. 꾸미기를 눌러 책을 꾸며 볼까요?', target: icon(0), below: true),
-      OnbStep.select => CoachBubble(text: '방금 꽂은 책을 눌러 골라요', fallbackBottom: pad.bottom + 120),
-      // 조작부 바로 위. 책등으로 선 책은 회전 막대가 없어 자세 · 기대기를, 표지 · 눕힌 책은 회전 막대를 권한다(에뮬 확인: 책등 책에 회전을 권하면 가리킬 곳이 없었다)
-      OnbStep.rotate => CoachBubble(
-          text: _panel?.pose == Pose.upright ? '$named눕히거나 기대 보세요. 아래에서 자세 · 기대기 · 앞뒤를 바꿀 수 있어요' : '$named회전 막대를 밀어 돌려 보세요. 자세 · 앞뒤도 바꿀 수 있어요',
-          target: t['deco-panel'],
-        ),
-      OnbStep.finish => CoachBubble(text: '좋아요! 완료를 누르면 책장에 그대로 남아요', target: t['done'], below: true),
-    };
   }
 
   Future<void> _enterDecorate([String? id]) async {
@@ -555,11 +491,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   }
 
   void _exitDecorate() {
-    // 안내 마지막 단계(바꿔 본 뒤 완료): 끝
-    if (Onboarding.instance.active && Onboarding.instance.changed) {
-      Onboarding.instance.finish();
-      showToast(context, '첫 책장을 꾸몄어요. 책을 더 꽂아 나만의 책장을 채워 보세요.');
-    }
     _clearPreview();
     // 고른 스킨·책 옆면으로 빛을 다시 굽고 시작 사진을 버린다(지난 '선반, 벽지' 화면의 적용하기와 같다)
     if (_skinChanged) {
@@ -639,8 +570,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     final s = PlacementStore.instance, l = s.layout, id = _editId;
     if (l == null || id == null) return;
     _apply(op(l, s.books, id));
-    // 안내: 고른 책을 바꿔 봤다(회전 · 자세 · 기대기 · 앞뒤)
-    Onboarding.instance.markChanged();
   }
 
   void _editPose(Pose pose) {
@@ -1683,9 +1612,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     // 가만히 있으면 아래(하단 탭 · 작은 타이머 · 덮개 · 시스템 막대)를 비운다: 내려도 되는지는 이 화면이 정한다
     IdleBars.instance.canHide = _canIdle;
     IdleBars.instance.poke();
-    // 처음 쓰는 사람 안내(온보딩): 서재를 다 읽은 뒤 시작할지 정한다
-    Onboarding.instance.addListener(_onbChanged);
-    if (LibraryModel.instance.loaded) Onboarding.instance.load(LibraryModel.instance.lib).ignore();
   }
 
   /// 앱이 앞으로 오면 받지 못한 표지를 다시 받아 본다. 뒤로 가면 다시 받기를 멈춘다
@@ -1722,13 +1648,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void _libraryChanged() {
     final model = LibraryModel.instance;
     if (!model.loaded) return;
-    final onb = Onboarding.instance;
-    if (!onb.loaded) {
-      onb.load(model.lib).ignore();
-    } else {
-      onb.libraryChanged(model.lib);
-      if (onb.active && mounted) _onbChanged();
-    }
     final sig = shelfLookSignature(model.lib);
     final changed = _lookSig != null && sig != _lookSig;
     _lookSig = sig;
@@ -1945,7 +1864,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
 
   @override
   void dispose() {
-    Onboarding.instance.removeListener(_onbChanged);
     if (IdleBars.instance.canHide == _canIdle) {
       IdleBars.instance.canHide = null;
       IdleBars.instance.stop();
@@ -2353,8 +2271,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                 left: 0,
                 right: 0,
                 bottom: 0,
-                // 안내(온보딩)가 조작부 위를 가리킨다
-                child: CoachTarget(id: 'deco-panel', child: _decoBottom()),
+                child: _decoBottom(),
               ),
           ],
           if (_placeOpen && !_decorating)
@@ -2362,8 +2279,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
               left: 0,
               right: 0,
               bottom: 0,
-              // 안내(온보딩)가 시트 위를 가리킨다
-              child: CoachTarget(id: 'place-sheet', child: PlaceSheet(
+              child: PlaceSheet(
                 lib: LibraryModel.instance.lib,
                 items: _placeItems(),
                 hidden: _sheetDrag,
@@ -2373,7 +2289,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                 onDragCancel: _cancelDrag,
                 onList: () => openAddBook(context),
                 onClose: _closePlace,
-              )),
+              ),
             ),
           if (_drag != null && _drag!.shelfId.isNotEmpty)
             Positioned(
@@ -2383,8 +2299,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
               height: pad.bottom + _removeLift * 2,
               child: IgnorePointer(child: RemoveZone(active: _overRemove, centerFromBottom: pad.bottom + _removeLift)),
             ),
-          // 처음 쓰는 사람 안내(맨 위 겹)
-          if (_onbLayer(pad) case final layer?) Positioned.fill(key: const ValueKey('onboarding'), child: layer),
         ],
       ),
       ),
@@ -2665,11 +2579,11 @@ class _Header extends StatelessWidget {
               child: OverflowBox(
                 minHeight: Space.touch + _HeaderIcons.slopY * 2,
                 maxHeight: Space.touch + _HeaderIcons.slopY * 2,
-                child: CoachTarget(id: 'header-icons', child: _HeaderIcons(items: [
+                child: _HeaderIcons(items: [
                   ('decorate', '꾸미기', onDecorate),
                   ('add', '책장에 꽂기', onAdd ?? () => openAddBook(context)),
                   ('profile', '내 정보', () => openProfile(context)),
-                ])),
+                ]),
               ),
             ),
         ],

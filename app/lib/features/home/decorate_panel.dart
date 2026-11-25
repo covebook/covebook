@@ -26,7 +26,6 @@ import '../../scene_config/spine_look.dart';
 import '../../ui/keep_all.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../onboarding/onboarding.dart' show CoachTarget;
 
 /// 막대 손잡이 원 지름(2026-11-18 사용자 '원 줄이기' 26 → 18). 잡는 칸은 막대 그림 칸 높이(누르는 자리 48, Space.hit)
 const _thumb = 18.0, _track = 4.0;
@@ -80,7 +79,7 @@ class DecorateBar extends StatelessWidget {
         ),
         const SizedBox(width: Space.l),
         // 머리줄 '완료'는 본문색 글자 단추(DESIGN 5-1). 이 줄은 폭이 빠듯해 양옆 여백 없이 글자 폭만큼(start), 높이는 누르는 자리 48
-        SizedBox(height: Space.hit, child: CoachTarget(id: 'done', child: TextLink(label: '완료', ink: true, start: true, onPress: onDone))),
+        SizedBox(height: Space.hit, child: TextLink(label: '완료', ink: true, start: true, onPress: onDone)),
       ]);
 }
 
