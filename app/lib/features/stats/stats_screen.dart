@@ -152,8 +152,8 @@ class _StatsScreenState extends State<StatsScreen> {
         // 달 아래 여백은 달 위 여백과 같게(전환 칸 → 달 Space.s, 달 → 달력 Space.s, 2026-11-20 사용자 '년도랑 월 위아래 여백 맞춰')
         const SizedBox(height: Space.s),
         ReadingCalendar(lib: lib, y: _y, m: _m, days: days, selected: selected, today: todayDay, onSelect: (d) => setState(() => _picked = d)),
-        // 캘린더: 그날 기록 머리 바로 위 책 칸. 위아래 16(2026-11-24 사용자 '여기 간격 좀 줄이는 게': 28 · 28이었다).
-        // 표지가 없는 주는 날짜 줄만큼 낮아 마지막 주가 비어도 칸이 떠 보이지 않는다(2026-11-25)
+        // 캘린더: 그날 기록 머리 바로 위 책 칸. 위아래 16(2026-11-24 사용자 '여기 간격 좀 줄이는 게': 28 · 28이었다.
+        // 달력 마지막 주는 표지 자리 52를 늘 비워 두어 표지가 없으면 그만큼 더 떠 보인다)
         const SizedBox(height: Space.l),
         bookBox(bottom: Space.l),
         if (selected != null)

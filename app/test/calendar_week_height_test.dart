@@ -1,5 +1,5 @@
-// 통계 캘린더: 표지가 하나도 없는 주는 날짜 숫자 줄만(누르는 높이 48), 그 주에 기록이 생기면 표지 자리만큼 높아진다
-// (2026-11-25 사용자 '좀 줄이고 추가하면 늘리는 거': 전에는 주마다 표지 자리를 늘 비워 두어 마지막 주가 떠 보였다)
+// 통계 캘린더: 주마다 표지 자리를 늘 두어 기록 없는 주도 같은 높이, 기록이 생겨도 달력 높이가 그대로다
+// (11-25 빈 주를 낮췄다가 2026-11-26 사용자 '기존이 낫다'로 되돌림)
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/stats/chart_data.dart';
 import 'package:chaekjang/features/stats/stats_widgets.dart';
@@ -32,24 +32,20 @@ Future<void> pump(WidgetTester t, Map<String, DayBooks> days) async {
 Rect cell(WidgetTester t, int n) => t.getRect(find.bySemanticsLabel(RegExp('^$n일,')));
 
 void main() {
-  testWidgets('표지 없는 주는 48, 표지 있는 주는 표지 자리만큼 높다', (t) async {
+  testWidgets('기록 없는 주도 표지 자리까지 같은 높이', (t) async {
     await pump(t, {'2026-11-10': const DayBooks(['bk1'], false, 600000)});
     final full = cell(t, 10).height;
-    expect(full, greaterThan(80), reason: '숫자 24 + 2 + 표지 자리 52 + 위아래 6');
-    expect(cell(t, 8).height, full, reason: '같은 주 빈 날도 같은 높이');
-    expect(cell(t, 3).height, Space.hit, reason: '표지 없는 주는 누르는 높이만');
-    expect(cell(t, 24).height, Space.hit);
-    expect(cell(t, 30).height, Space.hit, reason: '마지막 주가 비면 낮다');
+    expect(full, greaterThan(70), reason: '숫자 24 + 2 + 표지 자리 52');
+    for (final d in [3, 8, 24, 30]) {
+      expect(cell(t, d).height, full, reason: '$d일');
+    }
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('빈 주에 기록이 생기면 그 주만 높아진다', (t) async {
+  testWidgets('빈 주에 기록이 생겨도 달력 높이는 그대로', (t) async {
     await pump(t, {'2026-11-10': const DayBooks(['bk1'], false, 600000)});
-    final full = cell(t, 10).height;
     final before = cell(t, 30).bottom;
     await pump(t, {'2026-11-10': const DayBooks(['bk1'], false, 600000), '2026-11-24': const DayBooks(['bk1'], false, 300000)});
-    expect(cell(t, 24).height, full);
-    expect(cell(t, 30).height, Space.hit);
-    expect(cell(t, 30).bottom - before, closeTo(full - Space.hit, 0.5), reason: '달력 전체가 그 주 표지 자리만큼 길어진다');
+    expect(cell(t, 30).bottom, before);
   });
 }
