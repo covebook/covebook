@@ -97,9 +97,11 @@ void main() {
     expect(c.top - math.max(t.getRect(line).bottom, add.bottom), closeTo(Space.xl, 1.5));
   });
 
-  testWidgets('목록 위 + 없이 목록 아래 + 책 추가(+ 획 왼쪽 끝 = 표지 줄 왼쪽 끝)', (t) async {
+  testWidgets('목록 제목 오른쪽 +(전처럼, 2026-11-25 사용자)와 목록 아래 + 책 추가(+ 획 왼쪽 끝 = 표지 줄 왼쪽 끝)', (t) async {
     await pump(t);
-    expect(find.bySemanticsLabel('읽기 목록에 추가'), findsNothing);
+    final head = find.bySemanticsLabel('읽기 목록에 추가');
+    expect(head, findsOneWidget);
+    expect(t.getRect(head).center.dy, closeTo(t.getRect(find.text('내 읽기 목록')).center.dy, 0.5), reason: '제목과 한 줄');
     final add = find.bySemanticsLabel('읽기 목록에 책 추가');
     expect(add, findsOneWidget);
     expect(find.text('책 추가'), findsOneWidget);
