@@ -512,6 +512,11 @@ void main() {
       expect(list[2].text!.$1, contains('자동 갱신이 꺼졌습니다'));
       expect(list[2].text!.$2, contains('2027년 1월 18일까지 이용할 수 있습니다'));
       expect(list[5].text!.$2, '선반 1칸을 더 열 수 있습니다.');
+      expect(list[3].text!.$2, contains('선반이 잠겼습니다'));
+      // 칸을 연 적 없는 선반의 환불: 잠겼다고 하지 않는다
+      final unopened = n(7, 'shelf_refunded', '2027-01-06T03:00:00Z', params: {'route': iapRoute, 'opened': false}).text!.$2;
+      expect(unopened, contains('선반을 열지 않고 환불했습니다'));
+      expect(unopened, isNot(contains('잠겼습니다')));
       // 고지에 금액은 넣지 않는다(서버가 주지 않고, 금액은 결제한 스토어가 정한다)
       for (final x in list) {
         expect(x.text!.$2.contains(RegExp(r'\d\s*원')), isFalse, reason: x.kind);

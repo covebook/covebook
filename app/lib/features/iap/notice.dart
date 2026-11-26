@@ -111,6 +111,8 @@ class IapNotice {
       'payment_failed' => ('$name 결제가 이뤄지지 않았습니다', '${grace == null ? '' : '${iapDate(grace)}까지는 계속 이용할 수 있습니다. '}$store 계정의 결제 수단을 확인해 주세요. 그때까지 결제되지 않으면 구독이 끝납니다.'),
       'expired' => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
       'subscription_refunded' => ('$name 결제가 환불 처리됐습니다', '$when구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+      // 어느 해 책장인지 몰라 칸을 열지 않은 결제를 서버가 환불했다(opened=false). 잠글 선반이 없다
+      'shelf_refunded' when params['opened'] == false => ('추가 선반 결제가 환불 처리됐습니다', '$when어느 해 책장의 선반인지 확인하지 못해 선반을 열지 않고 환불했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
       'shelf_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when${bookcase.isEmpty ? '해당 ' : bookcase}선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
       'renewal_upcoming' => expires == null
           ? null
