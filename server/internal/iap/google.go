@@ -94,11 +94,17 @@ func googleErr(err error) error {
 }
 
 func (g *Google) fromSubscription(token string, s *androidpublisher.SubscriptionPurchaseV2) (Purchase, error) {
-	// 우리 구독은 상품 1개라 항목도 1개다. 다르면 설정이 바뀐 것이니 지급하지 않고 멈춘다.
-	if len(s.LineItems) != 1 {
-		return Purchase{}, fmt.Errorf("google 구독: 항목이 %d개", len(s.LineItems))
+	// 보통 항목은 1개다. 요금제 변경을 다음 결제일로 미루면(DEFERRED) 옛 요금제(자동 갱신 꺼짐)와 새 요금제가 함께 온다.
+	// 만료가 가장 늦은 항목을 지금 구독으로 본다. 둘 다 같은 plus라 권한은 같고, 만료·요금제·자동 갱신 표시만 새 것을 따른다
+	if len(s.LineItems) == 0 {
+		return Purchase{}, errors.New("google 구독: 항목이 없음")
 	}
-	item := s.LineItems[0]
+	item, latest := s.LineItems[0], time.Time{}
+	for _, it := range s.LineItems {
+		if t, err := rfcTime(it.ExpiryTime); err == nil && t.After(latest) {
+			item, latest = it, t
+		}
+	}
 	started, err := rfcTime(s.StartTime)
 	if err != nil {
 		return Purchase{}, fmt.Errorf("google 구독 시작 시각: %w", err)

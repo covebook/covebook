@@ -273,3 +273,23 @@ func TestGoogleRefund(t *testing.T) {
 		t.Fatalf("주문 ID 없으면 오류: %v %v", calls, err)
 	}
 }
+
+// 요금제 변경을 다음 결제일로 미루면 항목이 2개 온다. 만료가 늦은 새 요금제를 쓴다(이슈 #33)
+func TestGoogleSubscriptionDeferredChange(t *testing.T) {
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{sub: &androidpublisher.SubscriptionPurchaseV2{
+		SubscriptionState: "SUBSCRIPTION_STATE_ACTIVE", StartTime: "2026-11-18T03:00:00Z",
+		LineItems: []*androidpublisher.SubscriptionPurchaseLineItem{
+			{ProductId: "plus", ExpiryTime: "2026-12-18T03:00:00Z", LatestSuccessfulOrderId: "GPA.1",
+				OfferDetails: &androidpublisher.OfferDetails{BasePlanId: "monthly"}, AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: false}},
+			{ProductId: "plus", ExpiryTime: "2027-12-18T03:00:00Z", LatestSuccessfulOrderId: "GPA.2",
+				OfferDetails: &androidpublisher.OfferDetails{BasePlanId: "yearly"}, AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: true}},
+		},
+	}}}
+	p, err := g.Lookup(context.Background(), Ref{Kind: KindSubscription, ID: "tok"})
+	if err != nil {
+		t.Fatalf("항목 2개를 받지 못함: %v", err)
+	}
+	if p.PlanID != "yearly" || !p.AutoRenew || p.ExpiresAt.Year() != 2027 || p.TransactionID != "GPA.2" {
+		t.Fatalf("새 요금제를 고르지 않음: %+v", p)
+	}
+}
