@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 )
 
 type fakeGoogleAPI struct {
@@ -328,5 +332,26 @@ func TestGoogleSubscriptionDeferredChange(t *testing.T) {
 	}
 	if p.PlanID != "yearly" || !p.AutoRenew || p.ExpiresAt.Year() != 2027 || p.TransactionID != "GPA.2" {
 		t.Fatalf("새 요금제를 고르지 않음: %+v", p)
+	}
+}
+
+// 환불은 revoke=true로 부른다. 소비하지 않은 선반을 revoke 없이 환불하면 구매가 남아 다시 살 수 없다
+func TestGoogleRefundRevokes(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	svc, err := androidpublisher.NewService(context.Background(), option.WithEndpoint(srv.URL), option.WithoutAuthentication(), option.WithHTTPClient(srv.Client()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := &Google{packageName: "app.covebook", api: googleClient{svc: svc}}
+	if err := g.Refund(context.Background(), "GPA.1"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "POST ") || !strings.Contains(got, "/orders/GPA.1:refund") || !strings.Contains(got, "revoke=true") {
+		t.Fatalf("환불 요청: %s", got)
 	}
 }
