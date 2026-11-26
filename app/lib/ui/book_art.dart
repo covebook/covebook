@@ -189,7 +189,9 @@ void _verticalTitle(ui.Canvas canvas, BookLook look, Dims d, GlyphMetrics g, dou
   final fs = t.fontSize;
   final gy = -(g.ascent(fs) + g.descent(fs)) / 2;
   final colW = fs * 1.2;
-  final cols = t.columns.reversed.toList();
+  // 두 열이면 첫 열이 왼쪽(왼쪽 → 오른쪽으로 읽는다). 옛 세로쓰기처럼 오른쪽부터 두어 '있는 당신에게 | 오늘은 빼앗기고'로 읽혔다
+  // (2026-11-26 사용자 '보통 글씨가 왼쪽 -> 오른쪽 이렇게 세로로 가지 않나? 지금 반대인데')
+  final cols = t.columns;
   final x0 = w / 2 - cols.length * colW / 2;
   final ink = _alpha(_color(look.ink), opacity);
   final top = look.titleTop != null ? math.max(0.12, look.titleTop! - _titleLift) : t.textTop;
