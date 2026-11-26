@@ -26,6 +26,63 @@ Future<void> saveFinishedReading(FinishDraft draft, {num? startPage, num? pagesR
   await ReadingStore.instance.clearPending();
 }
 
+/// 쪽 칸 글자를 쪽 수로(숫자만 남겨 0보다 클 때만). 독서 끝 화면과 묻지 않고 저장하는 길이 같은 규칙을 쓴다
+int? pageOf(String? v) {
+  final n = int.tryParse((v ?? '').replaceAll(RegExp(r'[^\d]'), ''));
+  return v != null && v.trim().isNotEmpty && n != null && n > 0 ? n : null;
+}
+
+/// 적어 둔 그대로 저장(묻지 않고 거기까지 기록, 2026-11-26 사용자 '화면 나가면 그냥 거기까지 기록하고 (팝업이나 그렇게 떠서 하는 거면 그냥 기록하고)').
+/// 칸 글자를 넘기지 않으면 초안에 남은 것(쪽 · 메모, 시작 쪽은 그 책의 지금 쪽)을 쓴다. 독서 끝 화면이 저장 단추에서 막는 쪽
+/// (전체 쪽수보다 큼 · 시작 쪽보다 앞)은 빼고 시간과 메모는 남긴다. 1초가 안 되는 기록은 남길 것이 없어 버린다(false). 저장하면 true
+Future<bool> saveDraftAsIs(FinishDraft draft, {String? startPage, String? pages, String? memo}) async {
+  if (draft.durationMs < 1000) {
+    await ReadingStore.instance.clearPending();
+    return false;
+  }
+  final model = LibraryModel.instance;
+  await model.load();
+  final n = draft.notes;
+  final book = draft.myBookId == null ? null : model.lib.books[draft.myBookId];
+  final total = book == null ? null : model.lib.editions[book.editionId]?.pageCount;
+  final max = total != null && total > 0 ? total : null;
+  var sp = book == null ? null : pageOf(startPage ?? n?.startPage ?? draft.startPage?.toString());
+  var ep = book == null ? null : pageOf(pages ?? n?.pages);
+  if (sp != null && max != null && sp > max) sp = null;
+  if (ep != null && ((max != null && ep > max) || (sp != null && ep < sp))) ep = null;
+  final m = (memo ?? n?.memo ?? '').trim();
+  await saveFinishedReading(draft, startPage: sp, pagesRead: ep, memo: m.isEmpty ? null : m);
+  return true;
+}
+
+/// 앱을 다시 켰을 때 남아 있던 독서를 묻지 않고 거기까지 기록한다(2026-11-26 사용자 '멈춰 둔 독서가 있어요 이런 거 그냥 기록해').
+/// 전에는 창 셋이 물었다: 저장하지 않은 독서 기록이 있어요 · 멈춰 둔 독서가 있어요 · 지난 독서가 중간에 멈췄어요.
+/// - 끝내고 저장하지 않은 초안: 적어 둔 쪽 · 메모 그대로
+/// - 멈춰 둔 독서(켤 때 일시정지였던 것, 1분 미만은 ReadingStore.load가 지운다): 멈춘 때까지
+/// - 앱이 꺼져 멈춘 독서: 마지막으로 확인된 때까지(1분 미만 꺼졌던 것은 읽던 중이라 그 시간도 넣는다, askGapMs)
+/// 저장한 기록을 돌려준다. 저장하지 못하면 예외(그 기록은 저장 전 초안으로 읽기 탭에 남고 다음에 켤 때 다시 저장한다)
+Future<List<FinishDraft>> settleLeftoverReading() async {
+  final rs = ReadingStore.instance;
+  final saved = <FinishDraft>[];
+  final p = rs.pending;
+  if (p != null && rs.pendingRestored) {
+    rs.ackPendingRestored();
+    if (await saveDraftAsIs(p)) saved.add(p);
+  }
+  // 초안이 남아 있으면(지금 독서 끝 화면에서 적는 중 등) 진행 중 독서를 끝내지 않는다: 끝내면 그 초안을 덮는다
+  if (rs.pending != null || rs.active == null) return saved;
+  final it = rs.interrupted;
+  FinishDraft? d;
+  if (it != null) {
+    d = rs.finishInterrupted(includeGap: it.gapMs < askGapMs);
+  } else if (rs.stale) {
+    rs.clearStale();
+    d = rs.finish(rs.active!.lastBeat);
+  }
+  if (d != null && await saveDraftAsIs(d)) saved.add(d);
+  return saved;
+}
+
 /// 독서 일시정지: 타이머와 함께 소리도 멈춘다. 켜 둔 소리 설정은 그대로라 이어 읽으면 다시 난다
 /// (2026-11-21 사용자 '타이머 멈출 때 소리도 같이 멈추게'). 일시정지 단추(장면 · 작은 타이머)가 모두 이것을 쓴다
 void pauseReading() {
