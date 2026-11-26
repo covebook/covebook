@@ -453,3 +453,39 @@ func TestIAPNoticeShelfOverCapRefund(t *testing.T) {
 		}
 	}
 }
+
+// 갱신 결제도 결제 완료를 알린다(ADR-0003 L7). 알림으로 와도, 앱이 갱신 거래를 내도 거래마다 한 줄이다
+func TestIAPNoticeRenewalPaid(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	account := e.accountToken(token)
+	orig, first := iapTestID(t, "orig"), iapTestID(t, "first")
+	e.apple.Purchases[first] = e.subscription(orig, first, account, time.Now().Add(time.Hour))
+	if code, _ := e.submit(token, "apple", e.plus, first, false); code != 200 {
+		t.Fatal(code)
+	}
+	e.wantKinds(token, "처음 구매", noticePurchaseDone)
+
+	// 한 달 뒤 갱신: 알림이 오고 대조가 두 번 돈다
+	second := iapTestID(t, "second")
+	e.apple.Purchases[second] = e.subscription(orig, second, account, time.Now().Add(31*24*time.Hour))
+	for _, s := range []string{"a", "b"} {
+		e.notify("apple", subNotice(iapTestID(t, "renew-"+s), second, orig), "")
+		e.sweep()
+	}
+	// 앱도 같은 갱신 거래를 낸다(iOS)
+	e.submit(token, "apple", e.plus, second, false)
+	e.wantKinds(token, "첫 갱신", noticePurchaseDone, noticePurchaseDone)
+
+	// 다음 갱신은 앱이 먼저 낸다
+	third := iapTestID(t, "third")
+	e.apple.Purchases[third] = e.subscription(orig, third, account, time.Now().Add(62*24*time.Hour))
+	e.submit(token, "apple", e.plus, third, false)
+	e.notify("apple", subNotice(iapTestID(t, "renew-c"), third, orig), "")
+	e.sweep()
+	e.wantKinds(token, "둘째 갱신", noticePurchaseDone, noticePurchaseDone, noticePurchaseDone)
+
+	// 구매 복원은 새 결제가 아니다
+	e.submit(token, "apple", e.plus, third, true)
+	e.wantKinds(token, "복원", noticePurchaseDone, noticePurchaseDone, noticePurchaseDone)
+}

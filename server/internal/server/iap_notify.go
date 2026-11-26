@@ -456,8 +456,16 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	// 가장 최근 거래를 원장에 남긴다(갱신 거래). 주인을 아는 경우에만.
 	key := iapTransactionKey(iap.KindSubscription, cur)
 	if user != 0 && cur.State == iap.StatePaid {
-		if _, err = iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur); err != nil {
-			return "", err
+		inserted, e := iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur)
+		if e != nil {
+			return "", e
+		}
+		// 주인이 있던 구독에 처음 보는 결제 거래: 갱신(또는 요금제 변경) 결제다. 결제 완료를 알린다(T3, ADR-0003 L7 "구매·갱신 직후").
+		// 고지의 유일 키가 거래 단위라, 같은 거래를 제출 경로가 먼저 알렸어도 한 줄이다
+		if inserted && owner.found {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapShelfGrant{}); err != nil {
+				return "", err
+			}
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {

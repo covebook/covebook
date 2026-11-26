@@ -508,8 +508,16 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		}
 		// 제출된 거래 자체도 원장에 남긴다. 이미 있으면 그대로 둔다.
 		if submitted.State == iap.StatePaid {
-			if _, err = iapRecordPurchase(ctx, tx, user, asked.Kind, submitted); err != nil {
-				return err
+			inserted, e := iapRecordPurchase(ctx, tx, user, asked.Kind, submitted)
+			if e != nil {
+				return e
+			}
+			// 내 구독의 처음 보는 결제 거래(iOS는 갱신 거래를 앱에도 준다): 갱신 결제 완료를 알린다(T3).
+			// 처음 구매는 위에서 알렸다. 구매 복원은 새 결제가 아니라 알리지 않는다
+			if inserted && mine && !body.Restore {
+				if err = iapNotePurchaseDone(ctx, tx, user, asked.Kind, submitted, iapShelfGrant{}); err != nil {
+					return err
+				}
 			}
 		}
 		if inactive {
