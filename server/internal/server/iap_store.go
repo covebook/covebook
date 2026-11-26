@@ -155,6 +155,10 @@ func iapSettleShelf(ctx context.Context, tx pgx.Tx, user int64, route iap.Route,
 	return
 }
 
+// iapRefundDueSQL은 실패한 환불을 다시 시도할 때가 됐는지다. 간격은 2분, 4분, 8분 … 6시간에서 멈춘다(20번이면 약 3일).
+// 시도마다 updated_at이 바뀐다(iapNoteRefundAttempt, iapRefundPurchase)
+const iapRefundDueSQL = `(refund_attempts = 0 OR updated_at < now() - least(interval '1 minute' * power(2, refund_attempts), interval '6 hours'))`
+
 // iapOverCapRow는 환불을 다시 요청할 넘은 거래다.
 type iapOverCapRow struct {
 	Route iap.Route
@@ -163,10 +167,12 @@ type iapOverCapRow struct {
 
 // iapOverCapToRefund는 3칸을 넘게 산 거래 중 환불 요청을 아직 못 마친 것을 오래된 순으로 준다.
 // routes는 개발자가 환불할 수 있는 경로(구글)만 준다. 애플 거래가 목록을 차지해 구글 거래가 밀리지 않게.
-// 20번 넘게 실패한 거래는 빼고 운영자가 본다(/admin/iap/stats).
+// 실패하면 간격을 2배씩 늘려 다시 한다(iapRefundDueSQL). 대조는 1분마다 돌아서 간격이 없으면 구글 장애 20분에 20번을 다 쓴다.
+// 이 거래는 이미 소비해 구글 3일 자동 환불도 없다. 20번(약 3일) 넘게 실패한 거래는 빼고 운영자가 본다(/admin/iap/stats의 shelfOverCap).
 func iapOverCapToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
 	rows, err := q.Query(ctx, `SELECT route, transaction_id FROM iap_purchases
 		WHERE over_cap AND refund_requested_at IS NULL AND state='paid' AND refund_attempts < 20 AND route = ANY($1)
+		  AND `+iapRefundDueSQL+`
 		ORDER BY created_at LIMIT $2`, routes, limit)
 	if err != nil {
 		return nil, err
@@ -248,7 +254,18 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 	if err != nil {
 		return false, err
 	}
-	return tag.RowsAffected() == 1, nil
+	if tag.RowsAffected() == 1 {
+		return true, nil
+	}
+	// 이미 있던 거래다. 처음 넣을 때 금액을 못 받았으면(구글 주문 조회 실패) 지금 받은 값으로 채운다. 한 번 채운 금액은 바꾸지 않는다
+	if p.PriceMilli > 0 && p.Currency != "" {
+		if _, err = q.Exec(ctx, `UPDATE iap_purchases SET currency=$3, price_milli=$4, updated_at=now()
+			WHERE route=$1 AND transaction_id=$2 AND price_milli IS NULL`,
+			string(p.Route), iapTransactionKey(kind, p), p.Currency, p.PriceMilli); err != nil {
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 // iapTransactionKey는 원장의 유일 키에 쓸 값이다.
@@ -599,7 +616,7 @@ func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNotic
 func iapYearlessToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
 	rows, err := q.Query(ctx, `SELECT route, transaction_id FROM iap_purchases
 		WHERE kind='product' AND shelf_year IS NULL AND NOT over_cap AND confirmed_at IS NULL AND state='paid'
-		  AND refund_requested_at IS NULL AND refund_attempts < 20 AND route = ANY($1)
+		  AND refund_requested_at IS NULL AND refund_attempts < 20 AND route = ANY($1) AND `+iapRefundDueSQL+`
 		  AND (created_at < now() - interval '2 days' OR user_id IS NULL) AND created_at > now() - interval '3 days'
 		ORDER BY created_at LIMIT $2`, routes, limit)
 	if err != nil {

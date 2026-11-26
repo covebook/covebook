@@ -209,28 +209,30 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	unconfirmed, err := iapUnconfirmedPurchases(ctx, s.DB, 100)
 	keep(err)
 	for _, u := range unconfirmed {
-		store := s.IAP[u.Route]
-		if store == nil {
-			continue
-		}
-		ref, consume := iap.Ref{Kind: u.Kind, ID: u.OriginalID}, false
-		if u.Kind == iap.KindProduct {
-			if p, e := iapFindProduct(ctx, s.DB, u.Route, u.ProductID); e == nil {
-				consume = p.Consume
+		iapSafely("confirm", func() {
+			store := s.IAP[u.Route]
+			if store == nil {
+				return
 			}
-		}
-		storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
-		e := store.Confirm(storeCtx, ref, u.ProductID, consume)
-		cancel()
-		if e != nil {
-			log.Printf("iap confirm retry failed: route=%s product=%s err=%v", u.Route, u.ProductID, e)
-			continue
-		}
-		if e = iapMarkConfirmed(ctx, s.DB, u.Route, u.Key); e != nil {
-			keep(e)
-			continue
-		}
-		res.Confirmed++
+			ref, consume := iap.Ref{Kind: u.Kind, ID: u.OriginalID}, false
+			if u.Kind == iap.KindProduct {
+				if p, e := iapFindProduct(ctx, s.DB, u.Route, u.ProductID); e == nil {
+					consume = p.Consume
+				}
+			}
+			storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+			e := store.Confirm(storeCtx, ref, u.ProductID, consume)
+			cancel()
+			if e != nil {
+				log.Printf("iap confirm retry failed: route=%s product=%s err=%v", u.Route, u.ProductID, e)
+				return
+			}
+			if e = iapMarkConfirmed(ctx, s.DB, u.Route, u.Key); e != nil {
+				keep(e)
+				return
+			}
+			res.Confirmed++
+		})
 	}
 
 	// 2. 스토어의 목록으로 빠진 알림과 환불을 메운다(6시간에 한 번). 넣은 알림은 바로 아래에서 처리된다
@@ -259,39 +261,43 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	overCap, err := iapOverCapToRefund(ctx, s.DB, refunders, 50)
 	keep(err)
 	for _, o := range overCap {
-		store := s.IAP[o.Route]
-		if _, ok := store.(iap.Refunder); !ok {
-			continue
-		}
-		// 주문 ID는 원장에 두지 않는다. 구매 토큰으로 다시 물어 받는다
-		storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
-		p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
-		cancel()
-		if e != nil {
-			log.Printf("iap over cap refund retry: lookup failed route=%s err=%v", o.Route, e)
-			keep(iapNoteRefundAttempt(ctx, s.DB, o.Route, o.Key, false))
-			continue
-		}
-		if s.iapRefundOverCap(ctx, store, o.Key, p.TransactionID) {
-			res.Refunds++
-		}
+		iapSafely("over cap refund", func() {
+			store := s.IAP[o.Route]
+			if _, ok := store.(iap.Refunder); !ok {
+				return
+			}
+			// 주문 ID는 원장에 두지 않는다. 구매 토큰으로 다시 물어 받는다
+			storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+			p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
+			cancel()
+			if e != nil {
+				log.Printf("iap over cap refund retry: lookup failed route=%s err=%v", o.Route, e)
+				keep(iapNoteRefundAttempt(ctx, s.DB, o.Route, o.Key, false))
+				return
+			}
+			if s.iapRefundOverCap(ctx, store, o.Key, p.TransactionID) {
+				res.Refunds++
+			}
+		})
 	}
 	// 연도를 끝내 모르는 선반(2일 뒤)과 주인 없는 선반. 앱이 연도와 함께 다시 낼 시간을 준 뒤 구글 3일 자동 환불보다 먼저 한다.
 	// 환불하는 순간 앱이 연도를 붙여 내 칸을 받았어도, 구글 환불 알림(voided)이 와서 칸을 회수한다
 	yearless, err := iapYearlessToRefund(ctx, s.DB, refunders, 50)
 	keep(err)
 	for _, o := range yearless {
-		store := s.IAP[o.Route]
-		storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
-		p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
-		cancel()
-		if e != nil {
-			log.Printf("iap yearless refund: lookup failed route=%s err=%v", o.Route, e)
-			continue
-		}
-		if s.iapRefundPurchase(ctx, store, o.Key, p.TransactionID) {
-			res.Refunds++
-		}
+		iapSafely("yearless refund", func() {
+			store := s.IAP[o.Route]
+			storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+			p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
+			cancel()
+			if e != nil {
+				log.Printf("iap yearless refund: lookup failed route=%s err=%v", o.Route, e)
+				return
+			}
+			if s.iapRefundPurchase(ctx, store, o.Key, p.TransactionID) {
+				res.Refunds++
+			}
+		})
 	}
 
 	// 5. 만료가 다가왔거나 지난 구독
@@ -299,20 +305,38 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	keep(err)
 	for _, d := range due {
 		route, original := iap.Route(d[0]), d[1]
-		store := s.IAP[route]
-		if store == nil {
-			// 꺼진 경로의 줄이 매번 맨 앞에 뽑히지 않게 한다
+		if iapSafely("subscription", func() {
+			store := s.IAP[route]
+			if store == nil {
+				// 꺼진 경로의 줄이 매번 맨 앞에 뽑히지 않게 한다
+				keep(iapBumpSubscription(ctx, s.DB, route, original))
+				return
+			}
+			if _, e := s.iapSyncSubscription(ctx, store, original); e != nil {
+				log.Printf("iap subscription refresh failed: route=%s err=%v", route, e)
+				keep(iapBumpSubscription(ctx, s.DB, route, original))
+				return
+			}
+			res.Refreshed++
+		}) {
+			// 패닉 난 구독이 다음 바퀴에도 맨 앞에 뽑혀 뒤의 구독을 막지 않게 뒤로 보낸다
 			keep(iapBumpSubscription(ctx, s.DB, route, original))
-			continue
 		}
-		if _, e := s.iapSyncSubscription(ctx, store, original); e != nil {
-			log.Printf("iap subscription refresh failed: route=%s err=%v", route, e)
-			keep(iapBumpSubscription(ctx, s.DB, route, original))
-			continue
-		}
-		res.Refreshed++
 	}
 	return res, firstErr
+}
+
+// iapSafely는 대조의 한 건을 돌리고, 패닉을 그 건의 실패로 가둔다(패닉이면 true).
+// 대조 전체의 recover(iapSweepSafely)만 있으면 패닉 난 한 건이 그 바퀴의 뒤 단계를 다 끊고, 다음 바퀴에도 맨 앞에 뽑혀 같은 일이 반복된다
+func iapSafely(what string, fn func()) (panicked bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("iap sweep panic: step=%s panic=%v", what, r)
+			panicked = true
+		}
+	}()
+	fn()
+	return false
 }
 
 // iapProcessNoticeSafely는 알림 한 건의 패닉을 그 알림의 실패로 가둔다.

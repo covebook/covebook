@@ -1018,6 +1018,59 @@ func TestIAPShelfOwnerGone(t *testing.T) {
 	}
 }
 
+// 다른 계정(결제한 계정)에 넣는 선반 거래에는 낸 사람이 보낸 연도를 쓰지 않는다. 그 계정이 고르지 않은 해에 칸이 열리지 않게
+func TestIAPShelfOwnerYearNotFromSubmitter(t *testing.T) {
+	e := newIAPEnv(t)
+	payer, _ := e.user()
+	other, _ := e.user()
+	id := iapTestID(t, "owner-year")
+	// 연도별 값이 아닌 계정 연결 값으로 결제했다: 결제한 계정의 어느 해 책장인지 모른다
+	e.google.Purchases[id] = e.shelfPurchase(id, e.accountToken(payer))
+	if code, body := e.submitYear(other, "google", e.shelf, id, 2026); code != 409 || errCode(body) != "iap_other_account" {
+		t.Fatalf("다른 계정이 연도와 냄: %d %v", code, body)
+	}
+	if _, body := e.call("GET", "/iap/me", payer, nil); shelvesIn(body, 2026) != 0 {
+		t.Fatalf("결제한 계정에 낸 사람의 연도로 칸이 열림: %v", body)
+	}
+	if iapTestHas(e.google.Confirmed, id) {
+		t.Fatal("연도를 모르는 선반을 소비함")
+	}
+}
+
+// 처음 넣을 때 금액을 못 받았으면(구글 주문 조회 실패) 다시 낼 때 채운다. 한 번 채운 금액은 바꾸지 않는다
+func TestIAPPriceFilledLater(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	id := iapTestID(t, "price")
+	p := e.shelfPurchase(id, e.shelfToken(token, 2026))
+	e.google.Purchases[id] = p
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 {
+		t.Fatalf("제출: %d %v", code, body)
+	}
+	price := func() *int64 {
+		var v *int64
+		if err := e.db.QueryRow(e.ctx, "SELECT price_milli FROM iap_purchases WHERE transaction_id=$1", id).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	if price() != nil {
+		t.Fatal("금액이 없던 거래에 금액이 있음")
+	}
+	p.Currency, p.PriceMilli = "KRW", 3_300_000
+	e.google.Purchases[id] = p
+	e.submit(token, "google", e.shelf, id, false)
+	if v := price(); v == nil || *v != 3_300_000 {
+		t.Fatalf("다시 낼 때 금액을 채우지 않음: %v", v)
+	}
+	p.PriceMilli = 9_900_000
+	e.google.Purchases[id] = p
+	e.submit(token, "google", e.shelf, id, false)
+	if v := price(); *v != 3_300_000 {
+		t.Fatalf("채운 금액이 바뀜: %d", *v)
+	}
+}
+
 // 앱이 지금 결제의 예약 번호를 붙여 옛 거래를 내도 옛 거래는 그 예약을 쓰지도 풀지도 않는다(코드 리뷰 #43)
 func TestIAPOldPurchaseKeepsReservation(t *testing.T) {
 	e := newIAPEnv(t)
