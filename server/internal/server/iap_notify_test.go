@@ -286,6 +286,26 @@ func TestIAPNotifyRefund(t *testing.T) {
 		t.Fatalf("스토어가 모르는 토큰의 환불: %s", state("google", gone))
 	}
 
+	// 제출보다 환불 알림이 먼저 오면(앱이 제출하기 전에 환불) 알림을 끝내지 않고 기다렸다가, 제출 뒤 재시도에서 회수한다
+	early := iapTestID(t, "early")
+	e.google.Purchases[early] = e.shelfPurchase(early, e.shelfToken(token, 2027)) // 조회는 계속 "결제됨"
+	earlyID := iapTestID(t, "r1d")
+	e.notify("google", iap.Notice{ID: earlyID, Type: "voided/2", Voided: true, Target: &iap.Ref{Kind: iap.KindProduct, ID: early}}, "Bearer pubsub")
+	e.sweep()
+	if res, note, _ := e.noticeResult("google", earlyID); res != "failed" || !strings.Contains(note, "제출 전 환불") {
+		t.Fatalf("원장에 없는 거래의 환불 알림이 끝남: %s %s", res, note)
+	}
+	if code, body := e.submit(token, "google", e.shelf, early, false); code != 200 {
+		t.Fatalf("제출 %d %v", code, body)
+	}
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_notifications SET processed_at=now()-interval '1 hour' WHERE notification_id=$1", earlyID); err != nil {
+		t.Fatal(err)
+	}
+	e.sweep()
+	if res, _, _ := e.noticeResult("google", earlyID); res != "processed" || state("google", early) != "revoked" || shelvesIn(e.me(token), 2027) != 0 {
+		t.Fatalf("제출 뒤 재시도에서 회수되지 않음: %s, 원장 %s, 선반 %v", res, state("google", early), e.me(token)["shelvesByYear"])
+	}
+
 	// 애플 선반 환불과 환불 되돌림: 애플은 거래마다 환불 여부를 알려 준다
 	txn := iapTestID(t, "atxn")
 	a := e.shelfPurchase(txn, shelfAccount)
@@ -778,5 +798,33 @@ func TestIAPNotifyPanicIsolated(t *testing.T) {
 	}
 	if result, note, _ := e.noticeResult("apple", good); result != "processed" {
 		t.Fatalf("뒤의 알림: %s %q", result, note)
+	}
+}
+
+// 주문 ID가 없는 거래(프로모션 코드)는 환불을 요청할 수 없다. 대조가 매 바퀴 다시 뽑지 않게 시도 상한으로 올린다
+func TestIAPRefundNoOrderIDGivesUp(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	y := e.shelfToken(token, 2026)
+	a := iapTestID(t, "a")
+	pa := e.shelfPurchase(a, y)
+	pa.TransactionID = "" // 주문 ID 없음
+	e.google.Purchases[a] = pa
+	e.notify("google", iap.Notice{ID: iapTestID(t, "n1"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: a}}, "Bearer pubsub")
+	e.sweep()
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET over_cap=true WHERE transaction_id=$1", a); err != nil {
+		t.Fatal(err)
+	}
+	e.sweep()
+	var att int
+	if err := e.db.QueryRow(e.ctx, "SELECT refund_attempts FROM iap_purchases WHERE transaction_id=$1", a).Scan(&att); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := iapOverCapToRefund(e.ctx, e.db, []string{"google"}, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if att != iapRefundMaxAttempts || len(rows) != 0 {
+		t.Fatalf("주문 ID 없는 넘은 거래: 시도 %d, 다음 바퀴에 다시 뽑힘 %d건", att, len(rows))
 	}
 }

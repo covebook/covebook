@@ -721,8 +721,11 @@ func (s *Server) iapRefundOverCap(ctx context.Context, store iap.Store, key, ord
 		return true
 	}
 	if orderID == "" {
-		// 주문 ID가 없으면(프로모션 코드로 받은 구매 등) 환불을 요청할 수 없다. 시도를 쌓지 않고 운영자가 처리한다
+		// 주문 ID가 없으면(프로모션 코드로 받은 구매 등) 환불을 요청할 수 없다. 다시 해도 같으니 시도 상한으로 올려 대조에서 빼고 운영자가 처리한다
 		log.Printf("iap over cap refund needs manual handling: route=%s key=%s (no order id)", route, iapShortKey(key))
+		if e := iapGiveUpRefund(ctx, s.DB, route, key); e != nil {
+			log.Printf("iap over cap refund not recorded: route=%s err=%v", route, e)
+		}
 		return false
 	}
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
@@ -803,6 +806,9 @@ func (s *Server) iapRefundPurchase(ctx context.Context, store iap.Store, key, or
 	}
 	if orderID == "" {
 		log.Printf("iap refund needs manual handling: route=%s key=%s (no order id)", route, iapShortKey(key))
+		if e := iapGiveUpRefund(ctx, s.DB, route, key); e != nil {
+			log.Printf("iap refund not recorded: route=%s err=%v", route, e)
+		}
 		return false
 	}
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)

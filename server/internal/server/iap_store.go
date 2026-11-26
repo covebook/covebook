@@ -204,6 +204,16 @@ func iapNoteRefundAttempt(ctx context.Context, q dbtx, route iap.Route, transact
 	return err
 }
 
+// iapRefundMaxAttempts는 서버가 환불 요청을 그만두는 시도 횟수다. 넘은 거래는 운영자가 본다
+const iapRefundMaxAttempts = 20
+
+// iapGiveUpRefund는 다시 해도 소용없는 환불(주문 ID 없음)을 시도 상한으로 올려 대조가 다시 뽑지 않게 한다
+func iapGiveUpRefund(ctx context.Context, q dbtx, route iap.Route, transactionKey string) error {
+	_, err := q.Exec(ctx, `UPDATE iap_purchases SET refund_attempts=greatest(refund_attempts, $3), updated_at=now()
+		WHERE route=$1 AND transaction_id=$2 AND refund_requested_at IS NULL`, string(route), transactionKey, iapRefundMaxAttempts)
+	return err
+}
+
 // iapOwnsToken은 그 계정 연결 값이 이 유저의 것인지 알려 준다. UUID 모양이 아니면 false다.
 func iapOwnsToken(ctx context.Context, q dbtx, user int64, token string) (bool, error) {
 	if !iapIsUUID(token) {

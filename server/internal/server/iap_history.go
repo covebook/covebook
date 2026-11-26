@@ -70,8 +70,9 @@ func (s *Server) iapPurchases(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// iapSellerKeys는 앱에 보여 줄 사업자 정보의 칸이다(ADR-0003 L14): 상호, 대표자, 주소, 전화, 전자우편, 사업자등록번호, 통신판매업 신고번호.
-var iapSellerKeys = []string{"name", "owner", "address", "phone", "email", "bizNo", "saleNo"}
+// iapSellerKeys는 앱에 보여 줄 사업자 정보의 칸이다(ADR-0003 L14): 상호, 대표자, 주소, 전화, 전자우편, 사업자등록번호, 통신판매업 신고번호,
+// 호스팅서비스 제공자의 상호(전자상거래법 제10조 제1항 제6호, 시행령 제11조의4).
+var iapSellerKeys = []string{"name", "owner", "address", "phone", "email", "bizNo", "saleNo", "host"}
 
 // iapSeller는 환경 변수 IAP_SELLER_JSON(JSON 객체)에서 사업자 정보를 읽는다. 저장소가 공개라 값을 코드에 적지 않는다.
 // 없거나 깨졌으면 nil이다. 아는 칸의 글자 값만 내보낸다.

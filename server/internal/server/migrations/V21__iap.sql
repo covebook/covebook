@@ -12,7 +12,6 @@
 --  * 구독용: year가 NULL인 값. 유저마다 하나를 쓴다
 --  * 추가 선반용: 연도 책장마다 하나(year). 스토어 거래에는 연도가 없어서, 선반을 살 때 그 연도의 값을 넘기고
 --    돌아온 값으로 어느 해 책장의 칸인지 찾는다(D1). 앱이 결제 중 꺼져도, 스토어 알림으로 와도 연도를 잃지 않는다
--- 구독을 다른 계정으로 옮겨도(D8) 이 값은 옮기지 않는다. 스토어는 옮긴 뒤에도 옛 값을 보내므로, 구독의 주인은 이 값이 아니라 iap_subscriptions.user_id가 정한다.
 CREATE TABLE iap_account_tokens (
     token      UUID PRIMARY KEY,  -- 무작위 UUID(v4). 서버가 만들어 넣는다. gen_random_uuid()는 PostgreSQL 13부터라 쓰지 않는다
     user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
