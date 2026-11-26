@@ -11,8 +11,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../services/share_image.dart';
-import '../../ui/alert.dart';
-import '../../ui/feedback.dart' show errorText;
+import '../../ui/feedback.dart' show shareFailAlert;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../share/mark_scene.dart';
@@ -81,9 +80,8 @@ class _MarkShareState extends State<_MarkShare> {
         if (mounted) nav.pop();
       }
     } catch (e) {
-      // 이미지 만들기 · 저장 못 하는 기기는 앱이 쓴 안내, 공유창 · 사진첩 실패는 플랫폼 원문이라 errorText로
-      final own = e is ShareImageError && (e.stage == 'image' || e.stage == 'unavailable');
-      if (mounted) appAlert(context, shareErrorTitle(e), own ? e.message : errorText(e));
+      // 책 공유와 같은 창: 앱이 쓴 안내는 그대로, 공유창 · 사진첩 실패는 사람 문장. 취소 · 다시 시도
+      if (mounted) shareFailAlert(context, e, () => _act(kind));
     } finally {
       if (mounted) setState(() => _busy = null);
     }
@@ -136,13 +134,13 @@ class _MarkShareState extends State<_MarkShare> {
           // 공통 규칙: 안내 글은 sub(2026-11-19. caption이었다)
           child: WordText('글이 길어 그림에는 앞부분만 들어가요. 끝에 \'…\'로 표시돼요.', textAlign: TextAlign.center, style: AppType.sub),
         ),
-      // 시트 안 단추는 l(공통 규칙 7장)
+      // 시트 안 단추는 xlarge(TDS Button 기본값, 공통 규칙 7장)
       Row(children: [
         if (_canSave) ...[
-          Expanded(child: Btn(label: _saved ? '저장했어요' : '사진 저장', kind: 'secondary', size: 'l', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
+          Expanded(child: Btn(label: _saved ? '저장했어요' : '사진 저장', kind: 'secondary', size: 'xlarge', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
           const SizedBox(width: Space.s),
         ],
-        Expanded(child: Btn(label: '공유', size: 'l', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
+        Expanded(child: Btn(label: '공유', size: 'xlarge', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
       ]),
     ]);
   }

@@ -51,6 +51,9 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
   /// counted: 끊긴 동안 타이머가 실제로 잰 시간(그동안 멈춰 뒀으면 그만큼 적다). 빼기는 이것만 뺀다
   ({num start, num end, num counted})? spanGap;
   num? _spanStart;
+
+  /// 통화 등으로 소리가 끊긴 중(읽는 중에 끊겼을 때). 이때 멈춘 소리는 타이머를 멈추지 않는다(끝나면 넣을지 묻는다)
+  bool get interrupting => _spanStart != null;
   num _spanElapsed0 = 0;
   StreamSubscription<AudioInterruptionEvent>? _interruptions;
 

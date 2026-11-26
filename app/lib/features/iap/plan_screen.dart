@@ -14,7 +14,7 @@ import '../../store/entitlement_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../settings/settings_screen.dart' show privacyUrl;
-import '../settings/terms.dart' show showTermsSheet;
+import '../settings/terms.dart' show openTermsPage;
 import 'notice.dart' show showPurchaseDone;
 import 'subscription_screen.dart' show openSubscription, showRefundSheet, storeName;
 
@@ -82,7 +82,7 @@ class _PlanScreenState extends State<PlanScreen> {
     // 결제 조건은 본문과 같은 크기로 적는다(작은 글씨로 숨기지 않는다, 고지 문구 T1)
     Widget line(String t) => Padding(padding: const EdgeInsets.only(bottom: 6), child: WordText(t, style: AppType.body));
     final links = ListGroup(children: [
-      ListItem(label: '이용약관', chevron: true, onPress: () => showTermsSheet(context)),
+      ListItem(label: '이용약관', chevron: true, onPress: () => openTermsPage(context)),
       ListItem(label: '환불 안내', chevron: true, onPress: () => showRefundSheet(context, iapRoute)),
       ListItem(label: '개인정보 처리방침', chevron: true, onPress: () => launchUrl(Uri.parse(privacyUrl), mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
     ]);

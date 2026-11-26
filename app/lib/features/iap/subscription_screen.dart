@@ -10,7 +10,7 @@ import '../../services/iap.dart';
 import '../../store/entitlement_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../settings/terms.dart' show showTermsSheet;
+import '../settings/terms.dart' show openTermsPage;
 import 'plan_screen.dart' show openPlans;
 
 Future<void> openSubscription(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -151,7 +151,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         const SectionBand(inset: true),
         ListGroup(children: [
           ListItem(label: '환불 안내', chevron: true, onPress: () => showRefundSheet(context, route)),
-          ListItem(label: '이용약관', chevron: true, onPress: () => showTermsSheet(context)),
+          ListItem(label: '이용약관', chevron: true, onPress: () => openTermsPage(context)),
         ]),
       ],
     );

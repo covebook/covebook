@@ -11,7 +11,7 @@
 | 이슈 | 내용 | 상태 |
 |---|---|---|
 | #9 | `go-iap` 도입, 결제 경로 인터페이스 | 거래 조회, 구독 상태 조회, 구글 확인, 알림 해석, 환경변수 읽기까지 됨 |
-| #8 | 테이블 (V21~) | #6 결정 대기 |
+| #8 | 테이블 (V21) | 초안 PR. 선반을 어디에 붙일지(#6)만 열려 있음 |
 | #10 | 구매 검증 API | 시작 전 |
 
 - 내가 직접 채울 곳: `server/internal/iap/check.go`의 `Check` (7장)
@@ -31,6 +31,18 @@
 
 - `./...`은 "이 폴더 아래 모든 패키지"
 - DB 통합 테스트는 `TEST_DATABASE_URL`이 있을 때만 돎. 없으면 건너뜀. 실제 DB를 넣지 않음
+- 버릴 DB를 로컬에 띄워 돌리는 법 (Homebrew의 PostgreSQL 기준)
+
+```sh
+initdb -D /tmp/pgtest -U test --auth=trust
+pg_ctl -D /tmp/pgtest -o "-p 55432" -w start
+psql -h 127.0.0.1 -p 55432 -U test -d postgres -c "CREATE DATABASE iaptest"
+TEST_DATABASE_URL='postgres://test@127.0.0.1:55432/iaptest?sslmode=disable' go test ./...
+pg_ctl -D /tmp/pgtest stop
+```
+
+- 주의: `TestCommunity`는 같은 DB에서 두 번째 실행하면 실패함 (고정된 이름을 씀). 다시 돌릴 때는 DB를 지우고 새로 만듦
+- `-count=1`: 캐시된 결과를 쓰지 않고 다시 실행. DB 테스트에 붙임
 - `go.mod`가 Java의 `build.gradle`, `go.sum`이 의존성 잠금 파일. 둘 다 커밋
 
 ## 2. Java와 다른 것 한눈에
@@ -124,7 +136,17 @@ var _ Store = (*Apple)(nil)
 - 클라이언트가 연결을 끊으면 `r.Context()`가 취소되고, 그 `ctx`를 받은 DB 쿼리와 HTTP 호출이 같이 멈춤
 - Java에는 딱 맞는 것이 없음. 스레드 인터럽트와 요청 범위 값을 합친 것에 가까움
 - 규칙: 받은 `ctx`를 아래 함수에 그대로 넘김. 구조체 필드에 저장하지 않음
-- 주의: 지급 트랜잭션은 요청이 끊겨도 끝까지 가야 하는지 #10에서 정해야 함. 정하면 여기에 추가
+- 결제에서 정한 것(#10, 2026-11-26)
+  - 지급 트랜잭션은 요청 `ctx`를 그대로 씀. 앱이 끊으면 롤백되고, 앱이 같은 거래를 다시 내면 처음부터 다시 함(멱등)
+  - 커밋 뒤 스토어 확인은 끊기면 안 됨(구글은 3일 안에 확인하지 않으면 환불). `context.WithoutCancel(ctx)`로 취소만 떼어 내고 `context.WithTimeout`으로 시간을 새로 줌
+
+```go
+after, cancel := context.WithTimeout(context.WithoutCancel(ctx), iapStoreTimeout)
+defer cancel()
+store.Confirm(after, ref, productID, consume)
+```
+
+  - 앞의 조회에 쓴 `storeCtx`를 다시 쓰지 않음. 같은 15초를 나눠 써서, 조회가 오래 걸리면 확인이 바로 시간 초과가 됨
 
 ## 6. 트랜잭션
 
@@ -164,6 +186,23 @@ return tx.Commit(ctx)
   2. 짧은 트랜잭션: 거래 기록 `INSERT ... ON CONFLICT DO NOTHING` → 들어갔을 때만 권한 지급 → 커밋
   3. 커밋 뒤: 스토어에 확인(acknowledge) (ADR-0002 D10)
 
+### 6-1. 결제 테이블에서 쓴 것 (V21, `server/internal/server/iap_store.go`)
+
+| 하고 싶은 것 | 쓴 방법 | Java·JPA로 치면 |
+|---|---|---|
+| 같은 거래를 두 번 넣지 않기 | `INSERT ... ON CONFLICT (route, transaction_id) DO NOTHING` 뒤 `tag.RowsAffected() == 1` | `save` 전에 `existsBy...`를 하는 대신 유일 키에 맡김 |
+| 있으면 고치고 없으면 넣기 | `ON CONFLICT (...) DO UPDATE SET x = EXCLUDED.x` | `merge` |
+| 동시에 두 개 생기지 않게 | `SELECT id FROM users WHERE id=$1 FOR UPDATE`로 유저 줄을 먼저 잠금 | `@Lock(PESSIMISTIC_WRITE)` |
+| 트랜잭션 안팎 어디서나 부를 함수 | `dbtx` 인터페이스 (`Exec`, `Query`, `QueryRow`)를 인자로 받음. 풀과 `tx`가 둘 다 맞음 | `EntityManager`를 받는 것 |
+| 빈 값을 NULL로 | SQL에서 `nullif($1, '')` | |
+| NULL일 수 있는 칸 읽기 | 포인터로 받음: `var owner *int64` | `Long` (박싱 타입) |
+| 계정을 지워도 기록은 남기기 | 외래 키를 `ON DELETE SET NULL` | `@OnDelete` 없이 연관만 끊기 |
+
+- 권한은 저장하지 않고 계산 (ADR-0002 D5): `iapEntitlements`가 구독 테이블과 거래 테이블에서 매번 셈. 원장과 "가진 것"이 어긋날 수 없음
+- 만료 판단은 SQL의 `now()` (DB 서버 시계). 앱 서버가 여러 대여도 기준이 하나
+- 동시성은 테스트로 확인: 같은 거래를 고루틴 10개가 동시에 넣고 "처음 들어갔다"는 답이 1번인지 봄 (`iap_store_test.go`)
+  - 고루틴: `go func() { ... }()`. 가벼운 스레드. `sync.WaitGroup`으로 끝나기를 기다림 (`CountDownLatch` 자리)
+
 ## 7. 내가 채울 것: `Check`
 
 - 위치: `server/internal/iap/check.go`
@@ -185,8 +224,8 @@ return tx.Commit(ctx)
   - 로그에 남는 오류가 원인 파악에 쓰임. 가장 근본적인 것(다른 앱)부터 보는 것이 보통
 - 확인 방법
   - `go test -v -run TestCheck ./internal/iap`
-  - 지금은 "먼저 채운다"로 건너뜀. 채우면 표의 경우들이 돎
-  - `check_test.go`의 표에 빈 `AccountToken` 경우를 한 줄 추가
+  - 지금은 "먼저 채운다"로 건너뜀. 채우면 테이블의 경우들이 돎
+  - `check_test.go`의 테이블에 빈 `AccountToken` 경우를 한 줄 추가
 - 쓸 문법
   - `if p.BundleID != want.BundleID { return ErrWrongApp }`
   - 맵 조회: `want.Products[p.ProductID]`는 없으면 `false`
@@ -196,7 +235,7 @@ return tx.Commit(ctx)
 
 - 파일 이름이 `_test.go`로 끝나고 함수가 `TestXxx(t *testing.T)`면 테스트. 프레임워크 없음
 - 실패 알림: `t.Fatalf("...")`. 단정문 라이브러리를 쓰지 않고 `if`로 비교
-- 표 형식 테스트 (`check_test.go`): 경우를 구조체 목록으로 늘어놓고 `t.Run(이름, ...)`으로 돌림. JUnit의 `@ParameterizedTest`
+- 테이블 주도 테스트(table-driven test, `check_test.go`): 경우를 구조체 목록으로 늘어놓고 `t.Run(이름, ...)`으로 돌림. JUnit의 `@ParameterizedTest`
 - 가짜: 인터페이스를 구현한 작은 구조체를 손으로 씀 (`fake.go`, `apple_test.go`)
 - 다른 패키지에서 결제를 테스트할 때는 `iap.Fake`에 거래를 넣어 두고 씀
 
@@ -292,4 +331,5 @@ return tx.Commit(ctx)
 | 2026-11-18 | #9 | `go-iap` v1.59.1 추가, `iap` 패키지(`Store`, 애플 거래 조회, 가짜), `Check` 자리 | 1~9장 |
 | 2026-11-19 | #9 | 구독 상태 조회, 구글 확인·소비, 애플·구글 알림 해석 | 9-0 |
 | 2026-11-19 | 조사 | 애플·구글·중국어권·국내 자료 조사, 이슈 #22~#42 | [조사 종합](../reports/2026-11-19-iap-pitfalls.md) |
+| 2026-11-19 | #8 | V21 마이그레이션(테이블 5개), 저장소 함수와 DB 테스트 | 1장 로컬 DB, 6-1 |
 | 2026-11-18 | #9 | 구글 거래 조회, 인터페이스를 `Lookup(Ref)`로 고침, 상태 값 `State`, 환경변수 읽기 | 4장 고친 기록, 4-1, 9장 구글 비교, 9-1 |

@@ -44,7 +44,7 @@ fi
 echo "== SkSL·줄 구성 뽑기 (jest)"
 cd "$APP_SRC"
 PATH=$NODE_BIN:$PATH npx jest --silent=false \
-  --config "{\"preset\":\"jest-expo\",\"rootDir\":\".\",\"testEnvironment\":\"node\",\"modulePaths\":[\"<rootDir>/node_modules\"],\"roots\":[\"$ROOT/tool\"],\"testMatch\":[\"**/dump_sksl.test.ts\",\"**/dump_schema.test.ts\",\"**/dump_bookmark.test.ts\",\"**/dump_reading.test.ts\",\"**/dump_rebinding.test.ts\",\"**/dump_physics.test.ts\",\"**/dump_locked.test.ts\",\"**/dump_qa_seed.test.ts\",\"**/dump_edit.test.ts\",\"**/dump_reference.test.ts\"],\"moduleNameMapper\":{\"^@/(.*)$\":\"<rootDir>/src/\$1\"}}" \
+  --config "{\"preset\":\"jest-expo\",\"rootDir\":\".\",\"testEnvironment\":\"node\",\"modulePaths\":[\"<rootDir>/node_modules\"],\"roots\":[\"$ROOT/tool\"],\"testMatch\":[\"**/dump_sksl.test.ts\",\"**/dump_schema.test.ts\",\"**/dump_bookmark.test.ts\",\"**/dump_reading.test.ts\",\"**/dump_rebinding.test.ts\",\"**/dump_physics.test.ts\",\"**/dump_locked.test.ts\",\"**/dump_qa_seed.test.ts\",\"**/dump_edit.test.ts\"],\"moduleNameMapper\":{\"^@/(.*)$\":\"<rootDir>/src/\$1\"}}" \
   2>&1 | grep -E "^\s+(console.log|\[dump\])|✓|✕|Tests:|Error|Cannot" | sed 's/^ *//'
 
 echo "== GLSL 로 바꾸기"
@@ -59,3 +59,8 @@ cat > lib/gen/bake_shader_hash.g.dart <<DART
 const bakeShaderHash = '$H';
 DART
 echo "[bake] $H"
+
+echo "== 낱개 uniform 묶기(아이폰 Metal 버퍼 칸 31개 제한)"
+# 굽기 셰이더 지문은 묶기 전 GLSL로 낸다(위): 묶기는 값을 바꾸지 않아 이미 구운 그림을 그대로 쓴다
+PATH=$FLUTTER_BIN:$PATH dart run tool/pack_uniforms.dart lib/gen/packed_uniforms.g.dart \
+  shaders/lit.frag shaders/book.frag shaders/bake.frag shaders/grid.frag shaders/tab.frag

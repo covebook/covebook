@@ -3,6 +3,7 @@
 // 못 찾은 줄은 목록에 남겨 알려 주고, 누르면 그 검색어로 책 추가를 연다(넣고 오면 '추가한 책'으로). 읽기 상태 열이 있으면 그대로 옮긴다
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -18,6 +19,7 @@ import '../../store/library_model.dart';
 import '../../ui/alert.dart';
 import '../../ui/draft_guard.dart';
 import '../../ui/feedback.dart' show errorText;
+import '../../ui/josa.dart' show eulReul;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'add_book_screen.dart' show openAddBook;
@@ -55,7 +57,8 @@ class _ImportListScreenState extends State<ImportListScreen> {
   String? _file, _error;
   ImportParse? _parse;
   List<_Line> _lines = const [];
-  bool _reading = false, _searching = false, _stop = false, _saving = false;
+  bool _reading = false, _searching = false, _saving = false;
+  LineSearch<_Line, SearchResult>? _job;
 
   /// 찾아 본 줄 수(다시 찾는 줄은 찾기 전으로 돌려 세므로 전체를 넘지 않는다)
   int get _searched => _lines.where((l) => l.searched).length;
@@ -96,35 +99,42 @@ class _ImportListScreenState extends State<ImportListScreen> {
   /// 줄마다 찾는다(한 번에 세 줄씩). 아직 안 찾은 줄과 검색이 실패한 줄을 찾는다. '그만 찾기'면 남은 줄은 찾지 않은 줄로 둔다
   Future<void> _searchAll() async {
     final todo = [for (final l in _lines) if (!l.searched || l.fail != null) l];
+    _job?.stop();
+    final job = _job = LineSearch<_Line, SearchResult>(todo, (l) => searchBooks(l.row.query), (l, r) {
+      if (!mounted) return;
+      final c = r.ok ? matchCandidate(l.row, r.items) : null;
+      setState(() {
+        l.searched = true;
+        // 검색이 실패하면(인터넷 없음 · 서버 오류) 다시 찾을 줄로 둔다(2026-11-19 공통 규칙: 서버 오류는 그냥 '찾지 못한 책'이었다)
+        l.fail = r.ok ? null : (r.reason == 'network' ? 'network' : 'error');
+        l.book = c;
+        l.ownedId = c == null ? null : ownedBookId(LibraryModel.instance.lib, c);
+        l.picked = c != null && l.ownedId == null;
+      });
+    }, parallel: _parallel);
     setState(() {
       _searching = true;
-      _stop = false;
       // 다시 찾는 줄은 찾기 전으로(진행 수가 전체를 넘지 않게: 2026-11-19 '10권 중 12권'이 될 수 있었다)
       for (final l in todo) {
         l.searched = false;
         l.fail = null;
       }
     });
-    var next = 0;
-    Future<void> worker() async {
-      while (mounted && !_stop && next < todo.length) {
-        final l = todo[next++];
-        final r = await searchBooks(l.row.query);
-        if (!mounted) return;
-        final c = r.ok ? matchCandidate(l.row, r.items) : null;
-        setState(() {
-          l.searched = true;
-          // 검색이 실패하면(인터넷 없음 · 서버 오류) 다시 찾을 줄로 둔다(2026-11-19 공통 규칙: 서버 오류는 그냥 '찾지 못한 책'이었다)
-          l.fail = r.ok ? null : (r.reason == 'network' ? 'network' : 'error');
-          l.book = c;
-          l.ownedId = c == null ? null : ownedBookId(LibraryModel.instance.lib, c);
-          l.picked = c != null && l.ownedId == null;
-        });
-      }
-    }
+    await job.run();
+    if (mounted && identical(_job, job)) setState(() => _searching = false);
+  }
 
-    await Future.wait([for (var i = 0; i < _parallel; i++) worker()]);
-    if (mounted) setState(() => _searching = false);
+  /// '그만 찾기': 기다리던 검색은 버리고 바로 끝낸다(그 줄은 찾지 않은 줄로 남아 '이어서 찾기'로 다시 찾는다).
+  /// 2026-11-20 QA: 응답이 멈춘 검색이 하나라도 있으면 그 검색이 끝날 때까지 단추가 '그만 찾기'에 멈춰 있었다
+  void _stopSearch() {
+    _job?.stop();
+    setState(() => _searching = false);
+  }
+
+  @override
+  void dispose() {
+    _job?.stop();
+    super.dispose();
   }
 
   Future<void> _addAll() async {
@@ -179,20 +189,20 @@ class _ImportListScreenState extends State<ImportListScreen> {
     // 찾은 책이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
     return DraftGuard(
       dirty: () => _dirty,
-      title: '찾은 책을 버릴까요?',
-      keep: '계속 가져오기',
+      title: '가져오기를 그만할까요?',
+      body: '지금 나가면 찾은 책은 추가되지 않아요.',
       child: Screen(
         title: '책 목록 가져오기',
-        // 화면 아래 주요 단추 l. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
+        // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
         footer: _searching
-            ? Btn(label: '그만 찾기', kind: 'secondary', size: 'l', onPress: () => setState(() => _stop = true))
+            ? Btn(label: '그만 찾기', kind: 'secondary', size: 'xlarge', onPress: _stopSearch)
             : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (n == 0)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Space.s),
                     child: NoticeText(found.isEmpty ? '추가할 수 있는 책이 없어요.' : '추가할 책을 골라 주세요.', center: true),
                   ),
-                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'l', disabled: n == 0, busy: _saving, onPress: _addAll),
+                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'xlarge', disabled: n == 0, busy: _saving, onPress: _addAll),
               ]),
         children: [
           Text(_file ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
@@ -215,7 +225,7 @@ class _ImportListScreenState extends State<ImportListScreen> {
                 Text(_searching ? '${_lines.length}권 중 $_searched권 찾았어요' : '$waiting권은 찾지 않았어요', style: AppType.sub.tnum),
                 const SizedBox(height: Space.s),
                 ProgressBar(value: _lines.isEmpty ? 0 : _searched / _lines.length),
-                if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 's', onPress: _searchAll)),
+                if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 'medium', onPress: _searchAll)),
               ]),
             ),
           // 검색이 실패한 줄: 오류 글(화면 읽기가 바로 읽는다) + 다시 찾기. 찾지 않은 줄이 있으면 '이어서 찾기'가 함께 찾는다(단추 하나만)
@@ -224,15 +234,15 @@ class _ImportListScreenState extends State<ImportListScreen> {
               padding: const EdgeInsets.only(top: Space.s),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 NoticeText(failed.any((l) => l.fail == 'network') ? '인터넷에 연결되지 않아 찾지 못한 책이 있어요.' : '검색에 잠시 문제가 있어 찾지 못한 책이 있어요.', error: true),
-                if (waiting == 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '다시 찾기', kind: 'secondary', size: 's', onPress: _searchAll)),
+                if (waiting == 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '다시 찾기', kind: 'secondary', size: 'medium', onPress: _searchAll)),
               ]),
             ),
           if (found.isNotEmpty) ...[
-            _Head(
-              title: '찾은 책',
-              count: '${found.length}권',
-              action: found.every((l) => l.picked) ? '모두 빼기' : '모두 고르기',
-              onAction: () => setState(() {
+            _Head(title: '찾은 책', count: '${found.length}권'),
+            // 전체 선택: 줄들과 같은 자리의 고르는 원(2026-11-20 사용자 '전체선택 버튼 넣어줘'. 구역 제목 오른쪽 '모두 고르기' 글자는 눈에 띄지 않았다)
+            _SelectAll(
+              on: found.every((l) => l.picked),
+              onTap: () => setState(() {
                 final all = found.every((l) => l.picked);
                 for (final l in found) {
                   l.picked = !all;
@@ -267,9 +277,9 @@ class _ImportListScreenState extends State<ImportListScreen> {
       final f = File('${dir.path}/$name');
       await f.writeAsString(csv);
       if (await _files.invokeMethod<bool>('canSaveDownload').catchError((_) => false) == true) {
-        await _files.invokeMethod<String>('saveDownload', {'path': f.path, 'name': name, 'mime': 'text/csv'});
+        final saved = await _files.invokeMethod<String>('saveDownload', {'path': f.path, 'name': name, 'mime': 'text/csv'});
         f.delete().ignore();
-        if (mounted) appAlert(context, '예시 파일을 저장했어요', '다운로드 › 책장한켠 폴더의 ‘$name’을 엑셀에서 열어 내 책으로 고친 뒤 여기서 골라 주세요.');
+        if (mounted) appAlert(context, '예시 파일을 저장했어요', sampleSavedText(saved, name));
       } else {
         await SharePlus.instance.share(ShareParams(files: [XFile(f.path, mimeType: 'text/csv')], title: name));
       }
@@ -311,6 +321,50 @@ class _ImportListScreenState extends State<ImportListScreen> {
       );
 }
 
+/// 예시 파일 저장 안내 글. 같은 이름 파일이 이미 있으면 기기가 'name (1).csv'처럼 이름을 바꿔 저장하므로 저장한 이름(saveDownload가 돌려준 것)을 쓴다.
+/// 돌려준 값이 이름이 아니면(예전 앱의 content:// 주소) 고른 이름. 조사는 이름 끝소리로(2026-11-20 QA: ‘책장한켠 예시.csv’을, 실제 파일은 ‘책장한켠 예시 (4).csv’)
+String sampleSavedText(String? saved, String name) {
+  final shown = saved != null && saved.trim().isNotEmpty && !saved.contains('://') && !saved.contains('/') ? saved.trim() : name;
+  return '다운로드 › 책장한켠 폴더의 ${eulReul('‘$shown’')} 엑셀에서 열어 내 책으로 고친 뒤 여기서 골라 주세요.';
+}
+
+/// 줄 찾기 한 번(파일을 고를 때 · 이어서 찾기 · 다시 찾기마다 새로): 한 번에 [parallel]줄씩 찾아 줄마다 [onResult].
+/// [stop]을 부르면 남은 줄은 찾지 않고, 기다리던 검색의 결과도 버리며, [run]이 그 검색을 기다리지 않고 바로 끝난다
+class LineSearch<T, R> {
+  LineSearch(this.todo, this.search, this.onResult, {this.parallel = 3});
+  final List<T> todo;
+  final Future<R> Function(T item) search;
+  final void Function(T item, R result) onResult;
+  final int parallel;
+  final _stopped = Completer<void>();
+
+  bool get stopped => _stopped.isCompleted;
+
+  void stop() {
+    if (!stopped) _stopped.complete();
+  }
+
+  Future<void> run() async {
+    var next = 0;
+    Future<void> worker() async {
+      while (!stopped && next < todo.length) {
+        final item = todo[next++];
+        final R r;
+        try {
+          r = await search(item);
+        } catch (_) {
+          // 검색 함수는 실패를 결과로 돌려준다. 그래도 던지면 이 줄은 찾지 않은 줄로 두고 다음 줄로
+          continue;
+        }
+        if (stopped) return;
+        onResult(item, r);
+      }
+    }
+
+    await Future.any([Future.wait([for (var i = 0; i < parallel; i++) worker()]), _stopped.future]);
+  }
+}
+
 /// 안내 접는 줄 하나(책 확인 '추가 정보'와 같은 FoldRow, 2026-11-19 공통 규칙). 펼치면 점 붙은 안내 글
 class _Fold extends StatefulWidget {
   const _Fold({required this.title, required this.lines, this.last = false});
@@ -349,15 +403,43 @@ class _FoldState extends State<_Fold> {
 
 /// 결과 묶음 머리: 공용 구역 머리(제목 19 · 개수 · 아래 설명 · 오른쪽 글자 단추, 2026-11-19 공통 규칙: 설명이 오른쪽 caption이었다)
 class _Head extends StatelessWidget {
-  const _Head({required this.title, this.count, this.note, this.action, this.onAction});
+  const _Head({required this.title, this.count, this.note});
   final String title;
-  final String? count, note, action;
-  final VoidCallback? onAction;
+  final String? count, note;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: Space.xl, bottom: Space.xs),
-        child: SectionHead(title: title, count: count, note: note, link: action, linkLabel: action, onLink: onAction),
+        child: SectionHead(title: title, count: count, note: note),
+      );
+}
+
+/// 찾은 책 '전체 선택' 줄: 왼쪽 이름, 오른쪽 고르는 원(책 줄의 원과 같은 세로 줄). 화면 읽기는 체크 상자 하나
+class _SelectAll extends StatelessWidget {
+  const _SelectAll({required this.on, required this.onTap});
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        checked: on,
+        button: true,
+        label: '전체 선택',
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Pressable(
+          onPress: onTap,
+          dim: true,
+          bleed: Space.page,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.hit),
+            child: Row(children: [
+              Expanded(child: Text('전체 선택', style: AppType.row)),
+              RadioMark(on: on),
+            ]),
+          ),
+        ),
       );
 }
 

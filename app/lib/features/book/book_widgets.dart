@@ -23,39 +23,85 @@ int? numOf(String v) {
 /// ISBN 정리: 숫자와 X만 남긴다
 String cleanIsbn(String? v) => (v ?? '').replaceAll(RegExp(r'[^\dXx]'), '');
 
-/// 표지 사진 고르기(책 확인 · 책 정보 수정이 같은 이름 · 모양: 줄 안 작은 보조 단추). 표지가 있으면 '표지 바꾸기', 없으면 '표지 사진 등록'
-class CoverPhotoButton extends StatelessWidget {
-  const CoverPhotoButton({super.key, required this.hasCover, required this.onPicked, required this.onDenied, this.onError});
-  final bool hasCover;
+/// 표지 고치기(책 정보 수정 시안 2026-11-21): 표지 오른쪽 아래 흰 원 연필 단추. 표지나 연필을 누르면 시트
+/// '표지 바꾸기'(사진 고르기) · '표지 삭제'(표지가 있을 때, 주의색). 표지가 없으면 '표지 사진 등록' 하나
+class CoverEditTile extends StatelessWidget {
+  const CoverEditTile({super.key, required this.uri, required this.title, required this.width, required this.onPicked, required this.onRemove, required this.onDenied, this.onError});
+  final String? uri;
+  final String title;
+  final double width;
   final ValueChanged<String> onPicked;
-
-  /// 사진 보관함 권한이 없을 때(안내 글을 넘긴다)
+  final VoidCallback onRemove;
   final ValueChanged<String> onDenied;
-
-  /// 사진을 읽지 못했을 때(실패 문장을 넘긴다). 없으면 확인창으로 알린다(2026-11-19 공통 규칙: 실패는 늘 알린다. 말없이 넘어갔다)
   final ValueChanged<String>? onError;
 
+  /// 연필 단추 지름
+  static const badge = 36.0;
+
+  Future<void> _pick(BuildContext context) async {
+    final r = await pickPhoto('library');
+    if (!context.mounted) return;
+    if (r case PhotoOk(:final uri)) {
+      onPicked(uri);
+    } else if (r case PhotoFail(reason: 'denied')) {
+      onDenied(deniedMessage('library'));
+    } else if (r case PhotoFail(reason: 'error', :final message)) {
+      final m = message ?? '사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요.';
+      if (onError != null) {
+        onError!(m);
+      } else {
+        appAlert(context, '사진을 불러오지 못했어요', '다른 사진으로 다시 시도해 주세요.');
+      }
+    }
+  }
+
+  Future<void> _menu(BuildContext context) => showSheet<void>(
+        context,
+        builder: (ctx) => ListGroup(children: [
+          ListItem(
+            label: uri != null ? '표지 바꾸기' : '표지 사진 등록',
+            icon: const LucideIcon('Image', color: AppColors.icon),
+            onPress: () {
+              Navigator.pop(ctx);
+              _pick(context);
+            },
+          ),
+          if (uri != null)
+            ListItem(
+              label: '표지 삭제',
+              danger: true,
+              icon: const LucideIcon('Trash2', color: AppColors.danger),
+              onPress: () {
+                Navigator.pop(ctx);
+                onRemove();
+              },
+            ),
+        ]),
+      );
+
   @override
-  Widget build(BuildContext context) => Btn(
-        label: hasCover ? '표지 바꾸기' : '표지 사진 등록',
-        kind: 'secondary',
-        size: 's',
-        onPress: () async {
-          final r = await pickPhoto('library');
-          if (!context.mounted) return;
-          if (r case PhotoOk(:final uri)) {
-            onPicked(uri);
-          } else if (r case PhotoFail(reason: 'denied')) {
-            onDenied(deniedMessage('library'));
-          } else if (r case PhotoFail(reason: 'error', :final message)) {
-            final m = message ?? '사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요.';
-            if (onError != null) {
-              onError!(m);
-            } else {
-              appAlert(context, '사진을 불러오지 못했어요', '다른 사진으로 다시 시도해 주세요.');
-            }
-          }
-        },
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        button: true,
+        label: uri != null ? '표지 바꾸기 · 삭제' : '표지 사진 등록',
+        onTap: () => _menu(context),
+        excludeSemantics: true,
+        child: Pressable(
+          onPress: () => _menu(context),
+          child: Stack(clipBehavior: Clip.none, children: [
+            RealCover(uri: uri, title: title, width: width),
+            Positioned(
+              right: -badge / 4,
+              bottom: -badge / 4,
+              child: Container(
+                width: badge,
+                height: badge,
+                decoration: const BoxDecoration(color: AppColors.white, shape: BoxShape.circle, boxShadow: [Shape.floatShadow]),
+                child: const Center(child: LucideIcon('Pencil', size: IconSize.small, color: AppColors.inkSoft)),
+              ),
+            ),
+          ]),
+        ),
       );
 }
 
@@ -109,8 +155,13 @@ Future<BookRemoval?> confirmRemoveBooks(BuildContext context, List<String> ids) 
       if (hidden.isNotEmpty && !hideOnly) Padding(padding: const EdgeInsets.only(top: Space.xs), child: WordText('${hidden.length}권은 $yearText에 있어서 숨기기만 해요.', style: AppType.sub)),
       if (hidden.isNotEmpty) Padding(padding: EdgeInsets.only(top: hideOnly ? 0 : Space.s), child: WordText(hiddenWhere, style: AppType.sub)),
       const SizedBox(height: Space.l),
-      Btn(label: hideOnly ? '숨기기' : '삭제', kind: hideOnly ? 'primary' : 'danger', size: 'l', onPress: () => Navigator.pop(ctx, true)),
-      SubAction(label: '취소', onPress: () => Navigator.pop(ctx, false)),
+      // 왼쪽 '취소' · 오른쪽 '확인'(테마색) 두 단추(2026-11-20 사용자 '확인 취소로 좌우 버튼으로 넣어 색은 테마색'. SCREENS 61 예외:
+      // 지우기 확정 단추를 '삭제' 주의색으로 두는 12장과 다르다. 무엇을 지우는지는 제목 · 표지 · 설명이 말한다)
+      Row(children: [
+        Expanded(child: Btn(label: '취소', kind: 'secondary', size: 'xlarge', onPress: () => Navigator.pop(ctx, false))),
+        const SizedBox(width: Space.s),
+        Expanded(child: Btn(label: '확인', size: 'xlarge', onPress: () => Navigator.pop(ctx, true))),
+      ]),
     ]),
   );
   return ok == true ? (deleted: deleted, hidden: hidden) : null;
@@ -119,13 +170,20 @@ Future<BookRemoval?> confirmRemoveBooks(BuildContext context, List<String> ids) 
 /// 확인한 삭제 · 숨기기를 한다. 지운 책 · 숨긴 책은 책장 배치에서도 빠진다
 Future<void> removeBooks(BookRemoval r) async {
   final model = LibraryModel.instance;
-  for (final id in r.deleted) {
-    await model.deleteBook(id, archived: false);
+  // 여러 권 중 뒤 책에서 실패해도 이미 지우거나 숨긴 책은 책장 배치에서도 뺀다(2026-11-20: 실패하면 forget이 불리지 않았다)
+  final done = <String>[];
+  try {
+    for (final id in r.deleted) {
+      await model.deleteBook(id, archived: false);
+      done.add(id);
+    }
+    for (final id in r.hidden) {
+      await model.deleteBook(id, archived: true);
+      done.add(id);
+    }
+  } finally {
+    if (done.isNotEmpty) await PlacementStore.instance.forget(done);
   }
-  for (final id in r.hidden) {
-    await model.deleteBook(id, archived: true);
-  }
-  await PlacementStore.instance.forget([...r.deleted, ...r.hidden]);
 }
 
 /// 삭제 · 숨기기 결과 토스트 글(한 권이면 제목으로)

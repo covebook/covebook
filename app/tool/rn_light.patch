@@ -24,9 +24,12 @@
    pine: { name: '밝은 나무 벽', color: '#F2D7BC', mat: 'wood' },
    walnut: { name: '호두나무 벽', color: '#8F6950', mat: 'wood' },
    none: null,
-@@ -82,7 +83,10 @@
+@@ -80,9 +81,12 @@
+ // - sideMm·sideK: 안쪽 면이 위 면(천장·판 아랫면) 아래에서 어두워지는 범위와 세기. 안쪽 면은 창빛을 받지 않아 판 그림자가 없으므로 위에서 가려지는 몫을 따로 둔다. 시안 안쪽 면은 판 바로 아래 172에서 약 55px에 걸쳐 215까지 밝아진다
+ // - cornerK: 뒷벽 꼭지점 둥근 그늘 세기(2026-11-04 사용자 '안쪽 꼭지점이 더 곡선이어야'). 위 면과 안쪽 면이 함께 가리는 곳이 둥글게 어두워져 안쪽 면과 뒷벽 경계가 곡선으로 녹아든다. 시안 꼭지점 약 170 → 뒷벽 약 190
  // - plankSpec: 판 표면 반사 몫 배수(반무광 마감). 낮은 눈에서 판 윗면을 스치듯 보면 반사가 뒷벽의 밝은 빛을 비춰 윗면이 밝아진다(시안 윗면 202~217, 1배면 197)
- // - coveMm: 안쪽 모서리 곡면 반지름(2026-11-04 사용자 '선반이랑 벽 만나는 곳을 부드럽게 이어지게'). 벽·틀·판이 맞닿는 곳에서 두 면의 법선이 서서히 돌아 모서리에서 같아진다(light-model coveNormal)
+-// - coveMm: 안쪽 모서리 곡면 반지름(2026-11-04 사용자 '선반이랑 벽 만나는 곳을 부드럽게 이어지게'). 벽·틀·판이 맞닿는 곳에서 두 면의 법선이 서서히 돌아 모서리에서 같아진다(light-model coveNormal)
++// - coveMm: 안쪽 모서리 곡면 반지름(2026-11-04 사용자 '선반이랑 벽 만나는 곳을 부드럽게 이어지게'). 판 윗면과 만나는 아래 모서리는 2026-11-21부터 곡면 없이 접촉 그늘로만(사용자 '선반 뒷쪽에 흰색 선': 위로 도는 곡면이 위쪽 빛을 받아 흰 줄) 벽·틀·판이 맞닿는 곳에서 두 면의 법선이 서서히 돌아 모서리에서 같아진다(light-model coveNormal)
  // - cornerMm: 뒷벽 네 꼭지점 둥글기(2026-11-04 사용자 '안쪽 꼭지점 모서리가 더 곡선이어야'). 판 윗면의 뒤쪽 꼭지점도 같은 값
 -export const LOOK = { dist: 3300, eyeY: 150, thickMm: 19, jointMm: 8, jointK: 0.22, rimMm: 4, coveMm: 7, cornerMm: 9, sideMm: 26, sideK: 0.6, plankSpec: 2, cornerK: 0.22, softMm: 3, rimCorner: 1.5, lipMm: 4 };
 +// 2026-11-10 사용자 '책장 모서리 좀 더 둥글게(벽에서 벽 꺾이는 부분)', '안쪽은 좀 더 밝게': 테 반지름 4 → 8mm(벽 앞 거리 lipMm보다 넓게 꺾이는 빛의 테), 구멍 모서리 1.5 → 6DU(약 8mm),
@@ -50,7 +53,7 @@
  // 가림 L(면이 받는 하늘 빛 sky) ↔ 그림 값 g
  export function lossEncode(L: number, sky: number) {
    const R = sky - L;
-@@ -815,6 +818,70 @@
+@@ -815,6 +818,71 @@
  // 하늘 가림 굽기: 그림 칸 p(칸 가운데)의 줄 공간 점 O + p.x·Ux + p.y·Vy, 면 법선 tN에서. 출력 채널마다 lossEncode + 디더.
  // 면 둘레 한 칸(겹선형 읽기가 아틀라스의 옆 그림으로 새지 않게 더 굽는 칸)은 면 가장자리 칸 값 그대로(cells: 면의 칸 수로 자른다):
  // 면 밖 점을 구우면 맞닿은 옆 책 몸속 점이 되어 '다 가려짐'이 구워지고, 면 가장자리를 읽을 때 섞여 칸 하나 폭의 검은 띠가 된다
@@ -75,7 +78,8 @@
 +    else if (abs(n.z) > 0.5) {
 +      float fx = max(2.0 * jointF(P.x - ${f(FRAME_X0)}, ${f(SIDE_H)}, 1.0), 2.0 * jointF(${f(FRAME_X1)} - P.x, ${f(SIDE_H)}, 1.0));
 +      float fy = 2.0 * jointF(env.z - P.y, ${f(SIDE_H)}, 1.0);
-+      k = (1.0 - jointF(env.z - P.y, ${f(JOINT_H)}, ${f(JOINT_K)})) * jointXs(P, ${f(JOINT_SIDE)}) * (1.0 - ${f(CORNER_K)} * fx * fy);
++      // 아래 판 윗면과 만나는 모서리도 옆벽과 같은 바닥 그늘(light-model jointBase, Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선')
++      k = (1.0 - jointF(env.z - P.y, ${f(JOINT_H)}, ${f(JOINT_K)})) * (1.0 - jointF(P.y - env.y, ${f(JOINT_H)}, ${f(SIDE_FLOOR_K)})) * jointXs(P, ${f(JOINT_SIDE)}) * (1.0 - ${f(CORNER_K)} * fx * fy);
 +    }
 +    else if (n.y > 0.5) k = jointXs(P, 1.0) * (1.0 - jointF(DEPTH - P.z, ${f(JOINT_H)}, ${f(JOINT_K * 0.5)}));
 +    else {
@@ -121,7 +125,7 @@
  export function bakeSource() {
    return `
    uniform float3 O;
-@@ -850,31 +917,7 @@
+@@ -850,31 +918,7 @@
      }
      return m * n.y;
    }
@@ -154,7 +158,7 @@
    half4 main(float2 p) {
      float2 pc = clamp(p, float2(0.5), max(float2(0.5), cells - float2(0.5)));
      float3 P = wallOutside(O + pc.x * Ux + pc.y * Vy, tN);
-@@ -1293,7 +1336,6 @@
+@@ -1293,7 +1337,6 @@
    uniform float4 bev1;
    uniform float endR;       // 판 앞면 양 끝 세로 모서리 둥글기(0이면 없다)
    uniform float4 rim;       // 평평한 벽의 구멍(x0, x1, y0, y1): 구멍 앞 끝 둥근 테. x0 > x1이면 없다
@@ -162,7 +166,7 @@
    uniform float kS;         // 재질의 표면 반사 몫 배수(materials specular)
    uniform float4 softBox;   // 안쪽 모서리 번짐: 면 좌표의 둥근 사각형(a0, a1, b0, b1)
    uniform float2 softR;     // 그 반지름, 번짐 폭(폭 0이면 번지지 않는다)
-@@ -1317,13 +1359,10 @@
+@@ -1317,13 +1360,10 @@
  ${materialCode()}
  ${shadeCode()}
    // 안쪽 모서리 곡면(light-model coveNormal): 벽·틀·판이 맞닿는 곳에서 면 법선이 맞닿은 면 법선 쪽으로 돈다
@@ -179,7 +183,7 @@
    }
    // 안쪽 모서리 번짐: 뒷벽·천장·판 윗면은 맞닿은 면 위에 그려진다. 실제 모서리는 곡면이라 한 면의 빛이 다른 면의 빛으로 서서히 넘어가므로, 그린 면이 모서리 쪽에서 투명해져 밑면이 비치게 한다.
    // 면 좌표: 뒷벽은 (x, y), 천장·판 윗면은 (x, z × 눌림): 화면에서 눌린 깊이를 눌린 만큼 줄여 폭이 화면에서 같게 보인다. 둥근 사각형 안쪽 거리라 꼭지점도 둥글다
-@@ -1337,7 +1376,12 @@
+@@ -1337,7 +1377,12 @@
      float2 c2 = float2(softBox.x + softBox.y, softBox.z + softBox.w) * 0.5;
      float2 q = abs(u - c2) - (float2(softBox.y - softBox.x, softBox.w - softBox.z) * 0.5 - float2(softR.x));
      float d = softR.x - length(max(q, float2(0.0))) - min(max(q.x, q.y), 0.0);
@@ -193,7 +197,7 @@
    }
    // 평면 위 점 Q가 그려지는 캔버스 자리: 사상 P = (O + p.x Ux + p.y Vy) / w의 역(면 안 두 축 Au, Av로 푼다)
    float2 pxOf(float3 Q, float3 Au, float3 Av) {
-@@ -1352,12 +1396,43 @@
+@@ -1352,12 +1397,42 @@
      float g = dot(C, Av);
      return float2(e * d - b * g, a * g - e * c) / (a * d - b * c);
    }
@@ -213,16 +217,16 @@
 +  }
 +  float3 coveOf(float3 P, float3 V) {
      float3 c = float3(0.0);
-     if (env.x < 1.5 || ${COVE_R > 0 ? 'false' : 'true'} || P.z < ${f(-FRAME_FRONT - 0.5)} || (abs(tN.z) > 0.5 && P.z < ${f(-SHELF_FRONT + 0.5)})) return c;
+-    if (env.x < 1.5 || ${COVE_R > 0 ? 'false' : 'true'} || P.z < ${f(-FRAME_FRONT - 0.5)} || (abs(tN.z) > 0.5 && P.z < ${f(-SHELF_FRONT + 0.5)})) return c;
 -    if (abs(tN.y) < 0.5) c.y += coveB(P.y - env.y, ${f(COVE_NARROW)}) - coveB(env.z - P.y, ${f(COVE_NARROW)});
 -    if (abs(tN.x) < 0.5 && tN.y > -0.5) c.x += coveB(P.x - ${f(FRAME_X0)}, ${f(COVE_WIDE)}) - coveB(${f(FRAME_X1)} - P.x, ${f(COVE_WIDE)});
 -    return c;
++    // 판 윗면과 벽·틀이 만나는 곳은 곡면 없이 곧은 모서리 + 접촉 그늘만(light-model coveNormal, Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선')
++    if (env.x < 1.5 || ${COVE_R > 0 ? 'false' : 'true'} || tN.y > 0.5 || P.z < ${f(-FRAME_FRONT - 0.5)} || (abs(tN.z) > 0.5 && P.z < ${f(-SHELF_FRONT + 0.5)})) return c;
 +    float w0 = coveWt(tN, V);
 +    float3 m = tN * w0;
 +    float w;
 +    if (abs(tN.y) < 0.5) {
-+      w = coveS(P.y - env.y);
-+      if (w > 0.0) m += float3(0.0, 1.0, 0.0) * w * coveWt(float3(0.0, 1.0, 0.0), V);
 +      w = coveS(env.z - P.y);
 +      if (w > 0.0) m += float3(0.0, -1.0, 0.0) * w * coveWt(float3(0.0, -1.0, 0.0), V);
 +    }
@@ -363,7 +367,18 @@
    'worklet';
    // 판 앞면(앞을 향한 면 중 벽 면 쪽)은 위아래로 맞닿은 면이 없다. 판 끝은 둥근 법선(Plane endR)이 어둡게 한다
    if (!env?.side || p.z < -FRAME_FRONT - 0.5 || (Math.abs(n.z) > 0.5 && p.z < -SHELF_FRONT + 0.5)) return 0;
-@@ -1287,26 +1296,77 @@
+@@ -1276,7 +1285,9 @@
+     // 뒷벽 꼭지점: 위 면과 안쪽 면이 함께 가리는 몫(두 띠 몫의 곱이라 꼭지점 둘레로 둥글게 옅어진다)
+     const fx = Math.max(2 * jointF(p.x - FRAME_X0, SIDE_H, 1), 2 * jointF(FRAME_X1 - p.x, SIDE_H, 1));
+     const fy = 2 * jointF(env.ceil - p.y, SIDE_H, 1);
+-    k = (1 - jointF(env.ceil - p.y, H, K)) * xs(JOINT_SIDE) * (1 - CORNER_K * fx * fy);
++    // 아래 판 윗면과 만나는 모서리도 옆벽과 같은 바닥 그늘(SIDE_FLOOR_K). 빠져 있어 가장 깊은 뒤 아래 모서리만 그늘이 없었고,
++    // 위로 도는 곡면이 판 윗면 쪽 밝은 빛을 받아 판 바로 뒤에 흰 줄이 보였다(Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선이 이상하지 않나')
++    k = (1 - jointF(env.ceil - p.y, H, K)) * (1 - jointF(p.y - env.floor, H, SIDE_FLOOR_K)) * xs(JOINT_SIDE) * (1 - CORNER_K * fx * fy);
+   }
+   else if (n.y > 0.5) k = xs(1) * (1 - jointF(SHELF_DEPTH - p.z, H, K * 0.5));
+   else {
+@@ -1287,26 +1298,76 @@
    }
    return 1 - k;
  }
@@ -413,6 +428,13 @@
 -  return t < COVE_R ? Math.tan(end * (1 - t / COVE_R)) : 0;
 -}
 -export function coveNormal(p: Vec3, n: Vec3, env: Env | null): Vec3 {
+-  'worklet';
+-  if (!env?.side || COVE_R <= 0 || p.z < -FRAME_FRONT - 0.5 || (Math.abs(n.z) > 0.5 && p.z < -SHELF_FRONT + 0.5)) return n;
+-  let x = n.x;
+-  let y = n.y;
+-  const z = n.z;
+-  if (Math.abs(n.y) < 0.5) y += coveBend(p.y - env.floor, COVE_NARROW) - coveBend(env.ceil - p.y, COVE_NARROW);
+-  if (Math.abs(n.x) < 0.5 && n.y > -0.5) x += coveBend(p.x - FRAME_X0, COVE_WIDE) - coveBend(FRAME_X1 - p.x, COVE_WIDE);
 +  if (t >= COVE_R) return 0;
 +  const s = t / COVE_R;
 +  return Math.tan(end * (1 - s * s * (3 - 2 * s)));
@@ -420,13 +442,10 @@
 +// 안쪽 모서리 곡면 법선 = 그 점 둘레 면들의 법선을 섞은 것. 면 j의 몫 = (j 평면까지 거리로 곡면 안 1 → 곡면 끝 0) / |nj·v|(v: 점 → 눈, 없으면 정면).
 +// 점의 자리와 눈 방향으로만 정해져 같은 점이면 어느 면에서 재도 같다(셰이더 coveOf와 같은 규칙, Flutter 2026-11-18 사용자 '모서리 경계선 없애')
 +export function coveNormal(p: Vec3, n: Vec3, env: Env | null, v: Vec3 = { x: 0, y: 0, z: -1 }): Vec3 {
-   'worklet';
-   if (!env?.side || COVE_R <= 0 || p.z < -FRAME_FRONT - 0.5 || (Math.abs(n.z) > 0.5 && p.z < -SHELF_FRONT + 0.5)) return n;
--  let x = n.x;
--  let y = n.y;
--  const z = n.z;
--  if (Math.abs(n.y) < 0.5) y += coveBend(p.y - env.floor, COVE_NARROW) - coveBend(env.ceil - p.y, COVE_NARROW);
--  if (Math.abs(n.x) < 0.5 && n.y > -0.5) x += coveBend(p.x - FRAME_X0, COVE_WIDE) - coveBend(FRAME_X1 - p.x, COVE_WIDE);
++  'worklet';
++  // 판 윗면(책이 놓이는 면)과 벽·틀이 만나는 곳은 곡면 없이 곧은 모서리 + 접촉 그늘(jointShade)만. 판은 틀에 끼운 따로인 판이고,
++  // 위로 도는 곡면이 위쪽 빛을 받아 판 바로 뒤 벽에 흰 줄이 생겼다(Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선이 이상하지 않나'). 위 모서리(천장 쪽)는 그대로
++  if (!env?.side || COVE_R <= 0 || n.y > 0.5 || p.z < -FRAME_FRONT - 0.5 || (Math.abs(n.z) > 0.5 && p.z < -SHELF_FRONT + 0.5)) return n;
 +  const wt = (m: Vec3) => Math.pow(Math.max(Math.abs(m.x * v.x + m.y * v.y + m.z * v.z), 0.05), -0.42);
 +  const S = (d: number) => (COVE_R > 0 ? Math.pow(1 - Math.min(1, Math.max(0, d / COVE_R)), 1.5) : 0);
 +  let x = n.x * wt(n);
@@ -439,10 +458,7 @@
 +    y += m.y * k;
 +    z += m.z * k;
 +  };
-+  if (Math.abs(n.y) < 0.5) {
-+    add(S(p.y - env.floor), { x: 0, y: 1, z: 0 });
-+    add(S(env.ceil - p.y), { x: 0, y: -1, z: 0 });
-+  }
++  if (Math.abs(n.y) < 0.5) add(S(env.ceil - p.y), { x: 0, y: -1, z: 0 });
 +  if (Math.abs(n.x) < 0.5) {
 +    add(S(p.x - FRAME_X0), { x: 1, y: 0, z: 0 });
 +    add(S(FRAME_X1 - p.x), { x: -1, y: 0, z: 0 });
@@ -451,7 +467,7 @@
    const l = Math.hypot(x, y, z);
    return { x: x / l, y: y / l, z: z / l };
  }
-@@ -1735,7 +1795,9 @@
+@@ -1735,7 +1796,9 @@
      const wallP = FRAME_ON ? frameP : { x: REF_X, y: REF_SPACE / 2, z: SHELF_DEPTH };
      EREF.wall = anchorLight(wallP, front, G, rWall);
      EREF.plank = anchorLight({ x: REF_X, y: -SHELF_THICK / 2, z: -SHELF_FRONT }, front, G, rPlank);
@@ -462,7 +478,7 @@
      // 틀 안쪽 면이 받는 빛(되비침에 쓴다): 면 전체 평균(가운데만 재면 모서리 쪽 어두운 몫이 빠져 되비침이 커진다)
      SIDE_E.l = sideMean(SHELF_X0, 1, G);
      SIDE_E.r = sideMean(SHELF_X1, -1, G);
-@@ -1755,7 +1817,7 @@
+@@ -1755,7 +1818,7 @@
    return { gain: CAM.gain, eref: { wall: EREF.wall, plank: EREF.plank, frame: EREF.frame, book: EREF.book, paper: EREF.paper }, albedo: { wall: ALBEDO.wall, plank: ALBEDO.plank, frame: ALBEDO.frame, paper: ALBEDO.paper }, sideE: { l: SIDE_E.l, r: SIDE_E.r }, sref: SREF };
  }
  // 맞추기 입력(이 값이 바뀌면 미리 계산한 값을 다시 만든다). method: 맞추기 방법을 바꾸면 올린다
@@ -1291,7 +1307,7 @@
    });
    it('구멍 밖 평평한 벽은 판 바로 밑에서도 가려지지 않는다(판이 벽보다 뒤에 있다)', () => {
      const under: Env = { floor: -FAR, ceil: -SHELF_THICK };
-@@ -410,7 +411,7 @@
+@@ -410,11 +411,15 @@
    it('안쪽 면은 창빛 그림자가 없어 위 면 아래에서 뒷벽보다 넓고 진하다', () => {
      const atSide = (h: number) => jointShade({ x: FRAME_X0, y: 200 - h, z: 40 }, side, framed);
      for (const h of [2, 10, 20, 30]) expect(atSide(h)).toBeGreaterThan(below(h));
@@ -1299,8 +1315,18 @@
 +    expect(atSide(20)).toBeGreaterThan(0.03); // 2026-11-10 사용자 '안쪽은 좀 더 밝게': 옆면 그늘 세기 0.6 → 0.35(0.05 × 0.35/0.6)
      expect(jointShade({ x: FRAME_X0, y: 2, z: 40 }, side, framed)).toBeGreaterThan(jointShade({ x: FRAME_X0, y: 100, z: 40 }, side, framed));
    });
-   it('뒷벽은 아래 판 쪽으로 어두워지지 않고, 안쪽 면 쪽은 위 면 쪽보다 약하다', () => {
-@@ -447,19 +448,38 @@
+-  it('뒷벽은 아래 판 쪽으로 어두워지지 않고, 안쪽 면 쪽은 위 면 쪽보다 약하다', () => {
+-    expect(jointShade({ x: 183, y: 1, z: SHELF_DEPTH }, front, framed)).toBeLessThan(0.001);
++  // Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선': 뒷벽도 아래 판과 만나는 곳은 옆벽처럼 어두워진다(빠져 있어 위로 도는 곡면이 흰 줄로 보였다)
++  it('뒷벽은 아래 판 쪽으로도 어두워지고(옆벽 바닥과 같은 세기), 안쪽 면 쪽은 위 면 쪽보다 약하다', () => {
++    const atFloor = (h: number) => jointShade({ x: 183, y: h, z: SHELF_DEPTH }, front, framed);
++    expect(atFloor(1)).toBeGreaterThan(0.05);
++    expect(atFloor(1)).toBeGreaterThan(atFloor(5));
++    expect(atFloor(40)).toBeLessThan(0.01);
+     expect(jointShade({ x: FRAME_X0 + 1, y: 100, z: SHELF_DEPTH }, front, framed)).toBeLessThan(below(1));
+   });
+   it('뒷벽 꼭지점은 위 면·안쪽 면 어느 한쪽 가까이보다 어둡고 둘레로 둥글게 옅어진다', () => {
+@@ -447,19 +452,48 @@
    const wall = { x: 0, y: 0, z: -1 };
    const side = { x: 1, y: 0, z: 0 };
    const up = { x: 0, y: 1, z: 0 };
@@ -1329,16 +1355,26 @@
 +    const l = Math.hypot(d.x, d.y, d.z);
 +    return { x: d.x / l, y: d.y / l, z: d.z / l };
 +  };
-+  it('모서리 선 위에서 맞닿은 두 면의 법선이 같다(뒷벽·안쪽 면·천장·판 윗면)', () => {
++  it('모서리 선 위에서 맞닿은 두 면의 법선이 같다(뒷벽·안쪽 면·천장)', () => {
 +    for (const p of [
 +      { x: FRAME_X0, y: 100, z: SHELF_DEPTH, a: wall, b: side },
 +      { x: 183, y: 200, z: SHELF_DEPTH, a: wall, b: down },
-+      { x: 183, y: 0, z: SHELF_DEPTH, a: wall, b: up },
 +      { x: FRAME_X0, y: 200, z: 40, a: side, b: down },
-+      { x: FRAME_X0, y: 0, z: 40, a: side, b: up },
 +    ]) {
 +      const v = eye(p);
 +      same(coveNormal(p, p.a, framed, v), coveNormal(p, p.b, framed, v));
++    }
++  });
++  // Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선': 판 윗면과 만나는 아래 모서리는 곡면 없이 곧은 모서리(접촉 그늘만)
++  it('판 윗면과 벽 · 안쪽 면이 만나는 아래 모서리는 곡면이 없다(두 면 모두 제 법선)', () => {
++    for (const p of [
++      { x: 183, y: 0, z: SHELF_DEPTH, a: wall, b: up },
++      { x: FRAME_X0, y: 0, z: 40, a: side, b: up },
++      { x: 183, y: COVE_R * 0.5, z: SHELF_DEPTH, a: wall, b: up },
++    ]) {
++      const v = eye(p);
++      same(coveNormal(p, p.a, framed, v), p.a);
++      same(coveNormal(p, p.b, framed, v), p.b);
 +    }
 +  });
 +  it('정면으로 보는 면이 곡면을 더 많이 돈다(뒷벽 정면이면 모서리 선에서 안쪽 면 쪽으로 70° 넘게)', () => {

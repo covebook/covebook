@@ -59,4 +59,46 @@ void main() {
     expect(s.lib.books['bk1']!.status, ReadStatus.reading);
     expect(s.lib.rounds.length, 1);
   });
+
+  group('읽기 상태 · 현재 쪽 규칙(2026-11-24 1단계): 타이머 저장 · 현재 쪽 고치기', () {
+    // 기기 현지 날짜 기준 그날 저녁 9시(UTC로 바꿔 적는다)
+    String at(int d, [int h = 21]) => DateTime(2026, 11, d, h).toUtc().toIso8601String();
+    SessionInput input(num? pages, {int day = 19}) => SessionInput(myBookId: 'bk1', startedAt: at(day), endedAt: at(day, 22), durationMs: 3600000, pagesRead: pages);
+
+    test('규칙 1: 도달한 쪽이 전체 쪽수(216) 이상이면 완독, 완독일은 그 기록을 시작한 날', () {
+      final r = addSessionTo(lib(), input(216, day: 19), at(23));
+      final b = r.lib.books['bk1']!;
+      expect(b.status, ReadStatus.read);
+      expect(b.currentPage, 216);
+      expect(r.lib.rounds.values.single.finishedAt, '2026-11-19');
+    });
+
+    test('규칙 1: 마지막 쪽 전이면 읽는 중 그대로, 쪽수를 모르는 판본은 완독으로 바꾸지 않는다', () {
+      expect(addSessionTo(lib(), input(215), at(23)).lib.books['bk1']!.status, ReadStatus.reading);
+      final noCount = lib()..editions['ed1'] = Edition(id: 'ed1', title: '소년이 온다', authors: const ['한강'], source: 'photo', createdAt: t1, updatedAt: t1);
+      expect(addSessionTo(noCount, input(999), at(23)).lib.books['bk1']!.status, ReadStatus.reading);
+      final zero = lib()..editions['ed1'] = Edition(id: 'ed1', title: '소년이 온다', authors: const ['한강'], source: 'photo', pageCount: 0, createdAt: t1, updatedAt: t1);
+      expect(addSessionTo(zero, input(999), at(23)).lib.books['bk1']!.status, ReadStatus.reading);
+    });
+
+    test('규칙 1: 이미 완독이면 그대로(완독일도 그대로)', () {
+      final done = addSessionTo(lib(), input(216, day: 18), at(23)).lib;
+      final again = addSessionTo(done, input(216, day: 20), at(23)).lib;
+      expect(again.books['bk1']!.status, ReadStatus.read);
+      expect([for (final r in again.rounds.values) r.finishedAt], ['2026-11-18']);
+    });
+
+    test('규칙 2: 현재 쪽을 마지막 쪽 이상으로 고치면 완독(완독일 오늘), 낮춰도 완독은 그대로(규칙 4)', () {
+      final reading = addSessionTo(lib(), input(100), at(23)).lib;
+      final now = DateTime.now().toUtc().toIso8601String();
+      final done = setCurrentPageIn(reading, 'bk1', 216, now);
+      expect(done.books['bk1']!.status, ReadStatus.read);
+      expect(done.rounds.values.single.finishedAt, today());
+      final lower = setCurrentPageIn(done, 'bk1', 50, now);
+      expect(lower.books['bk1']!.status, ReadStatus.read);
+      expect(lower.books['bk1']!.currentPage, 50);
+      expect(setCurrentPageIn(reading, 'bk1', 200, now).books['bk1']!.status, ReadStatus.reading);
+    });
+  });
 }
+

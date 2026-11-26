@@ -1,9 +1,15 @@
 // 꾸미기 화면 부품(지금 앱 features/home/DecoratePanel.tsx, 2026-10-26 꾸미기 시안을 2026-11-19 사용자 시안으로 바꿈):
 // 맨 위 줄 DecorateBar('책 배치 | 선반 | 벽지' 탭, 되돌리기·완료), 아래는 탭마다
-//  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 누르거나 끌어보세요' + 책 측면 고르기), 고르면 DecoratePanel
+//  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('위치, 각도 | 디자인' 전환 칸, 2026-11-20 사용자. 이름은 2026-11-23)
 //  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
-// DecoratePanel: 고른 책 제목, 자세 탭(책등·표지·눕힘, 아이콘 + 밑줄), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
-// 책등 책은 회전 대신 기대기(왼쪽·바로·오른쪽: 방향만 고르고 각도는 옆 책과의 틈으로). 막대에는 갈 수 있는 범위를 진한 띠로.
+// DecoratePanel: 고른 책 제목, '위치, 각도 | 디자인'. 위치, 각도는 자세 전환 칸(책등·표지·눕힘), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
+// 디자인은 책 옆면(단색 | 실물 | 겹무늬, 고른 책에만)과 이 책의 책 꾸미기(그림, 색상, 재질)로 가는 줄.
+// 2026-11-23 사용자: 책 옆면은 책마다 따로('가호를 눌러 연 화면이니까 여기서 고른 모양은 가호에만'), 그래서 적용 범위 글('모든 책')을 뺐다.
+// 이름도 사용자 정리대로 '움직임 | 겉모습' → '위치, 각도 | 디자인', '실물 측면' → '측면', '표지 이어 쌓기' → '겹무늬', 나열은 쉼표로.
+// 2026-11-25 사용자 '책 옆면에 측면 말고 실물로': '측면' → '실물'(YES24 책등 사진 그대로).
+// 기대기는 자세처럼 전환 칸(2026-11-21 사용자 '기대기도 다른 버튼처럼'): 책등 책은 왼쪽 · 바로 · 오른쪽(방향만 고르고 각도는 옆 책과의 틈으로,
+// 기댄 각도를 아래 글로), 표지 책은 바로 · 뒤로(벽에 기대기, 사용자 '표지 쪽은 뒤로 기대기가 안 돼': 머리 손잡이를 끌어야만 됐다).
+// 막대에는 갈 수 있는 범위를 진한 띠로.
 // 막대는 놓을 때 확정한다(끄는 동안은 숫자와 손잡이만 따라간다).
 // 2026-11-16 QA 영숙 F7: 큰 글씨에서는 라벨을 따로 줄에 둔다(잘리거나 '위치기대기'로 세로로 섰다).
 // 2026-11-18 사용자: '순서' 줄·자리 표시와 안내 글을 뺐다. 한 칸씩 옮기기는 책장 책 칸의 화면 읽기 동작으로 남겼다(home_screen)
@@ -39,20 +45,20 @@ class DecorateBar extends StatelessWidget {
   final VoidCallback onUndo;
   final VoidCallback onDone;
 
-  // 탭 글자와 되돌리기·완료 글자를 같은 줄 높이(글자 기준선)에 둔다: 탭은 글자 밑에 밑줄 몫이 있어 가운데 맞추면 탭 글자가 떠 보였다
+  // 책 배치 · 선반 · 벽지는 꾸미기 아래 칸을 통째로 바꾸는 모드라 전환 칸(DESIGN 7장 '전환 칸과 밑줄 탭', 2026-11-20 사용자 '캘린더 분석같이 버튼으로').
+  // 되돌리기 · 완료는 전환 칸 오른쪽에 세로 가운데로
   @override
-  Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+  Widget build(BuildContext context) => Row(children: [
         Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Tabs<DecorateTab>(
-              items: const [(id: DecorateTab.books, label: '책 배치'), (id: DecorateTab.shelf, label: '선반'), (id: DecorateTab.wall, label: '벽지')],
-              value: tab,
-              onChange: onTab,
-              gap: Space.l + Space.s,
-            ),
+          child: Segmented<DecorateTab>(
+            items: const [(DecorateTab.books, '책 배치'), (DecorateTab.shelf, '선반'), (DecorateTab.wall, '벽지')],
+            value: tab,
+            onChange: onTab,
+            // 머리줄 안이라 낮은 칸(회색 칸 36): 옆 되돌리기 · 완료와 높이를 맞춘다(2026-11-20 사용자 '세로 높이 좀 길지 않나')
+            compact: true,
           ),
         ),
+        const SizedBox(width: Space.l),
         Semantics(
           button: true,
           enabled: canUndo,
@@ -97,16 +103,16 @@ class _Sheet extends StatelessWidget {
       );
 }
 
-/// 책 배치 탭에서 책을 고르기 전: 떠 있는 안내(놓지 못한 까닭이 있으면 그 글) + 아래 책 측면 고르기(책 모양이라 책 배치 탭에, 2026-11-19 사용자)
+/// 책 배치 탭에서 책을 고르기 전: 떠 있는 안내 하나(놓지 못한 까닭이 있으면 그 글).
+/// 책 옆면 고르기는 책을 고른 뒤 '디자인'으로 옮겼다(그때 이름은 '겉모습')(2026-11-20 사용자 '책 선택하면 있어야지', '책을 하나 선택하세요 뜬 다음에')
 class DecorateHint extends StatelessWidget {
-  const DecorateHint({super.key, required this.msg, required this.spine, required this.onSpine});
+  const DecorateHint({super.key, required this.msg});
   final String? msg;
-  final SpineLook spine;
-  final ValueChanged<SpineLook> onSpine;
 
   @override
-  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Center(
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + Space.xl),
+        child: Center(
           child: Semantics(
             liveRegion: true,
             child: Container(
@@ -117,24 +123,11 @@ class DecorateHint extends StatelessWidget {
                 border: Border.all(color: AppColors.line, width: Hairline.of(context)),
                 boxShadow: const [Shape.floatShadow],
               ),
-              child: Text(msg ?? '책을 누르거나 끌어보세요', style: AppType.caption.copyWith(color: msg != null ? AppColors.danger : AppColors.ink)),
+              child: Text(msg ?? '책을 하나 골라 주세요', style: AppType.caption.copyWith(color: msg != null ? AppColors.danger : AppColors.ink)),
             ),
           ),
         ),
-        const SizedBox(height: Space.m),
-        _Sheet(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            // 묶음 이름은 꾸미기 시안 모양(본문색 16 보통, 1c111a7 사용자 시안) 그대로: DESIGN 16장 예외(시트 안 SheetLabel 18 굵게와 다름)
-            Text('책 측면', style: AppType.sub.copyWith(color: AppColors.ink)),
-            const SizedBox(height: Space.xs),
-            Segmented<SpineLook>(
-              items: const [(SpineLook.color, '색 한 가지'), (SpineLook.photo, '실물 측면'), (SpineLook.stripe, '표지 이어 쌓기')],
-              value: spine,
-              onChange: onSpine,
-            ),
-          ]),
-        ),
-      ]);
+      );
 }
 
 /// 선반·벽지 탭: 고르는 대로 책장에 바로 보인다(실시간 스킨). 저장은 고를 때, 빛 다시 굽기는 꾸미기를 마칠 때(home_screen)
@@ -192,8 +185,13 @@ class SkinSheet extends StatelessWidget {
       );
 }
 
-/// 책 배치 탭에서 책을 골랐을 때: 제목, 자세 탭, 앞뒤·회전/기대기
-class DecoratePanel extends StatelessWidget {
+/// 고른 책 조작부의 두 칸: 위치, 각도(자세 · 앞뒤 · 회전/기대기) | 디자인(책 옆면 · 이 책 꾸미기)
+enum DecoPart { move, look }
+
+/// 책 배치 탭에서 책을 골랐을 때: 제목, 전환 칸 '위치, 각도 | 디자인', 그 아래 고른 칸의 조작부
+/// (2026-11-20 사용자 '각도 같은 움직임, 책 색상이나 표면 측면 같은 거 선택하는 버튼 … 누르면 그 밑에 해당 내용들이 뜨게').
+/// 자세(책등 · 표지 · 눕힘)도 전환 칸(2026-11-20 사용자 '눕힘 세움 이런 거 버튼으로 하라 하지 않았나? 통계 캘린더 분석 같은')
+class DecoratePanel extends StatefulWidget {
   const DecoratePanel({
     super.key,
     required this.title,
@@ -210,8 +208,21 @@ class DecoratePanel extends StatelessWidget {
     required this.onLean,
     required this.onSpin,
     required this.onDepth,
+    required this.spine,
+    required this.onSpine,
+    required this.onBinding,
     this.bookKey,
+    this.leanDeg,
+    this.frontBack,
+    this.onFrontLean,
   });
+
+  /// 책등 책: 지금 기댄 각도(°, 옆 책과의 틈으로 정해진다)
+  final double? leanDeg;
+
+  /// 표지 책: 뒤로 기대 있는지(젖힌 각도가 있으면 '뒤로')
+  final bool? frontBack;
+  final ValueChanged<bool>? onFrontLean;
 
   final String title;
   final Pose? pose;
@@ -230,67 +241,131 @@ class DecoratePanel extends StatelessWidget {
   final ValueChanged<double> onSpin;
   final ValueChanged<double> onDepth;
 
+  /// 고른 책의 옆면 모양(이 책에만): 디자인 칸
+  final SpineLook spine;
+  final ValueChanged<SpineLook> onSpine;
+
+  /// 이 책의 책 꾸미기(장정 그림, 색상, 재질과 갈피)로. 줄 이름 '이 책 꾸미기', 값 '그림, 색상, 재질'(2026-11-23 사용자 정리)
+  final VoidCallback onBinding;
+
   /// 고른 책이 바뀌면 막대 상태를 새로
   final Object? bookKey;
 
   @override
-  Widget build(BuildContext context) {
+  State<DecoratePanel> createState() => _DecoratePanelState();
+}
+
+class _DecoratePanelState extends State<DecoratePanel> {
+  DecoPart _part = DecoPart.move;
+
+  Widget _move(BuildContext context, bool big) {
+    final w = widget, pose = w.pose;
     final turns = pose == Pose.horizontal || pose == Pose.front;
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _Row(
+        label: '자세',
+        child: Segmented<Pose>(
+          items: [for (final p in const [Pose.upright, Pose.front, Pose.horizontal]) (p, _poseNames[p]!)],
+          // 고른 자세가 없으면(아직 못 놓은 책) 책등 칸이 고른 모양
+          value: pose ?? Pose.upright,
+          onChange: w.onPose,
+        ),
+      ),
+      if (w.depth != null)
+        // '위치'는 좌우로 읽혀 '앞뒤'로(2026-11-18 사용자: 옮기면 기대는 각이 바뀌어야 한다고 봄. 이 막대는 앞뒤만 옮긴다)
+        _Row(label: '앞뒤', child: _DepthSlider(key: ValueKey(('d', w.bookKey)), lo: w.depth!.lo, hi: w.depth!.hi, back: w.depth!.back, value: w.depth!.z, onChange: w.onDepth)),
+      if (turns)
+        _Row(label: '회전', child: _SpinSlider(key: ValueKey(('s', w.bookKey, pose)), value: w.spin, max: w.spinMax, range: w.spinRange, onChange: w.onSpin)),
+      // 표지 책: 바로 서기 | 뒤 벽에 기대기
+      if (pose == Pose.front && w.onFrontLean != null)
+        _Row(
+          label: '기대기',
+          child: Segmented<bool>(items: const [(false, '바로'), (true, '뒤로')], value: w.frontBack ?? false, onChange: w.onFrontLean!),
+        ),
+      // 책등 책: 왼쪽 · 바로 · 오른쪽(기댈 옆 책이 없는 쪽은 흐리게)
+      if (!turns)
+        _Row(
+          label: '기대기',
+          child: Segmented<int>(
+            items: [for (final d in const [-1, 0, 1]) (d, _leanNames[d]!)],
+            value: pose == Pose.upright ? w.lean : 0,
+            disabled: {if (pose != Pose.upright || !w.canLean.left) -1, if (pose != Pose.upright || !w.canLean.right) 1},
+            onChange: w.onLean,
+          ),
+        ),
+      if (_angleNote(pose) case final note?)
+        Padding(padding: EdgeInsets.only(left: big ? 0 : 48), child: Align(alignment: Alignment.centerLeft, child: Text(note, style: AppType.caption))),
+    ]);
+  }
+
+  /// 기댄 각도 글: 표지 책은 뒤로 젖힌 각도, 책등 책은 기댄 쪽과 각도(각도는 옆 책과의 틈만큼이라 늘 같지 않다)
+  String? _angleNote(Pose? pose) {
+    final w = widget;
+    if (pose == Pose.front) return w.angles;
+    if (pose != Pose.upright || w.lean == 0 || w.leanDeg == null) return null;
+    return '${_leanNames[w.lean]}으로 ${w.leanDeg!.round()}° 기대 있어요(옆 책과의 틈만큼 기울어요)';
+  }
+
+  Widget _look(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // 묶음 이름은 꾸미기 시안 모양(본문색 16 보통, 1c111a7 사용자 시안) 그대로: DESIGN 16장 예외(시트 안 SheetLabel 18 굵게와 다름).
+        // 고른 책에만 걸려 적용 범위 글은 없다(2026-11-23 사용자)
+        Text('책 옆면', style: AppType.sub.copyWith(color: AppColors.ink)),
+        const SizedBox(height: Space.xs),
+        Segmented<SpineLook>(
+          items: const [(SpineLook.color, '단색'), (SpineLook.photo, '실물'), (SpineLook.stripe, '겹무늬')],
+          value: widget.spine,
+          onChange: widget.onSpine,
+        ),
+        const SizedBox(height: Space.s),
+        // 그림 · 색상 · 재질 · 갈피는 책 꾸미기(책 정보 › 책 정보 칸 › 책 꾸미기와 같은 화면).
+        // '그림, 색상, 재질'은 오른쪽 값, 이름과 한 줄(2026-11-24 사용자 '왼쪽 사진처럼 우측에 있게 하고 한 줄로': 이름 아래 두었었다).
+        // 칸이 모자라면 값 끝을 '…'로 줄인다(이름은 다 보이게, ListItem.oneLine)
+        ListItem(label: '이 책 꾸미기', value: '그림, 색상, 재질', oneLine: true, chevron: true, onPress: widget.onBinding),
+      ]);
+
+  static const _partNames = {DecoPart.move: '위치, 각도', DecoPart.look: '디자인'};
+
+  @override
+  Widget build(BuildContext context) {
     final big = largeText(context);
+    final part = Segmented<DecoPart>(compact: !big, items: [for (final e in _partNames.entries) (e.key, e.value)], value: _part, onChange: (v) => setState(() => _part = v));
     return _Sheet(
       top: 0,
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Center(
           child: Container(width: 38, height: 4.5, margin: const EdgeInsets.only(top: 10), decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3))),
         ),
-        // 큰 글씨: 제목 두 줄까지
+        // 제목 줄 오른쪽에 '위치, 각도 | 디자인'(낮은 전환 칸, 2026-11-21 사용자 '움직임 겉모습 버튼 가호랑 같은 라인 우측에', 이름은 2026-11-23).
+        // 큰 글씨이거나, 같은 줄에 두면 제목이 세 글자도 안 남을 때(좁은 화면 · 조금 키운 글씨): 제목 두 줄까지, 전환 칸은 아래 줄.
+        // 전환 칸 폭은 굵은 '위치, 각도'가 한 칸에 다 들어가게 글자 크기에 맞춘다(152로 두면 잘렸다)
         Padding(
-          padding: const EdgeInsets.only(top: 16),
-          child: Text(keepAll(title), maxLines: big ? 2 : 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle),
+          padding: const EdgeInsets.only(top: Space.s),
+          child: LayoutBuilder(builder: (context, box) {
+            final partW = Segmented.fitWidth(context, _partNames.values);
+            final titleMin = MediaQuery.textScalerOf(context).scale(AppType.pageTitle.fontSize! * 3);
+            if (big || box.maxWidth - Space.m - partW < titleMin) {
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(keepAll(widget.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.pageTitle),
+                const SizedBox(height: Space.s),
+                part,
+              ]);
+            }
+            return Row(children: [
+              Expanded(child: Text(keepAll(widget.title), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle)),
+              const SizedBox(width: Space.m),
+              SizedBox(width: partW, child: part),
+            ]);
+          }),
         ),
         // 고른 뒤 놓지 못한 까닭: 오류 글(화면 읽기가 바로 읽는다)
-        if (msg != null) NoticeText(msg!, error: true),
+        if (widget.msg != null) NoticeText(widget.msg!, error: true),
         // 큰 글씨에서 조작부가 화면보다 길어지면 안에서 밀어 본다
         Flexible(
           child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 18),
-                child: Row(children: [
-                  for (final p in const [Pose.upright, Pose.front, Pose.horizontal])
-                    Expanded(child: _PoseTab(pose: p, on: pose == p, onPress: () => onPose(p))),
-                ]),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 14, bottom: 6),
-                child: Column(children: [
-                  if (depth != null)
-                    // '위치'는 좌우로 읽혀 '앞뒤'로(2026-11-18 사용자: 옮기면 기대는 각이 바뀌어야 한다고 봄. 이 막대는 앞뒤만 옮긴다)
-                    _Row(label: '앞뒤', child: _DepthSlider(key: ValueKey(('d', bookKey)), lo: depth!.lo, hi: depth!.hi, back: depth!.back, value: depth!.z, onChange: onDepth)),
-                  if (turns)
-                    _Row(label: '회전', child: _SpinSlider(key: ValueKey(('s', bookKey, pose)), value: spin, max: spinMax, range: spinRange, onChange: onSpin)),
-                  if (!turns)
-                    _Row(
-                      label: '기대기',
-                      child: Row(children: [
-                        for (final (i, d) in const [-1, 0, 1].indexed) ...[
-                          if (i > 0) const SizedBox(width: 6),
-                          Expanded(
-                            child: _LeanChoice(
-                              dir: d,
-                              on: pose == Pose.upright && lean == d,
-                              disabled: pose != Pose.upright || (d < 0 && !canLean.left) || (d > 0 && !canLean.right),
-                              onPress: () => onLean(d),
-                            ),
-                          ),
-                        ],
-                      ]),
-                    ),
-                  if (angles != null && pose == Pose.front)
-                    Padding(padding: EdgeInsets.only(left: big ? 0 : 48), child: Align(alignment: Alignment.centerLeft, child: Text(angles!, style: AppType.caption))),
-                ]),
-              ),
-            ]),
+            child: Padding(
+              padding: const EdgeInsets.only(top: Space.m, bottom: 6),
+              child: _part == DecoPart.move ? _move(context, big) : _look(context),
+            ),
           ),
         ),
       ]),
@@ -328,136 +403,7 @@ class _Row extends StatelessWidget {
 
 const _poseNames = {Pose.upright: '책등', Pose.front: '표지', Pose.horizontal: '눕힘'};
 
-class _PoseTab extends StatelessWidget {
-  const _PoseTab({required this.pose, required this.on, required this.onPress});
-  final Pose pose;
-  final bool on;
-  final VoidCallback onPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = on ? AppColors.accent : AppColors.inkSoft;
-    return Semantics(
-      button: true,
-      selected: on,
-      label: _poseNames[pose],
-      onTap: onPress,
-      excludeSemantics: true,
-      child: Pressable(
-        onPress: onPress,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Space.hit),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const SizedBox(height: 2),
-            CustomPaint(size: const Size(30, 30), painter: _PoseIcon(pose, color)),
-            const SizedBox(height: 6),
-            Text(_poseNames[pose]!, style: (on ? AppType.labelStrong : AppType.bodySmall).copyWith(color: on ? AppColors.ink : AppColors.inkSoft)),
-            const SizedBox(height: 9),
-            Container(width: 52, height: 2.5, decoration: BoxDecoration(color: on ? AppColors.accent : Colors.transparent, borderRadius: BorderRadius.circular(2))),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-/// 자세 아이콘(26 칸 viewBox를 30으로): 책등 세로 막대·표지 넓은 판·눕힘 가로 막대
-class _PoseIcon extends CustomPainter {
-  _PoseIcon(this.pose, this.color);
-  final Pose pose;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.scale(size.width / 26);
-    final r = switch (pose) {
-      Pose.upright => const Rect.fromLTWH(10, 3, 6, 20),
-      Pose.front => const Rect.fromLTWH(6, 4, 14, 18),
-      Pose.horizontal => const Rect.fromLTWH(2.5, 10, 21, 6),
-    };
-    canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(1.4)), Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_PoseIcon old) => old.pose != pose || old.color != color;
-}
-
 const _leanNames = {-1: '왼쪽', 0: '바로', 1: '오른쪽'};
-
-class _LeanChoice extends StatelessWidget {
-  const _LeanChoice({required this.dir, required this.on, required this.disabled, required this.onPress});
-  final int dir;
-  final bool on, disabled;
-  final VoidCallback onPress;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        selected: on,
-        enabled: !disabled,
-        label: _leanNames[dir],
-        onTap: disabled ? null : onPress,
-        excludeSemantics: true,
-        child: Opacity(
-          opacity: disabled ? disabledOpacity : 1,
-          child: Pressable(
-            onPress: disabled ? null : onPress,
-            // 누르는 자리는 48(Space.hit): 보이는 칸(44)은 그대로 두고 위아래 빈 자리까지 누른다
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: (Space.hit - Space.touch) / 2),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: Space.touch),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(Shape.input), border: on ? Border.all(color: AppColors.inkFaint) : null),
-                child: Flex(
-                  direction: largeText(context) ? Axis.vertical : Axis.horizontal,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CustomPaint(size: const Size(26, 26), painter: _LeanIcon(dir)),
-                    const SizedBox(width: 6),
-                    Text(_leanNames[dir]!, softWrap: false, style: AppType.micro.copyWith(color: AppColors.ink)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-}
-
-/// 기대기 아이콘: 기대는 쪽 옆 책(옅게) + 기운 책
-class _LeanIcon extends CustomPainter {
-  _LeanIcon(this.dir);
-  final int dir;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.scale(size.width / 26);
-    final side = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.3
-      ..color = AppColors.ink.withValues(alpha: 0.55);
-    final me = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = AppColors.ink;
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(dir < 0 ? 5 : dir > 0 ? 15 : 7, 4, 6, 19), const Radius.circular(1.2)), side);
-    canvas.save();
-    if (dir != 0) {
-      canvas.translate(13, 23);
-      canvas.rotate(dir * 16 * math.pi / 180);
-      canvas.translate(-13, -23);
-    }
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(dir < 0 ? 13 : dir > 0 ? 7 : 14, 4, 6, 19), const Radius.circular(1.2)), me);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_LeanIcon old) => old.dir != dir;
-}
 
 /// 막대 공통 그림: 전체(옅게) · 갈 수 있는 범위(진한 띠) · 기준점에서 손잡이까지 갈색 · 손잡이
 class _BarPainter extends CustomPainter {
@@ -623,6 +569,71 @@ class _DepthSliderState extends State<_DepthSlider> {
       ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 52),
         child: Text('${mmOf(shown)}mm', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink).tnum),
+      ),
+    ]);
+  }
+}
+
+/// 책을 끄는 동안 화면 아래 빼기 자리(2026-11-24 사용자 '책 옮길 때 하단 쪽으로 넣으면 삭제되게, 흰색 x에 주변에 그라데이션').
+/// 회색 X 둘레로 흰 빛이 둥글게 번져 사라진다(같은 날 사용자 '흰색 그라데이션에 검은색 x가 낫지 않나': 어두운 빛 + 흰 X였다 →
+/// 검은 X를 보고 '검은 거 말고 회색': 선 아이콘 색 AppColors.icon).
+/// 흰 빛 밑에 옅은 회색 그늘을 한 겹 더 깔아 밝은 책장 위에서도 자리가 보인다. 책이 그 위에 오면 흰 빛 · 그늘이 짙어지고 X가 커진다.
+/// 놓으면 책장에서 뺀다(책은 내 책에 남고 토스트로 되돌린다). 누르는 자리는 없다(끄는 손가락 자리로만 본다)
+class RemoveZone extends StatelessWidget {
+  const RemoveZone({super.key, required this.active, required this.centerFromBottom});
+  final bool active;
+
+  /// 이 칸 아래 끝에서 X 가운데까지
+  final double centerFromBottom;
+
+  /// 번지는 빛 지름(누르는 자리 48의 세 배쯤)
+  static const _glow = Space.hit * 3;
+
+  /// 화면 아래(안전 영역 위)에서 X 가운데까지. 손가락이 X 가운데에서 [hit] 안이면 빼기 자리 위(책 끌기 · 작은 타이머 끌기가 같이 쓴다)
+  static const lift = Space.hit + Space.xl;
+  static const hit = Space.hit + Space.l;
+
+  /// 손가락(화면 좌표)이 빼기 자리 위인지
+  static bool isOver(MediaQueryData mq, Offset global) => (global - Offset(mq.size.width / 2, mq.size.height - mq.padding.bottom - lift)).distance < hit;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final speed = reduce ? Duration.zero : const Duration(milliseconds: 140);
+    final white = AppColors.white.withValues(alpha: active ? 1 : 0.9);
+    final shade = AppColors.ink.withValues(alpha: active ? 0.16 : 0.1);
+    return Stack(children: [
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: centerFromBottom - _glow / 2,
+        height: _glow,
+        child: Center(
+          // 바깥: 옅은 회색 그늘(가운데에서 끝으로 사라짐), 안: 흰 빛(가운데 흰색, 3분의 2쯤에서 사라짐)
+          child: AnimatedContainer(
+            duration: speed,
+            width: _glow,
+            height: _glow,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [shade, shade.withValues(alpha: 0)], stops: const [0.3, 1]),
+            ),
+            child: AnimatedContainer(
+              duration: speed,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [white, white, white.withValues(alpha: 0)], stops: const [0, 0.3, 0.66]),
+              ),
+              child: Center(
+                child: AnimatedScale(
+                  duration: speed,
+                  scale: active ? 1.25 : 1,
+                  child: const LucideIcon('X', size: IconSize.back, color: AppColors.icon, stroke: IconSize.markStroke),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     ]);
   }

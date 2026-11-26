@@ -46,6 +46,7 @@ class ReadingCalendar extends StatelessWidget {
               child: Row(children: [for (final d in weekdays) SizedBox(width: cell, child: Text(d, textAlign: TextAlign.center, style: _small))]),
             ),
             // 주 사이에만 선(맨 아래 선은 없다: 아래 구역 선과 겹쳐 두 줄로 보였다, 2026-11-17 사용자 댓글)
+            // 주마다 표지 자리를 늘 둔다(기록 없는 주도 같은 높이). 11-25 빈 주를 낮췄다가 11-26 사용자 '기존이 낫다'로 되돌림
             for (final (wi, week) in weeks.indexed)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6),
@@ -81,13 +82,15 @@ class _DayCell extends StatelessWidget {
     final label = row != null
         ? '$n일, ${titles.isNotEmpty ? '${titles.first}${row!.books.length > 1 ? ' 외 ${row!.books.length - 1}권' : ''}, ' : ''}${formatDuration(row!.ms)}'
         : '$n일, 기록 없음';
+    // 기록이 없는 날도 오늘까지는 누른다(그날 독서 기록 추가, 2026-11-23). 앞날은 누르지 않는다
+    final can = row != null || day.compareTo(todayKey()) <= 0;
     return Semantics(
       button: true,
       selected: selected,
-      enabled: row != null,
+      enabled: can,
       label: label,
       child: Pressable(
-        onPress: row == null ? null : () => onSelect(day),
+        onPress: can ? () => onSelect(day) : null,
         child: SizedBox(
           width: cell,
           child: Column(children: [
@@ -378,13 +381,16 @@ class _MiniPainter extends CustomPainter {
 /// 이름 + 숫자 칸(작은 회색 이름 위, 굵은 숫자 19 아래): 통계 요약 · 평균 카드 · 책 한 권 기록이 모두 이것
 /// (2026-11-19 공통 규칙: 같은 '읽은 날'이 24와 19로 달랐고, 같은 칸을 세 벌로 만들었다)
 class StatNumber extends StatelessWidget {
-  const StatNumber({super.key, required this.label, required this.value});
+  const StatNumber({super.key, required this.label, required this.value, this.flex = 1});
   final String label;
   final String value;
+  /// 한 줄에 놓인 칸끼리 나누는 몫(값이 긴 '읽은 시간'은 넓게)
+  final int flex;
 
   // 화면 읽기는 '이름 값' 한 번(안쪽 글자까지 두 번 읽혔다)
   @override
   Widget build(BuildContext context) => Expanded(
+        flex: flex,
         child: Semantics(
           container: true,
           label: '$label $value',
@@ -412,11 +418,11 @@ class BookRecordView extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = bookRecord(lib, id);
     final span = r.firstDay != null ? dateRange(r.firstDay, r.lastDay) : '아직 기록이 없어요';
-    // 책 줄은 앱 공통 BookRow(작게 40, 2026-11-19 공통 규칙). 위아래 12는 BookRow가 가진다
-    final w = BookRow.coverWidth(BookRowSize.small);
-    return Column(children: [
-      BookRow(cover: LinkedCover(lib: lib, id: id, width: w), title: bookTitle(lib, id) ?? '', meta: span),
-      const SizedBox(height: Space.s),
+    // 책은 화면 맨 위 책 칸에 이미 있어 책 줄을 되풀이하지 않는다. 아래 달 숫자와 헷갈리지 않게 '이 책 전체'와 읽은 기간을 머리로
+    // (2026-11-21: 맨 위 책 칸을 넣으며 책 줄이 두 번 보였다)
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SectionHead(title: '이 책 전체', note: span),
+      const SizedBox(height: Space.m),
       Row(children: [
         StatNumber(label: '총 독서 시간', value: formatDuration(r.readMs)),
         const SizedBox(width: Space.m),
@@ -434,7 +440,7 @@ class BookRecordView extends StatelessWidget {
           const Spacer(),
         ]),
       ],
-      const SectionBand(),
+      // 아래 구역과 나누는 회색 띠는 다음 흰 띠(Band)가 깐다(여기도 띠를 두면 회색 띠 둘 사이에 빈 흰 칸이 생겼다, 2026-11-21 촬영 확인)
     ]);
   }
 }

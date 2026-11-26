@@ -330,7 +330,8 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
     });
   }
 
-  void _saveView() => KvStore.set(boardViewKey(widget.id), jsonEncode({'x': _v.x, 'y': _v.y, 's': _v.s}));
+  // 마지막 보던 곳은 다음에 열 때의 편의라 저장하지 못해도 알리지 않는다(처리하지 않은 실패로 남지 않게)
+  void _saveView() => KvStore.set(boardViewKey(widget.id), jsonEncode({'x': _v.x, 'y': _v.y, 's': _v.s})).ignore();
 
   void _animateTo(BoardView to) {
     final from = _v;
@@ -561,10 +562,19 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
 
   List<({String id, double x, double y, double rot})> get _spotList => [for (final s in _spots) (id: s.id, x: s.x, y: s.y, rot: s.rot)];
 
-  /// 자리 · 폭 저장: 화면에는 바로 보이고, 기기에 저장하지 못하면 알린다(공통 규칙 11장: 결과를 기다리지 않고 실패를 버렸다)
+  /// 자리 · 폭 저장: 화면에는 바로 보이고, 기기에 저장하지 못하면 서재가 앞 자리로 되돌아가(카드도 돌아간다) 알린다
+  /// (공통 규칙 11장: 결과를 기다리지 않고 실패를 버렸다. 2026-11-20 QA: 옮긴 채 아무 알림 없다가 다시 켜면 앞 자리였다).
+  /// 그사이 이 쪽이 닫혔으면(옆 책으로 넘김) 보드 화면이 알린다
   void _saveSpot(String id, {required double x, required double y, required double rot, double? w}) {
+    final host = widget.host;
     _model.updateBoard(_spotList, id, x: x, y: y, rot: rot, w: w).catchError((Object e) {
-      if (mounted) appAlert(context, w != null ? '갈피 크기를 저장하지 못했어요' : '갈피 자리를 저장하지 못했어요', errorText(e));
+      final title = w != null ? '갈피 크기를 저장하지 못했어요' : '갈피 자리를 저장하지 못했어요';
+      if (mounted) {
+        appAlert(context, title, errorText(e));
+      } else if (host.mounted) {
+        final c = host.context;
+        if (c.mounted) appAlert(c, title, errorText(e));
+      }
     });
   }
 
@@ -603,7 +613,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
   void _fit() {
     final v = boardFit(_spots, _vp.width, _vp.height, _bottomBar);
     _animateTo(v);
-    KvStore.set(boardViewKey(widget.id), jsonEncode({'x': v.x, 'y': v.y, 's': v.s}));
+    KvStore.set(boardViewKey(widget.id), jsonEncode({'x': v.x, 'y': v.y, 's': v.s})).ignore();
   }
 
   void _addHere() {
@@ -739,7 +749,7 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
           trailing: Btn(
             label: '목록 보기',
             kind: 'secondary',
-            size: 's',
+            size: 'medium',
             onPress: () {
               Navigator.of(context).popUntil((r) => r.isFirst);
               AppNav.instance.goBookmarks(widget.id);
@@ -780,14 +790,14 @@ class _BoardPageState extends State<_BoardPage> with TickerProviderStateMixin {
           child: Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 16),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Btn(label: '전체 보기', kind: 'secondary', size: 's', disabled: _marks.isEmpty, onPress: _fit),
+              Btn(label: '전체 보기', kind: 'secondary', size: 'medium', disabled: _marks.isEmpty, onPress: _fit),
               // 화면 읽기 이름은 '갈피 추가'(단추 글은 '+ 갈피'라 '갈피'로만 읽혔다. Btn에 이름을 따로 줄 길이 없어 바깥에서 준다)
               Semantics(
                 button: true,
                 label: '갈피 추가',
                 onTap: _addHere,
                 excludeSemantics: true,
-                child: Btn(label: '갈피', kind: 'secondary', size: 's', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
+                child: Btn(label: '갈피', kind: 'secondary', size: 'medium', icon: const LucideIcon('Plus', size: 18), onPress: _addHere),
               ),
             ]),
           ),

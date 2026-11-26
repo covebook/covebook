@@ -1,8 +1,11 @@
-// 재장정 미리보기·편집(지금 앱 features/book/BindingEditor.tsx: 책 추가 확인 화면과 책 상세가 함께 쓴다). 2026-10-10 시안: 책 미리보기 → 그림·색상·재질 탭 → 그 탭의 옵션.
+// 재장정 미리보기·편집(지금 앱 features/book/BindingEditor.tsx: 책 추가 확인 화면과 책 꾸미기가 함께 쓴다). 2026-10-10 시안: 책 미리보기 → 그림·색상·재질 탭 → 그 탭의 옵션.
 // 책장과 같은 책 그림·빛으로 같은 책을 돌려 보며 고른 장정이 바로 반영된다.
 // - 그림: 기본 정면 장정 6종(3열) + '그림 없음'(단색 정면 또는 실제 표지). 그림을 골라도 책 색은 그대로
-// - 색상: 표지 색(많은 순서) + 이 책 추천 색 + 모든 색. 고른 색에 테두리와 체크. 추천 장정으로 되돌리기
+// - 색상: 표지 색(많은 순서) + 이 책 추천 색 + 모든 색 + 직접 고르기(R · G · B 막대와 색 코드, 2026-11-21 사용자 '표지색 rgb 고를 수 있게').
+//   고른 색에 테두리와 체크. 추천 장정으로 되돌리기
 // - 재질: 고운 종이·린넨·매끈 무광·줄무늬 종이 + 책등 글자 배치
+// - 갈피(책 꾸미기만, onRibbon이 있을 때. 책이 아직 없는 책 추가 확인에는 없다): 자동(표지에서 고른 색) · 표지 색 · 다른 색.
+//   미리보기 책 머리에 갈피 탭을 고른 색으로 그린다(2026-11-23 사용자: 갈피 색 시트를 장정 편집 안으로, 저장도 함께)
 // 탭을 바꿔도 고르던 값은 그대로다(값은 부르는 쪽이 가진다). 고르면 사용자 장정(source 'custom')
 library;
 
@@ -11,6 +14,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../domain/binding_draft.dart';
+import '../../domain/color.dart' show isNeutralColor, paperColors, ribbonPalette;
 import '../../domain/cover_artworks.dart';
 import '../../domain/cover_url.dart' show coverAtSize, spineRatioOf;
 import '../../domain/geometry.dart' show realDimensions;
@@ -36,11 +40,12 @@ BindingDraft resetBinding(BindingDraft rec, num seed) =>
     BindingDraft(spineColor: rec.spineColor, motif: rec.motif, seed: seed, inkColor: rec.inkColor, accentColor: rec.accentColor, layout: rec.layout);
 
 /// 미리보기 책: 고른 장정으로 그린 책(실제 표지가 있고 그림을 고르지 않았으면 정면은 실제 표지)
-Book previewBook({required String title, String? author, ({num widthMm, num heightMm})? size, num? pages, required BindingDraft binding, String? realCover}) {
+/// id: 책이 있으면 그 책 id(책장과 같은 결 · 갈피 탭 모양), 없으면 'preview'
+Book previewBook({required String title, String? author, ({num widthMm, num heightMm})? size, num? pages, required BindingDraft binding, String? realCover, String id = 'preview'}) {
   final w = (size?.widthMm ?? 128).toDouble(), h = (size?.heightMm ?? 188).toDouble();
   final art = isCoverArtworkId(binding.coverArtId);
   return Book(
-    id: 'preview',
+    id: id,
     title: title.isEmpty ? '제목' : title,
     author: author == null || author.isEmpty ? null : author,
     themeColor: _hex(binding.spineColor),
@@ -62,7 +67,22 @@ Book previewBook({required String title, String? author, ({num widthMm, num heig
 
 /// current: 아직 아무것도 고르지 않았을 때 보여 줄 지금 모습(책장에 놓인 그대로). 하나라도 고르면 고른 장정으로 바뀐다
 class BindingEditor extends StatefulWidget {
-  const BindingEditor({super.key, required this.title, this.author, this.size, this.pages, required this.value, required this.recommended, this.current, this.realCover, required this.onChange});
+  const BindingEditor({
+    super.key,
+    required this.title,
+    this.author,
+    this.size,
+    this.pages,
+    required this.value,
+    required this.recommended,
+    this.current,
+    this.realCover,
+    required this.onChange,
+    this.bookId,
+    this.ribbon,
+    this.marks = 0,
+    this.onRibbon,
+  });
   final String title;
   final String? author, realCover;
   final ({num widthMm, num heightMm})? size;
@@ -70,6 +90,16 @@ class BindingEditor extends StatefulWidget {
   final BindingDraft value, recommended;
   final Book? current;
   final ValueChanged<BindingDraft> onChange;
+
+  /// 책 꾸미기의 책 id(책 추가 확인처럼 책이 아직 없으면 null)
+  final String? bookId;
+
+  /// 고른 갈피 색(null = 표지에서 고른 색). onRibbon이 있을 때만 '갈피' 칸이 보인다
+  final String? ribbon;
+
+  /// 이 책의 갈피 수(미리보기 탭 수, 없어도 하나는 그린다)
+  final int marks;
+  final ValueChanged<String?>? onRibbon;
 
   @override
   State<BindingEditor> createState() => _BindingEditorState();
@@ -91,12 +121,17 @@ class _BindingEditorState extends State<BindingEditor> {
     }
   }
 
-  Book _book(BindingDraft b) => previewBook(title: widget.title, author: widget.author, size: widget.size, pages: widget.pages, binding: b, realCover: widget.realCover);
+  Book _book(BindingDraft b) => previewBook(title: widget.title, author: widget.author, size: widget.size, pages: widget.pages, binding: b, realCover: widget.realCover, id: widget.bookId ?? 'preview');
+
+  bool get _hasRibbon => widget.onRibbon != null && widget.bookId != null;
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final shown = widget.current ?? _book(widget.value);
+    // 갈피 칸에서는 미리보기 책 머리에 고른 색 갈피 탭(갈피가 없는 책도 하나)
+    final ribbonTab = _hasRibbon && _tab == 'ribbon';
+    final base = widget.current ?? _book(widget.value);
+    final shown = ribbonTab ? base.withRibbon(widget.ribbon, math.max(1, widget.marks)) : base;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -104,7 +139,7 @@ class _BindingEditorState extends State<BindingEditor> {
           padding: const EdgeInsets.only(top: Space.xs),
           child: Column(
             children: [
-              RotatableBook(key: ValueKey(shown), book: shown, frontWidth: math.min(170, width * 0.39), initialSpin: 32, shadow: true),
+              RotatableBook(key: ValueKey(shown), book: shown, frontWidth: math.min(170, width * 0.39), initialSpin: 32, shadow: true, ribbons: ribbonTab),
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text('드래그해서 돌려 보세요', style: AppType.caption),
@@ -115,11 +150,16 @@ class _BindingEditorState extends State<BindingEditor> {
         // 전환 칸은 공용 Segmented(2026-11-19 공통 규칙: 모서리 · 높이 · 그림자를 따로 그린 복사본이었다). 회색 칸은 위 여백 4 안쪽에서 시작해 16 아래에 그대로
         Padding(
           padding: const EdgeInsets.only(top: Space.m),
-          child: Segmented<String>(items: const [('art', '그림'), ('color', '색상'), ('material', '재질')], value: _tab, onChange: (id) => setState(() => _tab = id)),
+          child: Segmented<String>(
+            items: [('art', '그림'), ('color', '색상'), ('material', '재질'), if (_hasRibbon) ('ribbon', '갈피')],
+            value: _tab,
+            onChange: (id) => setState(() => _tab = id),
+          ),
         ),
         switch (_tab) {
           'color' => _colorPane(),
           'material' => _materialPane(),
+          'ribbon' when _hasRibbon => _ribbonPane(),
           _ => _artPane(),
         },
       ],
@@ -257,6 +297,14 @@ class _BindingEditorState extends State<BindingEditor> {
     ];
     // 추천 장정에는 재질 · 표지 그림이 없다(resetBinding)
     final same = v.spineColor == rec0.spineColor && v.motif == rec0.motif && v.layout == rec0.layout && (v.material ?? 'fine') == 'fine' && v.coverArtId == null;
+    void pick(String hex) {
+      final t = tonesFor(hex);
+      widget.onChange(v.custom(spineColor: hex, inkColor: t.inkColor, accentColor: t.accentColor));
+    }
+
+    // 지금 색이 위 목록에 없으면(직접 고른 색 · 표지 사진에서 온 색) '직접 고르기' 칸에 그 색을 고른 채로 보인다
+    final listed = {..._fromCover, ...rec, for (final c in bookColors) c.hex};
+    final mine = listed.contains(v.spineColor) ? null : v.spineColor;
     Widget swatch(String hex, String name) {
       final on = v.spineColor == hex;
       return Semantics(
@@ -306,6 +354,19 @@ class _BindingEditorState extends State<BindingEditor> {
         Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final (i, h) in rec.indexed) swatch(h, i == 0 ? '추천' : '추천 ${i + 1}')]),
         const H2('모든 색'),
         Wrap(spacing: Space.s, runSpacing: Space.s, children: [for (final c in rest) swatch(c.hex, c.name)]),
+        const H2('직접 고르기'),
+        Row(children: [
+          if (mine != null) ...[swatch(mine, '지금 색 ${mine.toUpperCase()}'), const SizedBox(width: Space.s)],
+          Btn(
+            label: 'RGB로 고르기',
+            kind: 'secondary',
+            size: 'medium',
+            onPress: () async {
+              final hex = await pickRgbColor(context, v.spineColor);
+              if (hex != null && mounted) pick(hex);
+            },
+          ),
+        ]),
         Padding(
           padding: const EdgeInsets.only(top: Space.group),
           // 머리줄 '초기화'와 같은 일이라 같은 말(2026-11-19 공통 규칙: '되돌리기'는 토스트 단추 말)
@@ -316,6 +377,66 @@ class _BindingEditorState extends State<BindingEditor> {
             onPress: () => widget.onChange(resetBinding(rec0, v.seed)),
           ),
         ),
+      ],
+    );
+  }
+
+  /// 갈피(옛 갈피 색 시트 features/bookmark/ribbon_color_sheet.dart를 옮긴 것): 책마다 하나. 책장 갈피 탭 · 갈피 카드 뒤 종이 · 테이프가 함께 바뀐다.
+  /// 자동 = 표지에서 고른 색. 표지에서 뽑은 색(무채색 빼고)과 기본 색 중에서 고르고, 자동으로 되돌릴 수 있다. 저장은 화면 아래 '꾸미기 저장'과 함께
+  Widget _ribbonPane() {
+    final id = widget.bookId!, picked = widget.ribbon;
+    void pick(String? c) => widget.onRibbon!(c);
+    final fromCover = [for (final c in _fromCover) if (!isNeutralColor(c)) c];
+    final hair = 1 / MediaQuery.devicePixelRatioOf(context);
+    // 색 견본: 색상 칸과 같은 크기(원 40 · 누르는 칸 48). 색은 갈피 테이프 색, 화면 읽기는 색 코드 대신 '갈피 색 N' · '표지 색 N'(DESIGN 15장)
+    Widget swatches(List<String> list, String name) => Wrap(spacing: Space.s, runSpacing: Space.s, children: [
+          for (final (i, c) in list.indexed)
+            Builder(builder: (_) {
+              final on = picked?.toLowerCase() == c.toLowerCase();
+              return Semantics(
+                button: true,
+                selected: on,
+                label: '$name ${i + 1}',
+                onTap: () => pick(c),
+                excludeSemantics: true,
+                child: Pressable(
+                  onPress: () => pick(c),
+                  child: SizedBox(
+                    width: Space.hit,
+                    height: Space.hit,
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: hexColor(paperColors(c, id).tape),
+                          border: Border.all(color: on ? AppColors.accent : AppColors.line, width: on ? 2 : hair * 2),
+                        ),
+                        child: on ? const Center(child: LucideIcon('Check', size: 20, color: AppColors.accent, stroke: 2.4)) : null,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+        ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 색은 갈피마다가 아니라 책에 하나라는 걸 분명히(2026-11-16 QA 현우 F8: 한 갈피만 바꾸려 했는데 다른 갈피도 바뀌었다)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.l),
+          child: WordText('이 책의 갈피 모두가 같은 색으로 바뀌어요(책장 위 갈피 끈과 갈피 카드).', style: AppType.sub),
+        ),
+        // 자동은 한 줄(2026-11-24 사용자 '자동이랑 표지에서 고른 색이 같은 건데 왜 따로': 묶음 이름 '자동' 아래 '표지에서 고른 색' 줄이었다)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: FilterOption(label: '자동', selected: picked == null, onPress: () => pick(null)),
+        ),
+        if (fromCover.isNotEmpty) ...[const H2('표지 색'), swatches(fromCover, '표지 색')],
+        const H2('다른 색'),
+        swatches(ribbonPalette, '갈피 색'),
       ],
     );
   }
@@ -481,3 +602,72 @@ class _MaterialSwatch extends CustomPainter {
   @override
   bool shouldRepaint(_MaterialSwatch old) => old.material != material || old.color != color;
 }
+
+/// 색 직접 고르기 시트: R · G · B 막대(0~255)와 색 코드(#RRGGBB), 위에 고른 색 미리보기. '이 색으로'를 누르면 '#rrggbb', 닫으면 null
+Future<String?> pickRgbColor(BuildContext context, String start) {
+  var rgb = [for (var i = 0; i < 3; i++) (_hex(start) >> (16 - 8 * i)) & 0xFF];
+  var code = _rgbCode(rgb);
+  return showSheet<String>(
+    context,
+    title: '색 직접 고르기',
+    scroll: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) {
+        final color = Color(0xFF000000 | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]);
+        Widget channel(int i, String name) => Row(children: [
+              SizedBox(width: 24, child: Text(name, style: AppType.sub.strong.copyWith(color: AppColors.ink))),
+              Expanded(
+                child: AppSlider(
+                  label: '$name 값',
+                  value: rgb[i] / 255,
+                  valueText: '${rgb[i]}',
+                  onChange: (x) => set(() {
+                    rgb[i] = (x * 255).round();
+                    code = _rgbCode(rgb);
+                  }),
+                  onCommit: (x) => set(() {
+                    rgb[i] = (x * 255).round();
+                    code = _rgbCode(rgb);
+                  }),
+                ),
+              ),
+              SizedBox(width: 40, child: Text('${rgb[i]}', textAlign: TextAlign.end, style: AppType.sub.tnum)),
+            ]);
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: const Color(0x14000000))),
+            ),
+            const SizedBox(width: Space.l),
+            Text(code.toUpperCase(), style: AppType.row.tnum),
+          ]),
+          const SizedBox(height: Space.l),
+          channel(0, 'R'),
+          channel(1, 'G'),
+          channel(2, 'B'),
+          const SizedBox(height: Space.l),
+          // 색 코드를 넣으면 막대도 그 값으로(여섯 자리가 다 맞을 때만)
+          Field(
+            label: '색 코드',
+            value: code,
+            placeholder: '#RRGGBB',
+            onChange: (t) {
+              final h = t.trim().replaceFirst('#', '');
+              final n = h.length == 6 ? int.tryParse(h, radix: 16) : null;
+              if (n == null) return;
+              set(() {
+                rgb = [(n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF];
+                code = _rgbCode(rgb);
+              });
+            },
+          ),
+          Btn(label: '이 색으로', onPress: () => Navigator.pop(ctx, code)),
+        ]);
+      },
+    ),
+  );
+}
+
+String _rgbCode(List<int> rgb) => '#${[for (final c in rgb) c.toRadixString(16).padLeft(2, '0')].join()}';

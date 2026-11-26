@@ -93,17 +93,31 @@ void main() {
   });
 
   group('고치는 화면 나가기 확인(12장)', () {
-    testWidgets('책 정보 수정: 고치고 뒤로 가면 묻고, 계속 수정이면 머문다', (t) async {
+    testWidgets('책 정보 수정: 고치고 뒤로 가면 묻고, 취소면 머문다', (t) async {
       _use(_lib());
       await _push(t, const EditBookScreen(id: 'b1'));
       await t.enterText(find.widgetWithText(TextField, '작별하지 않는다'), '작별하지 않는다 (개정판)');
       await t.pump();
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('고친 내용을 버릴까요?'), findsOneWidget);
-      await t.tap(find.text('계속 수정'));
+      expect(find.text('수정을 그만할까요?'), findsOneWidget);
+      await t.tap(find.text('취소'));
       await t.pumpAndSettle();
       expect(find.text('열기'), findsNothing);
+    });
+
+    testWidgets('책 정보 수정: 저장은 다른 수정 화면처럼 화면 아래 \'책 정보 저장\' 단추, 위 줄 글자 단추 · 구역 가는 선 없음(2026-11-21)', (t) async {
+      _use(_lib());
+      await _push(t, const EditBookScreen(id: 'b1'));
+      expect(find.widgetWithText(Btn, '책 정보 저장'), findsOneWidget);
+      expect(find.widgetWithText(TextLink, '저장'), findsNothing);
+      expect(find.byType(Hairline), findsNothing);
+      expect(find.widgetWithText(H2, '출판 정보'), findsOneWidget);
+      // 제목을 지우면 단추가 꺼지고 까닭은 제목 칸 아래
+      await t.enterText(find.widgetWithText(TextField, '작별하지 않는다'), '');
+      await t.pump();
+      expect(t.widget<Btn>(find.widgetWithText(Btn, '책 정보 저장')).disabled, isTrue);
+      expect(find.text('제목을 적어야 저장할 수 있어요'), findsOneWidget);
     });
 
     testWidgets('독서 기록 수정: 고치지 않았으면 묻지 않고 돌아간다', (t) async {
@@ -111,7 +125,7 @@ void main() {
       await _push(t, const SessionEditScreen(id: 's1'));
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('고친 내용을 버릴까요?'), findsNothing);
+      expect(find.text('수정을 그만할까요?'), findsNothing);
       expect(find.text('열기'), findsOneWidget);
     });
 

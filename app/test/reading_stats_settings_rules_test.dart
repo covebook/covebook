@@ -1,13 +1,16 @@
 // 2026-11-19 공통 규칙(읽기 · 통계 · 내 정보): 하나 고르기 시트는 FilterOption + 고르는 원, 책 줄은 BookRow, 책 없음은 '책 없이 읽기',
 // 시각은 '오후 9:05', 1분 미만은 초까지, 저장했어요 창은 사용자 시안 그대로
+import 'package:chaekjang/db/library_write.dart';
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/reading/finish_screen.dart' show showSavedDialog;
 import 'package:chaekjang/features/settings/backup_screen.dart';
 import 'package:chaekjang/features/settings/settings_screen.dart';
 import 'package:chaekjang/features/stats/chart_data.dart';
+import 'package:chaekjang/features/stats/stats_screen.dart';
 import 'package:chaekjang/features/stats/stats_widgets.dart';
 import 'package:chaekjang/store/library_model.dart';
 import 'package:chaekjang/ui/kit.dart';
+import 'package:chaekjang/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -83,11 +86,12 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('책 한 권 기록: 책 줄은 BookRow, 숫자 칸은 StatNumber 하나', (t) async {
+  testWidgets('책 한 권 기록: 머리는 \'이 책 전체\' 구역 머리(책 줄은 화면 맨 위 책 칸에 있어 되풀이하지 않는다), 숫자 칸은 StatNumber 하나', (t) async {
     await pump(t, Scaffold(body: BookRecordView(lib: lib(), id: 'bk1')));
-    // 제목은 책 줄과 그린 대체 표지에 한 번씩
-    expect(find.byType(BookRow), findsOneWidget);
-    expect(find.descendant(of: find.byType(BookRow), matching: find.text('데미안')), findsNWidgets(2));
+    // 2026-11-21: 독서 기록 맨 위 책 칸(SelectField)을 넣으며 책 줄이 두 번 보였다 → 여기서는 뺐다. 아래 회색 띠도 다음 흰 띠가 깐다
+    expect(find.byType(BookRow), findsNothing);
+    expect(find.widgetWithText(SectionHead, '이 책 전체'), findsOneWidget);
+    expect(find.byType(SectionBand), findsNothing);
     expect(find.byType(StatNumber), findsNWidgets(3));
     expect(t.takeException(), isNull);
   });
@@ -112,4 +116,79 @@ void main() {
     expect(find.text('책 없이 읽기'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('한 책 독서 기록 분석: 달 숫자는 달 · 책 칸 바로 아래, \'이 책 전체\'는 맨 아래. 책 칸은 흰 바탕 + 회색 테두리(2026-11-21)', (t) async {
+    await pump(t, const StatsScreen(tab: false, initialBook: 'bk1'));
+    final box = t.widget<SelectField>(find.byType(SelectField));
+    expect(box.outlined, isTrue);
+    await t.tap(find.text('분석'));
+    await t.pumpAndSettle();
+    await t.dragUntilVisible(find.text('이 책 전체'), find.byType(Scrollable).first, const Offset(0, -300));
+    await t.pumpAndSettle();
+    final month = t.getRect(find.text('독서 횟수'));
+    final whole = t.getRect(find.text('이 책 전체'));
+    expect(month.top, lessThan(whole.top));
+    expect(t.getRect(find.text('날짜별 독서')).top, lessThan(whole.top));
+    // 한 권이면 '많이 읽은 책'(늘 그 책 한 줄)은 없고, 달 완독은 '이 책 전체'와 같은 '회'
+    expect(find.text('많이 읽은 책'), findsNothing);
+    expect(find.text('0권'), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('통계 탭 책 고르기: 맨 위 줄 오른쪽이 아니라 달력과 그날 기록 머리 사이 테두리 칸, 고르면 책 이름(검정) · 저자(작고 회색) (2026-11-24)', (t) async {
+    await pump(t, const StatsScreen(tab: true));
+    await t.pumpAndSettle();
+    expect(find.byType(FilterButton), findsNothing, reason: '위 줄 오른쪽 모든 책 ⌄는 없다');
+    final box = find.byType(SelectField);
+    expect(t.widget<SelectField>(box).outlined, isTrue);
+    expect(find.descendant(of: box, matching: plain('모든 책')), findsOneWidget);
+    // 달력 아래, 그날 기록 머리 위. 달력과 칸 사이 16(2026-11-24 사용자 '여기 간격 좀 줄이는 게': 28이었다)
+    expect(t.getRect(find.byType(ReadingCalendar)).bottom, lessThan(t.getRect(box).top));
+    expect(t.getRect(box).top - t.getRect(find.byType(ReadingCalendar)).bottom, closeTo(Space.l, 0.5));
+    final head = find.textContaining('일요일');
+    if (head.evaluate().isNotEmpty) expect(t.getRect(box).bottom, lessThan(t.getRect(head.first).top));
+    // 분석: 달 바로 아래
+    await t.tap(find.text('분석'));
+    await t.pumpAndSettle();
+    expect(find.byType(SelectField), findsOneWidget);
+
+    await t.pumpWidget(const SizedBox()); // 같은 화면 상태를 다시 쓰지 않게(고른 책은 처음 열 때 읽는다)
+    await pump(t, const StatsScreen(tab: true, initialBook: 'bk1'));
+    await t.pumpAndSettle();
+    // 앞 것은 표지(꾸민 표지 그림 속 제목), 마지막이 칸 글자
+    final title = find.descendant(of: find.byType(SelectField), matching: find.text('데미안')).last;
+    final author = find.descendant(of: find.byType(SelectField), matching: find.text('헤르만 헤세'));
+    final ts = t.widget<Text>(title).style!, as = t.widget<Text>(author).style!;
+    expect(ts.color, AppColors.ink);
+    expect(as.color, AppColors.inkSoft);
+    expect(as.fontSize!, lessThan(ts.fontSize!));
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('저장했어요 창 5단계(2026-11-24): 저장으로 완독이면 \'기록하고 완독했어요\' + 별(누르면 바로 별점, 있던 별점은 보인다), 확인으로 닫힌다. 완독이 아니면 별 없음', (t) async {
+    final m = LibraryModel.instance;
+    m.lib = lib()..books['bk1'] = MyBook(id: 'bk1', editionId: 'ed1', status: ReadStatus.read, rating: 3, createdAt: t1, updatedAt: t1);
+    m.writeChanges = (_) async {};
+    addTearDown(() => m.writeChanges = applyLocalChanges);
+    await pump(t, Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showSavedDialog(c, bookId: 'bk1', sessionId: 's1', finished: true), child: const Text('열기')))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(plainStarts('25분 기록하고 완독했어요'), findsOneWidget);
+    expect(find.byType(Stars), findsOneWidget);
+    expect(t.widget<Stars>(find.byType(Stars)).value, 3, reason: '있던 별점');
+    await t.tap(find.bySemanticsLabel('별점 4점'));
+    await t.pump();
+    expect(m.lib.books['bk1']!.rating, 4, reason: '누르면 바로 저장');
+    expect(plainStarts('25분 기록하고 완독했어요'), findsOneWidget, reason: '별을 눌러도 창은 그대로');
+    await t.tap(find.text('확인'));
+    await t.pumpAndSettle();
+    expect(find.byType(Stars), findsNothing);
+
+    await pump(t, Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showSavedDialog(c, bookId: 'bk1', sessionId: 's1'), child: const Text('열기')))));
+    await t.tap(find.text('열기'));
+    await t.pumpAndSettle();
+    expect(plainStarts('25분 기록했어요'), findsOneWidget);
+    expect(find.byType(Stars), findsNothing, reason: '완독이 아닌 저장은 지금과 같다');
+  });
 }
+

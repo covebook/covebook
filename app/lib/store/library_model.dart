@@ -20,11 +20,23 @@ class LibraryModel extends ChangeNotifier {
   LibraryModel._();
   static final instance = LibraryModel._();
 
-  Library lib = Library();
+  /// 화면이 보는 서재(저장 중인 고치기까지 들어 있다)
+  Library get lib => _lib;
+
+  /// 서재를 통째로 바꾼다(기기에서 읽은 값 · 시험): 기기에 있는 값으로 본다
+  set lib(Library l) => _lib = _saved = l;
+  Library _lib = Library();
+
+  /// 기기 DB에 있는 서재(저장이 끝난 고치기까지). 저장이 실패하면 그 고치기의 항목을 이 값으로 되돌린다
+  Library _saved = Library();
   bool loaded = false;
   Object? error;
   Future<void>? _loading;
   Future<void> _writes = Future.value();
+
+  /// 서재 변경을 기기에 쓴다(시험에서 성공 · 실패를 바꿔 끼운다)
+  @visibleForTesting
+  Future<void> Function(List<LocalChange> changes) writeChanges = applyLocalChanges;
 
   // 예시 서재(빈 서재에만 넣는다)를 다 넣은 뒤에 읽는다
   Future<void> load() => _loading ??= prepareFirstShelf().then((_) => loadFullLibrary()).then((l) {
@@ -33,18 +45,35 @@ class LibraryModel extends ChangeNotifier {
         notifyListeners();
       });
 
+  /// 시험: 기기 DB 없이 이 서재를 읽은 것으로(책 추가 · 갈피 남기기처럼 먼저 읽기를 기다리는 고치기도 바로 한다)
+  @visibleForTesting
+  void useForTest(Library l) {
+    lib = l;
+    loaded = true;
+    error = null;
+    // 저장 차례도 새로(위젯 시험은 시험 안에서 불러야 저장이 그 시험의 시계로 돈다)
+    _loading = Future.value();
+    _writes = Future.value();
+  }
+
   /// 다시 읽기(다른 곳에서 DB를 바꾼 뒤)
   Future<void> reload() {
     _loading = null;
     return load();
   }
 
+  /// 화면은 바로 바꾸고 저장은 차례대로. 저장하지 못하면(트랜잭션이라 DB는 그대로) 화면도 DB 값으로 되돌린 뒤 던진다
+  /// (2026-11-20 QA: 지우기가 실패해 '삭제하지 못했어요'가 떠도 화면에서는 책 · 독서 기록 · 갈피가 사라져 있다가 앱을 다시 켜면 돌아왔다)
   Future<void> _commit(Library next, List<LocalChange> changes) {
-    lib = next;
+    _lib = next;
     notifyListeners();
-    final w = _writes.catchError((_) {}).then((_) => applyLocalChanges(changes));
-    _writes = w.then((_) => error = null, onError: (Object e) {
+    final w = _writes.catchError((_) {}).then((_) => writeChanges(changes));
+    _writes = w.then((_) {
+      error = null;
+      _saved = _applied(_saved, changes);
+    }, onError: (Object e) {
       error = e;
+      _lib = _restored(_lib, _saved, changes);
       notifyListeners();
       throw e;
     });
@@ -74,12 +103,20 @@ class LibraryModel extends ChangeNotifier {
     for (final e in erases) {
       table(e.kind).remove(e.id);
     }
-    lib = Library(editions: ed, books: bk, rounds: rd, sessions: ss, bookmarks: bm, bindings: bd, essays: es);
+    _lib = Library(editions: ed, books: bk, rounds: rd, sessions: ss, bookmarks: bm, bindings: bd, essays: es);
     notifyListeners();
-    final done = _writes.catchError((_) {}).then((_) => applyRemoteChanges([
-          for (final w in writes) LocalChange.put(w.kind, w.id, w.item, ''),
-          for (final e in erases) LocalChange.delete(e.kind, e.id, ''),
-        ]));
+    final changes = [
+      for (final w in writes) LocalChange.put(w.kind, w.id, w.item, ''),
+      for (final e in erases) LocalChange.delete(e.kind, e.id, ''),
+    ];
+    final done = _writes.catchError((_) {}).then((_) => applyRemoteChanges(changes)).then((_) {
+      _saved = _applied(_saved, changes);
+    }, onError: (Object e) {
+      // 받은 항목을 쓰지 못했으면 화면도 DB 값으로(다음 동기화가 다시 받는다)
+      _lib = _restored(_lib, _saved, changes);
+      notifyListeners();
+      throw e;
+    });
     _writes = done.catchError((_) {});
     await done;
   }
@@ -128,12 +165,16 @@ class LibraryModel extends ChangeNotifier {
     return r.id;
   }
 
-  /// 책 고치기(별점·한 줄 감상·현재 쪽·갈피 색). null을 주면 비운다
+  /// 책 고치기(별점·한 줄 감상·현재 쪽·갈피 색). null을 주면 비운다.
+  /// 현재 쪽은 읽기 상태 · 현재 쪽 규칙(reading.dart setCurrentPageIn: 마지막 쪽이면 완독)을 거친다
   Future<void> updateBook(String id, {Object? rating = _keep, Object? note = _keep, Object? currentPage = _keep, Object? ribbonColor = _keep}) {
     final b = lib.books[id];
     if (b == null) return Future.value();
-    final next = b.patch(rating: rating, note: note, currentPage: currentPage, ribbonColor: ribbonColor, updatedAt: nowIso());
-    return commitLib(lib.copy(books: {...lib.books, id: next}));
+    final now = nowIso();
+    final next = b.patch(rating: rating, note: note, ribbonColor: ribbonColor, updatedAt: now);
+    var out = lib.copy(books: {...lib.books, id: next});
+    if (!identical(currentPage, _keep)) out = setCurrentPageIn(out, id, currentPage as num?, now);
+    return commitLib(out);
   }
 
   /// 읽기 상태 바꾸기(같은 상태면 그대로)
@@ -208,15 +249,22 @@ class LibraryModel extends ChangeNotifier {
     await commitLib(next);
     return id;
   }
-
-  /// 장정 바꾸기(지금 앱 setBinding): 그 책의 장정을 고른 값으로(없으면 새로). 재질·표지 그림이 비면 예전 값도 지운다
-  Future<void> setBinding(String myBookId, BindingDraft v) {
-    final b = lib.books[myBookId];
+  /// 책 꾸미기 저장(지금 앱 setBinding + 갈피 색): 장정(binding, 고쳤을 때만. 그 책의 장정을 고른 값으로, 없으면 새로. 재질·표지 그림이 비면 예전 값도 지운다)과
+  /// 갈피 색(ribbonColor, 바꿨을 때만, null = 표지에서 고른 색)을 한 번에(한 트랜잭션)
+  Future<void> setBookLook(String myBookId, {BindingDraft? binding, Object? ribbonColor = _keep}) {
+    var b = lib.books[myBookId];
     if (b == null) return Future.value();
     final t = nowIso();
-    final bd = _bindingOf(myBookId, v, b.bindingId == null ? null : lib.bindings[b.bindingId], t);
-    return commitLib(lib.copy(bindings: {...lib.bindings, bd.id: bd}, books: {...lib.books, myBookId: b.patch(bindingId: bd.id, updatedAt: t)}));
+    var bindings = lib.bindings;
+    if (binding != null) {
+      final bd = _bindingOf(myBookId, binding, b.bindingId == null ? null : lib.bindings[b.bindingId], t);
+      bindings = {...bindings, bd.id: bd};
+      b = b.patch(bindingId: bd.id, updatedAt: t);
+    }
+    if (!identical(ribbonColor, _keep)) b = b.patch(ribbonColor: ribbonColor, updatedAt: t);
+    return commitLib(lib.copy(bindings: bindings, books: {...lib.books, myBookId: b}));
   }
+
 
   Binding _bindingOf(String myBookId, BindingDraft v, Binding? old, String t) => Binding(
         id: old?.id ?? newId('bd'),
@@ -417,6 +465,64 @@ class LibraryModel extends ChangeNotifier {
     final next = m.withSaved(m.savedAt != null ? null : t, t);
     return _commit(_withBookmarks({...lib.bookmarks, id: next}), [LocalChange.put(LibKind.bookmarks, id, next, t)]);
   }
+}
+
+/// 저장이 끝난 변경을 얹은 서재(기기 DB에 있는 값을 따라간다)
+Library _applied(Library base, List<LocalChange> changes) {
+  Map<String, T> on<T extends Object>(LibKind k, Map<String, T> m) {
+    Map<String, T>? out;
+    for (final c in changes) {
+      if (c.kind != k) continue;
+      out ??= {...m};
+      if (c.deleted) {
+        out.remove(c.id);
+      } else {
+        out[c.id] = c.item! as T;
+      }
+    }
+    return out ?? m;
+  }
+
+  return Library(
+    editions: on(LibKind.editions, base.editions),
+    books: on(LibKind.books, base.books),
+    rounds: on(LibKind.rounds, base.rounds),
+    sessions: on(LibKind.sessions, base.sessions),
+    bookmarks: on(LibKind.bookmarks, base.bookmarks),
+    bindings: on(LibKind.bindings, base.bindings),
+    essays: on(LibKind.essays, base.essays),
+  );
+}
+
+/// 저장하지 못한 변경을 되돌린 서재: 그 변경이 넣은(지운) 그대로인 항목만 기기 DB 값(saved)으로 돌린다.
+/// 그사이 다른 고치기가 다시 바꾼 항목은 그대로 둔다(그 고치기의 저장이 항목을 통째로 쓴다)
+Library _restored(Library cur, Library saved, List<LocalChange> changes) {
+  Map<String, T> on<T extends Object>(LibKind k, Map<String, T> now, Map<String, T> was) {
+    Map<String, T>? out;
+    for (final c in changes) {
+      if (c.kind != k) continue;
+      final v = now[c.id];
+      if (c.deleted ? v != null : !identical(v, c.item)) continue;
+      out ??= {...now};
+      final old = was[c.id];
+      if (old == null) {
+        out.remove(c.id);
+      } else {
+        out[c.id] = old;
+      }
+    }
+    return out ?? now;
+  }
+
+  return Library(
+    editions: on(LibKind.editions, cur.editions, saved.editions),
+    books: on(LibKind.books, cur.books, saved.books),
+    rounds: on(LibKind.rounds, cur.rounds, saved.rounds),
+    sessions: on(LibKind.sessions, cur.sessions, saved.sessions),
+    bookmarks: on(LibKind.bookmarks, cur.bookmarks, saved.bookmarks),
+    bindings: on(LibKind.bindings, cur.bindings, saved.bindings),
+    essays: on(LibKind.essays, cur.essays, saved.essays),
+  );
 }
 
 /// 책장 책의 갈피 색(지금 앱 toShelfBook art.ribbon): 고른 색 → 표지에서 뽑은 색 → 무채색이 아닌 책 색

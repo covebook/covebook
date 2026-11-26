@@ -271,25 +271,25 @@ class _AddBookScreenState extends State<AddBookScreen> {
           ),
         ]),
         const SizedBox(height: Space.xl),
-        // 시트 안 단추는 l(2026-11-19 공통 규칙: 확인 시트는 l, 결과 시트는 m이었다)
+        // 시트 안 단추는 xlarge(2026-11-19 공통 규칙: 확인 시트는 l, 결과 시트는 m이었다)
         if (widget.pick)
-          Btn(label: '이 책으로 계속 쓰기', size: 'l', onPress: () => Navigator.pop(ctx))
+          Btn(label: '이 책으로 계속 쓰기', size: 'xlarge', onPress: () => Navigator.pop(ctx))
         // 바코드 · 목록 가져오기에서 왔으면 그 목록으로(여러 권 추가 결과의 '계속 추가'와 같은 뜻)
         else if (widget.fromList)
-          Btn(label: '계속 추가', size: 'l', onPress: () => Navigator.pop(ctx))
+          Btn(label: '계속 추가', size: 'xlarge', onPress: () => Navigator.pop(ctx))
         else ...[
           if (placed == 'shelf')
-            Btn(label: '책장에서 보기', size: 'l', onPress: () {
+            Btn(label: '책장에서 보기', size: 'xlarge', onPress: () {
               next = 'shelf';
               Navigator.pop(ctx);
             })
           else
-            Btn(label: '내 책 보기', size: 'l', onPress: () {
+            Btn(label: '내 책 보기', size: 'xlarge', onPress: () {
               next = 'books';
               Navigator.pop(ctx);
             }),
           const SizedBox(height: Space.s),
-          Btn(label: '책 정보 보기', kind: 'secondary', size: 'l', onPress: () {
+          Btn(label: '책 정보 보기', kind: 'secondary', size: 'xlarge', onPress: () {
             next = 'book';
             Navigator.pop(ctx);
           }),
@@ -370,14 +370,14 @@ class _AddBookScreenState extends State<AddBookScreen> {
       // 뒤로 가면 책 확인으로. 장정을 바꿨으면 버릴지 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
       return DraftGuard(
         dirty: () => !_saving && _binding != recommended,
-        title: '고른 장정을 버릴까요?',
-        keep: '계속 고르기',
+        title: '장정 고르기를 그만할까요?',
+        body: '지금 나가면 고른 장정은 저장되지 않아요.',
         onLeave: _backToConfirm,
         child: Screen(
           title: '장정 미리보기',
-          // 화면 아래 주요 단추는 l(DESIGN 5-2)
+          // 화면 아래 주요 단추는 xlarge(DESIGN 5-2)
           footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Btn(label: '추가하고 책장에 진열', size: 'l', busy: _saving, onPress: () => _add()),
+            Btn(label: '추가하고 책장에 진열', size: 'xlarge', busy: _saving, onPress: () => _add()),
             SubAction(label: '보관만 하기', disabled: _saving, onPress: () => _add(keep: true)),
           ]),
           children: [
@@ -414,7 +414,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
     // 적거나 바꾼 것이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
     return DraftGuard(
       dirty: () => !_saving && _draft.sig != _base,
-      title: '적은 내용을 버릴까요?',
+      title: '책 등록을 그만할까요?',
+      body: '지금 나가면 적은 내용은 저장되지 않아요.',
       onLeave: widget.title != null
           ? null
           : () {
@@ -452,8 +453,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
       footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // 꺼진 주요 단추의 이유는 단추 바로 위 안내 글(DESIGN 9장)
         if (d.title.trim().isEmpty) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('제목을 적어야 추가할 수 있어요.', center: true)),
-        // 주요 행동: 추천 장정으로 바로 추가(책장에 놓기). 장정은 고르고 싶을 때만(보조). 화면 아래 주요 단추는 l(DESIGN 5-2)
-        Btn(label: '추천 장정으로 추가', size: 'l', disabled: !ready, busy: _saving, onPress: () => _confirmDuplicate(() => _add())),
+        // 주요 행동: 추천 장정으로 바로 추가(책장에 놓기). 장정은 고르고 싶을 때만(보조). 화면 아래 주요 단추는 xlarge(DESIGN 5-2)
+        Btn(label: '추천 장정으로 추가', size: 'xlarge', disabled: !ready, busy: _saving, onPress: () => _confirmDuplicate(() => _add())),
         SubAction(label: '장정 직접 고르기', disabled: !ready, onPress: () => _confirmDuplicate(_toBinding)),
       ]),
       children: [
@@ -482,9 +483,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 ]),
                 WordText('쪽수, 판형을 모르면 비워 두세요. 책장에는 흔한 크기로 보이고, 책 정보에는 ‘미입력’으로 표시돼요.', style: AppType.sub),
                 const H2('읽기 상태'),
-                Wrap(spacing: Space.s, runSpacing: Space.s, children: [
-                  for (final s in bookStatuses) AppChip(label: statusLabel[s]!, on: d.status == s, onPress: () => setState(() => d.status = s)),
-                ]),
+                // 하나 고르기: TDS에 칩이 없어 SegmentedControl(Radio와 같은 역할)
+                Segmented<ReadStatus>(items: [for (final s in bookStatuses) (s, statusLabel[s]!)], value: d.status, onChange: (s) => setState(() => d.status = s)),
               ]),
             ),
           ),
@@ -495,26 +495,27 @@ class _AddBookScreenState extends State<AddBookScreen> {
     );
   }
 
-  /// 표지 가운데 + 표지 단추, 아래 제공처 한 줄(시안). 표지 단추는 책 정보 수정과 같은 이름 · 모양(2026-11-19 공통 규칙: 회색 상자 안 글자 단추였다)
+  /// 표지 가운데(연필 단추 → 표지 바꾸기 · 삭제 시트, 책 정보 수정과 같은 부품 CoverEditTile, 2026-11-21), 아래 제공처 한 줄(시안)
   Widget _coverBlock(_Draft d) {
     final link = d.link;
     void openLink() => launchUrl(Uri.parse(link!), mode: LaunchMode.externalApplication);
     return Padding(
       padding: const EdgeInsets.only(top: Space.s, bottom: Space.l),
       child: Column(children: [
-        _shadowed(RealCover(uri: d.coverUri, title: d.title.isEmpty ? '표지' : d.title, width: CoverSize.confirm)),
+        _shadowed(CoverEditTile(
+          uri: d.coverUri,
+          title: d.title.isEmpty ? '표지' : d.title,
+          width: CoverSize.confirm,
+          onPicked: (uri) => setState(() => d
+            ..coverUri = uri
+            ..coverSource = 'photo'),
+          onRemove: () => setState(() => d
+            ..coverUri = null
+            ..coverSource = null),
+          onDenied: (msg) => setState(() => _notice = msg),
+        )),
         Padding(
           padding: const EdgeInsets.only(top: Space.l),
-          child: CoverPhotoButton(
-            hasCover: d.coverUri != null,
-            onPicked: (uri) => setState(() => d
-              ..coverUri = uri
-              ..coverSource = 'photo'),
-            onDenied: (msg) => setState(() => _notice = msg),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: Space.s),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Flexible(child: WordText(d.coverUri != null ? (d.coverSource == 'photo' ? '내가 고른 사진' : '${d.sourceName ?? '도서 정보'} 제공') : '표지가 없어요', style: AppType.caption)),
             // 원문 보기는 밑줄 없는 글자 단추(2026-11-19 공통 규칙). 화면 읽기 이름은 '○○에서 원문 보기' 그대로
@@ -664,15 +665,20 @@ class _FindStepState extends State<_FindStep> {
       // 2026-11-17 사용자 시안: 뒤로 옆 '책 추가' 제목 + 오른쪽 '목록 가져오기', 그 아래 검색칸(오른쪽 끝 바코드), '많이 찾는 책' 줄은 제목·저자와 +
       child: Screen(
         headerField: Semantics(header: true, child: Text(_m.multi ? (n == 0 ? '여러 권 고르기' : '$n권 고름') : '책 추가', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.pageTitle)),
-        // 고르기를 끝내는 '취소'는 본문색(2026-11-19 공통 규칙)
-        left: _m.multi ? TextLink(label: '취소', ink: true, onPress: _endMulti) : null,
+        // 고르는 중에는 뒤로 꺾쇠 없이 오른쪽 빨간 '취소'(2026-11-20 사용자: 왼쪽 말고 오른쪽에, 빨간색으로). 기기 뒤로도 고르기만 끝낸다
+        back: !_m.multi,
         // 엑셀·CSV 목록으로 여러 권(책 고르기에서 왔을 때는 한 권만 고르므로 없음)
-        right: widget.pick || _m.multi ? null : TextLink(label: '목록 가져오기', soft: true, onPress: () => openImportList(context)),
-        // 화면 아래 주요 단추 l. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
+        right: _m.multi
+            ? TextLink(label: '취소', danger: true, onPress: _endMulti)
+            : widget.pick
+                ? null
+                : TextLink(label: '목록 가져오기', soft: true, onPress: () => openImportList(context)),
+        // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장).
+        // 아래 단추 줄은 화면 아래에 붙고 위는 흰 그라데이션(Screen 기본, 2026-11-20 사용자)
         footer: _m.multi
             ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (n == 0) const Padding(padding: EdgeInsets.only(bottom: Space.s), child: NoticeText('추가할 책을 골라 주세요.', center: true)),
-                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'l', disabled: n == 0, onPress: () => widget.onAddMany(_m.picked.values.toList())),
+                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'xlarge', disabled: n == 0, onPress: () => widget.onAddMany(_m.picked.values.toList())),
               ])
             : null,
         children: [
@@ -694,7 +700,7 @@ class _FindStepState extends State<_FindStep> {
             label: '제목이나 저자로 찾기',
             // 바코드로 여러 권 찾기: 검색칸 오른쪽 끝(책 고르기에서 왔을 때·여러 권 고르는 중에는 없음)
             // 칸 안 아이콘은 돋보기와 같은 22(24였다)
-            trailing: widget.pick || _m.multi ? null : IconBtn(label: '바코드로 찾기', onPress: () => openBarcodeScan(context), child: const LucideIcon('ScanBarcode', color: AppColors.inkSoft)),
+            trailing: widget.pick || _m.multi ? null : IconBtn(label: '바코드로 찾기', onPress: () => openBarcodeScan(context), child: const LucideIcon('ScanBarcode', color: AppColors.icon)),
           ),
           if (widget.notice != null) NoticeText(widget.notice!),
           if (_busy && items == null) const Loading(label: '책을 찾는 중이에요'),
@@ -783,7 +789,7 @@ class _ResultRow extends StatelessWidget {
               offset: const Offset(_iconNudge, 0),
               child: SizedBox.square(
                 dimension: Space.hit,
-                child: Center(child: owned ? const AddedMark() : const LucideIcon('Plus', color: AppColors.inkSoft)),
+                child: Center(child: owned ? const AddedMark() : const LucideIcon('Plus', color: AppColors.icon)),
               ),
             ),
       onPress: tap,

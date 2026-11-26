@@ -1,8 +1,8 @@
 // 읽기 탭(지금 앱 features/reading/ReadList.tsx): 맨 위 오늘 날짜와 오늘 읽은 시간, '최근 읽던 책' 큰 카드(표지 · 오늘 시간 · 이어서 읽기),
-// 아래 '내 읽기 목록'은 책마다 한 줄(표지 · 제목 · 저자 · 오늘 읽은 시간이나 ▶ 읽기). 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
+// 아래 '내 읽기 목록'은 책마다 한 줄(표지 · 제목 · 저자 · 오늘 읽은 시간이나 '읽기'), 제목 오른쪽 +와 맨 아래 '+ 책 추가'. 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
 // 줄을 길게 누르면 메뉴(책 정보 · 독서 기록 · 목록에서 빼기). 장면에서 뒤로 나오면 이 목록이다(타이머는 계속 돈다).
 // 다른 책을 재는 중에 다른 책을 누르면 묻는다(앞 책 시간이 설명 없이 새 책으로 옮겨 가지 않게).
-// '내 읽기 목록' 오른쪽 +는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
+// '내 읽기 목록' 오른쪽 +와 아래 '+ 책 추가'는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
 library;
 
 import 'dart:math' as math;
@@ -23,10 +23,10 @@ import '../book/add_book_screen.dart' show openAddBook;
 import '../book/book_screen.dart';
 import '../bookmark/book_picker.dart';
 import '../stats/chart_data.dart' show dayTitle;
+import '../stats/session_edit_screen.dart' show openSessionAdd;
 import '../stats/stats_screen.dart';
 import '../stats/stats_widgets.dart';
 import 'finish_screen.dart';
-import 'play_icons.dart';
 import 'reading_screen.dart';
 import 'start_book.dart';
 
@@ -178,67 +178,106 @@ class _ReadListState extends State<ReadList> {
           onPress: () => _tapRow(id),
           trailing: ms > 0 || isActive
               ? Text(_timeText(ms, isActive), style: AppType.rowStrong.tnum)
-              // 회색(위 +와 같은 색, 2026-11-19 사용자 '읽기 회색으로 하는 게 낫지 않나'): 줄마다 책 제목이 먼저 보인다
-              : Row(mainAxisSize: MainAxisSize.min, children: [
-                  const PlayIcon(size: 14, color: AppColors.inkSoft),
-                  const SizedBox(width: 6),
-                  Text('읽기', style: AppType.rowStrong.copyWith(color: AppColors.inkSoft)),
-                ]),
+              // 회색(위 +와 같은 색, 2026-11-19 사용자 '읽기 회색으로 하는 게 낫지 않나'): 줄마다 책 제목이 먼저 보인다.
+              // 글자 앞 ▶는 두지 않는다(DESIGN 5장 '단추 글자 앞 기호 없음', 2026-11-20 사용자 '삼각형 없애고')
+              : Text('읽기', style: AppType.rowStrong.copyWith(color: AppColors.inkSoft)),
         ),
       ),
     );
   }
 
-  /// 오늘 날짜와 오늘 총 시간(제목 바로 아래 한 줄). 날짜 글자는 앱 공통 날짜 머리 함수(DESIGN 4장 dayTitle)
+  /// 맨 위 두 줄: 오늘 날짜, 그 아래 '오늘 읽은 시간 N'. 오른쪽 '시간 추가'는 오늘 날짜로 독서 기록 추가(타이머 없이 읽은 시간).
+  /// 2026-11-25 사용자 시안 '오늘 읽은 시간 날짜 밑에, 수동 시간 추가는 오른쪽에'(전에는 날짜 한 줄 오른쪽 '오늘 총 N ＋').
+  /// '시간 추가'는 회색 글자 단추(누르는 높이 48), 글자 바닥을 '오늘 읽은 시간' 줄 바닥에 맞춘다. 날짜 글자는 앱 공통 날짜 머리 함수(DESIGN 4장 dayTitle)
   Widget _todayLine(String date, _Today t) {
     final day = dayTitle(date);
-    return Semantics(
-      label: '$day, 오늘 총 ${formatDuration(t.total)}${t.active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}',
-      excludeSemantics: true,
-      child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-        Expanded(child: Text(day, style: AppType.sub.copyWith(color: AppColors.ink))),
-        Text('오늘 총 ', style: AppType.sub),
-        Text(formatDuration(t.total), style: AppType.rowStrong.tnum),
-      ]),
-    );
+    final total = '오늘 읽은 시간 ${formatDuration(t.total)}${t.active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}';
+    final ink = AppType.sub.copyWith(color: AppColors.ink);
+    return Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(day, style: ink),
+          Semantics(
+            label: total,
+            excludeSemantics: true,
+            child: Text.rich(TextSpan(text: '오늘 읽은 시간 ', style: ink, children: [TextSpan(text: formatDuration(t.total), style: AppType.rowStrong.tnum)])),
+          ),
+        ]),
+      ),
+      const SizedBox(width: Space.m),
+      TextLink(label: '시간 추가', soft: true, end: true, bottom: true, onPress: () => openSessionAdd(context, day: date)),
+    ]);
   }
 
-  /// 최근 읽던 책 큰 카드(표지 120 · 제목 21 · 오늘 시간 · 이어서 읽기): 사용자 시안의 큰 카드라 책 줄(BookRow)로 바꾸지 않는다
+  /// 최근 읽던 책 큰 카드(표지 92 · 제목 · 오늘 시간 · 이어서 읽기, 위에 이름 글자 없음): 사용자 시안의 큰 카드라 책 줄(BookRow)로 바꾸지 않는다
   List<Widget> _featured(Library lib, _Today t, String? featured) {
     final active = t.active;
     final running = _reading.running;
     final fActive = active != null && active.myBookId == featured;
     final fMs = active != null && active.myBookId == featured ? math.max(t.of(featured), _reading.elapsed) : t.of(featured);
     final fRead = featured != null && lib.sessions.values.any((x) => x.myBookId == featured);
-    final fLabel = fActive ? (running ? '읽기 화면으로' : '이어서 읽기') : (fRead ? '이어서 읽기' : '읽기 시작');
+    // 완독한 책은 '다시 읽기'(책 정보 아래 단추와 같은 말. 완독으로 바꾼 책이 '이어서 읽기'로 보였다, 2026-11-20 QA)
+    final fDone = featured != null && lib.books[featured]?.status == ReadStatus.read;
+    final fLabel = fActive ? (running ? '읽기 화면으로' : '이어서 읽기') : (fDone ? '다시 읽기' : fRead ? '이어서 읽기' : '읽기 시작');
     final title = _titleOf(lib, featured), author = bookAuthor(lib, featured);
     void open() => featured == null ? null : openBook(context, featured);
     return [
-      // 위아래 간격은 시안처럼 촘촘하게(2026-11-18 사용자 '간격이 좀 이상하네')
-      Padding(padding: const EdgeInsets.only(top: Space.l, bottom: Space.m), child: Text(fActive ? (running ? '읽는 중' : '잠깐 멈춘 책') : '최근 읽던 책', style: AppType.sub)),
-      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Semantics(
-          button: true,
-          label: '$title 책 정보',
-          excludeSemantics: true,
-          onTap: featured == null ? null : open,
-          child: Pressable(onPress: featured == null ? null : open, child: _coverOf(lib, featured, CoverSize.feature)),
-        ),
-        const SizedBox(width: Space.l),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            WordText(title, maxLines: 2, style: AppType.bookFeatureTitle),
-            if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
-            const SizedBox(height: Space.l),
-            Text(_timeText(fMs, fActive), textAlign: TextAlign.right, style: AppType.section.tnum),
-            const SizedBox(height: Space.s),
-            // 다른 화면 단추와 같은 보통 높이(m 48, 2026-11-18 사용자 '박스 세로 높이 다른 버튼처럼')
-            Btn(label: fLabel, size: 'm', icon: const PlayIcon(size: 17, color: AppColors.onAccent), onPress: () => fActive && running ? _openScene() : _begin(featured)),
-          ]),
-        ),
-      ]),
+      // 카드 위 '최근 읽던 책 · 읽는 중 · 잠깐 멈춘 책' 글자는 없다(2026-11-25 사용자 시안 · '지워'). 재는 중인지는 단추 이름과 시간 글자로 보인다.
+      // 오늘 줄과 표지 사이는 구역 사이보다 조금 넓게(시안 ≈ 36)
+      const SizedBox(height: Space.xl),
+      // 표지 92(2026-11-25 사용자 '썸네일 저 정도로 줄이고, 줄이면서 버튼 좌우 길이 늘려'), 제목은 표지 위 끝 줄에서(사용자 '썸네일 상단 라인에 맞춰'),
+      // 오늘 시간은 전처럼 단추 오른쪽 위, 단추 아래 끝은 표지 아래 끝. 글이 표지보다 길면(큰 글씨 · 두 줄 제목) 줄이 그만큼 길어지고 표지는 위에 붙는다
+      IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Align(
+            alignment: Alignment.topCenter,
+            child: Semantics(
+              button: true,
+              label: '$title 책 정보',
+              excludeSemantics: true,
+              onTap: featured == null ? null : open,
+              child: Pressable(onPress: featured == null ? null : open, child: _coverOf(lib, featured, CoverSize.feature)),
+            ),
+          ),
+          const SizedBox(width: Space.l),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              WordText(title, maxLines: 2, style: AppType.bookFeatureTitle),
+              if (author.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bookAuthor)),
+              const Spacer(),
+              Text(_timeText(fMs, fActive), textAlign: TextAlign.right, style: AppType.section.tnum),
+              const SizedBox(height: Space.s),
+              // 다른 화면 단추와 같은 보통 높이(large 48, 2026-11-18 사용자 '박스 세로 높이 다른 버튼처럼')
+              Btn(label: fLabel, size: 'large', onPress: () => fActive && running ? _openScene() : _begin(featured)),
+            ]),
+          ),
+        ]),
+      ),
     ];
   }
+
+  /// 목록 아래 '+ 책 추가'(회색, 누르는 높이 48): + 그림 왼쪽 끝을 내용 왼쪽 끝(위 표지 줄)에 맞춘다(Lucide + 획은 24칸의 4.2부터).
+  /// 화면 읽기 이름은 하는 일대로 '읽기 목록에 책 추가'(보이는 글자를 품는다)
+  Widget _addRow(VoidCallback onPress) => Semantics(
+        button: true,
+        label: '읽기 목록에 책 추가',
+        excludeSemantics: true,
+        onTap: onPress,
+        child: Pressable(
+          onPress: onPress,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.hit),
+            child: Transform.translate(
+              offset: const Offset(-IconSize.base * 4.2 / 24, 0),
+              child: Row(children: [
+                const LucideIcon('Plus', color: AppColors.icon),
+                const SizedBox(width: Space.s),
+                Expanded(child: Text('책 추가', style: AppType.subLink)),
+              ]),
+            ),
+          ),
+        ),
+      );
 
   // 재는 동안은 1초마다 다시 그린다(줄 시간 · 오늘 총 · 화면 읽기 이름이 함께 바뀐다)
   @override
@@ -246,7 +285,7 @@ class _ReadListState extends State<ReadList> {
 
   Widget _screen(BuildContext context) {
     // 서재를 읽기 전에는 빈 목록 안내가 잠깐 보이지 않게 불러오는 중(DESIGN 11장)
-    if (!_lib.loaded) return const Screen(back: false, title: '읽기', children: [Loading()]);
+    if (!_lib.loaded) return const Screen(back: false, title: '읽기', hideTitle: true, children: [Loading()]);
     final lib = _lib.lib;
     final active = _reading.active;
     final added = _settings.readList;
@@ -286,11 +325,12 @@ class _ReadListState extends State<ReadList> {
     final rest = [for (final id in ids) if (!(hasFeatured && id == featured)) id];
     final restNoBook = showNoBook && !(hasFeatured && featured == null);
 
-    // 머리: 탭 첫 화면 공통 제목(위 16 · 아래 12, 2026-11-19 공통 규칙: 여기만 직접 만들어 아래 8이었다), 아래 오늘 날짜와 오늘 총 시간.
+    // 머리: 왼쪽 위 제목 '읽기'는 없다(하단바에 이름, 2026-11-24 사용자 6단계. 화면 읽기 머리로만), 맨 위가 오늘 날짜와 오늘 총 시간.
     // 소리만 듣기 아이콘은 뺐다(2026-11-17 사용자 '위에 음악 아이콘 없애')
     return Screen(
       back: false,
       title: '읽기',
+      hideTitle: true,
       bottomPad: TabBarStyle.contentPad - Space.section,
       children: [
         _todayLine(day, t),
@@ -306,26 +346,34 @@ class _ReadListState extends State<ReadList> {
             ),
           ),
         if (hasFeatured) ..._featured(lib, t, featured),
-        // 내 읽기 목록(오른쪽 +: 읽을 책·다 읽은 책이나 책 없이 읽기를 여러 개 골라 더한다)
+        // 내 읽기 목록. 더하기는 제목 오른쪽 +와 목록 아래 '+ 책 추가' 줄 둘 다(읽을 책·다 읽은 책이나 책 없이 읽기를 여러 개 골라 더한다).
+        // 2026-11-25 사용자 '책 추가 밑으로 넣어줘'로 아래 줄을 넣고 +를 뺐다가, 같은 날 '책목록 추가를 의미하는 +는 전처럼 있어야돼'로 +를 되살렸다
         Padding(
           padding: const EdgeInsets.only(top: Space.xl),
           child: Row(children: [
-            // 구역 제목은 앱 공통 구역 제목(19)
+            // 구역 제목은 앱 공통 구역 제목. 줄 높이는 누르는 높이(아래 목록 자리가 그대로)
             Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.section))),
-            // +는 보이는 획의 오른쪽 끝을 아래 '▶ 읽기' 글자 끝 선에 맞춘다(2026-11-18 사용자 '+ 너무 작고 우측 라인에 안 맞아, 회색').
-            // 26 그림(24칸에 획은 5~19)이 누르는 칸 48 가운데라 칸 끝까지 11, 그림 안 여백 5.4, 반 획 1을 빼 15.4만큼 민다
-            Transform.translate(
-              offset: const Offset(15.4, 0),
-              child: IconBtn(label: '읽기 목록에 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.inkSoft, stroke: 2)),
-            ),
+            // +는 보이는 획의 오른쪽 끝을 아래 '읽기' 글자 끝 선에 맞춘다(2026-11-18 사용자 '+ 너무 작고 우측 라인에 안 맞아, 회색').
+            // 26 그림(24칸에 획은 5~19)이 누르는 칸 48 가운데라 칸 끝까지 11, 그림 안 여백 5.4, 반 획 1을 빼 15.4만큼 민다.
+            // 첫 사용(목록이 빔)에는 두지 않는다: 아래 안내 단추와 같은 일이라 헷갈렸다(2026-11-20 사용자 '+랑 책 추가랑 무슨 차이야')
+            if (hasRows)
+              Transform.translate(
+                offset: const Offset(15.4, 0),
+                child: IconBtn(label: '읽기 목록에 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.icon, stroke: 2)),
+              )
+            else
+              const SizedBox(height: Space.hit),
           ]),
         ),
         if (rest.isNotEmpty || restNoBook)
           Padding(
             padding: const EdgeInsets.only(top: Space.xs),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final id in rest) _row(lib, t, id), if (restNoBook) _row(lib, t, null)]),
-          )
-        else if (!hasRows)
+          ),
+        // 첫 사용(목록이 빔)에는 두지 않는다: 아래 안내 단추와 같은 일이라 헷갈렸다(2026-11-20 사용자 '+랑 책 추가랑 무슨 차이야')
+        if (hasRows)
+          _addRow(openPicker)
+        else
           // 첫 사용(2026-11-17 시안: 안내 한 줄 + 단추). 단추 이름은 하는 일대로: 읽기 목록에 고르기는 '읽기 목록에 추가'
           // ('책 추가'는 내 책에 새 책을 넣는 일이라 이름이 같으면 헷갈린다), 고를 책이 없으면 내 책에 넣는 '책 추가'
           Padding(

@@ -735,6 +735,34 @@ EditResult moveBook(ShelfLayout layout, BookMap books, String bookId, DropTarget
   return _finish(layout, settle(normalize(_withPlacements(base, placements)), books, bookXs(base, books)), books);
 }
 
+/// 책장에 없는 책(내 책에만 있는 책)을 놓을 자리에 꽂는다(홈 '책장에 꽂기' 시트에서 끌어 놓기, 2026-11-24 사용자 '+ 누르면 책 옮겨서 넣을 수 있게').
+/// 세워 꽂기(자리 사이에 끼우기)와 눕힌 더미 위에 눕혀 얹기만. 놓을 자리 계산(findDropTarget)·밀어 비키기는 옮기기(moveBook)와 같다. 이미 책장에 있으면 옮기기
+EditResult placeFromDrawer(ShelfLayout layout, BookMap books, String bookId, DropTarget target) {
+  if (placementOf(layout, bookId) != null) return moveBook(layout, books, bookId, target);
+  if (!books.containsKey(bookId)) return const EditResult.fail('unknown-book');
+  if (!layout.shelves.any((s) => s.id == target.shelfId)) return const EditResult.fail('unknown-shelf');
+  final base = ShelfLayout(layout.shelves, layout.placements, [for (final id in layout.drawer) if (id != bookId) id]);
+  final proto = BookPlacement(bookId: bookId, shelfId: target.shelfId, order: 0);
+  if (target.kind == 'insert') {
+    if (target.x == null) return _finish(layout, _insertItem(base, proto, target.shelfId, target.index!, books), books);
+    final x = _clampX(base, books, target.shelfId, _insertItem(base, proto, target.shelfId, 0), bookId, target.x!);
+    final r = pushOneSide(base, books, target.shelfId, (i) => _insertItem(base, proto, target.shelfId, i), bookId, x, _itemXs(base, books, target.shelfId));
+    if (r != null) return _finish(layout, r.layout, books);
+    final packed = _finish(layout, _insertItem(base, proto, target.shelfId, target.index!, books, x), books);
+    return packed.ok ? packed : const EditResult.fail('no-space');
+  }
+  ShelfItem? item;
+  for (final it in shelfItems(base, target.shelfId)) {
+    if (it.key == target.itemKey) item = it;
+  }
+  if (item == null || !isHorizontalItem(item, base)) return const EditResult.fail('not-stackable');
+  if (item.bookIds.length >= maxStack) return const EditResult.fail('stack-full');
+  final stackId = stackIdFor(item.bookIds[0]);
+  final placements = [for (final q in base.placements) item.bookIds.contains(q.bookId) ? q.copyWith(stackId: stackId, stackOrder: item.bookIds.indexOf(q.bookId)) : q];
+  placements.add(BookPlacement(bookId: bookId, shelfId: target.shelfId, order: item.order, pose: Pose.horizontal, tilt: 0, stackId: stackId, stackOrder: item.bookIds.length));
+  return _finish(layout, settle(normalize(_withPlacements(base, placements)), books, bookXs(base, books)), books);
+}
+
 ({BookPlacement p, List<ShelfItem> items, int index}) _itemIndexOf(ShelfLayout layout, String bookId) {
   final p = placementOf(layout, bookId)!;
   final items = shelfItems(layout, p.shelfId);
@@ -1698,6 +1726,21 @@ _FrontRest _releaseRest(_FrontWorld w, FrontState cur, double target) {
   if (target < cur.pitch) return _restPose(fell.pose);
   final v = _restAt(w, fell);
   return v.kind == 'slip' ? _slideRest(w, fell.pose) : v;
+}
+
+/// 표지 책 '기대기' 칸(꾸미기 조작부, 2026-11-21 사용자 '표지 쪽은 뒤로 기대기가 안 돼'): back이면 뒤 벽에 기댄다(처음 놓을 때와 같은
+/// wallLeanPose, 돌린 각도 그대로), 아니면 젖힘 0으로 바로 세운 뒤 손을 놓은 것처럼 무게중심대로 둔다. 머리 손잡이로 끄는 것과 같은 계산
+EditResult setFrontLean(ShelfLayout layout, BookMap books, String bookId, bool back) {
+  final fs = frontStateOf(layout, books, bookId), book = books[bookId];
+  if (fs == null || book == null) return const EditResult.fail('no-space');
+  if (back) {
+    final w = wallLeanPose(frontDims(book), shelfDepth, fs.state.spin);
+    final placed = _placeFront(layout, books, bookId, fs.qx, (depth: w.depth, pitch: w.pitch, spin: w.spin ?? fs.state.spin));
+    return placed != null ? EditResult.ok(placed) : const EditResult.fail('no-space');
+  }
+  final r = frontTilt(layout, books, bookId, fs.state, fs.qx, 0);
+  final fin = r == null ? null : frontRelease(r.layout, books, bookId, r.state, fs.qx);
+  return fin != null ? EditResult.ok(fin) : const EditResult.fail('no-space');
 }
 
 /// 손을 놓으면 무게중심 방향으로 넘어지며 받침·벽·바닥에서 멈춘다(다시 서기·기대기·눕기·미끄러짐). 선반 밖으로는 떨어지지 않는다

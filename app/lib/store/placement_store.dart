@@ -21,7 +21,10 @@ class PlacementStore {
 
   ShelfLayout? layout;
   BookMap books = {};
-  ShelfLayout? _undo;
+  /// 되돌리기 차례(오래된 것부터): 확정할 때마다 바꾸기 전 배치를 쌓는다. 여러 번 되돌릴 수 있다
+  /// (2026-11-21 사용자 '되돌리기 1번밖에 안 되는 게 좀 별론데'). 너무 길어지지 않게 [_undoMax]까지
+  final List<ShelfLayout> _undo = [];
+  static const _undoMax = 30;
 
   /// 책장에서 뺀 책이 있던 자리(뺄 때 배치와 그 선반에서의 차례). '책장에 진열'로 되돌리면 그 자리부터 본다(앱을 끄면 잊는다).
   /// 2026-11-16 QA 현우 F12: 빼고 나서 다시 진열하면 선반 맨 끝으로 갔다
@@ -33,7 +36,7 @@ class PlacementStore {
   /// 뺄 때 자리를 기억하고 있는지
   bool hadSpot(String bookId) => _spots.containsKey(bookId);
 
-  bool get canUndo => _undo != null;
+  bool get canUndo => _undo.isNotEmpty;
 
   /// 홈이 읽은 서재(책 크기·배치)를 받는다
   void adopt(Library lib) {
@@ -57,9 +60,10 @@ class PlacementStore {
     }
     final fit = fitToShelf(keepGaps(l, before, books), books);
     final next = resolveLeans(fit.layout, books);
-    _undo = null;
+    _undo.clear();
     layout = l;
-    await _write(next);
+    // 새 크기의 책은 이미 서재에 있으니 저장하지 못해도 화면은 새 크기에 맞춘 배치로 둔다
+    await _write(next, keep: true);
     return fit.moved.length;
   }
 
@@ -75,10 +79,22 @@ class PlacementStore {
     return missing.isEmpty ? l : ShelfLayout(l.shelves, l.placements, [...l.drawer, ...missing]);
   }
 
-  Future<void> _write(ShelfLayout next) async {
+  /// 배치를 기기에 쓴다(시험에서 성공 · 실패를 바꿔 끼운다)
+  @visibleForTesting
+  Future<void> Function(ShelfLayout prev, ShelfLayout next) writeLayout = saveLayout;
+
+  /// 화면 배치를 바꾸고 저장한다. 저장하지 못하면(트랜잭션이라 DB는 그대로) keep이 아니면 화면 배치도 앞 배치로 되돌린 뒤 던진다
+  /// (2026-11-20 QA: 저장이 실패해도 화면은 새 배치였다가 앱을 다시 켜면 돌아왔다)
+  Future<void> _write(ShelfLayout next, {bool keep = false}) async {
     final prev = layout!;
     layout = next;
-    await saveLayout(prev, next);
+    try {
+      await writeLayout(prev, next);
+    } catch (_) {
+      if (!keep && identical(layout, next)) layout = prev;
+      shelfRefresh.value++;
+      rethrow;
+    }
     shelfRefresh.value++;
   }
 
@@ -92,8 +108,14 @@ class PlacementStore {
       debugPrint('[layout] 확정 거절 $errors');
       return false;
     }
-    _undo = cur;
-    await _write(next);
+    _undo.add(cur);
+    if (_undo.length > _undoMax) _undo.removeAt(0);
+    try {
+      await _write(next);
+    } catch (_) {
+      if (_undo.isNotEmpty && identical(_undo.last, cur)) _undo.removeLast();
+      rethrow;
+    }
     return true;
   }
 
@@ -125,9 +147,15 @@ class PlacementStore {
     if (spot != null) {
       final next = reinsertAt(l, books, spot.was, spot.index);
       // 다른 책은 자리·자세·깊이가 그대로일 때만(기대기는 뺄 때처럼 다시 풀린다: 이 책에 기대 있던 옆 책은 다시 기댄다)
-      if (next != null && _undisturbed(next, spot.was.shelfId, lean: false) && await commit(next)) {
-        lastRestored = bookId;
-        return true;
+      try {
+        if (next != null && _undisturbed(next, spot.was.shelfId, lean: false) && await commit(next)) {
+          lastRestored = bookId;
+          return true;
+        }
+      } catch (_) {
+        // 저장하지 못했으면 뺄 때 자리를 계속 기억한다
+        _spots[bookId] = spot;
+        rethrow;
       }
     }
     lastRestored = null;
@@ -183,17 +211,22 @@ class PlacementStore {
     _spots.removeWhere((id, _) => gone.contains(id));
     final next = resolveLeans(
         normalize(ShelfLayout(l.shelves, [for (final p in l.placements) if (!gone.contains(p.bookId)) p], [for (final id in l.drawer) if (!gone.contains(id)) id])), books);
-    _undo = null;
-    await _write(next);
+    _undo.clear();
+    // 책은 이미 서재에서 빠졌으니 저장하지 못해도 화면 배치는 그 책 없이 둔다(다시 켜면 서재에 없는 책의 자리는 읽을 때 빠진다)
+    await _write(next, keep: true);
   }
 
   Future<bool> undo() async {
-    final prev = _undo;
-    if (prev == null || layout == null) return false;
-    _undo = null;
+    if (_undo.isEmpty || layout == null) return false;
+    final prev = _undo.removeLast();
+    try {
+      await _write(_withMissing(prev));
+    } catch (_) {
+      _undo.add(prev);
+      rethrow;
+    }
     // 빼기를 되돌려 책장에 다시 선 책은 기억한 자리가 필요 없다
     _spots.removeWhere((id, _) => placementOf(prev, id) != null);
-    await _write(_withMissing(prev));
     return true;
   }
 }

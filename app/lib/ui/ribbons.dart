@@ -81,7 +81,15 @@ Future<Map<String, C3>> readTabLosses(RowCase row, ui.Image atlas, List<Spot> sp
 }
 
 /// 책 한 권의 갈피 탭(있으면): 종이 색 → 빛 두 겹(곱하기·닷지). 머리가 보는 쪽을 등지면 보이는 바깥 면에 가려지는 부분은 그리지 않는다
-void drawRibbons(ui.Canvas canvas, ShaderSlots slots, Cam c, Affine px, RowCase row, Book3 b, BookLook look, C3? loss) {
+/// 가림 없는 열린 방(선반 밖 한 권)의 탭 한 점 하늘 빛: 구운 가림을 푸는 식(readTabLosses)에서 가림이 0인 값
+C3 openTabLoss(Book3 b) {
+  final n = tabAxes(b).n;
+  final sky = bl.ambient + bl.skyTilt.$1 * n.x + bl.skyTilt.$2 * n.y + bl.skyTilt.$3 * n.z;
+  return C3(bl.skyC.r * sky, bl.skyC.g * sky, bl.skyC.b * sky);
+}
+
+/// env: 셰이더 빛 환경(줄이면 row.env.u, 선반 밖 열린 방이면 종류 0)
+void drawRibbons(ui.Canvas canvas, ShaderSlots slots, Cam c, Affine px, List<double> env, Book3 b, BookLook look, C3? loss) {
   if (look.ribbons <= 0 || loss == null) return;
   final tabs = tabsOf(b.id, look.ribbons, look.ribbon, look.tone);
   final out = tabs.map((t) => t.out).reduce(math.max);
@@ -157,7 +165,7 @@ void drawRibbons(ui.Canvas canvas, ShaderSlots slots, Cam c, Affine px, RowCase 
     vec('mG', tabPaper.mat.grain);
     vec('mS', tabPaper.mat.gsize);
     vec('mSeed', seed);
-    vec('env', row.env.u);
+    vec('env', env);
     vec('ECAM', cal.ECAM.list);
     vec('RADF', cal.RADF.list);
     vec('RADU', cal.RADU.list);

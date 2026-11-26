@@ -54,6 +54,16 @@ Future<void> _pump(WidgetTester t, Widget home) async {
   await t.pumpAndSettle();
 }
 
+/// 스토어에서 받아 오기가 끝났는데 가격이 없는 상태를 흉내 낸다.
+/// 실제 refresh는 기기 저장소를 읽어 가짜 시계 안에서 끝나지 않는다(앞 시험이 연 연결을 기다리다 멈춘다).
+/// 그래서 loading을 켠 채 화면을 열어 refresh를 건너뛰게 하고, 여기서 끄고 화면에 알린다
+Future<void> _refreshEndsEmpty(WidgetTester t) async {
+  await t.pump();
+  IapService.instance.loading = false;
+  EntitlementStore.instance.apply({'products': const []}, save: false);
+  await t.pumpAndSettle();
+}
+
 Future<void> _shot(WidgetTester t, String name) async {
   if (!_shots) return;
   await t.runAsync(() async {
@@ -251,8 +261,9 @@ void main() {
 
   testWidgets('선반 구매 시트: 스토어에서 가격을 못 받았으면 살 수 없다고 알린다', (t) async {
     await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showShelfPurchase(ctx))))));
+    IapService.instance.loading = true;
     await t.tap(find.text('열기'));
-    await t.pumpAndSettle();
+    await _refreshEndsEmpty(t);
     expect(find.textContaining('지금은 선반을 구매할 수 없어요'), findsOneWidget);
     expect(find.text('구매하기'), findsNothing);
   });
@@ -341,7 +352,12 @@ void main() {
   });
 
   testWidgets('구독 결제 화면: 스토어에서 요금제를 못 받았으면 구독할 수 없다고 알린다', (t) async {
-    await _pump(t, const PlanScreen());
+    t.view.physicalSize = const Size(1080, 2340);
+    t.view.devicePixelRatio = 2.625;
+    addTearDown(t.view.reset);
+    IapService.instance.loading = true;
+    await t.pumpWidget(const MaterialApp(home: PlanScreen()));
+    await _refreshEndsEmpty(t);
     expect(find.textContaining('지금은 구독할 수 없어요'), findsOneWidget);
     expect(find.text('구독하기'), findsNothing);
   });

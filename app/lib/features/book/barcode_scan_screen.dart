@@ -138,8 +138,8 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
     // 찾아 둔 책이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
     return DraftGuard(
       dirty: () => _dirty,
-      title: '찾은 책을 버릴까요?',
-      keep: '계속 찾기',
+      title: '바코드 찾기를 그만할까요?',
+      body: '지금 나가면 찾은 책은 추가되지 않아요.',
       child: Screen(
         title: '바코드로 찾기',
         scroll: false,
@@ -149,15 +149,15 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
           valueListenable: _scanner,
           builder: (context, cam, _) {
             // 카메라를 열지 못하면(권한 꺼짐 · 지원 안 함) 아래 단추는 할 수 있는 일로: 검색으로 돌아가 제목으로 찾기(DESIGN 11장 '권한 거부')
-            if (cam.error != null && _items.isEmpty) return Btn(label: '제목으로 찾기', size: 'l', onPress: () => Navigator.maybePop(context));
-            // 화면 아래 주요 단추 l. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
+            if (cam.error != null && _items.isEmpty) return Btn(label: '제목으로 찾기', size: 'xlarge', onPress: () => Navigator.maybePop(context));
+            // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
             return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               if (n == 0)
                 Padding(
                   padding: const EdgeInsets.only(bottom: Space.s),
                   child: NoticeText(_items.isEmpty ? '책 뒷면 바코드를 비춰 주세요.' : '추가할 책을 골라 주세요.', center: true),
                 ),
-              Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'l', disabled: n == 0, busy: _saving, onPress: _addAll),
+              Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'xlarge', disabled: n == 0, busy: _saving, onPress: _addAll),
             ]);
           },
         ),
@@ -275,7 +275,7 @@ class _ScanRow extends StatelessWidget {
               ? RadioMark(on: s.picked)
               : s.fail != null
                   // 목록 가져오기 '다시 찾기'와 같은 줄 안 작은 단추
-                  ? Btn(label: '다시 찾기', kind: 'secondary', size: 's', onPress: onRetry)
+                  ? Btn(label: '다시 찾기', kind: 'secondary', size: 'medium', onPress: onRetry)
                   : missing
                       ? const Chevron()
                       // 이미 내 책에 있는 책: 흐린 원(여러 권 고르기 · 목록 가져오기와 같게, 2026-11-19 공통 규칙: 빼기 X였다)

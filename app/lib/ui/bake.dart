@@ -12,6 +12,7 @@ import 'dart:ui' as ui;
 import '../domain/shelf_row.dart';
 import '../domain/vec3.dart';
 import '../gen/light_uniforms.g.dart' as cal;
+import '../gen/packed_uniforms.g.dart';
 
 /// 굽기에 쓰는 값(지금은 줄마다 둘레·상자·면. 맞추기 값은 lib/gen/light_uniforms.g.dart)
 class BakeCase {
@@ -70,15 +71,22 @@ const _atlasW = 512;
 /// 셰이더 uniform의 자리 번호를 프로그램마다 한 번만 구해 둔다.
 /// Flutter의 이름으로 넣는 API(getUniformVec3·getUniformVec4Array)는 부를 때마다 슬롯 객체를 만드는데,
 /// 배열은 원소마다 배열 전체 길이만큼 만든다(box[160] 한 번에 160×640개). 면마다 부르면 그것만으로 몇 초가 간다.
-/// 자리 번호는 프로그램마다 고정이므로 한 번 구해 두고 setFloat으로 바로 넣는다(그냥 Float32List 쓰기라 값싸다)
+/// 자리 번호는 프로그램마다 고정이므로 한 번 구해 두고 setFloat으로 바로 넣는다(그냥 Float32List 쓰기라 값싸다).
+/// 낱개 uniform은 vec4 배열 uP 하나로 묶여 있다(tool/pack_uniforms.dart, 아이폰 Metal 버퍼 칸 31개 제한): 그 이름은 uP 시작 + 표의 자리
 class ShaderSlots {
-  ShaderSlots(this.prog, List<String> names) {
+  ShaderSlots(this.prog, List<String> names, {Map<String, int> packed = const {}}) {
     final sh = prog.fragmentShader();
+    final base = packed.isEmpty ? 0 : sh.getUniformFloat(packedUniformName, 0).shaderIndex;
     for (final n in names) {
-      _at[n] = sh.getUniformFloat(n, 0).shaderIndex;
+      final o = packed[n];
+      _at[n] = o != null ? base + o : sh.getUniformFloat(n, 0).shaderIndex;
     }
     sh.dispose();
   }
+
+  /// 미리 컴파일된 셰이더(pubspec shaders)를 올리고 자리를 구한다
+  static Future<ShaderSlots> load(String asset, List<String> names) async =>
+      ShaderSlots(await ui.FragmentProgram.fromAsset(asset), names, packed: packedUniforms[asset] ?? const {});
 
   final ui.FragmentProgram prog;
   final Map<String, int> _at = {};
@@ -142,6 +150,36 @@ Future<void> initBake() async {
   final done = Completer<ui.Image>();
   ui.decodeImageFromPixels(Uint8List.fromList([128, 128, 128, 255]), 1, 1, ui.PixelFormat.rgba8888, done.complete);
   _empty = await done.future;
+}
+
+/// 셰이더를 처음 그릴 때 기기가 하는 컴파일을 미리 해 둔다: 1×1 그림에 섞기 방식마다 한 번씩 그려 본다.
+/// 아이폰(Impeller Metal)은 셰이더를 처음 그리는 순간 Metal 소스(벽·판 셰이더는 45만 자)를 기기에서 컴파일해 그 프레임이 멈춘다.
+/// 시험 서재 시뮬레이터에서 책장이 처음 보이는 프레임이 3.6초 걸렸다(2026-11-26). 시작 그림이 떠 있는 동안으로 옮긴다.
+/// samplers: 그 셰이더의 그림 칸 수(빈 그림으로 채운다)
+Future<void> warmShaders(List<(ShaderSlots, int)> list) async {
+  final rec = ui.PictureRecorder();
+  final canvas = ui.Canvas(rec);
+  final used = <ui.FragmentShader>[];
+  for (final (slots, samplers) in list) {
+    for (final blend in const [ui.BlendMode.srcOver, ui.BlendMode.multiply, ui.BlendMode.colorDodge, ui.BlendMode.plus]) {
+      final sh = slots.shader();
+      for (var i = 0; i < samplers; i++) {
+        sh.setImageSampler(i, _empty, filterQuality: ui.FilterQuality.low);
+      }
+      canvas.drawRect(const ui.Rect.fromLTWH(0, 0, 1, 1), ui.Paint()
+        ..shader = sh
+        ..blendMode = blend);
+      used.add(sh);
+    }
+  }
+  final pic = rec.endRecording();
+  final img = await pic.toImage(1, 1);
+  await settle(img);
+  img.dispose();
+  pic.dispose();
+  for (final sh in used) {
+    sh.dispose();
+  }
 }
 
 /// 그림이 실제로 그려질 때까지 기다린다. 그림을 읽는 1×1 그림을 하나 더 만들어 GPU가 이 그림을 끝내게 한다

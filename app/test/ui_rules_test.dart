@@ -77,6 +77,24 @@ void main() {
       expect(find.text('책장에서 뺐어요.'), findsNothing);
     });
 
+    testWidgets('화면 아래 단추 줄(ToastAvoid)이 보이면 토스트는 그 위에 뜬다(책 공유 사진 저장, 2026-11-20)', (t) async {
+      late BuildContext ctx;
+      await t.pumpWidget(_app(Builder(builder: (c) {
+        ctx = c;
+        return Material(
+          child: Column(children: [
+            const Expanded(child: SizedBox()),
+            ToastAvoid(child: const SizedBox(height: 120, child: Center(child: Text('사진 저장')))),
+          ]),
+        );
+      })));
+      showToast(ctx, '사진첩에 저장했어요.');
+      await t.pump(const Duration(milliseconds: 300));
+      final toast = t.getRect(find.text('사진첩에 저장했어요.'));
+      final footer = t.getRect(find.byType(ToastAvoid));
+      expect(toast.bottom, lessThanOrEqualTo(footer.top));
+    });
+
     testWidgets('되돌리기 없는 토스트는 2.5초 뒤 사라지고, 새 토스트는 앞 것을 바로 걷는다', (t) async {
       late BuildContext ctx;
       await t.pumpWidget(_app(Builder(builder: (c) {
@@ -90,8 +108,29 @@ void main() {
       await t.pump(const Duration(milliseconds: 300));
       expect(find.text('삭제했어요.'), findsNothing);
       expect(find.text('복사했어요.'), findsOneWidget);
-      await t.pump(toastShort + const Duration(milliseconds: 400));
+      // 시간은 화면이 넘어간 프레임으로 센다(프레임마다 0.1초씩)
+      for (var i = 0; i < (toastShort.inMilliseconds + 400) ~/ 100; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
       expect(find.text('복사했어요.'), findsNothing);
+    });
+
+    testWidgets('화면이 몇 초 멈춘 동안은 토스트 시간에 넣지 않는다(책장 굽는 동안 그려지지도 않고 걷혔다)', (t) async {
+      late BuildContext ctx;
+      await t.pumpWidget(_app(Builder(builder: (c) {
+        ctx = c;
+        return const SizedBox();
+      })));
+      showToast(ctx, '2권을 책장에 진열했어요.');
+      await t.pump();
+      // 한 프레임이 5초 걸림(GPU가 책장을 굽는 동안)
+      await t.pump(const Duration(seconds: 5));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('2권을 책장에 진열했어요.'), findsOneWidget);
+      for (var i = 0; i < (toastShort.inMilliseconds + 400) ~/ 100; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('2권을 책장에 진열했어요.'), findsNothing);
     });
   });
 
@@ -104,17 +143,17 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    testWidgets('고친 것이 있으면 묻고, 계속 수정은 머물고, 버리기는 나간다', (t) async {
+    testWidgets('고친 것이 있으면 묻고, 취소는 머물고, 확인은 나간다', (t) async {
       await open(t, DraftGuard.edit(dirty: () => true, child: const Scaffold(body: Text('수정 화면'))));
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('고친 내용을 버릴까요?'), findsOneWidget);
-      await t.tap(find.text('계속 수정'));
+      expect(find.text('수정을 그만할까요?'), findsOneWidget);
+      await t.tap(find.text('취소'));
       await t.pumpAndSettle();
       expect(find.text('수정 화면'), findsOneWidget);
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      await t.tap(find.text('버리기'));
+      await t.tap(find.text('확인'));
       await t.pumpAndSettle();
       expect(find.text('수정 화면'), findsNothing);
       expect(find.text('열기'), findsOneWidget);
@@ -124,7 +163,7 @@ void main() {
       await open(t, DraftGuard(dirty: () => false, child: const Scaffold(body: Text('쓰기 화면'))));
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.text('쓰던 내용을 버릴까요?'), findsNothing);
+      expect(find.text('그만 쓸까요?'), findsNothing);
       expect(find.text('열기'), findsOneWidget);
     });
   });
@@ -155,17 +194,17 @@ void main() {
   });
 
   group('누르는 자리 48(DESIGN 15장)', () {
-    testWidgets('구역 링크 · 거르기 단추 · 칩', (t) async {
+    testWidgets('구역 링크 · 거르기 단추 · 작은 단추(칩 자리)', (t) async {
       await t.pumpWidget(_app(Scaffold(
         body: Column(children: [
           SectionHead(title: '독서 기록', link: '전체 보기', onLink: () {}, chevron: true),
           FilterButton(label: '모든 책', onPress: () {}),
-          AppChip(label: '읽는 중', onPress: () {}),
+          Btn(label: '다시 찍기', kind: 'secondary', size: 'small', onPress: () {}),
         ]),
       )));
       expect(t.getSize(find.ancestor(of: find.text('전체 보기'), matching: find.byType(ConstrainedBox)).first).height, greaterThanOrEqualTo(Space.hit));
       expect(t.getSize(find.byType(FilterButton)).height, greaterThanOrEqualTo(Space.hit));
-      expect(t.getSize(find.byType(AppChip)).height, greaterThanOrEqualTo(Space.hit));
+      expect(t.getSize(find.byType(Btn)).height, greaterThanOrEqualTo(Space.hit));
     });
   });
 

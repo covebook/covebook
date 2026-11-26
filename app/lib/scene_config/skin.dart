@@ -19,22 +19,24 @@ const plankSkins = <String, SkinPart>{
   'pine': SkinPart('밝은 나무', 0xF2DCC1, SkinMat.wood),
   'oak': SkinPart('오크', 0xD6B48C, SkinMat.wood),
   'walnut': SkinPart('호두나무', 0x8F6E55, SkinMat.wood),
-  'white': SkinPart('흰 칠', 0xF5F3EE, SkinMat.paint),
+  'white': SkinPart('흰색', 0xF5F3EE, SkinMat.paint),
 };
 
 const frameSkins = <String, SkinPart?>{
   // 흰 벽 틀 = 벽지 흰 벽과 같은 칠(2026-11-15 사용자 '벽이 이어진 느낌이 안 나', 예전 0xECE7E4)
-  'white': SkinPart('흰 벽', wallColor, SkinMat.paint),
-  'pine': SkinPart('밝은 나무 벽', 0xF2D7BC, SkinMat.wood),
-  'walnut': SkinPart('호두나무 벽', 0x8F6950, SkinMat.wood),
+  // 이름에 '벽'을 붙이지 않는다: 묶음 이름이 이미 '벽'(2026-11-20 사용자 '호두나무 벽 말고 호두나무')
+  'white': SkinPart('흰색', wallColor, SkinMat.paint),
+  'pine': SkinPart('밝은 나무', 0xF2D7BC, SkinMat.wood),
+  'walnut': SkinPart('호두나무', 0x8F6950, SkinMat.wood),
   'none': null,
 };
 
 // 벽 기본 색은 일반 화면 바탕과 같은 흰색(2026-11-05 사용자가 후보 중 고름)
 const wallColor = 0xFFFFFF;
 const wallSkins = <String, SkinPart>{
-  'white': SkinPart('흰 벽', wallColor, SkinMat.paint),
-  'paper': SkinPart('종이 벽지', 0xF6F4EE, SkinMat.wallpaper),
+  // 벽지도 묶음 이름('벽지')을 이름에 다시 쓰지 않는다
+  'white': SkinPart('흰색', wallColor, SkinMat.paint),
+  'paper': SkinPart('종이', 0xF6F4EE, SkinMat.wallpaper),
   'cream': SkinPart('크림', 0xF5EEE1, SkinMat.paint),
   'sage': SkinPart('세이지', 0xE3E8DD, SkinMat.paint),
 };

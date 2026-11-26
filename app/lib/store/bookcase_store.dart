@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 
 import '../db/kv_store.dart';
 import '../domain/bookcase.dart';
+import '../domain/sample_cleanup.dart' show isSampleBookId;
 import '../domain/library.dart' show Library;
 import 'library_model.dart';
 import 'library_store.dart' show layoutChangedAt, loadLayout, readBookcases, writeBookcase;
@@ -16,14 +17,13 @@ import 'library_store.dart' show layoutChangedAt, loadLayout, readBookcases, wri
 const pullAllKey = 'sync-pulling-all:v1';
 
 // 손대지 않은 지금 앱 예시 책(지금 앱 home-reference checkSampleBooks): 연도 책장에 남기지 않는다
-final _sampleId = RegExp(r'^home-reference-b\d{2}(-\d+)?$');
 const _sampleSource = '시안 예시';
 
 Set<String> _pureSamples(Library lib) {
   final touched = {for (final r in lib.rounds.values) r.myBookId, for (final s in lib.sessions.values) ?s.myBookId, for (final m in lib.bookmarks.values) m.myBookId};
   final out = <String>{};
   for (final b in lib.books.values) {
-    if (!_sampleId.hasMatch(b.id)) continue;
+    if (!isSampleBookId(b.id)) continue;
     final e = lib.editions[b.editionId];
     if (e == null || e.sourceName != _sampleSource) continue;
     final bd = b.bindingId == null ? null : lib.bindings[b.bindingId];

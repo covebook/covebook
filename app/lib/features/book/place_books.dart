@@ -103,7 +103,7 @@ Future<bool?> _askNoRoom(BuildContext context, List<String> ids, int free) {
           ]),
         ),
       ),
-      Btn(label: '선반 열고 진열하기', size: 'l', onPress: () => Navigator.pop(ctx, true)),
+      Btn(label: '선반 열고 진열하기', size: 'xlarge', onPress: () => Navigator.pop(ctx, true)),
       SubAction(label: '보관만 하기', onPress: () => Navigator.pop(ctx, false)),
     ]),
   );

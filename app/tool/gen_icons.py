@@ -18,6 +18,10 @@ NAMES = {
     'ListIcon': 'menu',
     'SlidersHorizontal': 'sliders-horizontal', 'StickyNote': 'sticky-note', 'MoveDiagonal2': 'move-diagonal-2',
     'ScanBarcode': 'scan-barcode', 'FileSpreadsheet': 'file-spreadsheet', 'AudioLines': 'audio-lines',
+    # 2026-11-21: 검색 닫기 화살표(내 책 · 기록 검색), 책 정보 수정 시안의 표지 연필 · 표지 바꾸기 · 표지 삭제
+    'ArrowLeft': 'arrow-left', 'Pencil': 'pencil', 'Image': 'image', 'Trash2': 'trash-2',
+    # 2026-11-21: 인터넷 연결 없음 화면
+    'WifiOff': 'wifi-off',
 }
 
 root = os.path.dirname(os.path.abspath(__file__))

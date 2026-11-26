@@ -1,6 +1,6 @@
 // 독서 종료 기록(지금 앱 app/reading/finish.tsx): 연결된 책(바꾸거나 연결하기), 독서 시간, 선택 입력(시작 쪽·도달한 쪽·짧은 메모) → 개인 기록 저장 또는 버리기.
 // 적는 중인 쪽수·메모는 종료 초안에 함께 저장돼 앱이 꺼져도 이어서 쓴다. 분량은 시작 쪽과 도달한 쪽을 둘 다 알 때만 보인다.
-// 저장 후: 읽기 탭으로 돌아가 그 위에 '저장했어요' 창(이번 기록의 책 · 'N분 기록했어요' → '확인').
+// 저장 후: 읽기를 시작한 화면으로 돌아가(2026-11-24 사용자 4단계, 전에는 읽기 탭) 그 위에 '저장했어요' 창(이번 기록의 책 · 'N분 기록했어요' → '확인').
 // 2026-11-16 사용자 '페이지보다 팝업 느낌이 낫지 않나': 저장 뒤 화면 하나를 통째로 바꾸던 것을 가운데 창으로.
 // 독서 끝 화면은 여는 곳이 여럿이라(읽기 탭 · 장면 · 책 정보 · 복구 창) 여는 길은 openFinish 하나로 둔다
 library;
@@ -111,14 +111,15 @@ class _FinishScreenState extends State<FinishScreen> {
     });
   }
 
-  // 읽기 탭으로: 연달아 눌러도 한 번만, 닫히는 동안 아래 탭 바가 눌리지 않게(2026-11-15 QA 민혁 F6)
+  // 읽기를 시작한 화면으로: 독서 끝(그 아래 장면이 남아 있으면 그것도)만 닫는다. 탭은 바꾸지 않는다
+  // (2026-11-24 사용자 4단계: 맨 아래까지 닫고 읽기 탭으로 갔다. 읽기 탭에서 시작했으면 그대로 읽기 탭).
+  // 연달아 눌러도 한 번만, 닫히는 동안 아래 탭 바가 눌리지 않게(2026-11-15 QA 민혁 F6)
   bool _closing = false;
-  void _toRead() {
+  void _toStart() {
     if (_closing) return;
     _closing = true;
     AppNav.instance.blockTabs();
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    AppNav.instance.goTab(AppTab.read);
+    Navigator.of(context).popUntil((r) => r.isFirst || !(r.settings.name?.startsWith('/reading/') ?? false));
   }
 
   /// 적는 중인 값을 바로 초안에 남긴다(나갈 때)
@@ -128,9 +129,10 @@ class _FinishScreenState extends State<FinishScreen> {
   }
 
   // 저장하지 않고 뒤로: 갈피 화면처럼 묻는다. 나가도 기록은 읽기 탭에 남아 나중에 저장·버릴 수 있다(2026-11-15 QA 민혁 F3)
+  // 단추는 다른 나가기 확인과 같은 '취소' · '확인'(2026-11-20 사용자 '취소 확인으로 테마색으로')
   void _askLeave() => appAlert(context, '저장하지 않고 나갈까요?', '이 기록은 읽기 탭에 남아 있어 나중에 저장하거나 버릴 수 있어요.', [
-        const AlertButton('계속 쓰기', style: AlertStyle.cancel),
-        AlertButton('나가기', onPress: () {
+        const AlertButton('취소', style: AlertStyle.cancel),
+        AlertButton('확인', onPress: () {
           if (!mounted) return;
           _flushNotes();
           setState(() => _leaving = true);
@@ -153,18 +155,22 @@ class _FinishScreenState extends State<FinishScreen> {
       _saveError = null;
     });
     try {
-      await saveFinishedReading(pending, startPage: pending.myBookId != null ? sp : null, pagesRead: pending.myBookId != null ? ep : null, memo: _memo.trim().isEmpty ? null : _memo.trim());
+      final bookId = pending.myBookId;
+      final wasRead = bookId != null && _lib.lib.books[bookId]?.status == ReadStatus.read;
+      await saveFinishedReading(pending, startPage: bookId != null ? sp : null, pagesRead: bookId != null ? ep : null, memo: _memo.trim().isEmpty ? null : _memo.trim());
       Ambient.instance.stop();
-      final saved = (bookId: pending.myBookId, sessionId: pending.id);
+      // 이번 저장으로 완독이 됐는지(적은 쪽이 마지막 쪽, 읽기 상태 · 현재 쪽 규칙): 저장했어요 창에 별점
+      final finished = bookId != null && !wasRead && _lib.lib.books[bookId]?.status == ReadStatus.read;
+      final saved = (bookId: bookId, sessionId: pending.id);
       _saved = saved;
       _savedDraft = pending;
       if (!mounted) return;
       final nav = Navigator.of(context);
-      _toRead();
-      // 읽기 탭이 보인 뒤 그 위에 시트(화면은 이미 닫히는 중이라 앱 Navigator의 오버레이로 띄운다)
+      _toStart();
+      // 돌아온 화면 위에 창(화면은 이미 닫히는 중이라 앱 Navigator의 오버레이로 띄운다)
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final o = nav.overlay;
-        if (o != null && o.mounted) showSavedDialog(o.context, bookId: saved.bookId, sessionId: saved.sessionId);
+        if (o != null && o.mounted) showSavedDialog(o.context, bookId: saved.bookId, sessionId: saved.sessionId, finished: finished);
       });
     } catch (e) {
       // 예외 원문은 화면에 보이지 않는다(errorText가 로그로)
@@ -182,8 +188,8 @@ class _FinishScreenState extends State<FinishScreen> {
           Ambient.instance.stop();
           final nav = Navigator.of(context);
           final reading = _reading;
-          _toRead();
-          // 화면을 먼저 옮긴 뒤 초안을 버린다. 보던 기록이 사라지는 일이라 읽기 탭에서 토스트로 알린다(DESIGN 10 · 14장)
+          _toStart();
+          // 화면을 먼저 옮긴 뒤 초안을 버린다. 보던 기록이 사라지는 일이라 돌아온 화면에서 토스트로 알린다(DESIGN 10 · 14장)
           Future<void>.delayed(const Duration(milliseconds: 500), () => reading.clearPending().then((_) {
                 if (nav.mounted) showToast(nav.context, '독서 기록을 버렸어요.');
               }, onError: (Object e) {
@@ -206,7 +212,7 @@ class _FinishScreenState extends State<FinishScreen> {
     final pending = _reading.pending ?? _savedDraft;
     if (pending == null) {
       // 제목은 이 화면 이름 그대로(독서 기록 화면과 헷갈렸다)
-      return Screen(title: '독서 끝', children: [Empty(title: '끝낸 독서가 없어요', action: '읽기로', onAction: _toRead)]);
+      return Screen(title: '독서 끝', children: [Empty(title: '끝낸 독서가 없어요', action: '읽기로', onAction: _toStart)]);
     }
     final b = pending.myBookId == null ? null : lib.books[pending.myBookId];
     final e = b == null ? null : lib.editions[b.editionId];
@@ -228,18 +234,21 @@ class _FinishScreenState extends State<FinishScreen> {
       title: '독서 끝',
       back: false,
       topBar: true,
-      // 화면 아래 주요 단추는 l(2026-11-19 공통 규칙). 안내 · 저장 실패 글은 단추 바로 위
+      // 화면 아래 주요 단추는 xlarge(2026-11-19 공통 규칙). 안내 · 저장 실패 글은 단추 바로 위
       footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (tooShort) const NoticeText('1초가 안 되는 기록은 저장할 수 없어요. 이 기록은 버려 주세요.'),
         if (_saveError != null) NoticeText(_saveError!, error: true),
         if (tooShort || _saveError != null) const SizedBox(height: Space.m),
         Btn(
           label: '개인 기록 저장',
-          size: 'l',
+          size: 'xlarge',
           busy: _saving,
           disabled: !_lib.loaded || tooShort,
           onPress: () => fieldError != null ? _showError(fieldError) : _save(pending, sp, ep),
         ),
+        // 버리기는 저장 단추 바로 아래 보조 행동(큰 단추 아래 SubAction, 2026-11-21 사용자 '이 기록 버리기 간격이 이게 맞나':
+        // 메모 칸 아래에 따로 떠 있어 위아래 간격이 어디에도 맞지 않았다)
+        SubAction(label: '이 기록 버리기', onPress: () => _discard(pending)),
       ]),
       children: [
         // 기기 저장 실패 안내는 앱 공통 안내 · 오류 글
@@ -270,7 +279,8 @@ class _FinishScreenState extends State<FinishScreen> {
           sub: author.isEmpty ? null : author,
           placeholder: '책 연결하기 (선택)',
           onPress: () async {
-            final r = await pickBook(context, lib, allowNone: true);
+            // 지금 연결된 책(없으면 책 없이 읽기)은 고르는 원으로 보인다(DESIGN 13장 current)
+            final r = await pickBook(context, lib, allowNone: true, addNew: true, current: (id: b?.id));
             if (r.picked) _reading.setPendingBook(r.id, r.id == null ? null : lib.books[r.id]?.currentPage);
           },
         ),
@@ -318,7 +328,6 @@ class _FinishScreenState extends State<FinishScreen> {
             _edited();
           },
         ),
-        Padding(padding: const EdgeInsets.only(top: Space.s), child: TextLink(label: '이 기록 버리기', soft: true, onPress: () => _discard(pending))),
       ],
     );
     return PopScope(canPop: _leaving, onPopInvokedWithResult: (didPop, _) => didPop ? null : _askLeave(), child: screen);
@@ -327,7 +336,9 @@ class _FinishScreenState extends State<FinishScreen> {
 
 /// 저장했어요(2026-11-17 사용자 시안): 가운데 작은 창에 표지 · 제목 · 저자, 'N분 N초 기록했어요', 확인. 뒤는 어둡게, 어디를 눌러도 닫힌다.
 /// 창 모양(덮개 · 모서리 · 폭 · 나타나기)은 사용자 시안이라 확인창(appAlert)과 따로 둔다(DESIGN 16장)
-Future<void> showSavedDialog(BuildContext context, {required String? bookId, required String sessionId}) {
+/// [finished]: 이번 저장으로 완독이 됐다(2026-11-24 사용자 5단계): 'N분 N초 기록하고 완독했어요' + 그 아래 별(누르면 바로 그 책 별점으로 저장, 있던 별점은 그대로 보인다).
+/// 별점을 주지 않아도 '확인'으로 닫힌다. 한 줄 감상 칸은 두지 않는다. 완독이 아니면 지금과 같다
+Future<void> showSavedDialog(BuildContext context, {required String? bookId, required String sessionId, bool finished = false}) {
   final lib = LibraryModel.instance.lib;
   final ss = lib.sessions[sessionId];
   final sb = bookId == null ? null : lib.books[bookId];
@@ -336,7 +347,8 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
   final linked = sb != null && se != null ? sb.id : null;
   final title = se != null && sb != null ? se.title : NoBookCover.name;
   final author = se != null ? authorLine(se.authors) : '';
-  final done = '${ss == null ? '' : formatDurationPrecise(ss.durationMs)} 기록했어요'.trim();
+  final rate = finished && linked != null;
+  final done = '${ss == null ? '' : formatDurationPrecise(ss.durationMs)} ${rate ? '기록하고 완독했어요' : '기록했어요'}'.trim();
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -386,8 +398,28 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
                           ),
                         ]),
                       ),
+                      // 완독: 별점(공용 Stars, 누르는 대로 저장). 창은 닫히지 않는다
+                      if (rate)
+                        Padding(
+                          padding: const EdgeInsets.only(top: Space.m),
+                          child: StatefulBuilder(
+                            builder: (_, set) => Center(
+                              child: Semantics(
+                                label: '별점',
+                                child: Stars(
+                                  value: LibraryModel.instance.lib.books[linked]?.rating,
+                                  onChange: (v) {
+                                    LibraryModel.instance.updateBook(linked, rating: v);
+                                    set(() {});
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: Space.l),
-                      Btn(label: '확인', onPress: () => Navigator.pop(ctx)),
+                      // 가운데 작은 창 안 단추는 확인창과 같은 large(TDS ConfirmDialog 단추 기본값)
+                      Btn(label: '확인', size: 'large', onPress: () => Navigator.pop(ctx)),
                     ]),
                   ),
                 ),

@@ -103,6 +103,7 @@
 - 애플이 Go 공식 라이브러리를 낼 때
 - 외부 보안 감사를 받게 될 때
 - 스토어 재조회 지연으로 결제 장애가 반복될 때
+- 웹 프레임워크(부록 F): 라우트가 크게 늘어 묶음·바인딩을 직접 짜는 비용이 커질 때. 그때도 표준 핸들러를 그대로 쓰는 chi를 먼저 본다
 
 ## 8. 이어지는 결정
 
@@ -381,3 +382,23 @@ Go의 다른 선택지
 - [awa/go-iap v1.59.1 릴리스](https://github.com/awa/go-iap/releases/tag/v1.59.1)
 - [awa/go-iap 이슈 #341: 구글 클라이언트 변경으로 빌드 실패](https://github.com/awa/go-iap/issues/341)
 - [awa/go-iap PR #315: 샌드박스 거래 조회 실패](https://github.com/awa/go-iap/pull/315)
+
+## 부록 F. 웹 프레임워크: 표준 `net/http` 유지 (2026-11-26)
+
+- 결정: Gin·Echo·Fiber를 들이지 않고 지금처럼 표준 `net/http`의 `ServeMux`를 쓴다(범수)
+- 근거
+  - Go 1.22부터 표준 라우터가 메서드 구분과 경로 변수를 지원한다. Go 팀이 서드파티 프레임워크에서 가장 많이 쓰는 기능을 골라 넣었다
+  - 우리 서버는 Go 1.27, 라우트 27개, 대부분 DB와 스토어 API를 기다린다. 2026년 벤치마크에서 Gin·Echo·표준 라우터의 처리량은 몇 % 차이라 이점이 묻힌다
+  - 오류 처리 감싸기(`wrap`)와 제출 횟수 제한은 이미 함수로 있다
+  - 옮기면 핸들러와 결제 시험을 전부 다시 손봐야 한다
+- 고르지 않은 것
+  - Gin: 가장 많이 씀(2025 JetBrains 조사 48%). 핸들러가 `gin.Context`에 묶인다. 새 프로젝트라면 무난하지만 옮길 이유가 없다
+  - Fiber: 가장 빠르지만 HTTP/2를 지원하지 않고(fasthttp 설계와 충돌), 요청 객체를 다음 요청에 재사용한다. 핸들러가 끝난 뒤 값을 붙잡으면 다른 요청과 섞인다. 커밋 뒤 확인·환불을 뒤에서 처리하는 결제 코드에 위험하다. 표준 핸들러와 호환되지 않는다
+  - 참고 규모: 바이트댄스는 Gin을 감싸 쓰다가 서비스 1만 개, 최고 초당 4천만 요청 규모에서 자체 프레임워크(Hertz)로 옮겼다(자체 발표 수치)
+- 출처
+  - [Go Blog: Routing Enhancements for Go 1.22](https://go.dev/blog/routing-enhancements)
+  - [Go Web Frameworks in 2026: net/http, chi, Gin, Echo, Fiber Compared](https://glukhov.org/app-architecture/api-architecture/go-web-frameworks-stdlib-chi-gin-echo-fiber/)
+  - [JetBrains: The Go Ecosystem in 2025](https://blog.jetbrains.com/go/2025/11/10/go-language-trends-ecosystem-2025/)
+  - [Fiber README (context 재사용 경고)](https://github.com/gofiber/fiber)
+  - [valyala/fasthttp](https://github.com/valyala/fasthttp)
+  - [字节跳动开源 Go HTTP 框架 Hertz 设计实践](https://juejin.cn/post/7111956295531364360)

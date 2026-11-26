@@ -1,4 +1,5 @@
-// 기록 탭(2026-11-16 메뉴 구조 개편): 머리줄 '기록'과 검색·추가(고른 글자 탭에 맞게), 왼쪽 글자 탭 '갈피 | 감상'.
+// 기록 탭(2026-11-16 메뉴 구조 개편): 맨 위 글자 탭 '갈피 | 감상'과 그 줄 오른쪽 검색 · 추가(고른 글자 탭에 맞게). 왼쪽 위 제목 '기록'은 없다(2026-11-24 사용자 6단계, 하단바에 이름).
+// 검색을 켜면 맨 위 한 줄에 검색칸이 나타나고 끄면 사라진다.
 // 갈피: 예전 갈피 탭 그대로 옮김. 탭 아래 한 줄은 '갈피 N개'와 아껴둔 갈피 켜고 끄기·필터. 책·유형(문장·사진)은 필터 시트에,
 // 걸렸을 때만 '데미안 | 사진 갈피'처럼 조건과 '조건 지우기'를 보인다(기본 조건 칩 줄은 없앴다). 갈피 보드는 개수 줄 격자 아이콘에서.
 // 감상: 긴 감상(essay_screens.dart) 목록. '감상 N편'과 필터(책). 표지·책 제목·지은이·미리보기·쓴 날을 상자 없이 줄로
@@ -83,6 +84,9 @@ class _RecordTabState extends State<RecordTab> {
   bool _savedOnly = false;
   String? _essayBook;
 
+  /// 오래된 순(기본은 최신순). 갈피 · 감상 따로(2026-11-18 사용자 '필터가 책밖에 없어? 최신순 오래된순 이런 거는?')
+  bool _marksOld = false, _essaysOld = false;
+
   @override
   void initState() {
     super.initState();
@@ -162,27 +166,37 @@ class _RecordTabState extends State<RecordTab> {
   /// 책은 필터 시트 위에 겹쳐 고르고, 고른 것은 '적용'을 눌러야 걸린다(2026-11-17 사용자 시안. 감상 필터는 고르면 바로 걸렸다)
   Future<void> _openFilter({
     required String? book,
+    required bool old,
     required void Function(String? current, ValueChanged<String?> onPick) chooseBook,
     List<Widget> Function(StateSetter set)? more,
-    required void Function(String? book) onApply,
+    required void Function(String? book, bool old) onApply,
   }) {
     var picked = book;
+    var oldFirst = old;
     return showSheet<void>(
       context,
       title: '필터',
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
           // 공통 규칙: '이름 … 값 ›' 줄은 ListItem(직접 만든 줄이었다)
+          // 정렬(내 책 필터와 같은 두 칸)
+          const SheetLabel('정렬'),
+          Row(children: [
+            Expanded(child: ChoiceBox(label: '최신순', on: !oldFirst, onPress: () => set(() => oldFirst = false))),
+            const SizedBox(width: Space.s),
+            Expanded(child: ChoiceBox(label: '오래된순', on: oldFirst, onPress: () => set(() => oldFirst = true))),
+          ]),
+          const SizedBox(height: Space.l),
           ListItem(label: '책', value: picked == null ? '모든 책' : _titleOf(picked!), chevron: true, onPress: () => chooseBook(picked, (id) => set(() => picked = id))),
           const Hairline(),
           const SizedBox(height: Space.l),
           ...?more?.call(set),
           Btn(
             label: '적용',
-            size: 'l',
+            size: 'xlarge',
             onPress: () {
               Navigator.pop(ctx);
-              onApply(picked);
+              onApply(picked, oldFirst);
             },
           ),
           const SizedBox(height: Space.s),
@@ -198,6 +212,7 @@ class _RecordTabState extends State<RecordTab> {
     var saved = _savedOnly;
     return _openFilter(
       book: _markBook,
+      old: _marksOld,
       chooseBook: (current, onPick) => _pickMarkBook(_marks, current: current, onPick: onPick),
       more: (set) => [
         const SheetLabel('유형'),
@@ -212,10 +227,11 @@ class _RecordTabState extends State<RecordTab> {
         FilterToggleRow(label: '아껴둔 갈피만', value: saved, onChange: (v) => set(() => saved = v)),
         const SizedBox(height: Space.l),
       ],
-      onApply: (book) => setState(() {
+      onApply: (book, old) => setState(() {
         _markBook = book;
         _kind = kind;
         _savedOnly = saved;
+        _marksOld = old;
       }),
     );
   }
@@ -248,6 +264,7 @@ class _RecordTabState extends State<RecordTab> {
     final all = _model.essaysOf();
     return _openFilter(
       book: _essayBook,
+      old: _essaysOld,
       chooseBook: (current, onPick) => _chooseBook(
         books: _booksOf(all.map((e) => e.myBookId)),
         unit: (n) => '감상 $n편',
@@ -255,7 +272,10 @@ class _RecordTabState extends State<RecordTab> {
         current: current,
         onPick: onPick,
       ),
-      onApply: (book) => setState(() => _essayBook = book),
+      onApply: (book, old) => setState(() {
+        _essayBook = book;
+        _essaysOld = old;
+      }),
     );
   }
 
@@ -287,55 +307,48 @@ class _RecordTabState extends State<RecordTab> {
   @override
   Widget build(BuildContext context) {
     // 공통 규칙 11장: 화면 전체를 불러오는 중은 가운데 원(빈 몸통이었다)
-    if (!_model.loaded) return const Screen(title: '기록', back: false, scroll: false, children: [Loading()]);
+    if (!_model.loaded) return const Screen(title: '기록', back: false, scroll: false, hideTitle: true, children: [Loading()]);
     final section = _section;
     final marks = section == RecordSection.marks;
     final searching = _searching.contains(section);
     final what = marks ? '갈피' : '감상';
+    // 왼쪽 위 제목 '기록'은 없다(하단바에 이름, 2026-11-24 사용자 6단계): 맨 위가 '갈피 | 감상' 줄, 그 오른쪽에 검색 · ＋
+    final icons = Row(mainAxisSize: MainAxisSize.min, children: [
+      // 공통 규칙: 머리줄 아이콘은 HeadIcon(회색, 2026-11-19)
+      IconBtn(label: '$what 검색', onPress: () => setState(() => _searching.add(section)), child: const HeadIcon('Search')),
+      const SizedBox(width: headIconGap),
+      marks
+          ? IconBtn(label: '갈피 추가', onPress: () => openNewBookmark(context, book: _markBook, photoOnly: _kind == MarkKind.photo), child: const HeadIcon('Plus'))
+          : IconBtn(label: '감상 쓰기', onPress: () => openNewEssay(context, book: _essayBook), child: const HeadIcon('Plus')),
+    ]);
     return qaProbe('records', Screen(
       title: '기록',
       back: false,
       scroll: false,
-      right: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconBtn(
-          label: searching ? '$what 검색 닫기' : '$what 검색',
-          onPress: () => setState(() {
-            if (searching) {
-              _q[section] = '';
-              _searching.remove(section);
-            } else {
-              _searching.add(section);
-            }
-          }),
-          // 공통 규칙: 머리줄 아이콘은 HeadIcon(회색, 2026-11-19)
-          child: HeadIcon(searching ? 'X' : 'Search'),
-        ),
-        const SizedBox(width: headIconGap),
-        marks
-            ? IconBtn(label: '갈피 추가', onPress: () => openNewBookmark(context, book: _markBook, photoOnly: _kind == MarkKind.photo), child: const HeadIcon('Plus'))
-            : IconBtn(label: '감상 쓰기', onPress: () => openNewEssay(context, book: _essayBook), child: const HeadIcon('Plus')),
-      ]),
-      children: [
-        if (searching)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.s, bottom: Space.m),
-            child: SearchField(
+      hideTitle: true,
+      // 검색 중: 맨 위 한 줄에 검색칸(끄면 사라진다), 닫기는 칸 왼쪽 ← (내 책 검색과 같은 모양, 2026-11-20 사용자 · 11-21 내 책 검색 시안)
+      headerField: searching
+          ? SearchField(
               key: ValueKey(section),
               value: _q[section]!,
               onChange: (v) => setState(() => _q[section] = v),
               autofocus: true,
               placeholder: marks ? '문장, 메모에서 찾기' : '감상, 책 제목에서 찾기',
               label: '$what 검색어',
-            ),
-          ),
-        // 갈피 | 감상: 같은 크기 글자, 고른 것만 진하게 + 짧고 얇은 밑줄(회색 상자 없이 왼쪽 정렬)
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xs),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Tabs<RecordSection>(items: _sections, value: section, onChange: (v) => setState(() => _section = v), gap: Space.xl),
-          ),
-        ),
+              onBack: () => setState(() {
+                _q[section] = '';
+                _searching.remove(section);
+              }),
+            )
+          : null,
+      children: [
+        // 갈피 | 감상: 같은 크기 글자, 고른 것만 진하게 + 짧고 얇은 밑줄(회색 상자 없이 왼쪽 정렬). 오른쪽 끝 검색 · ＋(검색 중에는 없다)
+        Row(children: [
+          Tabs<RecordSection>(items: _sections, value: section, onChange: (v) => setState(() => _section = v), gap: Space.xl),
+          const Spacer(),
+          // 마지막 아이콘 오른쪽 여백을 개수 줄 아이콘과 맞춘다
+          if (!searching) Transform.translate(offset: const Offset(10, 0), child: icons),
+        ]),
         ...marks ? _marksBody(context) : _essaysBody(context),
       ],
     ));
@@ -368,12 +381,17 @@ class _RecordTabState extends State<RecordTab> {
     final all = _marks;
     if (all.isEmpty) return [Expanded(child: BookmarkEmpty(onAdd: () => openNewBookmark(context)))];
     final q = _q[RecordSection.marks]!.trim();
-    final list = [for (final m in all) if (markShown(m, book: _markBook, kind: _kind, savedOnly: _savedOnly, q: q)) m];
-    final conditions = markConditions(bookTitle: _markBook == null ? null : _titleOf(_markBook!), kind: _kind, savedOnly: _savedOnly);
+    final shown = [for (final m in all) if (markShown(m, book: _markBook, kind: _kind, savedOnly: _savedOnly, q: q)) m];
+    final list = _marksOld ? shown.reversed.toList() : shown;
+    final conditions = [
+      if (_marksOld) '오래된순',
+      ...markConditions(bookTitle: _markBook == null ? null : _titleOf(_markBook!), kind: _kind, savedOnly: _savedOnly),
+    ];
     void clear() => setState(() {
           _markBook = null;
           _kind = MarkKind.all;
           _savedOnly = false;
+          _marksOld = false;
         });
     final plain = _savedOnly && q.isEmpty && _markBook == null && _kind == MarkKind.all;
     // 공통 규칙 11장: 검색 0건은 "‘검색어’에 맞는 …" + 다른 낱말 안내, 거르기 0건은 '조건에 맞는 …' + '조건 지우기'
@@ -402,7 +420,7 @@ class _RecordTabState extends State<RecordTab> {
           // 공통 규칙: 아이콘은 머리줄과 같은 회색 HeadIcon, 사이 headIconGap(2026-11-19. 격자만 검었고 사이가 0이었다)
           IconBtn(label: '갈피 보드로 보기', onPress: _openBoard, child: const HeadIcon('LayoutGrid')),
           const SizedBox(width: headIconGap),
-          FilterIcon(active: _markBook != null || _kind != MarkKind.all || _savedOnly, onPress: _openMarkFilter),
+          FilterIcon(active: _markBook != null || _kind != MarkKind.all || _savedOnly || _marksOld, onPress: _openMarkFilter),
         ],
         conditions,
         clear,
@@ -467,13 +485,17 @@ class _RecordTabState extends State<RecordTab> {
     // 고른 책의 감상을 다 지웠으면 거르기를 푼다(빈 조건만 남지 않게)
     final book = _essayBook != null && _lib.books[_essayBook] != null ? _essayBook : null;
     final q = _q[RecordSection.essays]!.trim();
-    final list = [for (final e in all) if (essayShown(_lib, e, book: book, q: q)) e];
-    void clear() => setState(() => _essayBook = null);
+    final shown = [for (final e in all) if (essayShown(_lib, e, book: book, q: q)) e];
+    final list = _essaysOld ? shown.reversed.toList() : shown;
+    void clear() => setState(() {
+          _essayBook = null;
+          _essaysOld = false;
+        });
     return [
       ..._countRows(
         '감상 ${list.length}편',
-        [FilterIcon(active: book != null, onPress: _openEssayFilter)],
-        [if (book != null) _titleOf(book)],
+        [FilterIcon(active: book != null || _essaysOld, onPress: _openEssayFilter)],
+        [if (_essaysOld) '오래된순', if (book != null) _titleOf(book)],
         clear,
       ),
       Expanded(

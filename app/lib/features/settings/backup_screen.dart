@@ -102,7 +102,8 @@ class _BackupScreenState extends State<BackupScreen> {
               }
               if (mounted) appAlert(context, '삭제 요청을 접수했어요', '서버 접근을 차단하고 기록과 사진 삭제를 처리해요. 이 기기의 기록은 남아요.');
             } catch (e) {
-              if (mounted) appAlert(context, '삭제 완료를 확인하지 못했어요', '${errorText(e)} 동기화 상태를 확인하고 삭제를 다시 요청해 주세요.');
+              // 다시 하는 길을 이름으로(2026-11-20: '확인하고 다시 …'가 두 번 겹쳤고, 확인할 상태가 화면에 없었다)
+              if (mounted) appAlert(context, '삭제 완료를 확인하지 못했어요', '${errorText(e)} 아래 ‘회원탈퇴 다시 요청’으로 다시 보낼 수 있어요.');
             } finally {
               if (mounted) setState(() => _loggingIn = false);
             }
@@ -184,6 +185,8 @@ class _BackupScreenState extends State<BackupScreen> {
       if (s.lastError != null && s.state == SyncState.error) s.lastError!,
       // 멈춘 이유(2026-11-19 규칙: 이유 없이 '중지했어요'만 보였다). 다시 잇는 길은 정책 결정 대기(DESIGN 16-1)
       if (on && s.paused && !s.deletionPending) '로그인이 끝났거나 계정이 삭제되어 동기화를 멈췄어요. 이 기기의 기록은 그대로 있어요.',
+      // 탈퇴 요청이 서버에 닿았는지 모를 때(2026-11-20: '중지했어요'와 시각만 보여 왜 멈췄는지 몰랐다)
+      if (on && s.deletionPending) '회원탈퇴 요청이 서버에 닿았는지 확인하지 못했어요. 아래에서 다시 요청해 주세요.',
     ];
     final out = on && s.loginRequired && s.loggedIn && !s.deletionPending;
     // 탈퇴 줄은 서버 빌드에서 늘 보인다(오프라인으로 켜면 서버 지원 여부를 몰라 줄이 사라졌다, ADR-0003 L4). 서버가 받지 않는다고 답했을 때만 숨긴다

@@ -1,5 +1,6 @@
 // 독서 실행 화면(지금 앱 features/reading/ReadingScreen.tsx): 장면이 화면 대부분, 아래 조작부는 위에서부터 연결된 책 · 시간 · [분위기 | 재생/일시정지 | 목표] 한 줄.
 // 분위기 = 장면+환경음 한 세트. 조작부를 접으면 [스피커 · 밝은 시간 · 재생·일시정지]가 남는다(다시 열어도 타이머는 멈추지 않는다).
+// 일시정지를 누르면 멈추고 이 화면을 닫아 시작한 화면으로 돌아간다(2026-11-24 사용자). 멈춘 독서는 작은 타이머 · 읽기 탭에서 이어 읽는다.
 // 스피커를 누르면 그 줄 위에 왼쪽부터 차는 소리 막대가 열리고, 한 번 더 누르거나 막대를 맨 왼쪽까지 내리면 음소거.
 // 장면은 옆으로 밀어 바꾼다(접었을 때 아래 점이 지금 장면). 소리만 듣기(soundOnly)는 타이머 없이 소리만: 독서 시간으로 기록하지 않는다
 library;
@@ -14,6 +15,7 @@ import 'package:video_player/video_player.dart';
 import '../../domain/library.dart';
 import '../../domain/reading.dart';
 import '../../services/ambient.dart';
+import '../../store/finish_reading.dart' show pauseReading;
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
@@ -186,8 +188,13 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
       _audio.playing ? _audio.pause() : _audio.play(_settings.scene);
     } else if (_reading.active == null) {
       _start();
+    } else if (_reading.running) {
+      pauseReading();
+      // 일시정지하면 읽기 화면을 닫고 시작한 자리로 돌아간다(2026-11-24 사용자 '타이머 일시정지 하면 밖으로 나오게').
+      // 멈춘 독서는 그 화면의 작은 타이머 · 읽기 탭 카드에서 이어 읽는다. 펼친 조작부 · 접은 조작부의 단추가 같다
+      _leave();
     } else {
-      _reading.running ? _reading.pause() : unawaited(resumeReadingOrTell(context));
+      unawaited(resumeReadingOrTell(context));
     }
   }
 
@@ -229,7 +236,10 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
               : '이어서 읽기';
 
   Future<void> _pickBook() async {
-    final r = await pickBook(context, lib, allowNone: true);
+    // 지금 책(없으면 책 없이 읽기)은 고르는 원으로 보인다(DESIGN 13장 current)
+    final a0 = _reading.active;
+    // 책을 기록에 잇는 고르기는 모두 '+ 새 책 등록'(2026-11-21 사용자 '여기는 왜 책 추가 없어')
+    final r = await pickBook(context, lib, allowNone: true, addNew: true, current: (id: a0 != null ? a0.myBookId : _draftBookId));
     if (!r.picked || !mounted) return;
     final a = _reading.active;
     if (a != null && a.myBookId != r.id) {
@@ -412,11 +422,11 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
           WordText(active ? '소리는 독서 타이머와 따로 켜고 꺼요. 읽은 시간은 그대로예요.' : '시간을 재지 않고 소리만 들어요. 독서 시간에는 쌓이지 않아요.', style: AppType.sub),
           Padding(
             padding: const EdgeInsets.only(top: Space.m),
-            // 시트 안 단추는 l(2026-11-19 공통 규칙)
+            // 시트 안 단추는 xlarge(TDS Button 기본값 · 2026-11-19 공통 규칙)
             child: Btn(
               label: _audio.playing ? (active ? '소리 끄기' : '소리 멈추기') : active ? '소리 켜기' : '소리만 듣기',
               kind: 'secondary',
-              size: 'l',
+              size: 'xlarge',
               onPress: () => _audio.playing ? _audio.pause() : _audio.play(_settings.scene),
             ),
           ),
@@ -521,6 +531,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     );
   }
 
+  Widget _maybeAvoid(Widget panel) => _open ? ToastAvoid(child: panel) : panel;
+
   /// 조작부(아래 흰 판): 1) 연결된 책 2) 시간 3) [분위기 | 재생·일시정지 | 목표]
   Widget _panel(BuildContext context, EdgeInsets insets, double vh, bool ticking) {
     final soundOnly = widget.soundOnly;
@@ -532,7 +544,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
       bottom: 0,
       child: Offstage(
         offstage: !_open,
-        child: Container(
+        // 펼친 조작부 위로 토스트를 띄운다(책을 바꿔 나눠 저장한 토스트가 시간 · 일시정지를 덮었다, 2026-11-21 촬영 확인).
+        // 판은 GlobalKey라 감싸도 상태가 그대로 옮겨진다
+        child: _maybeAvoid(Container(
           key: _panelKey,
           constraints: BoxConstraints(maxHeight: vh * 0.65),
           decoration: const BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.vertical(top: Radius.circular(Shape.sheet))),
@@ -549,7 +563,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 Expanded(
                   child: _Side(
                     icon: _soundOff ? 'VolumeX' : 'AudioLines',
-                    text: _soundOff ? [sceneName(scene), '꺼짐'].join(metaSep) : sceneName(scene),
+                    // 꺼졌으면 '꺼짐'만(분위기 이름까지 붙이면 길었다, 2026-11-20 사용자 '꺼짐 옆에 창가의 빗소리 | 이거 없애버려')
+                    text: _soundOff ? '꺼짐' : sceneName(scene),
                     label: '분위기 고르기, ${sceneName(scene)}, ${_soundOff ? '소리 꺼짐' : _settings.muted ? '음소거' : '소리 ${(_settings.volume * 100).round()}%'}',
                     onPress: _moodSheet,
                   ),
@@ -561,8 +576,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                       : _Side(icon: 'Timer', text: goalMin != null ? '목표 ${minutesLabel(goalMin)}' : '목표 없음', label: '목표 시간, ${goalMin != null ? minutesLabel(goalMin) : '목표 없음'}', onPress: _goalSheet),
                 ),
               ]),
-              // 소리 재생 실패: 예외 원문(Ambient.error) 대신 사람 말과 다시 할 곳(DESIGN 9장 실패 알림, 원문은 로그로)
-              if (_audio.error != null) const NoticeText('소리를 재생하지 못했어요. 분위기에서 다시 켜 주세요.', error: true),
+              // 소리 재생 실패는 글로 알리지 않는다: 분위기 칸이 '꺼짐'으로 보인다(2026-11-20 사용자 '저 빨간색은 왜 있어 … 다 지워', SCREENS 156 예외)
               // 소리만 듣다가 기록 시작: 같은 장면에 타이머를 띄운다
               if (soundOnly)
                 Padding(
@@ -578,7 +592,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
             ]),
           ),
-        ),
+        )),
       ),
     );
   }
@@ -634,7 +648,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
         child: Pressable(
           onPress: () => setState(() => _open = false),
           // 글자 없이 ⌄만(2026-11-17 시안)
-          child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronDown', size: 26, color: AppColors.inkSoft))),
+          child: const SizedBox(width: Space.hit, height: Space.hit, child: Center(child: LucideIcon('ChevronDown', size: 26, color: AppColors.icon))),
         ),
       ),
     ]);
@@ -661,7 +675,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
             ElapsedTicker(
               running: ticking,
               builder: (ms) => Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-                Text(clock(ms), style: AppType.timer),
+                // '11:03:25'처럼 길어져도 화면 폭을 넘을 때(아주 큰 글씨)만 그 안에 들어가게 줄인다. 보통은 글자 그대로
+                FittedBox(fit: BoxFit.scaleDown, child: Text(clock(ms), maxLines: 1, style: AppType.timer)),
                 Positioned(
                   left: -100,
                   right: -100,
@@ -680,12 +695,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
               ]),
             ),
-            // 오류 글은 앱 공통 안내 · 오류 글(NoticeText). 시간 아래 한 줄('일시정지' · '목표') 밑에서 시작한다(그 줄과 겹쳐 그려졌다)
-            if (_reading.error != null)
-              Padding(
-                padding: EdgeInsets.only(top: _captionLine(context) - 2),
-                child: const NoticeText('독서 시간을 기기에 저장하지 못했어요. 저장 공간을 확인해 주세요.', error: true, center: true),
-              ),
+            // 기기 저장 실패도 장면에 빨간 글로 보이지 않는다(2026-11-20 사용자 '다 지워', SCREENS 156 예외). 기록을 저장하지 못하면 독서 끝 저장 때 알린다
           ]),
         ),
       ),
@@ -787,20 +797,26 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                 ),
               ),
               const SizedBox(width: Space.xl - _hitPad),
-              Semantics(
-                button: true,
-                label: '조작부 열기',
-                child: Pressable(
-                  onPress: () => setState(() {
-                    _volOpen = false;
-                    _open = true;
-                  }),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: Space.hit),
-                    child: Center(
-                      child: soundOnly
-                          ? Text('조작부 열기', style: _dockTime)
-                          : ElapsedTicker(running: ticking, builder: (ms) => Text(clock(ms), style: _dockTime)),
+              // 시간은 글자 폭만큼, 남는 자리를 넘으면(아주 큰 글씨) 줄인다: 'h:mm:ss' · 'hh:mm:ss'에서 양쪽 단추를 밀어내지 않게
+              Flexible(
+                child: Semantics(
+                  button: true,
+                  label: '조작부 열기',
+                  child: Pressable(
+                    onPress: () => setState(() {
+                      _volOpen = false;
+                      _open = true;
+                    }),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: Space.hit),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: soundOnly
+                              ? Text('조작부 열기', maxLines: 1, style: _dockTime)
+                              : ElapsedTicker(running: ticking, builder: (ms) => Text(clock(ms), maxLines: 1, style: _dockTime)),
+                        ),
+                      ),
                     ),
                   ),
                 ),

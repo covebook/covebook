@@ -51,7 +51,7 @@ func TestAppleLookup(t *testing.T) {
 	if p.Route != RouteApple || p.TransactionID != "200" || p.OriginalTransactionID != "100" || p.AccountToken != "u-1" {
 		t.Fatalf("식별 값이 다름: %+v", p)
 	}
-	if p.Env != EnvSandbox || p.PriceMilli != 12990 || p.Currency != "USD" || p.Country != "USA" {
+	if p.Env != EnvSandbox || p.PriceMilli != 12990 || p.Currency != "USD" || p.Country != "US" {
 		t.Fatalf("환경·금액이 다름: %+v", p)
 	}
 	if !p.PurchasedAt.Equal(time.UnixMilli(1_800_000_000_000)) || p.PurchasedAt.Location() != time.UTC {
@@ -176,7 +176,7 @@ func TestAppleParseNotice(t *testing.T) {
 	if n.Target == nil || *n.Target != (Ref{Kind: KindSubscription, ID: "300"}) || n.OriginalID != "100" {
 		t.Fatalf("대상: %+v %s", n.Target, n.OriginalID)
 	}
-	// 한 번 사는 상품의 알림(환불 등)은 구독 줄기가 없다
+	// 한 번 사는 상품의 알림(환불 등)은 구독 1건가 없다
 	n, err = notice(appstore.SubscriptionNotificationV2DecodedPayload{NotificationType: "REFUND", NotificationUUID: "u-2", Data: data}, &api.JWSTransaction{TransactionID: "400", Type: api.Consumable}, nil)
 	if err != nil || *n.Target != (Ref{Kind: KindProduct, ID: "400"}) || n.OriginalID != "" || n.Type != "REFUND" {
 		t.Fatalf("상품 알림: %+v %v", n, err)

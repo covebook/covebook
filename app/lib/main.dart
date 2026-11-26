@@ -6,15 +6,16 @@ import 'package:flutter/material.dart';
 
 import 'services/frame_log.dart';
 
-import 'domain/reference_home.dart';
 import 'scene_config/spine_look.dart';
 import 'store/skin_store.dart';
 import 'package:flutter/services.dart';
 
 import 'app/app_shell.dart';
+import 'app/net_gate.dart';
 import 'app/startup.dart';
 import 'features/auth/login_screen.dart' show AuthGate;
 import 'services/sync.dart';
+import 'services/net_status.dart';
 import 'services/ambient.dart';
 import 'services/cover_colors.dart';
 import 'features/reading/mini_timer.dart';
@@ -37,6 +38,8 @@ Future<void> main() async {
   if (_qaProxy.isNotEmpty) HttpOverrides.global = _QaProxy();
   bootAt = DateTime.now();
   WidgetsFlutterBinding.ensureInitialized();
+  // 인터넷 연결 확인(서버 있는 빌드만): 앱 화면보다 먼저 등록해 막혀 있는 동안 기기 뒤로를 먼저 받는다(app/net_gate.dart)
+  NetStatus.instance.start();
   // 시작 화면부터 그린다: 아래 준비가 몇 초 걸려 그동안 흰 화면만 보였다(지난 책장 사진이 있으면 그 사진)
   final snap = await usableSnapshot(homeSnapshotFile);
   startedWithSnapshot = snap != null;
@@ -54,8 +57,6 @@ Future<void> main() async {
   // 고른 스킨(선반·벽지·벽)·책 측면 모양: 책장을 굽기 전에
   await _startStep('스킨', loadSkin);
   await _startStep('책 측면', loadSpineLook);
-  // 새 서재 예시 책장(표시 전용 예시 책): 책장을 읽기 전에
-  await _startStep('예시 책장', loadReferenceHome);
   // 로그인 화면을 띄울지: 이 기기에 남긴 계정 사본을 먼저 읽는다(서버 있는 빌드만)
   await _startStep('계정', SyncService.instance.loadLocalState);
   startStep.value = 2;
@@ -184,10 +185,13 @@ class ChaekjangApp extends StatelessWidget {
                 systemNavigationBarIconBrightness: Brightness.dark,
                 systemNavigationBarContrastEnforced: false,
               ),
-              child: Stack(children: [
-                ?child,
-                Material(type: MaterialType.transparency, child: MiniTimer(navigator: appNavigator)),
-              ]),
+              // 인터넷이 없으면 앱 전체(모든 화면 · 작은 타이머) 위를 막는다(서버 있는 빌드, 2026-11-21 사용자 '인터넷이 없으면 막자')
+              child: NetGate(
+                child: Stack(children: [
+                  ?child,
+                  Material(type: MaterialType.transparency, child: MiniTimer(navigator: appNavigator)),
+                ]),
+              ),
             ),
           );
         },

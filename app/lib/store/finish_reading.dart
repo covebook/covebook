@@ -1,7 +1,10 @@
 // 독서 끝내고 저장하기(지금 앱 store/finish-reading.ts): 기록이 디스크에 저장되기 전에는 복구용 초안을 지우지 않는다. 다시 해도 같은 세션 id
 library;
 
+import 'dart:async';
+
 import '../domain/library.dart' show today;
+import '../services/ambient.dart';
 import '../domain/reading.dart';
 import 'library_model.dart';
 import 'reading_store.dart';
@@ -9,7 +12,7 @@ import 'settings_store.dart';
 
 /// startPage: 이번 독서를 시작한 쪽, pagesRead: 도달한 쪽. 둘 다 있을 때만 화면이 분량을 센다
 Future<void> saveFinishedReading(FinishDraft draft, {num? startPage, num? pagesRead, String? memo}) async {
-  if (draft.myBookId == null) _markNoBookDay(draft);
+  if (draft.myBookId == null) _markNoBookDay(today(DateTime.parse(draft.startedAt)));
   await LibraryModel.instance.addSession(SessionInput(
     id: draft.id,
     myBookId: draft.myBookId,
@@ -23,6 +26,16 @@ Future<void> saveFinishedReading(FinishDraft draft, {num? startPage, num? pagesR
   await ReadingStore.instance.clearPending();
 }
 
+/// 독서 일시정지: 타이머와 함께 소리도 멈춘다. 켜 둔 소리 설정은 그대로라 이어 읽으면 다시 난다
+/// (2026-11-21 사용자 '타이머 멈출 때 소리도 같이 멈추게'). 일시정지 단추(장면 · 작은 타이머)가 모두 이것을 쓴다
+void pauseReading() {
+  ReadingStore.instance.pause();
+  Ambient.instance.hold();
+}
+
+/// 이어 읽을 때 켜 둔 소리도 다시(소리를 꺼 둔 사람은 그대로 조용하다)
+void _resumeSound() => unawaited(Ambient.instance.resumeIfWanted().catchError((Object _) {}));
+
 /// 멈춰 둔 독서를 이어 읽기. 시작한 날이 오늘이 아니면 지난 몫은 그날(멈춘 때 끝난) 기록으로 저장하고 같은 책으로 오늘 새로 시작한다
 /// (2026-11-19 타이머 점검 B1: 어제 멈춘 독서를 오늘 이어 읽으면 오늘 읽은 시간까지 어제 기록이 되고 읽기 탭은 00:00이었다).
 /// 이어 읽기 단추(장면 · 작은 타이머 · 읽기 시작 · 멈춰 둔 독서 창)가 모두 이것을 쓴다.
@@ -33,6 +46,7 @@ Future<Object?> resumeReading() async {
   if (a == null || a.runningSince != null) return null;
   if (today(DateTime.parse(a.startedAt)) == today()) {
     rs.resume();
+    _resumeSound();
     return null;
   }
   final draft = rs.finish(a.lastBeat);
@@ -48,6 +62,7 @@ Future<Object?> resumeReading() async {
   }
   final page = a.myBookId == null ? null : LibraryModel.instance.lib.books[a.myBookId]?.currentPage;
   rs.start(a.myBookId, page);
+  _resumeSound();
   return null;
 }
 
@@ -66,10 +81,18 @@ Future<String?> saveAndStartOther(String? nextBookId) async {
   return draft.id;
 }
 
+/// 직접 추가한 독서 기록 저장(2026-11-23 사용자: 타이머를 켜지 않고 읽은 사람도 기록을 쉽게): 타이머 저장과 같은 길
+/// (addSession: 책이 있으면 회차를 확보하고 읽기 전 → 읽는 중, 도달한 쪽은 현재 쪽을 앞으로만). 책 없이 오늘 읽은 기록이면
+/// 타이머처럼 읽기 탭에 '책 없이 읽기' 줄을 띄운다(지난 날 기록은 오늘 줄과 상관없어 남기지 않는다). 새 기록 id를 돌려준다
+Future<String> saveManualReading(SessionInput input) async {
+  final day = today(DateTime.parse(input.startedAt));
+  if (input.myBookId == null && day == today()) _markNoBookDay(day);
+  return LibraryModel.instance.addSession(input);
+}
+
 /// 책 없이 읽어 저장한 날(설정 noBookDay)을 남긴다. 읽기 탭은 그날만 오늘 책 없는 시간으로 '책 없이 읽기' 줄을 띄운다:
 /// 책을 지워 책 연결이 빈 독서 시간만으로는 줄이 생기지 않게(2026-11-16 QA 현우 F4)
-void _markNoBookDay(FinishDraft draft) {
-  final day = today(DateTime.parse(draft.startedAt));
+void _markNoBookDay(String day) {
   final s = SettingsStore.instance;
   if (s.loaded && s.noBookDay == day) return;
   s.load().then((_) {

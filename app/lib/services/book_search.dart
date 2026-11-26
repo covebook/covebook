@@ -12,6 +12,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 /// 우리 서버 주소(빌드 때 --dart-define=API_URL=…, 없으면 운영 서버. 지금 앱 EXPO_PUBLIC_API_URL과 같은 기본값)
 const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'https://covebook.kodeploy.com');
 const _googleKey = String.fromEnvironment('GOOGLE_BOOKS_KEY');
@@ -75,18 +77,36 @@ const _providerName = {'yes24': 'YES24'};
 
 final _http = HttpClient()..connectionTimeout = const Duration(seconds: 12);
 
-/// GET → (상태, JSON). 끊기면 SocketException 등을 던진다
-Future<(int, Object?)> _getJson(String url) async {
-  final req = await _http.getUrl(Uri.parse(url));
-  final res = await req.close().timeout(const Duration(seconds: 15));
-  final body = await res.transform(utf8.decoder).join();
-  Object? json;
-  try {
-    json = body.isEmpty ? null : jsonDecode(body);
-  } catch (_) {
-    json = null;
+/// 요청 하나(연결 · 응답 머리 · 본문 다 받기까지)를 기다리는 한도. 넘으면 끊고 TimeoutException(인터넷 문제로 본다)
+const requestTimeout = Duration(seconds: 20);
+
+/// GET → (상태, JSON). 끊기면 SocketException 등을, [requestTimeout] 안에 본문까지 다 받지 못하면 요청을 끊고 TimeoutException을 던진다
+/// (2026-11-20 QA: 머리만 15초를 기다리고 본문 읽기는 한도가 없어, 응답이 멈추면 목록 가져오기 '그만 찾기'가 끝나지 않았다)
+Future<(int, Object?)> _getJson(String url) => getJsonWith(_http, url);
+
+@visibleForTesting
+Future<(int, Object?)> getJsonWith(HttpClient http, String url, {Duration timeout = requestTimeout}) async {
+  HttpClientRequest? req;
+  Future<(int, Object?)> run() async {
+    final r = req = await http.getUrl(Uri.parse(url));
+    final res = await r.close();
+    final body = await res.transform(utf8.decoder).join();
+    Object? json;
+    try {
+      json = body.isEmpty ? null : jsonDecode(body);
+    } catch (_) {
+      json = null;
+    }
+    return (res.statusCode, json);
   }
-  return (res.statusCode, json);
+
+  try {
+    return await run().timeout(timeout);
+  } on TimeoutException {
+    // 늦게 오는 응답은 버린다(소켓을 닫아 붙잡고 있지 않게)
+    req?.abort();
+    rethrow;
+  }
 }
 
 String? _s(Object? v) => v is String && v.isNotEmpty ? v : null;

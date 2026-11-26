@@ -70,7 +70,7 @@ func TestNativeLogin(t *testing.T) {
 	}
 	now := time.Now().Unix()
 	stamp := fmt.Sprintf("%d", time.Now().UnixNano())
-	kakaoID, kakaoApp := stamp[len(stamp)-12:], "1234"
+	kakaoID, kakaoApp := "1"+stamp[len(stamp)-11:], "1234" // 0으로 시작하면 JSON 숫자가 아니다
 	appleSub := "apple-native-" + stamp
 	appleServerToken := ""
 	var revokeClient string

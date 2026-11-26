@@ -119,6 +119,8 @@ Map<String, Object> buildTokens() => {
       'gap': TabBarStyle.gap,
       'paddingX': TabBarStyle.paddingX,
       'fade': TabBarStyle.fade,
+      'iconStroke': TabBarStyle.iconStroke,
+      'iconFillStroke': TabBarStyle.iconFillStroke,
     }),
   },
   'opacity': {'pressed': pressOpacity, 'disabled': disabledOpacity},
@@ -299,8 +301,8 @@ void main() {
     expect(AppType.bookTitle.fontSize, TypeSpecs.bookTitle.size);
   });
 
-  testWidgets('공용 단추 높이 = ControlSize(크게 · 보통 · 작게), 누르는 자리 48 이상', (t) async {
-    for (final (size, h) in [('l', ControlSize.buttonL), ('m', ControlSize.buttonM), ('s', ControlSize.buttonS)]) {
+  testWidgets('공용 단추 높이 = ControlSize(TDS xlarge · large · medium · small), 누르는 자리 48 이상', (t) async {
+    for (final (size, h) in [('xlarge', ControlSize.buttonL), ('large', ControlSize.buttonM), ('medium', ControlSize.buttonS), ('small', ControlSize.buttonS)]) {
       await _pump(t, Btn(label: '저장', size: size, onPress: () {}));
       expect(_boxOf(t, Btn).height, h, reason: 'Btn $size 겉높이');
       expect(t.getSize(find.byType(Btn)).height, greaterThanOrEqualTo(Space.hit), reason: 'Btn $size 누르는 자리');

@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:chaekjang/features/home/home_screen.dart' show headerIconsPreview;
 import 'package:chaekjang/features/settings/settings_screen.dart';
-import 'package:chaekjang/features/settings/terms.dart' show paidArticles, showTermsSheet, termsArticles;
+import 'package:chaekjang/features/settings/terms.dart' show paidArticles, openTermsPage, termsArticles;
 import 'package:chaekjang/services/sync.dart' show SyncService;
 import 'package:chaekjang/store/entitlement_store.dart';
 import 'package:chaekjang/ui/kit.dart' show Btn;
@@ -95,12 +95,12 @@ void main() {
     expect(termsArticles[3].$2.last, contains('결제 기록은 관계 법령에 따라'));
   }, skip: !iapOn);
 
-  testWidgets('결제를 켠 빌드의 약관 시트: 유료 서비스 조', (t) async {
-    await _pump(t, Builder(builder: (c) => Scaffold(body: Center(child: Btn(label: '열기', onPress: () => showTermsSheet(c))))));
+  testWidgets('결제를 켠 빌드의 약관 화면: 유료 서비스 조', (t) async {
+    await _pump(t, Builder(builder: (c) => Scaffold(body: Center(child: Btn(label: '열기', onPress: () => openTermsPage(c))))));
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.text('제7조 (유료 서비스)'), 300, scrollable: find.byType(Scrollable).last);
-    // 제7조 제목을 시트 맨 위로
+    // 제7조 제목을 화면 맨 위로
     Scrollable.ensureVisible(t.element(find.text('제7조 (유료 서비스)')));
     await t.pumpAndSettle();
     expect(find.text('제8조 (구독의 자동 갱신과 해지)'), findsOneWidget);

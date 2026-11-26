@@ -67,4 +67,10 @@ class AppNav extends ChangeNotifier {
     readBook = bookId;
     goTab(AppTab.read);
   }
+
+  /// 탭은 그대로 두고 읽기 탭 목록에서만 그 책을 맨 앞에(다른 화면에서 읽기를 시작할 때, 2026-11-24 사용자 4단계)
+  void frontRead(String bookId) {
+    readBook = bookId;
+    notifyListeners();
+  }
 }

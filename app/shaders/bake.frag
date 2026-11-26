@@ -6,14 +6,17 @@ precision highp float;
 layout(location = 0) out vec4 fragColor;
 
 
-  uniform vec3 O;
-  uniform vec3 Ux;
-  uniform vec3 Vy;
-  uniform vec3 tN;
-  uniform vec2 cells;
-  uniform float selfIdx;    // 이 면의 책(상자 목록에서 뺀다), 없으면 −1
+  // 낱개 uniform을 묶은 것(tool/pack_uniforms.dart): 아이폰 Metal은 버퍼 칸이 31개까지라 낱개로는 셰이더가 만들어지지 않는다.
+  // 아래 같은 이름의 전역 변수들은 main() 맨 앞에서 채운다
+  uniform vec4 uP[16];
+  vec3 O; // uP@0
+  vec3 Ux; // uP@3
+  vec3 Vy; // uP@6
+  vec3 tN; // uP@9
+  vec2 cells; // uP@12
+  float selfIdx; // 이 면의 책(상자 목록에서 뺀다), 없으면 −1 uP@14
 
-  uniform vec3 env;
+  vec3 env; // uP@15
 
   const float PI = 3.14159265;
   const float AMB = 0.620000000;
@@ -24,7 +27,7 @@ layout(location = 0) out vec4 fragColor;
   const vec3 LU = vec3(-0.102940441, 0.173648178, -0.979412873);
   // 맞추기 값(스킨마다 다르다: 스토어에서 색을 고르면 셰이더를 다시 만들지 않고 값만 바꾼다, light-model lightSet().u)
   // 카메라 기준 빛(벽 대표 자리 빛 / 노출 기준 CAM.gain, 반사광을 장면 밝기로)
-  uniform vec3 ECAM;
+  vec3 ECAM; // uP@18
   const float LELEV = 0.175474740;
   const float LRAD = 0.104719755;
   const float LAZ = -0.104719755;
@@ -41,13 +44,13 @@ layout(location = 0) out vec4 fragColor;
   const int ENV_COLS = 18;
   const float FARV = 10000.0000;
   // 둘레 면 밝기(선형 RGB: 반사율 × 받는 빛)와 속지 반사율(되비침): 맞추기 값. 속지 색(그림이 칠하는 색)은 스킨과 상관없다
-  uniform vec3 RADF;
-  uniform vec3 RADU;
-  uniform vec3 RADW;
-  uniform vec3 RADE;
-  uniform vec3 RADSL;
-  uniform vec3 RADSR;
-  uniform vec3 PAPER;
+  vec3 RADF; // uP@21
+  vec3 RADU; // uP@24
+  vec3 RADW; // uP@27
+  vec3 RADE; // uP@30
+  vec3 RADSL; // uP@33
+  vec3 RADSR; // uP@36
+  vec3 PAPER; // uP@39
   const vec3 PAPER_COLOR = vec3(0.883179738, 0.859173570, 0.796916543);
   const float EDGER = 3.05000000;
   const float SEAMR = 5.33750000;
@@ -357,21 +360,21 @@ layout(location = 0) out vec4 fragColor;
 
 
   uniform vec4 box[160];
-  uniform float nBox;
+  float nBox; // uP@42
 
 
   uniform sampler2D grid;
-  uniform vec2 gridSize;   // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다)
-  uniform mat3 gridMat;    // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬)
-  uniform float gridDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)      // 빛 격자 그림(GRID_SCALE), gridOn < 0.5면 읽지 않는다(가리개는 가림 없는 받는 빛: 격자 풀기 첫 번)
-  uniform float gridOn;
-  uniform float gridNx;     // 둘레 면 가로 칸 수(책이 없으면 1)
+  vec2 gridSize; // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다) uP@43
+  mat3 gridMat; // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬) uP@45
+  float gridDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)      // 빛 격자 그림(GRID_SCALE), gridOn < 0.5면 읽지 않는다(가리개는 가림 없는 받는 빛: 격자 풀기 첫 번) uP@54
+  float gridOn; // uP@55
+  float gridNx; // 둘레 면 가로 칸 수(책이 없으면 1) uP@56
   const float GN = 8.0;
   const float ENY = 16.0;
   const float GSCALE = 1.50000000;
   const float ENVL = 175.375000;
-  uniform vec3 ALB_WALL;   // 맞추기 값(벽·판 반사율)
-  uniform vec3 ALB_PLANK;
+  vec3 ALB_WALL; // 맞추기 값(벽·판 반사율) uP@57
+  vec3 ALB_PLANK; // uP@60
 vec4 _grid(vec2 q) {
   vec3 t = gridMat * vec3(q, 1.0);
   vec2 uv = (t.xy / t.z) / gridSize;
@@ -766,7 +769,8 @@ vec4 _grid(vec2 q) {
     else if (abs(n.z) > 0.5) {
       float fx = max(2.0 * jointF(P.x - 0.00000000, 19.8250000, 1.0), 2.0 * jointF(366.000000 - P.x, 19.8250000, 1.0));
       float fy = 2.0 * jointF(env.z - P.y, 19.8250000, 1.0);
-      k = (1.0 - jointF(env.z - P.y, 6.10000000, 0.150000000)) * jointXs(P, 0.300000000) * (1.0 - 0.150000000 * fx * fy);
+      // 아래 판 윗면과 만나는 모서리도 옆벽과 같은 바닥 그늘(light-model jointBase, Flutter 2026-11-21 사용자 '선반 뒷쪽에 흰색 선')
+      k = (1.0 - jointF(env.z - P.y, 6.10000000, 0.150000000)) * (1.0 - jointF(P.y - env.y, 6.10000000, 0.400000000)) * jointXs(P, 0.300000000) * (1.0 - 0.150000000 * fx * fy);
     }
     else if (n.y > 0.5) k = jointXs(P, 1.0) * (1.0 - jointF(DEPTH - P.z, 6.10000000, 0.0750000000));
     else {
@@ -809,6 +813,29 @@ vec4 _grid(vec2 q) {
 
   
 void main() {
+  O = uP[0].xyz;
+  Ux = vec3(uP[0].w, uP[1].xy);
+  Vy = vec3(uP[1].zw, uP[2].x);
+  tN = uP[2].yzw;
+  cells = uP[3].xy;
+  selfIdx = uP[3].z;
+  env = vec3(uP[3].w, uP[4].xy);
+  ECAM = vec3(uP[4].zw, uP[5].x);
+  RADF = uP[5].yzw;
+  RADU = uP[6].xyz;
+  RADW = vec3(uP[6].w, uP[7].xy);
+  RADE = vec3(uP[7].zw, uP[8].x);
+  RADSL = uP[8].yzw;
+  RADSR = uP[9].xyz;
+  PAPER = vec3(uP[9].w, uP[10].xy);
+  nBox = uP[10].z;
+  gridSize = vec2(uP[10].w, uP[11].x);
+  gridMat = mat3(uP[11].yzw, uP[12].xyz, vec3(uP[12].w, uP[13].xy));
+  gridDecal = uP[13].z;
+  gridOn = uP[13].w;
+  gridNx = uP[14].x;
+  ALB_WALL = uP[14].yzw;
+  ALB_PLANK = uP[15].xyz;
   vec2 p = FlutterFragCoord().xy;
 
     vec2 pc = clamp(p, vec2(0.5), max(vec2(0.5), cells - vec2(0.5)));

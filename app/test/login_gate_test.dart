@@ -57,7 +57,7 @@ void main() {
     for (final k in ['sync-token:v1', 'sync-rev:v1', 'sync-files:v1', 'sync-paused:v1', 'sync-epoch:v1', 'account:v1', 'reading-state:v2', 'active-reading:v1', 'finished-reading:v1', 'last-backup:v1', 'sync-pulling-all:v1']) {
       expect(wipesKey(k), isTrue, reason: k);
     }
-    for (final k in ['app-settings:v1', 'shelf-skin', 'spine-look', 'cover-accents-v2', 'yes24-spine-ratios-v1']) {
+    for (final k in ['app-settings:v1', 'shelf-skin', 'spine-look', 'spine-look-books', 'cover-accents-v2', 'yes24-spine-ratios-v1']) {
       expect(wipesKey(k), isFalse, reason: k);
     }
   });
