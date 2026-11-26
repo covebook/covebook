@@ -368,12 +368,25 @@ func (s *Server) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, 
 	if voided && n.Route == iap.RouteGoogle {
 		now := time.Now().UTC()
 		// 한 번 사는 상품은 구매 토큰이, 구독의 갱신 거래는 주문 ID가 원장의 키다
+		keys := []string{}
 		for _, key := range []string{n.TargetID, n.OrderID} {
 			if key == "" {
 				continue
 			}
+			keys = append(keys, key)
 			if _, err := iapRevokePurchase(ctx, s.DB, n.Route, key, now); err != nil {
 				return "failed", err.Error()
+			}
+		}
+		// 한 번 사는 상품이 원장에 아직 없으면(앱이 제출하기 전에 환불됨) 끝내지 않고 다시 시도한다.
+		// 여기서 끝내면 환불 사실이 남지 않아, 늦게 온 제출이 조회만 믿고 칸을 연다(구글 조회는 환불을 보장하지 않음)
+		if n.Kind != iap.KindSubscription {
+			var known bool
+			if err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM iap_purchases WHERE route=$1 AND transaction_id = ANY($2))`, string(n.Route), keys).Scan(&known); err != nil {
+				return "failed", err.Error()
+			}
+			if !known {
+				return "failed", "원장에 아직 없는 거래의 환불(제출 전 환불). 제출되면 다음 재시도에서 회수"
 			}
 		}
 		notes = append(notes, "환불 알림 반영")

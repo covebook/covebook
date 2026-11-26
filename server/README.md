@@ -32,7 +32,7 @@ Docker 이미지: `docker build -t chaekjang-go server`. 운영에서는 사진�
 
 알림함(결제 고지, ADR-0003 L8)은 `GET /iap/notices`(최신순 100건), `POST /iap/notices/read`(`{"ids":[...]}` 또는 `{"all":true}`)이고, `/iap/me`의 `unreadNotices`가 안 읽은 수다. 고지는 상태가 바뀐 순간(결제 완료, 결제 실패 유예 시작, 만료, 해지 접수, 환불)에 한 번 쓰이고 문구가 아니라 문구 번호와 값만 저장한다. `GET /admin/iap/stats`의 `notices30Days`가 최근 30일에 쓴 고지 수다. 계정을 지워도 고지 줄은 남고 `user_id`만 비워진다(알렸다는 증빙, ADR-0003 L11). 보관 기간(처리방침 초안 5년)이 지난 줄을 지우는 작업은 아직 없다.
 
-결제 API(`/iap/me`, `/iap/purchases`, 선반 결제 중 예약 `/iap/shelf-token`·`/iap/shelf-token/release`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다. `GET /iap/purchases`는 내 구매 내역이다. 앱에 보여 줄 사업자 정보는 `IAP_SELLER_JSON`(JSON 객체, 칸: `name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`)에 넣으면 `/iap/me`의 `seller`로 나간다. 값은 저장소에 적지 않는다.
+결제 API(`/iap/me`, `/iap/purchases`, 선반 결제 중 예약 `/iap/shelf-token`·`/iap/shelf-token/release`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다. `GET /iap/purchases`는 내 구매 내역이다. 앱에 보여 줄 사업자 정보는 `IAP_SELLER_JSON`(JSON 객체, 칸: `name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`, 호스팅서비스 제공자 `host`)에 넣으면 `/iap/me`의 `seller`로 나간다. 값은 저장소에 적지 않는다.
 
 ## 검증과 남은 작업
 
