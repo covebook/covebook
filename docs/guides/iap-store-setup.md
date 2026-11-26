@@ -326,6 +326,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 |---|---|---|
 | 요금제 화면 열기 | 결제 6 (미리 고른 것 없음) | |
 | 월간 고르고 구독 | 결제 7 → 결제 12 결제 완료 | 거래 줄, 구독 줄, `purchase_done` 고지 |
+| (첫 구매 직후) 계정 연결 값 확인 | | 거래 줄의 `account_token`이 **비어 있지 않은지**. 애플은 UUID 모양이 아닌 값을 오류 없이 버린다. Flutter에서 비어 오는 사례가 보고됨(2026-11-26 조사) |
 | 결제 대기(구글 느린 카드) | 결제 17 | 대기 뒤 지급 |
 | 구독 관리 | 결제 1 | |
 | 스토어에서 해지 | 결제 2, 알림함에 해지 접수 | `auto_renew=false`, `cancel_scheduled` 고지 |
