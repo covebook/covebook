@@ -937,8 +937,8 @@ func TestIAPOverCapRefundNoOrderID(t *testing.T) {
 		t.Fatal("주문 ID 없이 환불을 요청함")
 	}
 	var attempts int
-	if err := e.db.QueryRow(e.ctx, "SELECT refund_attempts FROM iap_purchases WHERE route='google' AND transaction_id=$1", second).Scan(&attempts); err != nil || attempts != 0 {
-		t.Fatalf("시도가 쌓임: %d %v", attempts, err)
+	if err := e.db.QueryRow(e.ctx, "SELECT refund_attempts FROM iap_purchases WHERE route='google' AND transaction_id=$1", second).Scan(&attempts); err != nil || attempts != iapRefundMaxAttempts {
+		t.Fatalf("다시 해도 소용없는 환불이 시도 상한으로 빠지지 않음(대조가 매 바퀴 다시 뽑음): %d %v", attempts, err)
 	}
 }
 
