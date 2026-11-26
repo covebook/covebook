@@ -184,6 +184,9 @@ func (g *Google) fromProduct(token string, r *androidpublisher.ProductPurchaseV2
 		PurchasedAt:           bought,
 		Country:               Country(r.RegionCode),
 	}
+	if d := r.ProductLineItem[0].ProductOfferDetails; d != nil {
+		p.Quantity = int(d.Quantity)
+	}
 	if r.TestPurchaseContext != nil {
 		p.Env = EnvSandbox
 	}
