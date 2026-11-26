@@ -118,7 +118,7 @@ class IapNotice {
       'shelf_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when${bookcase.isEmpty ? '해당 ' : bookcase}선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
       'renewal_upcoming' => expires == null
           ? null
-          : ('$name가 ${iapDate(expires)}에 갱신됩니다', '${_price == null ? '' : '결제 예정 금액은 $_price입니다. '}계속 이용하려면 할 일이 없습니다. 갱신을 원하지 않으면 ${iapDate(expires.subtract(const Duration(days: 1)))}까지 내 정보 › 구독 관리에서 해지할 수 있습니다.'),
+          : ('$name가 ${iapDate(expires)}에 갱신됩니다', '${_price == null ? '' : '결제 예정 금액은 $_price입니다. '}$store에 등록한 결제 수단으로 결제됩니다. 계속 이용하려면 할 일이 없습니다. 갱신을 원하지 않으면 ${iapDate(expires.subtract(const Duration(days: 1)))}까지 내 정보 › 구독 관리에서 해지할 수 있습니다.'),
       'cancel_scheduled' => ('$name의 자동 갱신이 꺼졌습니다', '${expires == null ? '' : '${iapDate(expires)}까지 이용할 수 있습니다. '}이후에는 결제되지 않습니다.'),
       // 두 기기에서 함께 사서 그 해 유료 칸(3칸)을 넘었다: 칸을 열지 않고 돌려준다(고지 문구 T15, ADR-0002 D1)
       'shelf_over_cap' => (
