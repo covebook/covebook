@@ -591,6 +591,34 @@ func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNotic
 	return out, rows.Err()
 }
 
+// iapYearlessToRefund는 서버가 환불할 칸 없는 선반 거래를 준다(구글 권고: 받을 수 없는 구매는 자동 환불에 맡기지 않는다, 2026-11-26 결정).
+//   - 연도를 모르는 선반: 2일 기다린다. 앱이 연도와 함께 다시 내면 칸을 받는다(그러면 shelf_year가 채워져 빠진다)
+//   - 주인 없는 선반(결제한 계정이 탈퇴, user_id NULL): 제출 때 이미 환불을 시도했으니 기다리지 않고 다시 한다
+//
+// 3일이 지나면 구글이 이미 자동 환불했으니 뺀다. 20번 넘게 실패한 거래도 빼고 운영자가 본다
+func iapYearlessToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
+	rows, err := q.Query(ctx, `SELECT route, transaction_id FROM iap_purchases
+		WHERE kind='product' AND shelf_year IS NULL AND NOT over_cap AND confirmed_at IS NULL AND state='paid'
+		  AND refund_requested_at IS NULL AND refund_attempts < 20 AND route = ANY($1)
+		  AND (created_at < now() - interval '2 days' OR user_id IS NULL) AND created_at > now() - interval '3 days'
+		ORDER BY created_at LIMIT $2`, routes, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []iapOverCapRow
+	for rows.Next() {
+		var r iapOverCapRow
+		var route string
+		if err = rows.Scan(&route, &r.Key); err != nil {
+			return nil, err
+		}
+		r.Route = iap.Route(route)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // iapUnconfirmed는 지급했는데 스토어 확인을 마치지 못한 거래다. 구글은 3일 안에 확인하지 않으면 자동 환불한다.
 type iapUnconfirmed struct {
 	Route      iap.Route

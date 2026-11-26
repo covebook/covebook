@@ -643,6 +643,62 @@ func TestIAPSweepSkipsShelfWithoutYear(t *testing.T) {
 	}
 }
 
+// 연도를 끝내 모르는 선반은 2일 뒤 대조가 환불한다(구글 3일 자동 환불보다 먼저). 하루 된 것은 기다린다.
+// 주인 없는 선반은 제출 때 환불이 실패했으면 다음 대조가 바로 다시 한다. 둘 다 소비하지 않는다
+func TestIAPSweepRefundsShelfWithoutYear(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	submitAged := func(name, age string) iap.Purchase {
+		id := iapTestID(t, name)
+		p := e.shelfPurchase(id, e.accountToken(token))
+		e.google.Purchases[id] = p
+		if code, body := e.submit(token, "google", e.shelf, id, false); code != 422 {
+			t.Fatalf("%s 제출: %d %v", name, code, body)
+		}
+		if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET created_at=now()-$2::interval WHERE transaction_id=$1", id, age); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	old, young := submitAged("old", "50 hours"), submitAged("young", "1 day")
+
+	payer, payerID := e.user()
+	other, _ := e.user()
+	goneID := iapTestID(t, "gone")
+	gone := e.shelfPurchase(goneID, e.shelfToken(payer, 2026))
+	e.google.Purchases[goneID] = gone
+	if _, err := e.db.Exec(e.ctx, "DELETE FROM users WHERE id=$1", payerID); err != nil {
+		t.Fatal(err)
+	}
+	e.google.RefundErr = errors.New("구글 잠시 실패")
+	if code, body := e.submit(other, "google", e.shelf, goneID, false); code != 409 || !strings.Contains(body["error"].(map[string]any)["message"].(string), "며칠") {
+		t.Fatalf("주인 없는 선반, 환불 실패: %d %v", code, body)
+	}
+	e.google.RefundErr = nil
+
+	e.sweep()
+	if !iapTestHas(e.google.Refunded, old.TransactionID) {
+		t.Fatal("2일 지난 연도 모르는 선반을 환불하지 않음")
+	}
+	if iapTestHas(e.google.Refunded, young.TransactionID) {
+		t.Fatal("하루 된 선반을 벌써 환불함")
+	}
+	if !iapTestHas(e.google.Refunded, gone.TransactionID) {
+		t.Fatal("주인 없는 선반의 환불을 다시 하지 않음")
+	}
+	for _, p := range []iap.Purchase{old, young, gone} {
+		if iapTestHas(e.google.Confirmed, p.OriginalTransactionID) {
+			t.Fatalf("칸 없는 선반을 소비함: %s", p.OriginalTransactionID)
+		}
+	}
+	// 한 번 요청했으면 다시 부르지 않는다
+	before := len(e.google.Refunded)
+	e.sweep()
+	if len(e.google.Refunded) != before {
+		t.Fatalf("환불을 두 번 요청함: %v", e.google.Refunded)
+	}
+}
+
 // 알림 하나가 처리 중 패닉을 내도 그 알림만 실패로 남고, 뒤의 알림은 처리된다
 func TestIAPNotifyPanicIsolated(t *testing.T) {
 	e := newIAPEnv(t)
