@@ -26,9 +26,10 @@ import 'sync.dart' show ApiError, api, syncTokenKey;
 /// - 409, 422: 환불됐거나 다른 계정·다른 앱의 구매. 다시 내도 결과가 같다 → 끝낸다
 /// - 그 밖(결제 대기 202, 스토어 확인 실패 503, 요청이 많음 429, 통신 실패): 끝내지 않는다. 다시 낼 수 있어야 한다
 /// - 증거를 확인할 수 없음(iap_bad_proof), 스토어에 없는 거래(404): 끝내지 않는다. 서버 쪽 문제일 수 있어 구매를 버리지 않는다
+/// - 어느 해 책장인지 모름(iap_shelf_year_missing): 끝내지 않는다. 서버가 소비하지 않았으니 연도를 붙여 다시 낼 수 있다
 bool iapShouldFinish({required int status, String code = ''}) {
   if (status == 200) return true;
-  if (code == 'iap_bad_proof') return false;
+  if (code == 'iap_bad_proof' || code == 'iap_shelf_year_missing') return false;
   return status == 409 || status == 422;
 }
 
