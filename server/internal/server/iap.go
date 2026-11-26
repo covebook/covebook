@@ -308,8 +308,15 @@ func iapValidYear(year int) bool { return year >= 2000 && year <= 9999 }
 //
 // 응답 202: {"status":"pending"}  결제가 아직 끝나지 않았다(구글 결제 대기). 지급하지 않았다
 //
-// 앱이 거래를 끝내도 되는 때: 200, 그리고 다시 보내도 결과가 같은 409·422.
-// 끝내면 안 되는 때: 202, 503, 5xx. 스토어가 다시 전달하면 다시 제출한다.
+// 앱이 스토어 거래를 끝낼지(애플 finishTransaction. 구글은 서버가 확인·소비한다):
+//
+//	끝낸다     200 granted·already·inactive
+//	           409 iap_purchase_refunded, iap_other_account(구독은 구매 복원 restore=true로 다시 내면 옮길 수 있다)
+//	           422 iap_unknown_product, iap_purchase_rejected, iap_sandbox_not_allowed
+//	끝내지 않음 202 pending, 404 iap_purchase_not_found, 422 iap_bad_proof, 422 iap_shelf_year_missing,
+//	           429 iap_too_many, 503 iap_store_unavailable, 그 밖의 5xx. 스토어가 다시 전달하면 다시 낸다
+//
+// iap_shelf_year_missing은 소비하지 않고 돌려준다. 앱이 연도를 붙여 다시 낼 수 있고, 끝내 못 내면 구글은 3일 뒤 환불한다.
 func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	user, err := s.user(r)
 	if err != nil {
@@ -364,6 +371,8 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	}
 	storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
+	// 스토어에서 읽기 시작한 때. 그 뒤에 알림 처리가 고친 구독 줄은 이 요청이 읽은 옛 상태로 덮어쓰지 않는다
+	lookupStart := time.Now()
 	submitted, err := store.Lookup(storeCtx, ref)
 	if err != nil {
 		return iapStoreError(route, err)
@@ -399,9 +408,11 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		return iapRejected
 	}
 	// 스토어가 알려 준 상품이 물어본 상품과 종류가 다르면 받지 않는다.
-	bought, err := iapFindProduct(ctx, s.DB, route, current.ProductID)
-	if err != nil {
-		return err
+	bought := asked
+	if current.ProductID != body.ProductID {
+		if bought, err = iapFindProduct(ctx, s.DB, route, current.ProductID); err != nil {
+			return err
+		}
 	}
 	if bought.Kind != asked.Kind {
 		return iapRejected
@@ -444,6 +455,7 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		if _, err = iapUpsertSubscription(ctx, tx, user, iapSubscription{
 			Route: route, OriginalID: current.OriginalTransactionID, ProductID: current.ProductID, PlanID: current.PlanID, Env: current.Env,
 			State: current.State, ExpiresAt: current.ExpiresAt, GraceUntil: current.GraceUntil, AutoRenew: current.AutoRenew, LatestTxnID: current.TransactionID,
+			ReadAgo: time.Since(lookupStart),
 		}); err != nil {
 			return err
 		}
@@ -475,6 +487,15 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 		if !inserted {
+			// 넣지 못했으면 그사이 누가 넣었다. 같은 거래를 다른 계정이 동시에 냈으면 진 쪽은 여기서 멈춘다
+			// (위에서 주인을 볼 때는 줄이 없었다. 계정마다 잠그는 줄이 달라 서로 기다리지 않는다)
+			again, e := iapPurchaseOwner(ctx, tx, route, key)
+			if e != nil {
+				return e
+			}
+			if again.user != user {
+				return iapProductNoRestore
+			}
 			status = "already"
 		}
 		// 어느 해 책장의 칸인지(D1). 넣을 때 계정 연결 값으로 이미 적었다.
@@ -523,15 +544,19 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	// 연도를 모르는 선반 거래는 소비하지 않는다. 소비한 뒤 돌려보내면 앱이 거래를 끝내 돈만 받은 것이 된다.
+	// 소비하지 않으면 앱이 연도를 붙여 다시 낼 수 있고, 끝내 못 내면 구글은 3일 뒤 환불한다. 우리 앱은 늘 연도를 보낸다
+	yearMissing := asked.Kind == iap.KindProduct && shelfYear == 0
+
 	// 5. 커밋 뒤 스토어 확인. 실패해도 지급은 유지한다. 확인 안 된 줄은 다시 시도한다(이슈 #26, #27).
-	if !submitted.Acknowledged && submitted.State == iap.StatePaid {
+	// 요청과 떼어 낸 컨텍스트에 제한 시간을 따로 준다. 조회가 시간을 거의 다 썼거나 사용자가 앱을 닫아도 확인은 끝까지 한다
+	after, cancelAfter := context.WithTimeout(context.WithoutCancel(ctx), iapStoreTimeout)
+	defer cancelAfter()
+	if !yearMissing && !submitted.Acknowledged && submitted.State == iap.StatePaid {
 		consume := asked.Kind == iap.KindProduct && bought.Consume
-		// 조회와 시간을 나눠 쓰지 않게 확인에는 제한 시간을 따로 준다
-		confirmCtx, cancelConfirm := context.WithTimeout(ctx, iapStoreTimeout)
-		defer cancelConfirm()
-		if e := store.Confirm(confirmCtx, ref, submitted.ProductID, consume); e != nil {
+		if e := store.Confirm(after, ref, submitted.ProductID, consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s product=%s err=%v", route, submitted.ProductID, e)
-		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
+		} else if e = iapMarkConfirmed(after, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
 		}
 	}
@@ -539,11 +564,11 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	// 6. 넘게 산 거래는 환불을 요청한다(구글만 된다). 소비한 뒤에 한다
 	autoRefund := false
 	if overCap {
-		autoRefund = s.iapRefundOverCap(ctx, store, key, submitted.TransactionID)
+		autoRefund = s.iapRefundOverCap(after, store, key, submitted.TransactionID)
 	}
 
-	if asked.Kind == iap.KindProduct && shelfYear == 0 {
-		log.Printf("iap shelf year missing: route=%s user=%d product=%s", route, user, submitted.ProductID)
+	if yearMissing {
+		log.Printf("iap shelf year missing (not consumed): route=%s user=%d product=%s", route, user, submitted.ProductID)
 		return iapShelfYearMissing
 	}
 
@@ -581,6 +606,11 @@ func (s *Server) iapRefundOverCap(ctx context.Context, store iap.Store, key, ord
 	if requested {
 		return true
 	}
+	if orderID == "" {
+		// 주문 ID가 없으면(프로모션 코드로 받은 구매 등) 환불을 요청할 수 없다. 시도를 쌓지 않고 운영자가 처리한다
+		log.Printf("iap over cap refund needs manual handling: route=%s key=%s (no order id)", route, iapShortKey(key))
+		return false
+	}
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
 	err := rf.Refund(refundCtx, orderID)
@@ -600,4 +630,12 @@ func iapStoreError(route iap.Route, err error) error {
 	}
 	log.Printf("iap store lookup failed: route=%s err=%v", route, err)
 	return iapStoreDown
+}
+
+// iapShortKey는 로그에 남길 거래 열쇠의 앞부분이다. 구글 구매 토큰은 비밀 값이라 통째로 남기지 않는다
+func iapShortKey(key string) string {
+	if len(key) > 8 {
+		return key[:8] + "…"
+	}
+	return key
 }
