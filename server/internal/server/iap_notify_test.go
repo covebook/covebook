@@ -587,8 +587,15 @@ func TestIAPNotifyOverCap(t *testing.T) {
 	if len(e.google.Refunded) != 0 {
 		t.Fatalf("실패했는데 환불 기록: %v", e.google.Refunded)
 	}
-	// 장애가 풀리면 다음 정기 처리가 다시 요청한다. 한 번만
+	// 장애가 풀려도 실패 직후에는 다시 부르지 않는다(간격 2분부터 2배씩, 1분마다 도는 대조가 20번을 금방 쓰지 않게)
 	e.google.RefundErr = nil
+	if r := e.sweep(); r.Refunds != 0 || len(e.google.Refunded) != 0 {
+		t.Fatalf("실패 직후 바로 다시 요청: %+v %v", r, e.google.Refunded)
+	}
+	// 간격이 지나면 다시 요청한다. 한 번만
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET updated_at=now()-interval '10 minutes' WHERE transaction_id=$1", second); err != nil {
+		t.Fatal(err)
+	}
 	if r := e.sweep(); r.Refunds != 1 || len(e.google.Refunded) != 1 || e.google.Refunded[0] != "GPA."+second {
 		t.Fatalf("다시 요청: %+v %v", r, e.google.Refunded)
 	}
@@ -675,6 +682,10 @@ func TestIAPSweepRefundsShelfWithoutYear(t *testing.T) {
 		t.Fatalf("주인 없는 선반, 환불 실패: %d %v", code, body)
 	}
 	e.google.RefundErr = nil
+	// 실패한 환불은 간격(2분부터)이 지나야 다시 한다
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET updated_at=now()-interval '10 minutes' WHERE transaction_id=$1", goneID); err != nil {
+		t.Fatal(err)
+	}
 
 	e.sweep()
 	if !iapTestHas(e.google.Refunded, old.TransactionID) {
@@ -696,6 +707,41 @@ func TestIAPSweepRefundsShelfWithoutYear(t *testing.T) {
 	e.sweep()
 	if len(e.google.Refunded) != before {
 		t.Fatalf("환불을 두 번 요청함: %v", e.google.Refunded)
+	}
+}
+
+// 구독 재조회 한 건이 패닉을 내도 다른 구독은 다시 조회하고, 패닉 난 구독은 뒤로 보내 다음 바퀴에 맨 앞을 막지 않는다
+func TestIAPSweepSubscriptionPanicIsolated(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	account := e.accountToken(token)
+	badOrig, badTxn := iapTestID(t, "bad-orig"), iapTestID(t, "bad-txn")
+	goodOrig, goodTxn := iapTestID(t, "good-orig"), iapTestID(t, "good-txn")
+	soon := time.Now().Add(time.Minute) // 만료가 5분 안: 재조회 대상
+	for _, x := range [][2]string{{badOrig, badTxn}, {goodOrig, goodTxn}} {
+		e.apple.Purchases[x[1]] = e.subscription(x[0], x[1], account, soon)
+		if code, body := e.submit(token, "apple", e.plus, x[1], false); code != 200 {
+			t.Fatalf("구독 제출: %d %v", code, body)
+		}
+	}
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_subscriptions SET updated_at=now()-interval '1 hour' WHERE original_id = ANY($1)", []string{badOrig, goodOrig}); err != nil {
+		t.Fatal(err)
+	}
+	// 스토어에서는 둘 다 갱신됐다. 하나는 조회가 패닉한다
+	later := time.Now().Add(30 * 24 * time.Hour)
+	e.apple.Purchases[goodTxn] = e.subscription(goodOrig, goodTxn, account, later)
+	e.apple.PanicOn = badOrig
+	e.sweep()
+	var goodExp time.Time
+	var badBumped bool
+	if err := e.db.QueryRow(e.ctx, "SELECT expires_at FROM iap_subscriptions WHERE original_id=$1", goodOrig).Scan(&goodExp); err != nil {
+		t.Fatal(err)
+	}
+	if goodExp.Before(later.Add(-time.Minute)) {
+		t.Fatalf("패닉 뒤의 구독을 다시 조회하지 않음: %v", goodExp)
+	}
+	if err := e.db.QueryRow(e.ctx, "SELECT updated_at > now()-interval '1 minute' FROM iap_subscriptions WHERE original_id=$1", badOrig).Scan(&badBumped); err != nil || !badBumped {
+		t.Fatalf("패닉 난 구독을 뒤로 보내지 않음: %v %v", badBumped, err)
 	}
 }
 
