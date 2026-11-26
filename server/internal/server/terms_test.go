@@ -43,7 +43,7 @@ func TestTermsMatchApp(t *testing.T) {
 	}
 }
 
-// 결제를 끈 서버는 10조, 켠 서버는 유료 조 4개가 (서비스의 변경과 중단) 앞에 들어가 14조
+// 결제를 끈 서버는 10조, 켠 서버는 유료 조 5개가 (서비스의 변경과 중단) 앞에 들어가 15조
 func TestTermsPage(t *testing.T) {
 	h := New(nil).Handler()
 	get := func() string {
@@ -71,7 +71,7 @@ func TestTermsPage(t *testing.T) {
 
 	t.Setenv("IAP_ENABLED", "1")
 	paid := get()
-	for _, want := range []string{"제7조 (유료 서비스)", "제8조 (구독의 자동 갱신과 해지)", "제11조 (서비스의 변경과 중단)", "제14조 (문의)", "계정과 분리해 보관합니다"} {
+	for _, want := range []string{"제7조 (유료 서비스)", "제8조 (구독의 자동 갱신과 해지)", "제9조 (유료 서비스에 관한 알림)", "제12조 (서비스의 변경과 중단)", "제15조 (문의)", "결제 전에 따로 알리지 않습니다", "계정과 분리해 보관합니다"} {
 		if !strings.Contains(paid, want) {
 			t.Errorf("결제 켠 약관에 %q 없음", want)
 		}
