@@ -644,9 +644,13 @@ type iapUnconfirmed struct {
 	Kind       iap.Kind
 }
 
+// iapUnconfirmedPurchases는 스토어 확인을 못 마친 거래를 고른다(정기 대조 1단계).
+// 연도를 모르는 선반은 뺀다. 제출·알림 경로처럼 일부러 소비하지 않은 거래다(연도와 함께 다시 내면 shelf_year가 채워져 그때 대상이 된다).
+// 여기서 소비하면 구글의 3일 자동 환불이 사라지고 앱도 다시 낼 수 없어, 돈은 받고 칸은 없는 채로 굳는다
 func iapUnconfirmedPurchases(ctx context.Context, q dbtx, limit int) ([]iapUnconfirmed, error) {
 	rows, err := q.Query(ctx, `SELECT route, transaction_id, original_id, product_id, kind FROM iap_purchases
 		WHERE confirmed_at IS NULL AND state='paid' AND created_at < now() - interval '1 minute' AND created_at > now() - interval '4 days'
+		  AND NOT (kind = 'product' AND shelf_year IS NULL)
 		ORDER BY created_at LIMIT $1`, limit)
 	if err != nil {
 		return nil, err

@@ -240,7 +240,7 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	notices, err := iapPendingNotifications(ctx, s.DB, 100)
 	keep(err)
 	for _, n := range notices {
-		result, note := s.iapProcessNotice(ctx, n)
+		result, note := s.iapProcessNoticeSafely(ctx, n)
 		if result == "failed" {
 			res.NoticesFailed++
 			log.Printf("iap notification failed (will retry): route=%s id=%s err=%s", n.Route, n.ID, note)
@@ -304,6 +304,19 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		res.Renewals = n
 	}
 	return res, firstErr
+}
+
+// iapProcessNoticeSafely는 알림 한 건의 패닉을 그 알림의 실패로 가둔다.
+// 대조 전체의 recover(iapSweepSafely)만 있으면, 패닉 난 알림은 실패로 기록되지 않아 시도 횟수가 오르지 않고
+// 다음 바퀴에도 맨 앞에 뽑혀 뒤의 알림과 4단계(만료 구독 재조회)를 매번 막는다. 실패로 남기면 다른 실패처럼 간격을 두고 다시 시도한다
+func (s *Server) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (result, note string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("iap notification panic: route=%s id=%s panic=%v", n.Route, n.ID, r)
+			result, note = "failed", fmt.Sprintf("처리 중 패닉: %v", r)
+		}
+	}()
+	return s.iapProcessNotice(ctx, n)
 }
 
 // iapProcessNotice는 알림 한 건을 처리하고 결과(processed, ignored, failed)와 메모를 돌려준다.
@@ -451,8 +464,16 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	// 가장 최근 거래를 원장에 남긴다(갱신 거래). 주인을 아는 경우에만.
 	key := iapTransactionKey(iap.KindSubscription, cur)
 	if user != 0 && cur.State == iap.StatePaid {
-		if _, err = iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur); err != nil {
-			return "", err
+		inserted, e := iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur)
+		if e != nil {
+			return "", e
+		}
+		// 주인이 있던 구독에 처음 보는 결제 거래: 갱신(또는 요금제 변경) 결제다. 결제 완료를 알린다(T3, ADR-0003 L7 "구매·갱신 직후").
+		// 고지의 유일 키가 거래 단위라, 같은 거래를 제출 경로가 먼저 알렸어도 한 줄이다
+		if inserted && owner.found {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapShelfGrant{}); err != nil {
+				return "", err
+			}
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
