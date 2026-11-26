@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
 )
@@ -508,6 +509,10 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			// 그냥 409를 주면 앱이 거래를 끝내 결제한 사람은 돈만 내고 칸을 못 받는다(애플은 끝낸 소모성 거래를 다시 주지 않는다)
 			if grantee, e = iapTokenOwner(ctx, tx, submitted.AccountToken); e != nil {
 				return e
+			}
+			if _, perr := uuid.Parse(submitted.AccountToken); grantee == 0 && perr != nil {
+				// UUID 모양이 아니면 우리가 발급한 값이 아니다. 탈퇴로 보지 않고 남의 값으로 거절한다(환불도 하지 않는다)
+				return iapProductNoRestore
 			}
 			if grantee == 0 {
 				// 결제한 계정이 탈퇴해 계정 연결 값 줄이 함께 지워졌다. 낸 계정에 주지 않는다(D8: 한 번 사는 상품은 계정을 옮기지 않는다, 2026-11-26 결정).
