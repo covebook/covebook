@@ -176,9 +176,18 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 	if err != nil {
 		return Purchase{}, fmt.Errorf("google 구독 만료 시각: %w", err)
 	}
+	// 미뤄진 새 요금제 항목은 아직 결제 전이라 주문 ID(latestSuccessfulOrderId)가 없다(구글 문서). 비면 주문 ID가 있는 항목의 것을 쓴다.
+	// 빈 값이면 원장 키가 구매 토큰으로 바뀌어 구매 내역에 같은 기간 줄이 하나 더 생긴다(코드 리뷰 #43-2)
+	order := item.LatestSuccessfulOrderId
+	for _, it := range s.LineItems {
+		if order != "" {
+			break
+		}
+		order = it.LatestSuccessfulOrderId
+	}
 	p := Purchase{
 		Route:                 RouteGoogle,
-		TransactionID:         item.LatestSuccessfulOrderId,
+		TransactionID:         order,
 		OriginalTransactionID: token,
 		BundleID:              g.packageName, // 응답에 패키지 이름이 없다. 우리 패키지로 물어서 받은 답이다
 		ProductID:             item.ProductId,
