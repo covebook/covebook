@@ -269,7 +269,7 @@ func TestIAPAdminStats(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("운영자 조회 %d %v", code, body)
 	}
-	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days", "shelfOverCap", "shelfOverCapRefunded", "shelfOverCapApple", "shelfNoYear"} {
+	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days", "shelfOverCap", "shelfOverCapRefunded", "shelfOverCapApple", "shelfNoYear", "oldestUnconfirmedSeconds", "sandboxPurchases30Days"} {
 		if _, ok := body[k].(float64); !ok {
 			t.Fatalf("%s 없음: %v", k, body)
 		}
