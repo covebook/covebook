@@ -78,7 +78,7 @@ func (a *Apple) NoticeHistory(ctx context.Context, since time.Time) ([]PastNotic
 	return out, skipped, nil
 }
 
-// googleVoidedPages는 한 번에 넘길 쪽 수의 상한이다(한 쪽에 최대 1000건). 넘으면 다음 대조에서 이어진다.
+// googleVoidedPages는 한 번에 넘길 쪽 수의 상한이다(한 쪽에 최대 1000건). 넘은 쪽은 이번에 받지 않는다. 다음 대조도 같은 시작 시각부터 처음 쪽을 다시 받으므로 이어지지 않는다(6시간 동안 1000건×상한을 넘는 환불이 올 때만 문제다).
 const googleVoidedPages = 20
 
 // Voided는 구글이 since 이후에 환불·취소한 구매(구독 포함)를 받는다. 구글이 주는 목록은 최근 30일까지다.
