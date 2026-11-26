@@ -239,6 +239,7 @@
   - 유일 키: 일회성 상품은 토큰, 구독 갱신 거래는 주문 ID. 구독 1건의 번호는 토큰
   - 새 토큰에 `linkedPurchaseToken`이 있으면 같은 트랜잭션에서 옛 구독을 끝냄
   - 우리 코드는 구독 항목이 1개가 아니면 멈춤 (`google.go`). 예약 변경에서 항목이 2개가 되므로 요금제 변경을 지원하려면 고쳐야 함
+    - 2026-11-26 고침(#43): 만료가 가장 늦은 항목을 씀
 - 출처: [구글 보안](https://developer.android.com/google/play/billing/security), [RevenueCat 구글 예외 사례](https://www.revenuecat.com/blog/engineering/google-play-edge-cases), [API 지원 종료](https://developer.android.com/google/play/billing/play-developer-apis-deprecations)
 
 ### 4-4. 애플: 결제 실패와 상태

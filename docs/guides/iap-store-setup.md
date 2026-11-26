@@ -285,6 +285,7 @@ gcloud pubsub subscriptions describe play-rtdn-push --format='value(pushConfig)'
 - [ ] 보관 기간이 지난 결제 기록 삭제 작업 (아직 없음. 처리방침 초안의 5년·3년). 탈퇴한 계정의 결제 고지도 `user_id`가 NULL인 채 남는다(#47)
 - [ ] `GET /admin/iap/stats`로 숫자가 나오는지
 - [ ] 선반 숫자: `shelfOverCap`(3칸을 넘은 거래), `shelfOverCapRefunded`(구글 자동 환불 요청), `shelfOverCapApple`(애플, 사용자 환불 요청 안내), `shelfNoYear`(연도를 모르는 거래). 0이 아니면 거래를 확인
+- [ ] 확인·샌드박스 숫자: `oldestUnconfirmedSeconds`(확인 못 한 구글 구매 중 가장 오래된 것, 86400을 넘으면 거래를 확인. 3일이면 구글이 환불), `sandboxPurchases30Days`(최근 30일 샌드박스 거래, 갑자기 늘면 확인)
 - DB 상품 줄 [Claude, 운영 DB 접속은 사람이 연다]
 
 ```sql
