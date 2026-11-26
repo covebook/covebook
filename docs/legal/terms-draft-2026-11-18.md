@@ -1,6 +1,6 @@
 # 책장 한켠 이용약관 초안 — 2026-11-18
 
-앱 안 전문(`app/lib/features/settings/terms.dart`, 내 정보 › 이용약관 ,  로그인 화면 아래)과 같은 글이다. 두 곳을 같이 고친다.
+앱 안 전문(`app/lib/features/settings/terms.dart`, 내 정보 › 이용약관 ,  로그인 화면 아래), 웹 약관(`server/internal/server/terms.go`, `/terms`)과 같은 글이다. 세 곳을 같이 고친다. 앱과 웹이 다르면 서버 시험 `TestTermsMatchApp`이 실패한다.
 법률 검토 전 초안이다. 시행일은 정식 출시 때 정한다.
 
 ## 이 초안을 쓴 이유(2026-11-18 사용자)

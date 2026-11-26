@@ -163,8 +163,8 @@
 - 앱 개인정보(App Privacy): "구매 항목 › 구매 내역" 추가 [사람]
 - 이용약관 링크 (심사 지침 3.1.2: 구독 앱은 앱 안과 스토어 설명 둘 다에 약관·처리방침 링크가 있어야 함)
   - 앱 안: 요금제 화면(결제 6)에 둘 다 있음
-  - 스토어 설명: 처리방침은 `https://covebook.kodeploy.com/privacy`. **약관 웹 주소는 아직 없다**
-  - 할 일 [Claude]: 서버에 `/terms` 페이지를 만든다(`server/internal/server/site/`, 처리방침과 같은 방식). 아니면 애플 표준 약관(EULA)을 쓴다
+  - 스토어 설명 [사람]: 처리방침 `https://covebook.kodeploy.com/privacy`, 이용약관 `https://covebook.kodeploy.com/terms`를 앱 설명에 적는다. App Store Connect의 사용권 계약(EULA) 칸에 약관 주소를 넣어도 된다
+  - `/terms`는 서버가 그린다(`server/internal/server/terms.go`, 2026-11-26). 유료 조는 `IAP_ENABLED`가 켜진 서버에서만 보인다. 재배포 뒤 결제를 켠 서버에서 제7조 (유료 서비스)가 보이는지 확인 [Claude]
 - 심사 메모 [사람]: 로그인이 필수라 심사용 계정이 필요하다. 소셜 로그인만 있어 방법을 정해야 한다
   - 로그인 강제는 반려 사례가 있다(ADR-0002 부록 A). 심사 메모에 "기록 동기화 때문에 계정이 필요하다"는 이유를 적는다
 - 애플 개발자 사이트 [사람]
@@ -309,7 +309,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 - 위 칸 이름은 PR 브랜치 기준이다. 넣기 전에 머지된 마이그레이션과 맞춘다
 - 상품 ID를 제안과 다르게 만들었으면 실제 ID로 바꿔 넣는다
 - `iap_plans` 줄이 없으면 서버가 주기를 몰라 연 구독 갱신 예정 고지와 앱의 갱신 전 알림이 나가지 않는다
-- 할 일 [Claude]: 웹 약관 페이지 `/terms`(2-8)
+- 웹 약관 `/terms`: 만듦(2-8). 재배포해야 열린다
 
 ## 5. 앱 [Claude]
 
