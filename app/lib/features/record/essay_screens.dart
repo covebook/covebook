@@ -203,10 +203,9 @@ class _EssayScreenState extends State<EssayScreen> {
     final e = b == null ? null : lib.editions[b.editionId];
     final title = essay.title?.trim() ?? '';
     return Screen(
-      // 공통 규칙: 머리줄 아이콘은 HeadIcon, 사이 headIconGap(2026-11-19. 사이가 0이었다)
-      right: Row(mainAxisSize: MainAxisSize.min, children: [
+      // 공통 규칙: 머리줄 아이콘은 HeadIcon, 나란히는 IconRow(2026-11-19 사이가 0 → 11-26 가운데 사이 40)
+      right: IconRow(children: [
         IconBtn(label: '감상 수정', onPress: () => openEditEssay(context, widget.id), child: const HeadIcon('PenLine')),
-        const SizedBox(width: headIconGap),
         IconBtn(label: '더 보기', onPress: _menu, child: const HeadIcon('MoreHorizontal')),
       ]),
       children: [

@@ -305,8 +305,47 @@ class HeadIcon extends StatelessWidget {
   Widget build(BuildContext context) => LucideIcon(name, size: IconSize.head, color: color);
 }
 
-/// 머리줄 아이콘 사이(4)
+/// 옛 머리줄 아이콘 사이(4, 누르는 칸 48 사이에 더하던 빈 곳 → 그림 사이 28). 나란한 아이콘은 이제 [IconRow]가 늘어놓는다
+/// (2026-11-26 사용자 '전체적으로 아이콘 같은 라인에 있으면 사이 간격이 큰 거 같아'). 아직 IconRow로 옮기지 않은 줄만 쓴다
 const headIconGap = Space.xs;
+
+/// 한 줄에 나란한 아이콘 단추의 가운데 사이 40: 그림 24 + 사이 16(Space.l). 전에는 누르는 칸 48 + 4 = 52(그림 사이 28)였다
+const iconPitch = IconSize.head + Space.l;
+
+/// 한 줄에 나란한 아이콘 단추(머리줄 · 개수 줄의 검색 · ＋ · 보기 · 거르기 · 공유 · 더 보기): 아이콘 가운데 사이 [iconPitch].
+/// 누르는 칸은 높이 48 그대로, 옆으로는 이웃과 가운데에서 나눠 겹치지 않는다(안쪽 단추 폭 40). 줄 양끝 단추는 바깥쪽 반(24)을 그대로 가져
+/// 줄 전체의 바깥 끝은 48 칸 단추를 늘어놓을 때와 같다(줄 끝 맞춤 Transform 값을 바꾸지 않는다). 눌림 원(48)은 칸 밖으로 그대로 그린다
+class IconRow extends StatelessWidget {
+  const IconRow({super.key, required this.children});
+
+  /// [IconBtn](또는 IconBtn을 그리는 부품: FilterIcon 등)
+  final List<Widget> children;
+
+  /// 아이콘 n개 줄의 폭
+  static double widthOf(int n) => n <= 0 ? 0 : iconPitch * (n - 1) + Space.hit;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = children.length;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (var i = 0; i < n; i++)
+        _IconSlot(
+          before: i == 0 ? Space.hit / 2 : iconPitch / 2,
+          after: i == n - 1 ? Space.hit / 2 : iconPitch / 2,
+          child: children[i],
+        ),
+    ]);
+  }
+}
+
+/// IconRow 안 단추 하나의 누르는 칸: 아이콘 가운데에서 왼쪽 [before], 오른쪽 [after]
+class _IconSlot extends InheritedWidget {
+  const _IconSlot({required this.before, required this.after, required super.child});
+  final double before, after;
+
+  @override
+  bool updateShouldNotify(_IconSlot old) => old.before != before || old.after != after;
+}
 
 /// 머리카락 선(화면 화소 1개): 가로선 · 세로선
 class Hairline extends StatelessWidget {
@@ -1123,6 +1162,31 @@ class _IconBtnState extends State<IconBtn> {
   @override
   Widget build(BuildContext context) {
     final on = !widget.disabled;
+    // IconRow 안이면 누르는 칸을 이웃과 나눈 폭으로(아이콘 가운데는 칸 왼쪽에서 before), 아니면 48×48
+    final slot = context.dependOnInheritedWidgetOfExactType<_IconSlot>();
+    final box = widget.outlined
+        ? SizedBox(
+            width: Space.hit,
+            height: Space.hit,
+            child: Center(
+              child: Container(
+                width: ControlSize.iconBox,
+                height: ControlSize.iconBox,
+                decoration: BoxDecoration(
+                  color: _down && on ? AppColors.greyOpacity100 : null,
+                  borderRadius: BorderRadius.circular(Shape.button),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Center(child: widget.child),
+              ),
+            ),
+          )
+        : Container(
+            width: Space.hit,
+            height: Space.hit,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: _down && on ? AppColors.greyOpacity100 : null),
+            child: Center(child: widget.child),
+          );
     return Semantics(
       container: true,
       button: true,
@@ -1138,28 +1202,14 @@ class _IconBtnState extends State<IconBtn> {
           onTapCancel: on ? () => setState(() => _down = false) : null,
           onTapUp: on ? (_) => setState(() => _down = false) : null,
           onTap: on ? widget.onPress : null,
-          child: widget.outlined
-              ? SizedBox(
-                  width: Space.hit,
+          child: slot == null
+              ? box
+              : SizedBox(
+                  width: slot.before + slot.after,
                   height: Space.hit,
-                  child: Center(
-                    child: Container(
-                      width: ControlSize.iconBox,
-                      height: ControlSize.iconBox,
-                      decoration: BoxDecoration(
-                        color: _down && on ? AppColors.greyOpacity100 : null,
-                        borderRadius: BorderRadius.circular(Shape.button),
-                        border: Border.all(color: AppColors.line),
-                      ),
-                      child: Center(child: widget.child),
-                    ),
-                  ),
-                )
-              : Container(
-                  width: Space.hit,
-                  height: Space.hit,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: _down && on ? AppColors.greyOpacity100 : null),
-                  child: Center(child: widget.child),
+                  child: Stack(clipBehavior: Clip.none, children: [
+                    Positioned(left: slot.before - Space.hit / 2, top: 0, width: Space.hit, height: Space.hit, child: box),
+                  ]),
                 ),
         ),
       ),

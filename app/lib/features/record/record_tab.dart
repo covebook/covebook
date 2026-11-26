@@ -313,10 +313,9 @@ class _RecordTabState extends State<RecordTab> {
     final searching = _searching.contains(section);
     final what = marks ? '갈피' : '감상';
     // 왼쪽 위 제목 '기록'은 없다(하단바에 이름, 2026-11-24 사용자 6단계): 맨 위가 '갈피 | 감상' 줄, 그 오른쪽에 검색 · ＋
-    final icons = Row(mainAxisSize: MainAxisSize.min, children: [
-      // 공통 규칙: 머리줄 아이콘은 HeadIcon(회색, 2026-11-19)
+    // 공통 규칙: 머리줄 아이콘은 HeadIcon(회색, 2026-11-19), 나란한 아이콘은 IconRow(가운데 사이 40, 2026-11-26)
+    final icons = IconRow(children: [
       IconBtn(label: '$what 검색', onPress: () => setState(() => _searching.add(section)), child: const HeadIcon('Search')),
-      const SizedBox(width: headIconGap),
       marks
           ? IconBtn(label: '갈피 추가', onPress: () => openNewBookmark(context, book: _markBook, photoOnly: _kind == MarkKind.photo), child: const HeadIcon('Plus'))
           : IconBtn(label: '감상 쓰기', onPress: () => openNewEssay(context, book: _essayBook), child: const HeadIcon('Plus')),
@@ -356,14 +355,15 @@ class _RecordTabState extends State<RecordTab> {
 
   double get _bottomPad => TabBarStyle.contentPad + (ReadingStore.instance.active != null ? miniTimerSpace : 0);
 
-  /// 개수 줄(왼쪽 'N개', 오른쪽 아이콘들) + 걸렸을 때만 조건 줄
+  /// 개수 줄(왼쪽 'N개', 오른쪽 아이콘들) + 걸렸을 때만 조건 줄. 목록 맨 위 줄로 넣어 목록과 같이 스크롤돼 올라간다
+  /// (2026-11-26 사용자 '스크롤해서 내리면 갈피 4개랑 필터 아이콘들 고정이잖아, 그냥 같이 올라가게 해줘 안 보이게')
   List<Widget> _countRows(String count, List<Widget> icons, List<String> conditions, VoidCallback clear) => [
         Padding(
           padding: const EdgeInsets.only(top: Space.xs),
           child: Row(children: [
             Expanded(child: Text(count, style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis)),
             // 마지막 아이콘 오른쪽 여백을 머리줄 아이콘과 맞춘다(내 책 탭과 같게)
-            Transform.translate(offset: const Offset(10, 0), child: Row(mainAxisSize: MainAxisSize.min, children: icons)),
+            Transform.translate(offset: const Offset(10, 0), child: IconRow(children: icons)),
           ]),
         ),
         if (conditions.isNotEmpty)
@@ -412,35 +412,39 @@ class _RecordTabState extends State<RecordTab> {
                 : null;
     final cardW = math.min(MediaQuery.sizeOf(context).width - Space.page * 2, contentMax);
     final bottomPad = _bottomPad;
-    return [
-      ..._countRows(
+    final head = _countRows(
         '갈피 ${list.length}개',
         [
           // 갈피 보드(책 한 권의 갈피를 넓은 보드에): 격자 아이콘(2026-11-17 시안). 아껴둔 갈피만은 필터 안으로 옮겼다
-          // 공통 규칙: 아이콘은 머리줄과 같은 회색 HeadIcon, 사이 headIconGap(2026-11-19. 격자만 검었고 사이가 0이었다)
+          // 공통 규칙: 아이콘은 머리줄과 같은 회색 HeadIcon, 나란한 아이콘은 IconRow(2026-11-19 격자만 검었고 사이가 0 → 11-26 가운데 사이 40)
           IconBtn(label: '갈피 보드로 보기', onPress: _openBoard, child: const HeadIcon('LayoutGrid')),
-          const SizedBox(width: headIconGap),
           FilterIcon(active: _markBook != null || _kind != MarkKind.all || _savedOnly || _marksOld, onPress: _openMarkFilter),
         ],
         conditions,
         clear,
-      ),
+      );
+    return [
       Expanded(
         child: OverflowBox(
           // 목록은 화면 좌우 여백 밖까지(카드 그림자·뒤 종이가 잘리지 않게)
           maxWidth: cardW + Space.page * 2,
           child: list.isEmpty
               ? ListView(padding: EdgeInsets.fromLTRB(Space.page, 0, Space.page, bottomPad), children: [
+                  ...head,
                   Empty(title: emptyTitle, body: emptyBody, action: q.isEmpty ? '조건 지우기' : null, actionKind: 'secondary', onAction: clear),
                 ])
               : ListView.builder(
                   // 글자 탭마다 따로 스크롤 자리를 기억한다
                   key: const PageStorageKey('record-marks'),
-                  padding: EdgeInsets.fromLTRB(Space.page, Space.xs, Space.page, bottomPad),
+                  padding: EdgeInsets.fromLTRB(Space.page, 0, Space.page, bottomPad),
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  itemCount: list.length,
+                  // 맨 위는 개수 줄(+ 조건 줄)과 카드 위 틈 4(전에는 목록 위 여백)
+                  itemCount: list.length + 1,
                   itemBuilder: (context, i) {
-                    final m = list[i];
+                    if (i == 0) {
+                      return Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: head));
+                    }
+                    final m = list[i - 1];
                     // 카드 값은 상세와 같은 cardData(목록 날짜는 dateShort)
                     final data = cardData(_lib, m, short: true);
                     if (data == null) return const SizedBox.shrink();
@@ -491,16 +495,20 @@ class _RecordTabState extends State<RecordTab> {
           _essayBook = null;
           _essaysOld = false;
         });
+    final head = _countRows(
+      '감상 ${list.length}편',
+      [FilterIcon(active: book != null || _essaysOld, onPress: _openEssayFilter)],
+      [if (_essaysOld) '오래된순', if (book != null) _titleOf(book)],
+      clear,
+    );
+    // 목록은 화면 폭 그대로(Bleed) 두고 좌우 여백은 목록 안에: 개수 줄 끝 아이콘(오른쪽으로 10 민다)의 눌림 원이 목록 가장자리에서 잘리지 않게
+    const side = EdgeInsets.symmetric(horizontal: Space.page);
     return [
-      ..._countRows(
-        '감상 ${list.length}편',
-        [FilterIcon(active: book != null || _essaysOld, onPress: _openEssayFilter)],
-        [if (_essaysOld) '오래된순', if (book != null) _titleOf(book)],
-        clear,
-      ),
       Expanded(
-        child: list.isEmpty
-            ? ListView(padding: EdgeInsets.only(bottom: bottomPad), children: [
+        child: Bleed(
+          child: list.isEmpty
+            ? ListView(padding: side.copyWith(bottom: bottomPad), children: [
+                ...head,
                 // 공통 규칙 11장: 검색 0건 · 거르기 0건(갈피와 같은 말)
                 q.isNotEmpty
                     ? Empty(title: '‘$q’에 맞는 감상이 없어요')
@@ -509,11 +517,15 @@ class _RecordTabState extends State<RecordTab> {
             // 목록 줄 사이에 선을 긋지 않는다(다른 책 목록과 같게, 0.5 선이었다)
             : ListView.builder(
                 key: const PageStorageKey('record-essays'),
-                padding: EdgeInsets.only(bottom: bottomPad),
+                padding: side.copyWith(bottom: bottomPad),
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                itemCount: list.length,
-                itemBuilder: (context, i) => EssayRow(key: ValueKey(list[i].id), lib: _lib, essay: list[i]),
+                // 맨 위는 개수 줄(+ 조건 줄): 목록과 같이 스크롤된다
+                itemCount: list.length + 1,
+                itemBuilder: (context, i) => i == 0
+                    ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: head)
+                    : EssayRow(key: ValueKey(list[i - 1].id), lib: _lib, essay: list[i - 1]),
               ),
+        ),
       ),
     ];
   }
