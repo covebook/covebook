@@ -57,7 +57,7 @@ func iapFromEnv() map[iap.Route]iap.Store {
 
 // 샌드박스 스위치(IAP_ALLOW_SANDBOX=1): 샌드박스(TestFlight, 심사, 시험 계정) 거래에도 지급한다.
 // 기본은 꺼짐이다. 켜 두면 실제로 결제하지 않은 사람이 운영 권한을 받는다(조사 종합 6-1장, 이슈 #31).
-// 심사와 내부 시험 기간에만 켠다. 끄면 전에 준 샌드박스 권한도 함께 사라진다.
+// 운영에서도 계속 켠다(2026-11-26 결정, 이슈 #31: TestFlight 참가자에게도 선반을 준다). 샌드박스 거래는 env로 따로 남아 매출에서 빠진다. 끄면 전에 준 샌드박스 권한도 함께 사라진다.
 func iapSandboxAllowed() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("IAP_ALLOW_SANDBOX"))) {
 	case "1", "true", "on", "yes":

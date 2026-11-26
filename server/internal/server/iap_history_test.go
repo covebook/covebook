@@ -301,6 +301,18 @@ func TestIAPAdminStats(t *testing.T) {
 	if err != nil || after.ShelfOverCap != b.ShelfOverCap || after.ShelfOverCapRefunded != b.ShelfOverCapRefunded+1 || after.ShelfNoYear != b.ShelfNoYear+1 {
 		t.Fatalf("구글 넘은 거래 %+v → %+v %v", b, after, err)
 	}
+	// 확인 못 한 가장 오래된 구글 구매의 나이와 샌드박스 구매 수도 값으로 본다(칸만 있고 쿼리가 틀려도 통과하지 않게)
+	oldID := iapTestID(t, "old-unconfirmed")
+	e.google.Purchases[oldID] = e.shelfPurchase(oldID, e.shelfToken(token, 2028))
+	if code, body := e.submit(token, "google", e.shelf, oldID, false); code != 200 {
+		t.Fatalf("선반 제출 %d %v", code, body)
+	}
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET confirmed_at=NULL, purchased_at=now()-interval '2 hours', env='sandbox' WHERE transaction_id=$1", oldID); err != nil {
+		t.Fatal(err)
+	}
+	if aged, err := iapBacklogNow(e.ctx, e.db); err != nil || aged.OldestUnconfirmedSecs < 7200 || aged.SandboxPurchases30Days != after.SandboxPurchases30Days+1 {
+		t.Fatalf("확인 못 한 구매의 나이, 샌드박스 수: %+v → %+v %v", after, aged, err)
+	}
 	// 애플의 넘은 거래는 사용자가 환불을 요청해야 해서 남는다
 	ya := e.shelfToken(token, 2027)
 	for range 2 {

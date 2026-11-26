@@ -352,7 +352,8 @@ func TestGoogleSubscriptionDeferredChange(t *testing.T) {
 		LineItems: []*androidpublisher.SubscriptionPurchaseLineItem{
 			{ProductId: "plus", ExpiryTime: "2026-12-18T03:00:00Z", LatestSuccessfulOrderId: "GPA.1",
 				OfferDetails: &androidpublisher.OfferDetails{BasePlanId: "monthly"}, AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: false}},
-			{ProductId: "plus", ExpiryTime: "2027-12-18T03:00:00Z", LatestSuccessfulOrderId: "GPA.2",
+			// 미뤄진 새 요금제는 아직 결제 전이라 주문 ID가 없다
+			{ProductId: "plus", ExpiryTime: "2027-12-18T03:00:00Z",
 				OfferDetails: &androidpublisher.OfferDetails{BasePlanId: "yearly"}, AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: true}},
 		},
 	}}}
@@ -360,7 +361,8 @@ func TestGoogleSubscriptionDeferredChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("항목 2개를 받지 못함: %v", err)
 	}
-	if p.PlanID != "yearly" || !p.AutoRenew || p.ExpiresAt.Year() != 2027 || p.TransactionID != "GPA.2" {
+	// 주문 ID는 주문 ID가 있는 옛 항목의 것(원장 키가 구매 토큰으로 바뀌지 않게)
+	if p.PlanID != "yearly" || !p.AutoRenew || p.ExpiresAt.Year() != 2027 || p.TransactionID != "GPA.1" {
 		t.Fatalf("새 요금제를 고르지 않음: %+v", p)
 	}
 }

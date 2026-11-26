@@ -285,8 +285,8 @@ func TestIAPNoticeRead(t *testing.T) {
 	}
 }
 
-// 계정을 지우면 고지도 지워진다. 주인이 없는 거래의 환불은 고지를 쓰지 않는다.
-func TestIAPNoticeCascadeAndOwnerless(t *testing.T) {
+// 계정을 지우면 고지 줄은 남기고 주인만 비운다(ON DELETE SET NULL, 알렸다는 증빙 ADR-0003 L11). 주인이 없는 거래의 환불은 고지를 쓰지 않는다.
+func TestIAPNoticeKeptOnDeleteAndOwnerless(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
 	tok := iapTestID(t, "tok")
@@ -301,11 +301,20 @@ func TestIAPNoticeCascadeAndOwnerless(t *testing.T) {
 	if count() != 1 {
 		t.Fatalf("지우기 전 고지 %d", count())
 	}
+	var noticeID int64
+	if err := e.db.QueryRow(e.ctx, "SELECT id FROM iap_notices WHERE user_id=$1", user).Scan(&noticeID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.db.Exec(e.ctx, "DELETE FROM users WHERE id=$1", user); err != nil {
 		t.Fatal(err)
 	}
 	if count() != 0 {
-		t.Fatalf("계정을 지웠는데 고지가 남음: %d", count())
+		t.Fatalf("계정을 지웠는데 고지에 주인이 남음: %d", count())
+	}
+	// 줄 자체는 남는다(CASCADE로 바뀌면 여기서 실패한다)
+	var orphan bool
+	if err := e.db.QueryRow(e.ctx, "SELECT user_id IS NULL FROM iap_notices WHERE id=$1", noticeID).Scan(&orphan); err != nil || !orphan {
+		t.Fatalf("계정을 지우면 고지 줄이 주인 없이 남아야 함: %v %v", orphan, err)
 	}
 	// 거래 줄은 남고(user_id NULL) 환불이 반영되지만, 알릴 사람이 없으니 고지는 없다
 	var before int
