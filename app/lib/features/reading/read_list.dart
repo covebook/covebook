@@ -15,6 +15,7 @@ import '../../domain/library.dart';
 import '../../domain/reading.dart';
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
+import '../../store/mini_timer_store.dart' show MiniTimerPlace;
 import '../../store/settings_store.dart';
 import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
@@ -69,6 +70,7 @@ class _ReadListState extends State<ReadList> {
       n.addListener(_changed);
     }
     AppNav.instance.addListener(_navHandoff);
+    MiniTimerPlace.instance.addListener(_tabChanged);
     _lib.load().then((_) => _navHandoff());
     _reading.load().catchError((_) {});
     _settings.load();
@@ -80,7 +82,17 @@ class _ReadListState extends State<ReadList> {
       n.removeListener(_changed);
     }
     AppNav.instance.removeListener(_navHandoff);
+    MiniTimerPlace.instance.removeListener(_tabChanged);
     super.dispose();
+  }
+
+  /// 다른 탭에 갔다 오면 다시 오늘(다른 날을 보던 채로 돌아오면 읽기 목록이 없어 헷갈린다, 2026-11-26 에뮬 확인)
+  String _lastTab = '/read';
+  void _tabChanged() {
+    final tab = MiniTimerPlace.instance.tab;
+    if (tab == _lastTab) return;
+    _lastTab = tab;
+    if (tab != '/read' && _day != null && mounted) setState(() => _day = null);
   }
 
   void _changed() {

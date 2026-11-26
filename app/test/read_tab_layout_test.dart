@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/reading/read_list.dart';
 import 'package:chaekjang/store/library_model.dart';
+import 'package:chaekjang/store/mini_timer_store.dart' show MiniTimerPlace;
 import 'package:chaekjang/ui/kit.dart';
 import 'package:chaekjang/ui/theme.dart';
 import 'package:flutter/material.dart';
@@ -108,6 +109,14 @@ void main() {
     await t.pump(const Duration(milliseconds: 300));
     expect(find.text('내 읽기 목록'), findsOneWidget, reason: '오늘로 돌아왔다');
     expect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 ')), findsOneWidget);
+    // 다른 날을 보다가 다른 탭에 갔다 오면 오늘
+    await t.tap(find.bySemanticsLabel('이전 날'));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('내 읽기 목록'), findsNothing);
+    MiniTimerPlace.instance.setTab('/stats');
+    MiniTimerPlace.instance.setTab('/read');
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('내 읽기 목록'), findsOneWidget, reason: '다른 탭에 갔다 오면 오늘');
   });
 
   testWidgets('최근 읽던 책: 표지 92, 제목 줄 위 = 표지 위, 단추 아래 = 표지 아래, 오늘 시간은 단추 오른쪽 위', (t) async {

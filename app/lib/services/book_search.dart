@@ -310,7 +310,7 @@ Future<String?> bookIntro(String isbn13) async {
 }
 
 /// 책 소개 글을 보일 글자로: 글은 고치지 않고 줄바꿈 표시(<br> · </p>)만 줄로, 다른 꺾쇠 표시는 빼고, 글자 표시(&amp; 등)를 글자로 푼다.
-/// 빈 줄은 하나까지
+/// 빈 줄은 두지 않는다(접어 둔 다섯 줄 중 한 줄이 빈 줄로 비어 '더 보기' 위가 휑했다, 2026-11-26 에뮬 확인)
 String introText(String raw) {
   var s = raw.replaceAll(RegExp(r'<br\s*/?>|</p>', caseSensitive: false), '\n').replaceAll(RegExp(r'<[^>]+>'), '');
   const named = {'&nbsp;': ' ', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&middot;': '·', '&hellip;': '…', '&lsquo;': '‘', '&rsquo;': '’', '&ldquo;': '“', '&rdquo;': '”'};
@@ -320,6 +320,6 @@ String introText(String raw) {
     return n == null || n <= 0 || n > 0x10FFFF ? m[0]! : String.fromCharCode(n);
   });
   s = s.replaceAll('&amp;', '&').replaceAll('\r', '');
-  s = s.split('\n').map((l) => l.trim()).join('\n').replaceAll(RegExp(r'\n{3,}'), '\n\n');
+  s = s.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).join('\n');
   return s.trim();
 }

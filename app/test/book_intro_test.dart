@@ -18,7 +18,7 @@ Finder _text(String s) => find.byWidgetPredicate((w) => w is RichText && w.text.
 void main() {
   group('introText: 글은 그대로, 표시만 푼다', () {
     test('줄바꿈 표시는 줄로, 다른 꺾쇠 표시는 빼고, 글자 표시는 글자로', () {
-      expect(introText('<b>소년이 온다</b><br/>1980년 5월&nbsp;광주.<br><br><br>&quot;너&quot; &amp; 나 &#8230; &#x2014;'), '소년이 온다\n1980년 5월 광주.\n\n"너" & 나 … —');
+      expect(introText('<b>소년이 온다</b><br/>1980년 5월&nbsp;광주.<br><br><br>&quot;너&quot; &amp; 나 &#8230; &#x2014;'), '소년이 온다\n1980년 5월 광주.\n"너" & 나 … —');
     });
     test('앞뒤 빈칸 · 줄 끝 빈칸은 지운다', () {
       expect(introText('  첫 줄  \r\n  둘째 줄 '), '첫 줄\n둘째 줄');
