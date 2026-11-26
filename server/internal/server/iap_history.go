@@ -178,9 +178,12 @@ func (s *Server) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 				log.Printf("iap voided list failed: route=%s err=%v", route, err)
 			}
 			for _, v := range list {
-				if s.iapApplyVoided(ctx, store, v, now) {
-					res.Voided++
-				}
+				// 한 건의 패닉이 뒤의 환불 반영을 막지 않게(iapSafely)
+				iapSafely("voided", func() {
+					if s.iapApplyVoided(ctx, store, v, now) {
+						res.Voided++
+					}
+				})
 			}
 		}
 	}
