@@ -110,7 +110,8 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
       line(p == null ? '$year년 책장에 선반을 엽니다. 다른 해의 책장에는 열리지 않습니다.' : '$year년 책장에 선반 ${p.shelves}칸을 엽니다. 다른 해의 책장에는 열리지 않습니다.'),
       line('한 번 결제하면 이 책장에서 계속 쓸 수 있습니다.'),
       line('구매한 선반은 로그인한 계정에 기록되어 기기를 바꿔도 유지됩니다.'),
-      line('환불은 $store의 환불 절차를 따릅니다.'),
+      // 청약철회 제한 표시(전자상거래법 제17조 제6항, T2 v3). 시험 사용은 잠긴 선반 미리보기(locked_rows)
+      line('결제하면 바로 선반이 열려 청약철회가 제한됩니다. 환불은 $store의 환불 절차를 따릅니다.'),
       if (failed != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(failed, style: AppType.sub.copyWith(color: AppColors.danger))),
       if (_iap.lastResult == IapResult.pending && _iap.lastMessage != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(_iap.lastMessage!, style: AppType.body)),
       Padding(

@@ -511,7 +511,7 @@ void main() {
       expect(list[2].unread, isFalse);
       expect(list[2].text!.$1, contains('자동 갱신이 꺼졌습니다'));
       expect(list[2].text!.$2, contains('2027년 1월 18일까지 이용할 수 있습니다'));
-      expect(list[5].text!.$2, '선반 1칸을 더 열 수 있습니다.');
+      expect(list[5].text!.$2, '선반 1칸을 더 열 수 있습니다. $kIapContractNote');
       // 구독 결제 완료(T3)에는 결제일이 있다(고지가 쓰인 날)
       expect(list[4].text!.$2, contains('결제일은 2026년 12월'));
       expect(list[3].text!.$2, contains('선반이 잠겼습니다'));
@@ -779,7 +779,7 @@ void main() {
         IapNotice.from({'id': 1, 'kind': kind, 'createdAt': '2026-11-19T03:00:00Z', 'params': {'route': 'apple', ...params}})!;
     expect(n('shelf_refunded', {'year': 2026, 'revokedAt': '2026-11-19T03:00:00Z'}).text!.$2, contains('2026년 책장의 선반이 잠겼습니다'));
     expect(n('shelf_refunded', {}).text!.$2, contains('해당 선반이 잠겼습니다'));
-    expect(n('purchase_done', {'kind': 'product', 'shelves': 3, 'year': 2027}).text!.$2, '2027년 책장의 선반 3칸을 더 열 수 있습니다.');
+    expect(n('purchase_done', {'kind': 'product', 'shelves': 3, 'year': 2027}).text!.$2, '2027년 책장의 선반 3칸을 더 열 수 있습니다. $kIapContractNote');
     final h = IapHistoryItem.from({'route': 'apple', 'productId': 'shelf3', 'kind': 'product', 'state': 'paid', 'purchasedAt': '2026-11-19T03:00:00Z', 'shelves': 3, 'year': 2026})!;
     expect(h.name, '2026년 책장 추가 선반 3칸');
     // 해가 바뀌어 올해 칸이 0이 돼도 상태 비교는 모든 해의 합이라 환불로 보지 않는다

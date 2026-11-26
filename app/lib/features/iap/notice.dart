@@ -128,8 +128,8 @@ class IapNotice {
               '${route == 'apple' ? 'Apple에 환불을 요청해 돌려받을 수 있습니다. Apple의 문제 신고 페이지에서 이 구매를 골라 환불을 요청해 주세요.' : params['autoRefund'] == true ? '자동으로 환불했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.' : '환불해 드립니다. 처리되면 $store에서 확인할 수 있습니다.'}'
         ),
       'purchase_done' => params['kind'] == 'product'
-          ? ('추가 선반 결제가 완료됐습니다', shelves > 0 ? '$bookcase선반 $shelves칸을 더 열 수 있습니다.' : '$bookcase선반을 더 열 수 있습니다.')
-          : ('$name 결제가 완료됐습니다', '${paid == null ? '' : '결제일은 ${iapDate(paid)}입니다. '}${expires == null ? '' : '다음 결제일은 ${iapDate(expires)}입니다. '}해지는 내 정보의 구독 관리에서 할 수 있습니다.'),
+          ? ('추가 선반 결제가 완료됐습니다', '${shelves > 0 ? '$bookcase선반 $shelves칸을 더 열 수 있습니다.' : '$bookcase선반을 더 열 수 있습니다.'} $kIapContractNote')
+          : ('$name 결제가 완료됐습니다', '${paid == null ? '' : '결제일은 ${iapDate(paid)}입니다. '}${expires == null ? '' : '다음 결제일은 ${iapDate(expires)}입니다. '}해지는 내 정보의 구독 관리에서 할 수 있습니다. $kIapContractNote'),
       _ => null,
     };
   }
@@ -245,10 +245,13 @@ Future<void> showIapNotice(BuildContext context, IapNotice n) async {
 final appleRefundUrl = Uri.parse('https://reportaproblem.apple.com');
 
 /// 결제 완료(T3): 결제한 화면에서 바로 알린다. price: 스토어가 준 가격 문자열(모르면 줄을 내지 않는다)
+/// 결제 완료 고지(T3 v2)가 계약 내용 서면(전자상거래법 제13조 제2항)을 겸하도록 판매자 정보와 철회·환불 기준이 있는 곳을 알린다
+const kIapContractNote = '판매자 정보와 청약철회·환불 기준은 내 정보의 사업자 정보와 이용약관에 있습니다.';
+
 Future<void> showPurchaseDone(BuildContext context, IapSubscription sub, {String? price}) => appAlert(
       context,
       '결제가 완료됐습니다',
-      ['책장 한켠 플러스', if (price != null) '결제 금액 $price', '결제일 ${iapDate(DateTime.now())}', '다음 결제일 ${iapDate(sub.expiresAt)}', '해지는 내 정보의 구독 관리에서 할 수 있습니다.'].join('\n'),
+      ['책장 한켠 플러스', if (price != null) '결제 금액 $price', '결제일 ${iapDate(DateTime.now())}', '다음 결제일 ${iapDate(sub.expiresAt)}', '해지는 내 정보의 구독 관리에서 할 수 있습니다.', kIapContractNote].join('\n'),
       null,
       true,
       false,
