@@ -117,9 +117,9 @@ func TestIAPSeller(t *testing.T) {
 		t.Fatal("설정이 없는데 사업자 정보가 나옴")
 	}
 	// 시험용 가짜 값. 모르는 칸과 글자가 아닌 값은 내보내지 않는다
-	t.Setenv("IAP_SELLER_JSON", `{"name":"시험 상호","owner":"시험 대표","bizNo":"000-00-00000","secret":"내보내면 안 됨","phone":123,"email":""}`)
+	t.Setenv("IAP_SELLER_JSON", `{"name":"시험 상호","owner":"시험 대표","bizNo":"000-00-00000","host":"시험 호스팅","secret":"내보내면 안 됨","phone":123,"email":""}`)
 	seller, _ := e.me(token)["seller"].(map[string]any)
-	if len(seller) != 3 || seller["name"] != "시험 상호" || seller["owner"] != "시험 대표" || seller["bizNo"] != "000-00-00000" {
+	if len(seller) != 4 || seller["host"] != "시험 호스팅" || seller["name"] != "시험 상호" || seller["owner"] != "시험 대표" || seller["bizNo"] != "000-00-00000" {
 		t.Fatalf("사업자 정보: %v", seller)
 	}
 	for _, broken := range []string{`not json`, `[]`, `{}`, `{"name":""}`} {
