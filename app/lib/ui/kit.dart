@@ -218,6 +218,10 @@ abstract final class IconSize {
   /// 머리줄 아이콘(HeadIcon · FilterIcon) 24: TDS Icon Button iconSize 기본값
   static const head = 24.0;
 
+  /// 개수 줄(목록 위 '갈피 N개' · '책 N권' 줄) 아이콘 20: 머리줄보다 한 단계 작게
+  /// (2026-11-26 사용자 '갈피 4개 라인에 있는 아이(콘)가 좀 크지 않나': 머리줄과 같은 24라 작은 '갈피 4개' 글자 옆에서 커 보였다)
+  static const count = 20.0;
+
   /// 이미 넣음 체크(AddedMark) 20 · 굵기 2, 고른 원 안 흰 체크 굵기 3
   static const mark = 20.0, markStroke = 2.0, checkStroke = 3.0;
 
@@ -225,7 +229,7 @@ abstract final class IconSize {
   static const small = 18.0;
 
   static const all = <String, double>{
-    'base': base, 'chevron': chevron, 'head': head, 'back': back, 'stroke': stroke, 'mark': mark, 'markStroke': markStroke, 'checkStroke': checkStroke, 'small': small,
+    'base': base, 'chevron': chevron, 'head': head, 'count': count, 'back': back, 'stroke': stroke, 'mark': mark, 'markStroke': markStroke, 'checkStroke': checkStroke, 'small': small,
   };
 }
 
@@ -297,12 +301,15 @@ class Chevron extends StatelessWidget {
 /// 머리줄 아이콘(검색 · + · 공유 · 더 보기 · 필터 · 보기 바꾸기): TDS Icon Button iconSize 기본 24 · 선 1.6 · 회색 [AppColors.icon]
 /// (아이콘 색 기본값은 공식 없음 → 지금 앱 '우측 상단 아이콘 회색', 2026-11-18 사용자 · 11-18 '아이콘 색 좀 연하게, 통일')
 class HeadIcon extends StatelessWidget {
-  const HeadIcon(this.name, {super.key, this.color = AppColors.icon});
+  const HeadIcon(this.name, {super.key, this.color = AppColors.icon, this.size = IconSize.head});
   final String name;
   final Color color;
 
+  /// 머리줄 24, 개수 줄은 IconSize.count 20
+  final double size;
+
   @override
-  Widget build(BuildContext context) => LucideIcon(name, size: IconSize.head, color: color);
+  Widget build(BuildContext context) => LucideIcon(name, size: size, color: color);
 }
 
 /// 옛 머리줄 아이콘 사이(4, 누르는 칸 48 사이에 더하던 빈 곳 → 그림 사이 28). 나란한 아이콘은 이제 [IconRow]가 늘어놓는다
@@ -2090,9 +2097,12 @@ class Tabs<T> extends StatelessWidget {
 
 /// 필터 아이콘: 누르면 필터 시트. 걸러진 상태면 테마색 점
 class FilterIcon extends StatelessWidget {
-  const FilterIcon({super.key, required this.onPress, this.active = false});
+  const FilterIcon({super.key, required this.onPress, this.active = false, this.size = IconSize.head});
   final VoidCallback onPress;
   final bool active;
+
+  /// 그림 크기(머리줄 24, 개수 줄 IconSize.count 20). 걸러진 상태 점은 그림 오른쪽 위 모서리에 붙는다
+  final double size;
 
   @override
   Widget build(BuildContext context) => IconBtn(
@@ -2102,11 +2112,11 @@ class FilterIcon extends StatelessWidget {
           width: Space.touch,
           height: Space.touch,
           child: Stack(children: [
-            const Center(child: LucideIcon('SlidersHorizontal', size: IconSize.head, color: AppColors.icon)),
+            Center(child: LucideIcon('SlidersHorizontal', size: size, color: AppColors.icon)),
             if (active)
               Positioned(
-                top: 9,
-                right: 7,
+                top: (Space.touch - size) / 2 - 1,
+                right: (Space.touch - size) / 2 - 3,
                 child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle)),
               ),
           ]),

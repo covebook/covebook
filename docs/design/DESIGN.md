@@ -226,6 +226,7 @@
 | `IconSize.stroke` | 1.6 | 선 아이콘 굵기 |
 | `IconSize.chevron` | 24 | 줄 끝 꺾쇠 `Chevron`(inkFaint) |
 | `IconSize.head` | 24 | 머리줄 아이콘 `HeadIcon`·`FilterIcon` |
+| `IconSize.count` | 20 | 개수 줄('갈피 N개' · '책 N권') 아이콘 `HeadIcon(size:)`·`FilterIcon(size:)`(2026-11-26 사용자 '갈피 4개 라인에 있는 아이(콘)가 좀 크지 않나') |
 | `IconSize.back` | 28 | 뒤로 꺾쇠(`NavBar`) |
 | `IconSize.mark` | 20 | 이미 넣음 체크 `AddedMark`(accent) |
 | `IconSize.small` | 18 | 줄 안 작은 표시(내 책 목록 메모), 흰 원 단추 안 그림(표지 연필 · 사진 ⋯) |

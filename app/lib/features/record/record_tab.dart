@@ -417,8 +417,9 @@ class _RecordTabState extends State<RecordTab> {
         [
           // 갈피 보드(책 한 권의 갈피를 넓은 보드에): 격자 아이콘(2026-11-17 시안). 아껴둔 갈피만은 필터 안으로 옮겼다
           // 공통 규칙: 아이콘은 머리줄과 같은 회색 HeadIcon, 나란한 아이콘은 IconRow(2026-11-19 격자만 검었고 사이가 0 → 11-26 가운데 사이 40)
-          IconBtn(label: '갈피 보드로 보기', onPress: _openBoard, child: const HeadIcon('LayoutGrid')),
-          FilterIcon(active: _markBook != null || _kind != MarkKind.all || _savedOnly || _marksOld, onPress: _openMarkFilter),
+          // 개수 줄 아이콘은 머리줄보다 한 단계 작은 IconSize.count(2026-11-26 사용자 '갈피 4개 라인에 있는 아이(콘)가 좀 크지 않나')
+          IconBtn(label: '갈피 보드로 보기', onPress: _openBoard, child: const HeadIcon('LayoutGrid', size: IconSize.count)),
+          FilterIcon(active: _markBook != null || _kind != MarkKind.all || _savedOnly || _marksOld, onPress: _openMarkFilter, size: IconSize.count),
         ],
         conditions,
         clear,
@@ -497,7 +498,7 @@ class _RecordTabState extends State<RecordTab> {
         });
     final head = _countRows(
       '감상 ${list.length}편',
-      [FilterIcon(active: book != null || _essaysOld, onPress: _openEssayFilter)],
+      [FilterIcon(active: book != null || _essaysOld, onPress: _openEssayFilter, size: IconSize.count)],
       [if (_essaysOld) '오래된순', if (book != null) _titleOf(book)],
       clear,
     );
