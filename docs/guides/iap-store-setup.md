@@ -122,7 +122,6 @@
 - 구독
   - 구독(Subscriptions) → 구독 그룹 하나(예: plus) → 그 안에 월간·연간
     - 월간과 연간은 **같은 등급(level)**으로 둔다. 기간이 다른 같은 등급끼리 바꾸면 다음 갱신일부터 바뀌어, 구글 설정과 같아진다(#33). 그룹과 등급은 나중에 바꾸기 어렵다
-  - 그룹 안 순서(레벨): 월↔연 바꾸기를 언제 적용할지가 달라진다. 정책 #33에서 정한다
   - 결제 실패 유예(Billing Grace Period): 켠다. **28일**, 대상은 모든 구독자(#34). 서버는 유예를 이미 처리한다(`grace_until`)
   - 가족 공유(Family Sharing): **켜지 않는다**. 켜면 다시 끌 수 없다. 가족 구성원의 구매에는 계정 연결 값이 없어 누구 것인지 가리기 어렵다
   - 무료 체험·할인 제안: 만들지 않는다(ADR-0002 D14)
@@ -372,7 +371,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 | `IAP_GOOGLE_PUSH_EMAIL` | 푸시 구독 인증에 고른 서비스 계정 이메일 | 3-6 |
 | `IAP_SELLER_JSON` | 사업자 정보 JSON(`name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`) | 1 |
 | `IAP_ENABLED` | `1` | |
-| `IAP_ALLOW_SANDBOX` | 시험·심사 동안 `1`, 그 뒤 정책 #31 | |
+| `IAP_ALLOW_SANDBOX` | `1` (계속 켜 둔다. 앱을 고칠 때마다 심사·TestFlight 결제가 샌드박스로 온다. #31 결정) | |
 | `IAP_RENEWAL_NOTICE_DAYS` | 연 구독 갱신 예정 고지를 며칠 전에. 비우면 14 | |
 | `ADMIN_TOKEN` | 운영 숫자 조회용(`GET /admin/iap/stats`). 운영에 아직 없다(2026-11-23 확인). 긴 무작위 값을 새로 만들어 넣는다(`openssl rand -hex 32`) | |
 
@@ -408,8 +407,8 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 
 - [ ] 처리방침 웹 전문 반영 (서버 재배포)
 - [ ] 앱 `IAP=true`로 빌드하는 설정을 CI에 반영 (TestFlight·Play 워크플로)
-- [ ] 심사 제출. 심사 기간에는 `IAP_ALLOW_SANDBOX=1`, 끝나면 정책(#31)에 따라
-- [ ] 첫 주는 매일 `/admin/iap/stats`: 대기·실패 알림, 확인 못 한 구매(구글 3일)
+- [ ] 심사 제출. `IAP_ALLOW_SANDBOX=1`은 심사가 끝나도 그대로 둔다(#31)
+- [ ] 첫 주는 매일 `/admin/iap/stats`: 대기·실패 알림, 확인 못 한 구매(`oldestUnconfirmedSeconds`가 86400을 넘으면 본다. 구글은 3일에 환불), 샌드박스 거래 수
 
 ## 출처
 
