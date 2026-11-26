@@ -202,7 +202,18 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 	if err != nil {
 		return false, err
 	}
-	return tag.RowsAffected() == 1, nil
+	if tag.RowsAffected() == 1 {
+		return true, nil
+	}
+	// 이미 있던 거래다. 처음 넣을 때 금액을 못 받았으면(구글 주문 조회 실패) 지금 받은 값으로 채운다. 한 번 채운 금액은 바꾸지 않는다
+	if p.PriceMilli > 0 && p.Currency != "" {
+		if _, err = q.Exec(ctx, `UPDATE iap_purchases SET currency=$3, price_milli=$4, updated_at=now()
+			WHERE route=$1 AND transaction_id=$2 AND price_milli IS NULL`,
+			string(p.Route), iapTransactionKey(kind, p), p.Currency, p.PriceMilli); err != nil {
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 // iapTransactionKey는 원장의 유일 키에 쓸 값이다.

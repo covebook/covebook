@@ -558,7 +558,8 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 				return e
 			}
 		}
-		if inserted && resYear > 0 {
+		// 예약과 앱이 보낸 연도는 낸 사람의 것이다. 다른 계정(결제한 계정)에 넣는 거래에는 쓰지 않는다(그 계정의 연도는 계정 연결 값으로만 안다)
+		if inserted && resYear > 0 && grantee == user {
 			prev, changed, e := iapPreferShelfYear(ctx, tx, route, key, resYear)
 			if e != nil {
 				return e
@@ -568,7 +569,11 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		// 값도 예약도 연도를 몰랐으면 앱이 보낸 연도로 채운다
-		if shelfYear, e = iapSetShelfYear(ctx, tx, route, key, body.Year); e != nil {
+		askedYear := body.Year
+		if grantee != user {
+			askedYear = 0
+		}
+		if shelfYear, e = iapSetShelfYear(ctx, tx, route, key, askedYear); e != nil {
 			return e
 		}
 		if shelfYear > 0 {
