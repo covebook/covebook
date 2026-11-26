@@ -1,8 +1,9 @@
-// 읽기 탭(지금 앱 features/reading/ReadList.tsx): 맨 위 오늘 날짜와 오늘 읽은 시간, '최근 읽던 책' 큰 카드(표지 · 오늘 시간 · 이어서 읽기),
-// 아래 '내 읽기 목록'은 책마다 한 줄(표지 · 제목 · 저자 · 오늘 읽은 시간이나 '읽기'), 제목 오른쪽 +와 맨 아래 '+ 책 추가'. 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
+// 읽기 탭(지금 앱 features/reading/ReadList.tsx): 맨 위 가운데 '‹ 11월 26일 목요일 ›'(전날 · 다음 날 기록 보기)와 그날 읽은 시간,
+// 오늘이면 '최근 읽던 책' 큰 카드(표지 · 오늘 시간 · 이어서 읽기)와 '내 읽기 목록'(책마다 한 줄: 표지 · 제목 · 저자 · 오늘 읽은 시간이나 '읽기', 맨 아래 '+ 책 추가'),
+// 다른 날이면 그날 독서 기록 줄(통계 캘린더 그날 기록과 같은 줄). 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
 // 줄을 길게 누르면 메뉴(책 정보 · 독서 기록 · 목록에서 빼기). 장면에서 뒤로 나오면 이 목록이다(타이머는 계속 돈다).
 // 다른 책을 재는 중에 다른 책을 누르면 묻는다(앞 책 시간이 설명 없이 새 책으로 옮겨 가지 않게).
-// '내 읽기 목록' 오른쪽 +와 아래 '+ 책 추가'는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
+// 아래 '+ 책 추가'는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
 library;
 
 import 'dart:math' as math;
@@ -23,6 +24,7 @@ import '../book/add_book_screen.dart' show openAddBook;
 import '../book/book_screen.dart';
 import '../bookmark/book_picker.dart';
 import '../stats/chart_data.dart' show dayTitle;
+import '../stats/session_edit_screen.dart' show openSessionEdit;
 import '../stats/session_edit_screen.dart' show openSessionAdd;
 import '../stats/stats_screen.dart';
 import '../stats/stats_widgets.dart';
@@ -56,6 +58,9 @@ class _ReadListState extends State<ReadList> {
   final _reading = ReadingStore.instance;
   final _settings = SettingsStore.instance;
   String? _focusId;
+
+  /// 보고 있는 날(null은 오늘): 머리 ‹ › 로 전날 · 다음 날 기록을 본다(2026-11-26 사용자 '중앙에 좀 더 큰 글씨로 두고 <> 둬서 전날이나 후 기록 볼 수 있게')
+  String? _day;
 
   @override
   void initState() {
@@ -186,27 +191,51 @@ class _ReadListState extends State<ReadList> {
     );
   }
 
-  /// 맨 위 두 줄: 오늘 날짜, 그 아래 '오늘 읽은 시간 N'. 오른쪽 '시간 추가'는 오늘 날짜로 독서 기록 추가(타이머 없이 읽은 시간).
-  /// 2026-11-25 사용자 시안 '오늘 읽은 시간 날짜 밑에, 수동 시간 추가는 오른쪽에'(전에는 날짜 한 줄 오른쪽 '오늘 총 N ＋').
-  /// '시간 추가'는 회색 글자 단추(누르는 높이 48), 글자 바닥을 '오늘 읽은 시간' 줄 바닥에 맞춘다. 날짜 글자는 앱 공통 날짜 머리 함수(DESIGN 4장 dayTitle)
-  Widget _todayLine(String date, _Today t) {
-    final day = dayTitle(date);
-    final total = '오늘 읽은 시간 ${formatDuration(t.total)}${t.active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}';
+  /// 맨 위 가운데 날 넘기기 '‹ 11월 26일 목요일 ›': 통계 달 넘기기와 같은 모양(글자 heading, 양옆 아이콘 단추. 2026-11-26 사용자
+  /// '11월 26일 목요일 저렇게 있는 거 좀 애매하지 않나 차라리 중앙에 좀 더 큰 글씨로 두고 <> 이거 둬서 전날이나 후 기록 볼 수 있는 게 나은듯').
+  /// 다음 날은 오늘까지. 날짜 글자는 앱 공통 날짜 머리 함수(DESIGN 4장 dayTitle)
+  Widget _dayBar(String date, String todayDay) => Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        IconBtn(label: '이전 날', onPress: () => _shiftDay(date, -1), child: const LucideIcon('ChevronLeft', color: AppColors.icon)),
+        // 좁은 화면 · 큰 글씨에서도 한 줄(넘치면 글자만 줄인다)
+        Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Semantics(header: true, child: Text(dayTitle(date), maxLines: 1, style: AppType.heading.tnum)))),
+        IconBtn(label: '다음 날', disabled: date == todayDay, onPress: () => _shiftDay(date, 1), child: const LucideIcon('ChevronRight', color: AppColors.icon)),
+      ]);
+
+  void _shiftDay(String date, int dir) {
+    final p = date.split('-').map(int.parse).toList();
+    final next = today(DateTime(p[0], p[1], p[2] + dir));
+    final now = today();
+    if (next.compareTo(now) > 0) return;
+    setState(() => _day = next == now ? null : next);
+  }
+
+  /// 날 넘기기 아래 한 줄: 왼쪽 '오늘 읽은 시간 N'(다른 날은 '읽은 시간 N'), 오른쪽 '시간 추가'(그 날짜로 독서 기록 추가, 타이머 없이 읽은 시간).
+  /// 2026-11-25 사용자 시안 '수동 시간 추가는 오른쪽에'. '시간 추가'는 회색 글자 단추(누르는 높이 48)
+  Widget _totalLine(String date, bool isToday, num total, Active? active) {
+    final name = isToday ? '오늘 읽은 시간' : '읽은 시간';
+    final label = '$name ${formatDuration(total)}${isToday && active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}';
     final ink = AppType.sub.copyWith(color: AppColors.ink);
-    return Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+    return Row(children: [
       Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(day, style: ink),
-          Semantics(
-            label: total,
-            excludeSemantics: true,
-            child: Text.rich(TextSpan(text: '오늘 읽은 시간 ', style: ink, children: [TextSpan(text: formatDuration(t.total), style: AppType.rowStrong.tnum)])),
-          ),
-        ]),
+        child: Semantics(
+          label: label,
+          excludeSemantics: true,
+          child: Text.rich(TextSpan(text: '$name ', style: ink, children: [TextSpan(text: formatDuration(total), style: AppType.rowStrong.tnum)])),
+        ),
       ),
       const SizedBox(width: Space.m),
-      TextLink(label: '시간 추가', soft: true, end: true, bottom: true, onPress: () => openSessionAdd(context, day: date)),
+      TextLink(label: '시간 추가', soft: true, end: true, onPress: () => openSessionAdd(context, day: date)),
     ]);
+  }
+
+  /// 다른 날의 독서 기록 줄(통계 캘린더 그날 기록과 같은 줄, 누르면 기록 수정). 기록이 없으면 한 줄 안내
+  List<Widget> _dayRecords(Library lib, String date) {
+    final list = [for (final s in lib.sessions.values) if (sessionDay(s) == date) s]..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    return [
+      const SizedBox(height: Space.l),
+      if (list.isEmpty) const EmptyLine('이날은 독서 기록이 없어요'),
+      for (final s in list) SessionRow(lib: lib, session: s, onPress: () => openSessionEdit(context, s.id)),
+    ];
   }
 
   /// 최근 읽던 책 큰 카드(표지 92 · 제목 · 오늘 시간 · 이어서 읽기, 위에 이름 글자 없음): 사용자 시안의 큰 카드라 책 줄(BookRow)로 바꾸지 않는다
@@ -223,8 +252,8 @@ class _ReadListState extends State<ReadList> {
     void open() => featured == null ? null : openBook(context, featured);
     return [
       // 카드 위 '최근 읽던 책 · 읽는 중 · 잠깐 멈춘 책' 글자는 없다(2026-11-25 사용자 시안 · '지워'). 재는 중인지는 단추 이름과 시간 글자로 보인다.
-      // 오늘 줄과 표지 사이는 구역 사이보다 조금 넓게(시안 ≈ 36)
-      const SizedBox(height: Space.xl),
+      // 오늘 줄 글자 아래 ~ 표지 28(Space.xl): 오늘 줄은 '시간 추가'가 누르는 높이 48이라 글자 아래로 12가 비어 16만 더한다
+      const SizedBox(height: Space.l),
       // 표지 92(2026-11-25 사용자 '썸네일 저 정도로 줄이고, 줄이면서 버튼 좌우 길이 늘려'), 제목은 표지 위 끝 줄에서(사용자 '썸네일 상단 라인에 맞춰'),
       // 오늘 시간은 전처럼 단추 오른쪽 위, 단추 아래 끝은 표지 아래 끝. 글이 표지보다 길면(큰 글씨 · 두 줄 제목) 줄이 그만큼 길어지고 표지는 위에 붙는다
       IntrinsicHeight(
@@ -325,15 +354,27 @@ class _ReadListState extends State<ReadList> {
     final rest = [for (final id in ids) if (!(hasFeatured && id == featured)) id];
     final restNoBook = showNoBook && !(hasFeatured && featured == null);
 
-    // 머리: 왼쪽 위 제목 '읽기'는 없다(하단바에 이름, 2026-11-24 사용자 6단계. 화면 읽기 머리로만), 맨 위가 오늘 날짜와 오늘 총 시간.
+    // 머리: 왼쪽 위 제목 '읽기'는 없다(하단바에 이름, 2026-11-24 사용자 6단계. 화면 읽기 머리로만), 맨 위가 가운데 날 넘기기와 그날 총 시간.
     // 소리만 듣기 아이콘은 뺐다(2026-11-17 사용자 '위에 음악 아이콘 없애')
+    final shown = _day != null && _day!.compareTo(day) < 0 ? _day! : day;
+    if (shown != day) {
+      // 다른 날: 날 넘기기 · 그날 읽은 시간 · 그날 기록 줄만(최근 읽던 책 · 읽기 목록은 오늘만)
+      return Screen(
+        back: false,
+        title: '읽기',
+        hideTitle: true,
+        bottomPad: TabBarStyle.contentPad - Space.section,
+        children: [_dayBar(shown, day), _totalLine(shown, false, todayRead(lib, shown).total, null), ..._dayRecords(lib, shown)],
+      );
+    }
     return Screen(
       back: false,
       title: '읽기',
       hideTitle: true,
       bottomPad: TabBarStyle.contentPad - Space.section,
       children: [
-        _todayLine(day, t),
+        _dayBar(day, day),
+        _totalLine(day, true, t.total, t.active),
         // 끝냈지만 저장하지 않은 기록(독서 끝 화면에서 뒤로 나왔을 때 등): 여기서 다시 연다(2026-11-15 QA 민혁 F3)
         if (_reading.pending != null)
           Padding(
@@ -346,24 +387,15 @@ class _ReadListState extends State<ReadList> {
             ),
           ),
         if (hasFeatured) ..._featured(lib, t, featured),
-        // 내 읽기 목록. 더하기는 제목 오른쪽 +와 목록 아래 '+ 책 추가' 줄 둘 다(읽을 책·다 읽은 책이나 책 없이 읽기를 여러 개 골라 더한다).
-        // 2026-11-25 사용자 '책 추가 밑으로 넣어줘'로 아래 줄을 넣고 +를 뺐다가, 같은 날 '책목록 추가를 의미하는 +는 전처럼 있어야돼'로 +를 되살렸다
+        // 내 읽기 목록. 더하기는 목록 아래 '+ 책 추가' 줄 하나(읽을 책·다 읽은 책이나 책 없이 읽기를 여러 개 골라 더한다).
+        // 제목 오른쪽 +는 2026-11-25 뺐다 되살렸다가 2026-11-26 사용자 '내 읽기 목록 옆에 있는 + 지워줘'로 다시 뺐다
         Padding(
           padding: const EdgeInsets.only(top: Space.xl),
-          child: Row(children: [
-            // 구역 제목은 앱 공통 구역 제목. 줄 높이는 누르는 높이(아래 목록 자리가 그대로)
-            Expanded(child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.section))),
-            // +는 보이는 획의 오른쪽 끝을 아래 '읽기' 글자 끝 선에 맞춘다(2026-11-18 사용자 '+ 너무 작고 우측 라인에 안 맞아, 회색').
-            // 26 그림(24칸에 획은 5~19)이 누르는 칸 48 가운데라 칸 끝까지 11, 그림 안 여백 5.4, 반 획 1을 빼 15.4만큼 민다.
-            // 첫 사용(목록이 빔)에는 두지 않는다: 아래 안내 단추와 같은 일이라 헷갈렸다(2026-11-20 사용자 '+랑 책 추가랑 무슨 차이야')
-            if (hasRows)
-              Transform.translate(
-                offset: const Offset(15.4, 0),
-                child: IconBtn(label: '읽기 목록에 추가', onPress: openPicker, child: const LucideIcon('Plus', size: 26, color: AppColors.icon, stroke: 2)),
-              )
-            else
-              const SizedBox(height: Space.hit),
-          ]),
+          // 구역 제목은 앱 공통 구역 제목. 줄 높이는 누르는 높이(+가 있던 때와 아래 목록 자리가 같게)
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.hit),
+            child: Align(alignment: Alignment.centerLeft, child: Semantics(header: true, child: Text('내 읽기 목록', style: AppType.section))),
+          ),
         ),
         if (rest.isNotEmpty || restNoBook)
           Padding(

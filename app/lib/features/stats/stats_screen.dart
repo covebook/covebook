@@ -216,28 +216,10 @@ class _StatsScreenState extends State<StatsScreen> {
   List<Widget> _dayRecords(Library lib, String selected, num selMs, List<Session> selSessions, String? book) => [
         StatHead(title: dayTitle(selected), top: selMs > 0 ? formatDuration(selMs) : null),
         const SizedBox(height: Space.s),
-        for (final s in selSessions) _sessionRow(lib, s),
+        for (final s in selSessions) SessionRow(lib: lib, session: s, onPress: () => openSessionEdit(context, s.id)),
         ListItem(label: '독서 기록 추가', chevron: true, onPress: () => openSessionAdd(context, bookId: book, day: selected)),
       ];
 
-  /// 기록 한 줄(책 줄 BookRow 작게): 시간대 · 오른쪽 읽은 시간(일시정지가 있었으면 아래 '일시정지 시간 제외'). 누르면 기록 수정
-  Widget _sessionRow(Library lib, Session s) {
-    final name = bookTitle(lib, s.myBookId) ?? NoBookCover.name;
-    final range = timeRange(s.startedAt, s.endedAt);
-    final pause = hasPause(s);
-    return BookRow(
-      cover: _cover(lib, s.myBookId),
-      title: name,
-      meta: range,
-      label: [name, range, formatDurationShort(s.durationMs), if (pause) '일시정지 시간 제외'].join(', '),
-      onPress: () => openSessionEdit(context, s.id),
-      trailing: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-        Text(formatDurationShort(s.durationMs), style: _rowValue),
-        // 공통 규칙 9장: 일시정지를 뺀 시간 표시는 '일시정지 시간 제외' 한 말('실제 독서'였다)
-        if (pause) Text('일시정지 시간 제외', style: AppType.caption),
-      ]),
-    );
-  }
 
   List<Widget> _records(Library lib, PeriodStats st0, List<Session> sessions, Period period, String? book) {
     final summary = sessionSummary(sessions);

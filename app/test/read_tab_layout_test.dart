@@ -1,5 +1,5 @@
-// 읽기 탭 배치(2026-11-25 사용자 시안): 맨 위 날짜 아래 '오늘 읽은 시간 N', 오른쪽 '시간 추가'(그 줄 바닥에 맞춘 회색 글자 단추),
-// 최근 읽던 책 표지 92 · 제목은 표지 위 끝 줄 · 오늘 시간은 단추 오른쪽 위 · 단추 아래 끝은 표지 아래 끝, '+ 책 추가'는 목록 아래
+// 읽기 탭 배치(2026-11-25 사용자 시안, 2026-11-26 머리): 맨 위 가운데 '‹ 날짜 ›'(전날 · 다음 날 기록 보기), 그 아래 '오늘 읽은 시간 N' · 오른쪽 '시간 추가',
+// 최근 읽던 책 표지 92 · 제목은 표지 위 끝 줄 · 오늘 시간은 단추 오른쪽 위 · 단추 아래 끝은 표지 아래 끝, '+ 책 추가'는 목록 아래(제목 오른쪽 +는 없다)
 import 'dart:math' as math;
 import 'package:chaekjang/domain/library.dart';
 import 'package:chaekjang/features/reading/read_list.dart';
@@ -10,6 +10,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const t1 = '2026-11-16T01:00:00.000Z';
+
+/// 어제 그 시각(기기 시간대)
+String yesterday(int h, [int m = 0]) {
+  final d = DateTime.now();
+  return DateTime(d.year, d.month, d.day - 1, h, m).toUtc().toIso8601String();
+}
 
 Library lib() {
   final now = DateTime.now().toUtc();
@@ -31,9 +37,14 @@ Library lib() {
     },
     sessions: {
       's1': Session(id: 's1', startedAt: at(30), endedAt: at(20), durationMs: 600000, createdAt: at(20), updatedAt: at(20), myBookId: 'bk1'),
+      // 어제 기록(날 넘기기로 본다)
+      's0': Session(id: 's0', startedAt: yesterday(9), endedAt: yesterday(9, 25), durationMs: 1500000, createdAt: t1, updatedAt: t1, myBookId: 'bk2'),
     },
   );
 }
+
+/// 머리 '다음 날' 단추
+IconBtn nextBtn(WidgetTester t) => t.widget<IconBtn>(find.byWidgetPredicate((w) => w is IconBtn && w.label == '다음 날'));
 
 /// 큰 카드 제목(표지 그림 안 제목 글자와 구별)
 Finder featureTitle(String s) => find.byWidgetPredicate((w) => w is Text && w.data == s && w.style?.fontSize == AppType.bookFeatureTitle.fontSize);
@@ -53,20 +64,50 @@ void main() {
     await t.pump(const Duration(milliseconds: 300));
   }
 
-  testWidgets('맨 위: 날짜 아래 오늘 읽은 시간, 오른쪽 끝 시간 추가(바닥이 그 줄 바닥과 1 안)', (t) async {
+  testWidgets('맨 위: 가운데 ‹ 날짜 ›(다음 날은 꺼짐), 그 아래 오늘 읽은 시간 · 오른쪽 끝 시간 추가', (t) async {
     await pump(t);
     expect(find.textContaining('오늘 총'), findsNothing);
     final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '));
     expect(line, findsOneWidget);
     final date = find.textContaining('요일');
-    expect(t.getRect(line).top, closeTo(t.getRect(date).bottom, 0.5), reason: '날짜 바로 아래 줄');
+    final screenW = t.getSize(find.byType(ReadList)).width;
+    expect(t.getRect(date).center.dx, closeTo(screenW / 2, 0.5), reason: '날짜는 가운데');
+    expect(t.widget<Text>(date).style?.fontSize, AppType.heading.fontSize, reason: '통계 달 넘기기와 같은 큰 글씨');
+    final prev = find.bySemanticsLabel('이전 날'), next = find.bySemanticsLabel('다음 날');
+    expect(prev, findsOneWidget);
+    expect(next, findsOneWidget);
+    expect(nextBtn(t).disabled, isTrue, reason: '오늘 다음 날은 없다');
+    expect(t.getRect(prev).right, lessThanOrEqualTo(t.getRect(date).left + 0.5));
+    expect(t.getRect(line).top, greaterThanOrEqualTo(t.getRect(date).bottom), reason: '날짜 아래 줄');
     final add = find.text('시간 추가');
     expect(add, findsOneWidget);
-    final screenW = t.getSize(find.byType(ReadList)).width;
-    final pageRight = t.getRect(date).left + (screenW - 2 * t.getRect(date).left);
+    final pageRight = screenW - t.getRect(line).left;
     expect(t.getRect(add).right, closeTo(pageRight, 0.5), reason: '글자 끝 = 내용 오른쪽 끝');
-    expect(t.getRect(add).bottom, closeTo(t.getRect(line).bottom, 1.5), reason: '오늘 읽은 시간 줄과 바닥을 맞춘다');
+    expect(t.getRect(add).center.dy, closeTo(t.getRect(line).center.dy, 1.5), reason: '오늘 읽은 시간 줄과 한 줄');
     expect(find.bySemanticsLabel('시간 추가'), findsOneWidget);
+  });
+
+  testWidgets('‹ 를 누르면 어제 기록(읽은 시간 · 기록 줄), 최근 읽던 책 · 읽기 목록은 없고 › 로 오늘', (t) async {
+    await pump(t);
+    await t.tap(find.bySemanticsLabel('이전 날'));
+    await t.pump(const Duration(milliseconds: 300));
+    final d = DateTime.now();
+    final y = DateTime(d.year, d.month, d.day - 1);
+    expect(find.text('${y.month}월 ${y.day}일 ${['일', '월', '화', '수', '목', '금', '토'][y.weekday % 7]}요일'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText() == '읽은 시간 25분'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^데미안, 오전 9:00')), findsOneWidget, reason: '그날 기록 줄(통계와 같은 줄)');
+    expect(find.text('내 읽기 목록'), findsNothing);
+    expect(find.widgetWithText(Btn, '이어서 읽기'), findsNothing);
+    expect(nextBtn(t).disabled, isFalse);
+    await t.tap(find.bySemanticsLabel('이전 날'));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('이날은 독서 기록이 없어요'), findsOneWidget);
+    await t.tap(find.bySemanticsLabel('다음 날'));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.bySemanticsLabel('다음 날'));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('내 읽기 목록'), findsOneWidget, reason: '오늘로 돌아왔다');
+    expect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 ')), findsOneWidget);
   });
 
   testWidgets('최근 읽던 책: 표지 92, 제목 줄 위 = 표지 위, 단추 아래 = 표지 아래, 오늘 시간은 단추 오른쪽 위', (t) async {
@@ -97,11 +138,9 @@ void main() {
     expect(c.top - math.max(t.getRect(line).bottom, add.bottom), closeTo(Space.xl, 1.5));
   });
 
-  testWidgets('목록 제목 오른쪽 +(전처럼, 2026-11-25 사용자)와 목록 아래 + 책 추가(+ 획 왼쪽 끝 = 표지 줄 왼쪽 끝)', (t) async {
+  testWidgets('목록 제목 오른쪽 +는 없고(2026-11-26 사용자 \'+ 지워줘\') 목록 아래 + 책 추가(+ 획 왼쪽 끝 = 표지 줄 왼쪽 끝)', (t) async {
     await pump(t);
-    final head = find.bySemanticsLabel('읽기 목록에 추가');
-    expect(head, findsOneWidget);
-    expect(t.getRect(head).center.dy, closeTo(t.getRect(find.text('내 읽기 목록')).center.dy, 0.5), reason: '제목과 한 줄');
+    expect(find.bySemanticsLabel('읽기 목록에 추가'), findsNothing);
     final add = find.bySemanticsLabel('읽기 목록에 책 추가');
     expect(add, findsOneWidget);
     expect(find.text('책 추가'), findsOneWidget);
@@ -110,7 +149,7 @@ void main() {
     expect(t.getRect(add).height, greaterThanOrEqualTo(48));
     final plus = find.descendant(of: add, matching: find.byType(LucideIcon));
     final glyphLeft = t.getRect(plus).left + 22 * 4.2 / 24;
-    final pageLeft = t.getRect(find.textContaining('요일')).left;
+    final pageLeft = t.getRect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '))).left;
     expect(glyphLeft, closeTo(pageLeft, 0.5));
   });
 
@@ -122,6 +161,6 @@ void main() {
     final b = t.getRect(find.widgetWithText(Btn, '이어서 읽기'));
     expect(b.bottom, greaterThanOrEqualTo(c.bottom - 0.5));
     final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '));
-    expect(t.getRect(find.text('시간 추가')).bottom, closeTo(t.getRect(line).bottom, 2));
+    expect(t.getRect(find.text('시간 추가')).center.dy, closeTo(t.getRect(line).center.dy, 2));
   });
 }
