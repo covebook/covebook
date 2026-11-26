@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -234,6 +235,9 @@ type iapSubscription struct {
 	GraceUntil  time.Time // 유예 중이 아니면 zero
 	AutoRenew   bool
 	LatestTxnID string
+	// 0이 아니면 이만큼 전에 스토어에서 읽은 상태다. 그 뒤에 다른 곳(알림 처리)이 고친 줄은 상태를 덮어쓰지 않고
+	// 주인만 바꾼다. 읽고 잠그기 전에 환불 알림이 revoked로 바꿨는데 옛 paid로 되돌리는 일을 막는다
+	ReadAgo time.Duration
 }
 
 // iapUpsertSubscription은 구독 상태를 넣거나 고친다. 스토어에 다시 물어 받은 최신 상태를 그대로 덮어쓴다.
@@ -248,14 +252,25 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 	if !s.GraceUntil.IsZero() {
 		grace = &s.GraceUntil
 	}
+	// 읽은 뒤 다른 곳이 고친 줄이면(updated_at이 읽기 시작보다 뒤) 상태 칸은 그 값을 둔다. 트랜잭션 시각에서 거슬러 재서 서버와 DB의 시계 차이를 타지 않는다
+	var readAgo *float64
+	if s.ReadAgo > 0 {
+		sec := s.ReadAgo.Seconds()
+		readAgo = &sec
+	}
+	fresh := "($12::float8 IS NULL OR iap_subscriptions.updated_at <= now() - make_interval(secs => $12::float8))"
+	pick := func(col string) string {
+		return col + "=CASE WHEN " + fresh + " THEN EXCLUDED." + col + " ELSE iap_subscriptions." + col + " END"
+	}
+	set := []string{"user_id=EXCLUDED.user_id"}
+	for _, col := range []string{"product_id", "plan_id", "env", "state", "expires_at", "grace_until", "auto_renew", "latest_transaction_id"} {
+		set = append(set, pick(col))
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO iap_subscriptions
 		(route,original_id,user_id,product_id,plan_id,env,state,expires_at,grace_until,auto_renew,latest_transaction_id)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,nullif($11,''))
-		ON CONFLICT (route,original_id) DO UPDATE SET
-			user_id=EXCLUDED.user_id, product_id=EXCLUDED.product_id, plan_id=EXCLUDED.plan_id, env=EXCLUDED.env,
-			state=EXCLUDED.state, expires_at=EXCLUDED.expires_at, grace_until=EXCLUDED.grace_until,
-			auto_renew=EXCLUDED.auto_renew, latest_transaction_id=EXCLUDED.latest_transaction_id, updated_at=now()`,
-		string(s.Route), s.OriginalID, user, s.ProductID, s.PlanID, string(s.Env), string(s.State), s.ExpiresAt, grace, s.AutoRenew, s.LatestTxnID)
+		ON CONFLICT (route,original_id) DO UPDATE SET `+strings.Join(set, ", ")+`, updated_at=now()`,
+		string(s.Route), s.OriginalID, user, s.ProductID, s.PlanID, string(s.Env), string(s.State), s.ExpiresAt, grace, s.AutoRenew, s.LatestTxnID, readAgo)
 	if err != nil {
 		return 0, err
 	}
@@ -398,8 +413,9 @@ func iapMarkConfirmed(ctx context.Context, q dbtx, route iap.Route, key string) 
 	return err
 }
 
-// 주의: 유예 끝(grace_until)이 NULL이면 `만료 지남 OR NULL`은 NULL이다. coalesce로 false로 만들지 않으면 참·거짓으로 읽다가 실패한다.
 // iapCurrentSubscription은 구독 관리 화면에 보일 구독 하나를 고른다. 지금 유효한 것이 먼저, 그다음 만료가 늦은 것. 없으면 nil이다.
+//
+// 주의: 유예 끝(grace_until)이 NULL이면 `만료 지남 OR NULL`은 NULL이다. coalesce로 false로 만들지 않으면 참·거짓으로 읽다가 실패한다.
 func iapCurrentSubscription(ctx context.Context, q dbtx, user int64, allowSandbox bool) (map[string]any, error) {
 	var route, product, plan, state string
 	var expires time.Time
