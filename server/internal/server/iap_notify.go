@@ -263,7 +263,7 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	notices, err := iapPendingNotifications(ctx, s.DB, 100)
 	keep(err)
 	for _, n := range notices {
-		result, note := s.iapProcessNotice(ctx, n)
+		result, note := s.iapProcessNoticeSafely(ctx, n)
 		if result == "failed" {
 			res.NoticesFailed++
 			log.Printf("iap notification failed (will retry): route=%s id=%s err=%s", n.Route, n.ID, note)
@@ -292,6 +292,19 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		res.Refreshed++
 	}
 	return res, firstErr
+}
+
+// iapProcessNoticeSafely는 알림 한 건의 패닉을 그 알림의 실패로 가둔다.
+// 대조 전체의 recover(iapSweepSafely)만 있으면, 패닉 난 알림은 실패로 기록되지 않아 시도 횟수가 오르지 않고
+// 다음 바퀴에도 맨 앞에 뽑혀 뒤의 알림과 4단계(만료 구독 재조회)를 매번 막는다. 실패로 남기면 다른 실패처럼 간격을 두고 다시 시도한다
+func (s *Server) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (result, note string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("iap notification panic: route=%s id=%s panic=%v", n.Route, n.ID, r)
+			result, note = "failed", fmt.Sprintf("처리 중 패닉: %v", r)
+		}
+	}()
+	return s.iapProcessNotice(ctx, n)
 }
 
 // iapProcessNotice는 알림 한 건을 처리하고 결과(processed, ignored, failed)와 메모를 돌려준다.
