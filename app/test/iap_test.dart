@@ -512,6 +512,8 @@ void main() {
       expect(list[2].text!.$1, contains('자동 갱신이 꺼졌습니다'));
       expect(list[2].text!.$2, contains('2027년 1월 18일까지 이용할 수 있습니다'));
       expect(list[5].text!.$2, '선반 1칸을 더 열 수 있습니다.');
+      // 구독 결제 완료(T3)에는 결제일이 있다(고지가 쓰인 날)
+      expect(list[4].text!.$2, contains('결제일은 2026년 12월'));
       expect(list[3].text!.$2, contains('선반이 잠겼습니다'));
       // 칸을 연 적 없는 선반의 환불: 잠겼다고 하지 않는다
       final unopened = n(7, 'shelf_refunded', '2027-01-06T03:00:00Z', params: {'route': iapRoute, 'opened': false}).text!.$2;
@@ -625,6 +627,16 @@ void main() {
     expect(find.textContaining('결제가 끝나면 자동으로 반영돼요'), findsOneWidget);
     expect(t.widget<Btn>(find.widgetWithText(Btn, '구독하기')).disabled, isFalse);
     await _shot(t, '17-plans-pending');
+  });
+
+  testWidgets('이전 작업의 결과: 화면을 새로 열면 지난 오류 문구는 보이지 않는다', (t) async {
+    plans();
+    IapService.instance
+      ..lastResult = IapResult.retryLater
+      ..lastMessage = '지난번 결제를 시작하지 못했어요.';
+    await _pump(t, const PlanScreen());
+    expect(find.textContaining('지난번 결제를 시작하지 못했어요'), findsNothing);
+    expect(IapService.instance.lastResult, isNull);
   });
 
   testWidgets('불러오는 중: 요금제를 받는 동안은 구독할 수 없다고 하지 않는다', (t) async {
@@ -819,7 +831,10 @@ void _resetAfterLogout() {
       ..busy = true
       ..lastResult = IapResult.granted
       ..lastMessage = '앞 계정의 결과';
+    s.loading = true; // 앞 계정의 refresh가 아직 도는 중
     s.reset();
+    // 새 계정의 refresh가 막히지 않게 푼다(앞 계정의 응답은 세대 번호가 달라 버린다)
+    expect(s.loading, isFalse);
     expect(s.synced, isFalse);
     expect(s.details, isEmpty);
     expect(s.plans, isEmpty);

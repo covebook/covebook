@@ -62,8 +62,9 @@ Future<void> wipeLocalData() async {
   } catch (_) {}
   // 5) 화면용 상태를 다시 읽는다(다음에 읽을 때 예시 책장을 다시 준비)
   // 결제 상태: 디스크 캐시는 3)에서 지웠고 메모리 값(구독·연도별 선반)도 비운다. 다른 계정으로 로그인했는데 /iap/me가 실패하면 앞 계정의 칸이 보이지 않게
-  await EntitlementStore.instance.clear();
+  // reset을 먼저: clear가 알리는 순간 synced가 아직 true면 칸 수 0으로 선반을 닫는 리스너가 돈다
   IapService.instance.reset();
+  await EntitlementStore.instance.clear();
   resetFirstShelf();
   await LibraryModel.instance.reload();
   await PlacementStore.instance.reload();

@@ -56,6 +56,7 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
     _before = _e.shelvesFor(widget.year);
     _iap.addListener(_changed);
     _e.addListener(_changed);
+    _iap.clearResult(); // 이전 작업의 오류 문구가 처음부터 보이지 않게
     if (_iap.details.isEmpty) _iap.refresh();
   }
 
@@ -89,7 +90,8 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
       ]);
     }
     // 상품이 하나면 그것, 여럿이면 고른 것(고르기 전에는 살 수 없다)
-    final p = products.length == 1 ? products.first : _picked;
+    // 목록이 새 객체로 바뀌어도 고른 것을 잃지 않게 상품 ID로 다시 찾는다
+    final p = products.length == 1 ? products.first : products.where((o) => o.productId == _picked?.productId).firstOrNull;
     final price = p == null ? null : _iap.details[p.productId]!.price;
     final failed = _iap.lastResult == IapResult.retryLater || _iap.lastResult == IapResult.rejected ? _iap.lastMessage : null;
     // 가운데 점을 쓰지 않는다(앱 규칙, 2026-11-18): 줄마다 문장 하나

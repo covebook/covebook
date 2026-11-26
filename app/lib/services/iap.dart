@@ -106,6 +106,10 @@ class IapService extends ChangeNotifier {
   AppLifecycleListener? _life;
   DateTime? _lastResubmit;
 
+  /// 계정 세대. reset()마다 오른다. 비동기 일은 시작할 때 값을 잡아 두고, 끝났을 때 값이 다르면(그사이 계정이 바뀌었으면)
+  /// 앞 계정의 응답을 지금 계정의 상태에 넣지 않는다
+  int _epoch = 0;
+
   /// 이번 실행에서 선반을 사려고 연 책장의 연도. 구매 제출에 같이 보낸다(서버는 계정 연결 값의 연도를 먼저 본다)
   int? _shelfYear;
 
@@ -159,6 +163,9 @@ class IapService extends ChangeNotifier {
   /// 로그아웃·계정 전환 때(local_reset) 앞 계정의 값을 비운다. 특히 synced: 남아 있으면 새 계정의 상태를 받기 전에
   /// 비워진 칸 수(0)로 선반을 닫는 일(enforceShelfLimit)이 돈다. 스토어 듣기는 그대로 둔다(앱 실행당 한 번)
   void reset() {
+    _epoch++;
+    // 앞 계정의 refresh가 아직 돌고 있어도 새 계정의 refresh가 돌 수 있게 푼다. 앞 계정의 응답은 세대가 달라 버린다
+    loading = false;
     synced = false;
     details = const {};
     plans = const [];
@@ -201,11 +208,13 @@ class IapService extends ChangeNotifier {
   Future<void> refresh() async {
     if (!iapOn || loading) return;
     loading = true; // 여기서는 알리지 않는다(화면의 initState 안에서 불린다). 끝날 때 알린다
+    final epoch = _epoch;
     try {
       final token = await KvStore.get(syncTokenKey);
-      if (token == null) return;
+      if (token == null || epoch != _epoch) return;
       try {
         final me = await api('GET', '/iap/me', token);
+        if (epoch != _epoch) return; // 그사이 로그아웃했다
         if (me is Map<String, dynamic>) {
           EntitlementStore.instance.apply(me);
           synced = true;
@@ -216,6 +225,7 @@ class IapService extends ChangeNotifier {
       final ids = {for (final p in EntitlementStore.instance.products) if (p.route == iapRoute) p.productId};
       if (ids.isEmpty || !await _store.isAvailable()) return;
       final res = await _store.queryProductDetails(ids);
+      if (epoch != _epoch) return;
       // 구글은 구독 하나에 요금제마다 한 줄씩 온다(상품 ID가 같다). 상품 ID로는 첫 줄만 남기고, 요금제는 따로 모은다
       details = {for (final d in res.productDetails.reversed) d.id: d};
       final subs = {for (final p in EntitlementStore.instance.products) if (p.kind == 'subscription') p.productId};
@@ -223,8 +233,11 @@ class IapService extends ChangeNotifier {
     } catch (_) {
       // 스토어에 닿지 못했다: 상품 없이 둔다
     } finally {
-      loading = false;
-      notifyListeners();
+      // 세대가 바뀌었으면 loading은 reset이 이미 풀었고, 새 계정의 refresh가 다시 잡았을 수 있다. 건드리지 않는다
+      if (epoch == _epoch) {
+        loading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -278,14 +291,24 @@ class IapService extends ChangeNotifier {
         unawaited(_release());
         _buying = null;
         _shelfYear = null;
-        await _resubmitIos();
-        _done(IapResult.retryLater, '끝나지 않은 지난 결제를 먼저 확인했어요. 반영된 내용을 확인한 뒤 필요하면 다시 결제해 주세요.');
+        final cleared = await _resubmitIos();
+        _done(
+          IapResult.retryLater,
+          cleared ? '끝나지 않은 지난 결제를 먼저 확인했어요. 반영된 내용을 확인한 뒤 필요하면 다시 결제해 주세요.' : '지난 결제를 아직 확인하지 못해 새 결제를 시작할 수 없어요. 잠시 뒤 다시 시도해 주세요.',
+        );
         return;
       }
       _failStart();
     } catch (_) {
       _failStart();
     }
+  }
+
+  /// 지금 결제가 취소·실패했다. 뒤에 같은 상품의 옛 거래를 다시 낼 때 이번 연도가 붙지 않게 비운다
+  void _forgetBuying(String productId) {
+    if (productId != _buying) return;
+    _buying = null;
+    _shelfYear = null;
   }
 
   void _failStart() {
@@ -295,8 +318,10 @@ class IapService extends ChangeNotifier {
     _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
   }
 
-  /// iOS: 끝내지 않은 거래(StoreKit 2 Transaction.unfinished)를 서버에 다시 내고, 끝내도 되는 것만 끝낸다
-  Future<void> _resubmitIos() async {
+  /// iOS: 끝내지 않은 거래(StoreKit 2 Transaction.unfinished)를 서버에 다시 내고, 끝내도 되는 것만 끝낸다.
+  /// 전부 끝냈으면 true. 하나라도 남았으면(서버가 404·503 등) false: 같은 상품은 그 거래가 끝날 때까지 새로 살 수 없다
+  Future<bool> _resubmitIos() async {
+    var cleared = true;
     try {
       for (final t in await SK2Transaction.unfinishedTransactions()) {
         final proof = t.receiptData ?? '';
@@ -311,11 +336,17 @@ class IapService extends ChangeNotifier {
           sk2Transaction: t,
         );
         final result = await _submit(d, restore: false);
-        if (result.$2) await _store.completePurchase(d);
+        if (result.$2) {
+          await _store.completePurchase(d);
+        } else {
+          cleared = false;
+        }
       }
     } catch (_) {
       // 스토어에 닿지 못했다. 앱을 다시 켜면 스트림으로 다시 온다
+      cleared = false;
     }
+    return cleared;
   }
 
   /// 선반을 살 때 스토어에 넘길 그 해 책장의 계정 연결 값과 결제 중 예약 번호. 서버가 이 값으로 어느 해 책장의 칸인지 찾는다. 받지 못하면 null.
@@ -378,21 +409,24 @@ class IapService extends ChangeNotifier {
         return;
       case PurchaseStatus.canceled:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
+        _forgetBuying(d.productID);
         unawaited(_release());
         _done(IapResult.rejected, null);
         return;
       case PurchaseStatus.error:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
+        _forgetBuying(d.productID);
         unawaited(_release());
         _done(IapResult.retryLater, '결제가 이뤄지지 않았어요.');
         return;
       case PurchaseStatus.purchased:
       case PurchaseStatus.restored:
+        final epoch = _epoch;
         final result = await _submit(d, restore: _restoring || d.status == PurchaseStatus.restored);
         final finish = result.$2;
         // 애플만 앱이 거래를 끝낸다. 안드로이드는 서버가 확인·소비한다
         if (finish && Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
-        _done(result.$1, result.$3);
+        if (epoch == _epoch) _done(result.$1, result.$3); // 계정이 바뀌었으면 앞 계정의 결과 문구를 보이지 않는다
     }
   }
 
@@ -401,12 +435,17 @@ class IapService extends ChangeNotifier {
     final token = await KvStore.get(syncTokenKey);
     final proof = d.verificationData.serverVerificationData;
     if (token == null || proof.isEmpty) return (IapResult.retryLater, false, '구매를 확인하지 못했어요. 앱을 다시 켜면 이어서 확인해요.');
+    final epoch = _epoch;
     try {
       final current = d.productID == _buying;
       final res = await api('POST', '/iap/purchases', token, {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, 'year': (current ? _shelfYear : null) ?? liveShelfYear(), if (current && _reservation != null) 'reservation': _reservation});
       if (res is! Map<String, dynamic>) {
         // 202: 결제가 아직 끝나지 않았다
         return (IapResult.pending, false, '결제를 확인하고 있어요. 끝나면 자동으로 반영돼요.');
+      }
+      if (epoch != _epoch) {
+        // 그사이 로그아웃했다. 서버는 앞 계정으로 처리를 마쳤으니 거래는 끝내고, 결과는 지금 계정의 상태에 넣지 않는다
+        return (IapResult.retryLater, true, null);
       }
       EntitlementStore.instance.apply(res);
       if (current) {
@@ -432,7 +471,21 @@ class IapService extends ChangeNotifier {
 
   void _busy(bool v) {
     busy = v;
+    if (v) {
+      // 새 작업을 시작한다: 이전 작업의 결과가 이번 결과처럼 보이지 않게 비운다(복원은 끝날 때 lastResult를 본다)
+      lastResult = null;
+      lastMessage = null;
+    }
     notifyListeners();
+  }
+
+  /// 결제 화면·시트를 열 때: 이전 작업의 결과 문구가 처음부터 보이지 않게 비운다. 진행 중이면 그대로 둔다.
+  /// 결제 대기(pending)는 끝난 결과가 아니라 아직 기다리는 상태라 남긴다("이 화면을 닫아도 돼요"라고 안내했다).
+  /// initState에서 부르므로 알리지 않는다
+  void clearResult() {
+    if (busy || lastResult == IapResult.pending) return;
+    lastResult = null;
+    lastMessage = null;
   }
 
   void _done(IapResult r, String? message) {

@@ -45,6 +45,7 @@ class _PlanScreenState extends State<PlanScreen> {
     _wasActive = _e.subscription?.active ?? false;
     _e.addListener(_changed);
     _iap.addListener(_changed);
+    _iap.clearResult(); // 이전 작업의 결과(오류 문구, 다른 화면의 결제 완료)가 이 화면의 결과처럼 보이지 않게
     if (_iap.plans.isEmpty) _iap.refresh();
   }
 
@@ -106,7 +107,9 @@ class _PlanScreenState extends State<PlanScreen> {
         links,
       ]);
     }
-    final p = _picked;
+    // refresh가 목록을 새 객체로 바꿔도 고른 것을 잃지 않게, 같은 상품·요금제를 지금 목록에서 다시 찾는다
+    final picked = _picked;
+    final p = picked == null ? null : plans.where((x) => x.details.id == picked.details.id && x.planId == picked.planId && x.period == picked.period).firstOrNull;
     final failed = _iap.lastResult == IapResult.retryLater || _iap.lastResult == IapResult.rejected ? _iap.lastMessage : null;
     return Screen(title: '책장 한켠 플러스', children: [
       Padding(

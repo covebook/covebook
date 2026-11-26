@@ -11,7 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../db/kv_store.dart';
-import '../../services/sync.dart' show api, syncTokenKey;
+import '../../services/api_error.dart';
+import '../../services/sync.dart' show api, syncBase, syncTokenKey;
 import '../../store/entitlement_store.dart';
 import '../../ui/alert.dart';
 import '../../ui/kit.dart';
@@ -107,6 +108,7 @@ class IapNotice {
     final bookcase = year == null ? '' : '$year년 책장의 ';
     final revoked = _date('revokedAt');
     final when = revoked == null ? '' : '환불일은 ${iapDate(revoked)}입니다. ';
+    final paid = createdAt; // 결제 완료 고지는 서버가 거래를 원장에 넣을 때 쓴다(T3의 결제일)
     return switch (kind) {
       'payment_failed' => ('$name 결제가 이뤄지지 않았습니다', '${grace == null ? '' : '${iapDate(grace)}까지는 계속 이용할 수 있습니다. '}$store 계정의 결제 수단을 확인해 주세요. 그때까지 결제되지 않으면 구독이 끝납니다.'),
       'expired' => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
@@ -127,7 +129,7 @@ class IapNotice {
         ),
       'purchase_done' => params['kind'] == 'product'
           ? ('추가 선반 결제가 완료됐습니다', shelves > 0 ? '$bookcase선반 $shelves칸을 더 열 수 있습니다.' : '$bookcase선반을 더 열 수 있습니다.')
-          : ('$name 결제가 완료됐습니다', '${expires == null ? '' : '다음 결제일은 ${iapDate(expires)}입니다. '}해지는 내 정보의 구독 관리에서 할 수 있습니다.'),
+          : ('$name 결제가 완료됐습니다', '${paid == null ? '' : '결제일은 ${iapDate(paid)}입니다. '}${expires == null ? '' : '다음 결제일은 ${iapDate(expires)}입니다. '}해지는 내 정보의 구독 관리에서 할 수 있습니다.'),
       _ => null,
     };
   }
@@ -136,14 +138,24 @@ class IapNotice {
 /// 서버 알림함을 읽는다. 서버가 아직 알림함을 주지 않으면(예전 서버) null
 Future<List<IapNotice>?> fetchIapNotices() async {
   final token = await KvStore.get(syncTokenKey);
-  if (token == null) return null;
+  if (token == null || syncBase.isEmpty) return null; // 서버가 없는 빌드: 기기 기준으로 알린다
   try {
     final res = await api('GET', '/iap/notices', token);
     if (res is! Map<String, dynamic> || res['notices'] is! List) return null;
     return [for (final j in res['notices'] as List) ?IapNotice.from(j)];
+  } on ApiError catch (e) {
+    // 알림함이 없는 서버(404)만 예전 방식으로 넘긴다
+    if (e.status == 404) return null;
+    throw const IapNoticesUnavailable();
   } catch (_) {
-    return null;
+    throw const IapNoticesUnavailable();
   }
+}
+
+/// 알림함을 받지 못했다(통신 오류, 서버 오류). 이때는 아무것도 띄우지 않고 다음에 다시 본다.
+/// 예전 방식으로 띄우면 다음 실행에 같은 일이 알림함에서 안 읽음으로 다시 떠 두 번 보인다
+class IapNoticesUnavailable implements Exception {
+  const IapNoticesUnavailable();
 }
 
 /// 읽음으로 표시한다. ids가 없으면 전부. 실패해도 넘어간다(다음에 다시 안 읽음으로 보일 뿐이다)
@@ -169,7 +181,12 @@ IapNotice? iapNoticeToShow(List<IapNotice> list) {
 Future<void> checkIapNotice(BuildContext context) async {
   final e = EntitlementStore.instance;
   if (!iapOn || !e.loaded) return;
-  final list = await fetchIapNotices();
+  final List<IapNotice>? list;
+  try {
+    list = await fetchIapNotices();
+  } on IapNoticesUnavailable {
+    return; // 기기 기준 상태(iapSeenKey)도 그대로 둬, 다음에 같은 변화를 놓치지 않는다
+  }
   final now = IapSnapshot.of(e);
   final seen = IapSnapshot.parse(await KvStore.get(iapSeenKey));
   await KvStore.set(iapSeenKey, now.encode());
@@ -231,7 +248,7 @@ final appleRefundUrl = Uri.parse('https://reportaproblem.apple.com');
 Future<void> showPurchaseDone(BuildContext context, IapSubscription sub, {String? price}) => appAlert(
       context,
       '결제가 완료됐습니다',
-      ['책장 한켠 플러스', if (price != null) '결제 금액 $price', '다음 결제일 ${iapDate(sub.expiresAt)}', '해지는 내 정보의 구독 관리에서 할 수 있습니다.'].join('\n'),
+      ['책장 한켠 플러스', if (price != null) '결제 금액 $price', '결제일 ${iapDate(DateTime.now())}', '다음 결제일 ${iapDate(sub.expiresAt)}', '해지는 내 정보의 구독 관리에서 할 수 있습니다.'].join('\n'),
       null,
       true,
       false,
