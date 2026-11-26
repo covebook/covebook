@@ -37,7 +37,7 @@ Docker 이미지: `docker build -t chaekjang-go server`. 운영에서는 사진�
 - 결제 뒤: 그래도 넘은 거래는 통째로 칸을 주지 않는다(`iap_purchases.over_cap`). 구글은 서버가 `orders.refund`로 환불을 요청하고, 실패하면 정기 처리가 다시 요청한다. 애플은 개발자가 환불할 수 없어 사용자가 애플에 요청해야 한다. 제출 응답의 `overCap`, `autoRefund`, 고지 `shelf_over_cap`(T15, params `route, productId, year, shelves, autoRefund`), 구매 내역의 `overCap`으로 보인다. 넘은 거래가 환불돼도 `shelf_refunded` 고지는 쓰지 않는다
 - `GET /admin/iap/stats`: `shelfOverCap`(넘은 거래 중 돈이 아직 안 돌아간 것), `shelfOverCapRefunded`(구글 자동 환불 요청), `shelfOverCapApple`(애플 넘은 거래), `shelfNoYear`(연도 모르는 거래)
 
-결제 API(`/iap/me`, `/iap/purchases`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다. `GET /iap/purchases`는 내 구매 내역이다. 앱에 보여 줄 사업자 정보는 `IAP_SELLER_JSON`(JSON 객체, 칸: `name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`)에 넣으면 `/iap/me`의 `seller`로 나간다. 값은 저장소에 적지 않는다.
+결제 API(`/iap/me`, `/iap/purchases`, 선반 결제 중 예약 `/iap/shelf-token`·`/iap/shelf-token/release`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다. `GET /iap/purchases`는 내 구매 내역이다. 앱에 보여 줄 사업자 정보는 `IAP_SELLER_JSON`(JSON 객체, 칸: `name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`)에 넣으면 `/iap/me`의 `seller`로 나간다. 값은 저장소에 적지 않는다.
 
 ## 검증과 남은 작업
 

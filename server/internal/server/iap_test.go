@@ -638,9 +638,16 @@ func TestIAPShelfYears(t *testing.T) {
 		if err := e.db.QueryRow(e.ctx, "SELECT shelf_year FROM iap_purchases WHERE route='google' AND transaction_id=$1", id).Scan(&year); err != nil || year != nil {
 			t.Fatalf("연도 모르는 거래가 기록되지 않음: %v %v", year, err)
 		}
+		// 소비하지 않았다: 앱이 연도를 붙여 다시 낼 수 있고, 끝내 못 내면 구글이 환불한다(코드 리뷰 #43)
+		if iapTestHas(e.google.Confirmed, id) {
+			t.Fatalf("연도 모르는 거래를 소비함(%q)", account)
+		}
 		// 같은 거래를 연도와 함께 다시 내면 그 해에 준다
 		if code, body = e.submitYear(token, "google", e.shelf, id, 2028); code != 200 || body["status"] != "already" || body["year"] != float64(2028) {
 			t.Fatalf("연도와 다시 제출(%q): %d %v", account, code, body)
+		}
+		if !iapTestHas(e.google.Confirmed, id) {
+			t.Fatalf("연도를 붙인 뒤에도 소비 안 함(%q)", account)
 		}
 	}
 	// 2028년: 2칸 + 2칸이라 뒤의 것은 넘은 거래
@@ -899,5 +906,42 @@ func TestIAPOverCapRefund(t *testing.T) {
 				t.Fatalf("애플은 환불을 시도하지 않음: %v %d", ok, n)
 			}
 		}
+	}
+}
+
+func iapTestHas(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// 주문 ID가 없는 구글 구매(프로모션 코드 등)가 3칸을 넘으면 환불을 요청하지 않고 시도도 쌓지 않는다(코드 리뷰 #43)
+func TestIAPOverCapRefundNoOrderID(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	y := e.shelfToken(token, 2026)
+	first, second := iapTestID(t, "n1"), iapTestID(t, "n2")
+	e.google.Purchases[first] = e.shelfPurchase(first, y)
+	p := e.shelfPurchase(second, y)
+	p.TransactionID = ""
+	e.google.Purchases[second] = p
+	if code, body := e.submit(token, "google", e.shelf, first, false); code != 200 || body["overCap"] != nil {
+		t.Fatalf("첫 구매: %d %v", code, body)
+	}
+	for range 2 {
+		code, body := e.submit(token, "google", e.shelf, second, false)
+		if code != 200 || body["overCap"] != true || body["autoRefund"] != false {
+			t.Fatalf("주문 ID 없는 넘은 구매: %d %v", code, body)
+		}
+	}
+	if iapTestHas(e.google.Refunded, "") {
+		t.Fatal("주문 ID 없이 환불을 요청함")
+	}
+	var attempts int
+	if err := e.db.QueryRow(e.ctx, "SELECT refund_attempts FROM iap_purchases WHERE route='google' AND transaction_id=$1", second).Scan(&attempts); err != nil || attempts != 0 {
+		t.Fatalf("시도가 쌓임: %d %v", attempts, err)
 	}
 }

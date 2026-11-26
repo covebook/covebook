@@ -594,3 +594,51 @@ func TestIAPOverCapNotCounted(t *testing.T) {
 		t.Fatalf("넘게 산 거래는 세지 않음: %v %v", shelves, err)
 	}
 }
+
+// 스토어에서 읽은 뒤 다른 곳(알림 처리)이 고친 구독 줄은 그 옛 상태로 덮어쓰지 않는다. 주인은 바꾼다(코드 리뷰 #43)
+func TestIAPUpsertKeepsNewerState(t *testing.T) {
+	ctx, db := iapTestDB(t)
+	user, other := iapTestUser(t, ctx, db), iapTestUser(t, ctx, db)
+	orig := iapTestID(t, "stale")
+	write := func(u int64, s iapSubscription) {
+		t.Helper()
+		tx, err := db.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		if _, err = iapUpsertSubscription(ctx, tx, u, s); err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := func() (st string, owner int64) {
+		t.Helper()
+		if err := db.QueryRow(ctx, "SELECT state, user_id FROM iap_subscriptions WHERE route='apple' AND original_id=$1", orig).Scan(&st, &owner); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	base := iapSubscription{Route: iap.RouteApple, OriginalID: orig, ProductID: "plus", Env: iap.EnvSandbox, ExpiresAt: time.Now().Add(time.Hour), AutoRenew: true}
+	revoked, stale, fresh := base, base, base
+	revoked.State = iap.StateRevoked
+	stale.State, stale.ReadAgo = iap.StatePaid, time.Minute
+	fresh.State, fresh.ReadAgo = iap.StatePaid, 5*time.Millisecond
+
+	write(user, revoked) // 알림 처리가 방금 환불로 바꿨다
+	write(other, stale)  // 1분 전에 paid를 읽은 제출이 뒤늦게 쓴다
+	if st, owner := state(); st != "revoked" || owner != other {
+		t.Fatalf("옛 상태로 덮어씀: %s %d", st, owner)
+	}
+	time.Sleep(30 * time.Millisecond)
+	write(other, fresh) // 줄을 고친 뒤에 읽은 값이면 쓴다
+	if st, _ := state(); st != "paid" {
+		t.Fatalf("새로 읽은 상태를 안 씀: %s", st)
+	}
+	write(other, revoked) // ReadAgo가 없으면(알림 처리) 늘 쓴다
+	if st, _ := state(); st != "revoked" {
+		t.Fatalf("알림 처리가 못 씀: %s", st)
+	}
+}
