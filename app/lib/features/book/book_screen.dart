@@ -1,5 +1,5 @@
 // 책 정보(지금 앱 app/book/[id]/index.tsx): 표지 위 가운데 전환 칸 [내 기록 | 평가 | 책 정보], 열면 내 기록(2026-11-24). 이어서 읽기와 갈피 남기기는 아래에 늘 보인다.
-// 책 꾸미기는 책 정보 칸 줄, 책 공유는 머리줄 아이콘(⋯ 메뉴에서는 뺐다)
+// 책 꾸미기는 내 기록 칸 맨 아래 줄(2026-11-26), 책 공유는 머리줄 아이콘(⋯ 메뉴에서는 뺐다). 책 정보 칸 맨 위는 YES24 책 소개(book_intro)
 // 날짜·쪽수·별점은 모두 선택 입력. 완독은 사용자가 정하거나, 적은 쪽(기록의 도달한 쪽 · 현재 쪽)이 마지막 쪽일 때만 자동으로 바뀐다(타이머 시간으로는 판정하지 않고, 자동으로 되돌리지 않는다. domain/reading.dart 읽기 상태 · 현재 쪽 규칙).
 // 완독한 책을 '읽는 중'·'보류'로 바꾸면 새 회차(다시 읽기)라 먼저 묻는다. 상태를 완독으로 바꾸면 평가 칸으로 넘긴다(2026-11-23). 현재 쪽을 마지막 쪽으로 고쳐 완독이 돼도 평가 칸으로(2026-11-24)
 library;
@@ -35,6 +35,7 @@ import '../stats/chart_data.dart' show timeLabel, timeRange;
 import '../stats/session_edit_screen.dart' show openSessionAdd, openSessionEdit;
 import '../stats/stats_screen.dart';
 import 'binding_screen.dart' show openBindingEditor;
+import 'book_intro.dart' show BookIntro;
 import 'book_share_screen.dart' show openBookShare;
 import 'book_widgets.dart' show confirmRemoveBooks, removeBooks, removedText, unhideBook, unhiddenText;
 import 'edit_book_screen.dart' show openEditBook;
@@ -194,7 +195,7 @@ class _BookScreenState extends State<BookScreen> {
   }
 
   /// 책 메뉴(지금 앱): 정보 수정·책장에서 보기·책장에서 빼기/진열·숨기기/삭제.
-  /// 책 공유는 머리줄 아이콘, 책 꾸미기는 책 정보 칸 줄에 있어 메뉴에서 뺐다(2026-11-24 사용자 2단계).
+  /// 책 공유는 머리줄 아이콘, 책 꾸미기는 내 기록 칸 맨 아래 줄에 있어 메뉴에서 뺐다(2026-11-24 사용자 2단계, 2026-11-26 책 정보 칸 → 내 기록 칸).
   /// 숨긴 책(연도 책장에만 남은 책, 갈피 상세에서 들어올 수 있다)은 진열 · 숨기기 대신 '다시 보이기'(내 책 › 숨긴 책과 같은 일)
   Future<void> _menu() async {
     final place = PlacementStore.instance;
@@ -389,10 +390,19 @@ class _BookScreenState extends State<BookScreen> {
     );
   }
 
-  /// 책 정보 칸: 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 책 꾸미기 · 판매처(책 꾸미기 줄은 2026-11-24 사용자 2단계: ⋯ 메뉴에 있었다. 갈피 색은 책 꾸미기 › 갈피)
+  /// 책 정보 칸: 맨 위 책 소개(YES24, 2026-11-26), 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 판매처.
+  /// 책 꾸미기 줄은 내 기록 칸 맨 아래로 옮겼다(2026-11-26 사용자 '책 꾸미기는 내 기록 맨 밑에'. 그 전 2026-11-24에는 ⋯ 메뉴에서 이 칸으로)
   Widget _infoPane(Library lib, MyBook b, Edition e) {
     final pub = [?e.publisher, if (e.publishedAt != null && e.publishedAt!.length >= 4) e.publishedAt!.substring(0, 4)].where((x) => x.isNotEmpty).join(metaSep);
     final sized = e.widthMm != null && e.heightMm != null;
+    final isbn = e.isbn13;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (isbn != null && isbn.isNotEmpty) BookIntro(isbn13: isbn, linked: e.link != null && e.sourceName == 'YES24', onOpen: _openLink),
+      _infoRows(e, pub, sized),
+    ]);
+  }
+
+  Widget _infoRows(Edition e, String pub, bool sized) {
     return ListGroup(children: [
       ListItem(label: '출판', value: pub.isEmpty ? '미입력' : pub),
       ListItem(label: 'ISBN', value: e.isbn13 ?? '미입력'),
@@ -400,7 +410,6 @@ class _BookScreenState extends State<BookScreen> {
       // 비어 있는 서지 값은 모두 '미입력'(2026-11-19 공통 규칙: 판형만 '확인 전'이었다)
       ListItem(label: '판형', value: sized ? '${e.widthMm}×${e.heightMm}mm' : '미입력', sub: sized ? null : '책장에는 기본 크기로 표시해요'),
       ListItem(label: '도서 정보', value: e.source == 'search' ? e.sourceName ?? '검색' : e.source == 'photo' ? '사진으로 추가' : '직접 입력'),
-      ListItem(label: '책 꾸미기', chevron: true, onPress: () => openBindingEditor(context, id)),
       // 판매 페이지는 맨 아래(YES24 약관: 출처와 상품 링크를 함께 보인다). 앱 밖으로 나가는 줄도 꺾쇠, 열지 못하면 확인창(docs/design/DESIGN.md 10장)
       if (e.link != null) ListItem(label: '${e.sourceName ?? '판매처'}에서 보기', chevron: true, onPress: () => _openLink(e.link!)),
     ]);
@@ -566,6 +575,9 @@ class _BookScreenState extends State<BookScreen> {
         ..._rounds(rounds),
         const SizedBox(height: Space.block),
         ..._marks(lib),
+        // 책 꾸미기는 내 기록 맨 아래(2026-11-26 사용자 '책 꾸미기는 내 기록 맨 밑에 넣어주고'. 전에는 책 정보 칸 줄)
+        const SizedBox(height: Space.block),
+        ListGroup(children: [ListItem(label: '책 꾸미기', chevron: true, onPress: () => openBindingEditor(context, id))]),
       ]);
 
   /// 읽기 상태 · 현재 쪽 · 진행 막대(전체 쪽수를 모르면 한 줄 안내) · 쪽수 고치기 칸
@@ -589,9 +601,10 @@ class _BookScreenState extends State<BookScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: Space.hit),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(statusLabel[shown]!, style: AppType.rowStrong.copyWith(color: AppColors.accent)),
+                // 읽기 전은 회색(아직 아무것도 하지 않은 값은 회색, 2026-11-26 사용자 '읽기 전은 컨벤션에 맞춰서 회색으로'), 읽는 중 · 완독 · 그만 읽음은 갈색
+                Text(statusLabel[shown]!, style: AppType.rowStrong.copyWith(color: shown == ReadStatus.want ? AppColors.inkSoft : AppColors.accent)),
                 const SizedBox(width: Space.xs),
-                const LucideIcon('ChevronDown', size: 20, color: AppColors.accent, stroke: 2),
+                LucideIcon('ChevronDown', size: 20, color: shown == ReadStatus.want ? AppColors.icon : AppColors.accent, stroke: 2),
               ]),
             ),
           ),

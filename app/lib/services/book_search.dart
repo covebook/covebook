@@ -294,3 +294,32 @@ Future<BookCandidate> candidateDetails(BookCandidate c) async {
     return c;
   }
 }
+
+/// YES24 책 소개(2026-11-26 사용자 '책 정보에 yes24에서 책 내용 요약 있잖아 그거 넣어서'): 서버 GET /books/{isbn}의 description
+/// (YES24 itemDetail contentDetail.bookIntroduction, 키는 서버에만). 서버가 YES24로 찾은 책(source yes24)일 때만, 없으면 null.
+/// 받은 글은 기기에 저장하지 않고 앱이 켜져 있는 동안만 기억한다(YES24 답변: 일시 캐싱만). 서버에 닿지 않으면 예외(기억하지 않아 다시 시도된다)
+final Map<String, String?> _introCache = {};
+Future<String?> bookIntro(String isbn13) async {
+  if (_introCache.containsKey(isbn13)) return _introCache[isbn13];
+  final (status, json) = await _getJson('$apiUrl/books/${Uri.encodeComponent(isbn13)}');
+  if (status == 404 || status == 400) return _introCache[isbn13] = null;
+  if (status != 200 || json is! Map) throw HttpException('book $status');
+  final j = json.cast<String, Object?>();
+  final text = j['source'] == 'yes24' ? introText(_s(j['description']) ?? '') : '';
+  return _introCache[isbn13] = text.isEmpty ? null : text;
+}
+
+/// 책 소개 글을 보일 글자로: 글은 고치지 않고 줄바꿈 표시(<br> · </p>)만 줄로, 다른 꺾쇠 표시는 빼고, 글자 표시(&amp; 등)를 글자로 푼다.
+/// 빈 줄은 하나까지
+String introText(String raw) {
+  var s = raw.replaceAll(RegExp(r'<br\s*/?>|</p>', caseSensitive: false), '\n').replaceAll(RegExp(r'<[^>]+>'), '');
+  const named = {'&nbsp;': ' ', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&middot;': '·', '&hellip;': '…', '&lsquo;': '‘', '&rsquo;': '’', '&ldquo;': '“', '&rdquo;': '”'};
+  named.forEach((k, v) => s = s.replaceAll(k, v));
+  s = s.replaceAllMapped(RegExp(r'&#(x?)([0-9a-fA-F]+);'), (m) {
+    final n = int.tryParse(m[2]!, radix: m[1]!.isEmpty ? 10 : 16);
+    return n == null || n <= 0 || n > 0x10FFFF ? m[0]! : String.fromCharCode(n);
+  });
+  s = s.replaceAll('&amp;', '&').replaceAll('\r', '');
+  s = s.split('\n').map((l) => l.trim()).join('\n').replaceAll(RegExp(r'\n{3,}'), '\n\n');
+  return s.trim();
+}
