@@ -273,6 +273,7 @@ func iapTransactionKey(kind iap.Kind, p iap.Purchase) string {
 // iapRevokePurchase는 환불·취소를 원장에 남긴다. 줄을 지우지 않는다. 바뀐 줄이 있으면 true다.
 // 같은 SQL 문에서 환불 고지(T9)도 쓴다: 상태만 바뀌고 고지가 빠지는 일이 없게 한다(주인이 있는 줄만).
 // 선반은 거래마다, 구독은 구독 1건마다 한 번 알린다. 3칸을 넘게 산 선반 거래(over_cap)는 알리지 않는다.
+// 연도를 몰라 칸을 열지 않은 선반은 opened=false를 붙인다. 주인 없는 줄(결제한 계정이 탈퇴)은 받을 사람이 없어 알리지 않는다.
 func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transactionID string, at time.Time) (bool, error) {
 	var changed int
 	err := q.QueryRow(ctx, `WITH r AS (
@@ -286,6 +287,8 @@ func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transaction
 				jsonb_strip_nulls(jsonb_build_object('route', $1::text, 'productId', r.product_id, 'kind', r.kind,
 					'shelves', CASE WHEN r.kind='product' THEN p.shelves END,
 					'year', r.shelf_year,
+					-- 연도를 몰라 칸을 열지 않은 선반(서버가 환불함). 앱이 "선반이 잠겼다" 대신 "열지 못해 환불했다"고 쓴다
+					'opened', CASE WHEN r.kind='product' AND r.shelf_year IS NULL THEN false END,
 					'revokedAt', to_char(r.revoked_at AT TIME ZONE 'UTC', `+iapStampSQL+`))),
 				r.env,
 				CASE WHEN r.kind='product' THEN 'shelf_refunded:' || $1::text || ':' || r.transaction_id
