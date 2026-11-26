@@ -68,7 +68,8 @@
   - 구매안전서비스 이용확인증이 필요한지, 간이과세자 면제가 되는지 확인한다
 - 세무사에게 물을 것 12개: `docs/reports/2026-11-19-iap-pitfalls.md` 7-4장
   - 특히 한국 소비자 결제의 부가세, 스토어 수수료 증빙, 연 구독 매출 시기
-- 앱에 보일 사업자 정보(상호, 대표자, 주소, 전화, 전자우편, 사업자등록번호, 통신판매업 신고번호)
+- 앱에 보일 사업자 정보(상호, 대표자, 주소, 전화, 전자우편, 사업자등록번호, 통신판매업 신고번호, 호스팅서비스 제공자의 상호)
+  - 호스팅서비스 제공자: 서버를 올린 곳(지금은 KoDeploy)을 운영하는 회사의 상호. 그 회사에 확인해 넣는다
   - 법으로 앱에 보여야 한다(ADR-0003 L14, 결제 10 화면)
   - 저장소에 적지 않고 KoDeploy의 `IAP_SELLER_JSON`에 넣는다(7장)
 - 약관과 처리방침: 결제를 켜기 30일 전
@@ -372,7 +373,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 | `IAP_GOOGLE_PACKAGE` | `app.covebook` | |
 | `IAP_GOOGLE_PUSH_AUDIENCE` | 푸시 구독의 대상 값 | 3-6 |
 | `IAP_GOOGLE_PUSH_EMAIL` | 푸시 구독 인증에 고른 서비스 계정 이메일 | 3-6 |
-| `IAP_SELLER_JSON` | 사업자 정보 JSON(`name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`) | 1 |
+| `IAP_SELLER_JSON` | 사업자 정보 JSON(`name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`, `host`) | 1 |
 | `IAP_ENABLED` | `1` | |
 | `IAP_ALLOW_SANDBOX` | `1` (계속 켜 둔다. 앱을 고칠 때마다 심사·TestFlight 결제가 샌드박스로 온다. #31 결정) | |
 | `IAP_RENEWAL_NOTICE_DAYS` | 연 구독 갱신 예정 고지를 며칠 전에. 비우면 14 | |
