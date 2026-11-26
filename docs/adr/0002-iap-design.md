@@ -41,6 +41,7 @@
 | D21 | 상품 목록 | 상품 ID → 권한 대응을 서버 테이블로 관리 |
 | D22 | 가격 표시 | 앱에 가격을 적지 않음. 스토어가 주는 현지 가격을 표시 |
 | D23 | 시각 | 전부 UTC로 저장. 만료 판단은 서버 시계 |
+| - | 정답이 없는 선택 | 3장 끝 표(2026-11-26 조사). 다른 곳의 선택과 우리 결정, 사람이 정할 것 |
 
 ## 3. 결정과 근거
 
@@ -198,7 +199,7 @@
 - 결정
   - 유예 기간(grace period): 권한 유지
   - 유예가 끝난 뒤(애플 결제 재시도, 구글 계정 보류): 권한 해제
-  - 애플 유예 기간은 App Store Connect에서 직접 켜야 함. 16일로 설정
+  - 애플 유예 기간은 App Store Connect에서 직접 켜야 함. 16일로 설정. 28일이 근거가 더 강해 다시 정함(3장 끝 표, #34)
   - 구글은 기본값 사용
 - 근거
   - 애플은 기본이 꺼짐. 안 켜면 결제 실패 즉시 권한이 끊김
@@ -263,6 +264,36 @@
   - 거래를 끝내지 않고 남겨 두므로 구매는 사라지지 않음. 다음 실행 때 다시 제출됨 (D10)
 - 감수하는 것: 서버 장애 중에는 결제한 유저가 기다려야 함
 - 대응: 재시도 간격을 짧게, 화면에 "결제는 완료됐고 확인 중"임을 분명히 표시
+
+### 정답이 없는 선택 (2026-11-26 조사)
+
+- 중국어권(掘金·博客园·CSDN 등)과 영어권(RevenueCat·Adapty·Qonversion, 애플·구글 공식 문서, 애플 포럼)에서 다른 곳이 무엇을 골랐는지 모아 정함
+- 중국어권은 대기업 기술팀 글을 찾지 못했고 개인 글·사고 복기가 대부분. 영어권은 대행사 문서와 공식 문서가 중심
+- 표의 "상태": 적용(코드·설정에 반영), 유지(지금 결정 그대로), 사람(가격·법률·사업 판단이라 정환과 정함), 실측(샌드박스·운영에서 확인한 뒤 정함)
+
+| 선택 | 다른 곳 | 우리 | 상태 |
+|---|---|---|---|
+| 스토어 조회 실패 때 지급 (#22) | RevenueCat은 애플 장애 때 구독에 최대 24시간 임시 권한, 소모성은 서버 검증을 기다림. 중국어권은 전부 "검증 뒤 지급" | 구독·선반 모두 보류(D18). 장애가 드물고, 임시 권한을 거두는 코드가 따로 필요함 | 유지. 애플 장애로 문의가 실제로 생기면 애플 구독만 임시 권한을 다시 검토 |
+| 방금 산 거래가 조회에 안 보임(애플 4040010) | 포럼 1건: 2~5분 뒤 조회됨, 알림은 바로 옴. 애플은 원인 설명 없음 | 서버는 요청 안에서 다시 묻지 않고 404. 앱은 거래를 끝내지 않아 다음 실행·재개 때 다시 냄. 알림이 먼저 오면 알림 처리가 지급(선반도 `ONE_TIME_CHARGE`로) | 적용 |
+| 만료 직후 갱신 반영이 늦을 때 (#24) | RevenueCat 기본은 버퍼 없음. 선택 사항으로 "갱신 대기" 화면, 예시 6시간 | 대조가 만료 임박 구독을 미리 다시 물음. 요청 때 재조회와 버퍼 길이는 정하지 않음 | 일부 적용. 버퍼 길이는 사람(해지한 사람이 그만큼 더 씀) |
+| 운영 서버의 샌드박스 거래 (#31) | RevenueCat 기본은 전부 지급(사용자 지정 가능), Adapty는 통계에서만 뺌. 网易云音乐은 심사 기간 밖에는 끔 | 받고 기록, 매출에서 뺌(D15). 구독은 샌드박스에서 몇 분 만에 끝나 누출이 작음. 선반은 만료가 없어 TestFlight 참가자가 3칸을 영구히 가질 수 있음 | 사람: TestFlight 참가자에게 선반을 줄지. 운영 통계에 최근 30일 샌드박스 거래 수를 둠(적용) |
+| 유예 일수 (#34) | 애플은 3·16·28일 중 선택, 한번 배정된 사람은 못 바꿈. RevenueCat 권고는 애플 28일(애플 자료상 결제 문제의 90%가 그 안에 해결), 구글 최대 30일 | D11은 애플 16일. 근거가 가장 강한 값은 28일 | 사람(유예 동안 무료로 쓰는 손실과 복구율). 구글 일시중지는 끔 |
+| 환불 회수 범위 | 구글 보안 문서: 거둘 수 있는 만큼 거두고, 쓴 것은 이용 제한 | D13(칸을 잠그고 책은 내 책으로) 유지. 같은 방향 | 유지 |
+| 제출 때 스토어가 "환불됨"이라고 답함 (#32) | 공식 문서: 알림은 놓칠 수 있으니 조회로 메움 | 알림 처리와 같은 길로 회수·고지하고 409. 실패하면 대조가 다시 봄 | 적용 |
+| 부분 환불(`REFUND_PRORATED`, 2025-12) | 대행사도 아직 따로 처리하지 않음 | 비율과 상관없이 그 거래 전체를 환불로 봄. 비율은 알림 원문에 남음 | 유지 |
+| 환불 되돌림(`REFUND_REVERSED`) | 포럼 질문에 답 없음. RevenueCat 문서에 언급 없음 | 알림 내용 대신 재조회 결과로 되돌림(D4) | 실측: 만료 뒤에 오는지 |
+| 반복 환불 계정 | 애플은 "감시"까지, 구글은 경고 → 구매 제한 → 접근 제한을 제안. 숫자 기준을 공개한 곳 없음 | 횟수만 셈(통계의 최근 30일 환불) | 사람: 제재는 약관 고지 뒤(법률) |
+| 환불 요청에 사용 정보 보내기(애플 `CONSUMPTION_REQUEST`, 구글 환불 심사) | RevenueCat 기본은 응답 안 함. 중국어권은 환불률 높은 게임이 주로 보냄. 효과 수치 없음 | 응답 안 함. 알림은 기록만 | 사람: 보내려면 동의 화면·약관·개인정보 라벨(법률) |
+| 월↔연 변경 (#33) | 대행사 최소 구성: 앱 안 변경 화면 없이 스토어 구독 관리만. 애플은 다른 기간으로 바꾸면 다음 갱신일부터, 구글은 같은 구독 안에서 즉시 전액 또는 다음 결제일 | 앱 안 변경 화면은 만들지 않음. 서버는 스토어에서 바꾼 것을 받음. 구글 구독 항목이 2개(예약된 변경)면 만료가 늦은 항목을 씀 | 적용. 구글 기본 청구 방식과 애플 그룹 안 순서는 사람 |
+| 받지 않은 구글 구매 (#27) | 구글 공식: 3일 자동 환불을 기다리지 말고 직접 환불. 掘金 사고 복기: 환불만 하고 회수(revoke)를 안 하면 확인 안 된 구매가 남아 새 구매를 막음 | 3칸 초과는 소비한 뒤 환불 요청이라 회수 문제 없음. 연도 모르는 선반은 "거절"이 아니라 "아직 못 정함"이라 3일을 기다림 | 유지 |
+| 앱 재제출 시점 (#40) | 구글 공식: `onResume`마다 조회. 중국어권: 시작·충전 화면 진입 때 재시도, 사용자가 누르는 새로고침 | 안드로이드: 시작 + 다시 앞으로 올 때(1분에 한 번, 결제 중 제외). 애플: 끝내지 않은 거래가 시작 때 다시 옴. 영구 실패는 끝내고 우리 설정 문제는 끝내지 않음 | 적용 |
+| 스토어 계정 하나, 앱 계정 여럿 | RevenueCat 기본은 새 계정으로 이전("원래 계정 유지"는 주의 표시). 중국어권 주류는 첫 계정 고정 + 다른 계정 구매 막기 | D8(마지막 복원 계정) 유지. 동시에 한 계정이라 돌려써도 얻는 게 작음 | 유지. 돌려쓰기가 보이면 5장 조건대로 |
+| 금액·장부 (#37) | 애플: 거래의 `price`를 매출 인식에 쓰지 말고 App Store Connect 보고서 기준. 중국어권 장부 글은 반대 줄 방식이지만 IAP 사례는 없음 | 서버 표는 소비자 결제 기록. 매출은 스토어 보고서. 환불은 같은 줄의 상태 변경, 이력은 알림 원문 | 유지. 연 구독 매출 인식은 사람(세무사) |
+| 대조 주기 | 구글 무효 구매 목록은 최근 30일만 줌. 공개 수치 없음 | 하루 1회 + 무효 구매 목록 + 애플 알림 이력 | 유지 |
+| 앱 오프라인 캐시 | RevenueCat SDK: 오프라인에서 활성 권한을 최대 3일 유지 | 서버 계산(D3). 앱이 서버 값을 얼마나 믿을지는 정하지 않음 | 사람: 오프라인 허용 기간 |
+| 관측 | RevenueCat 2020 사고: 지연 시간 알람만 있어 오류 급증을 늦게 앎. 掘金 사고: 같은 구매의 반복 제출을 문의로 알게 됨 | 통계에 "확인 못 한 구글 구매 중 가장 오래된 것의 나이"를 둠. 하루를 넘으면 사람이 봄(3일에 구글이 환불) | 적용. 알람을 보낼 수단은 #42 |
+| 탈퇴 | 애플: 구독 중이면 탈퇴 전에 해지 안내, 즉시 삭제 선택지도 둠, 남기는 정보는 알림 | 결제 기록은 지우지 않고 사용자 연결만 끊음(L13 보존 기간) | 사람: 보존 기간·가명 처리(법률) |
+| 서버가 애플 거래를 끝내기(Finish Transaction, 2026-04) | 애플: 서버가 권한을 관리하면 지급 뒤 서버가 불러도 됨 | 쓰지 않음. 앱이 끝냄(D10). Flutter 플러그인과 맞는지 확인 안 됨 | 유지 |
 
 ### 해외 결제 확장 (D19~D23)
 
@@ -345,6 +376,7 @@
 
 - D12: 유료 꾸미기를 기본값으로 되돌리는 방식에 동의하는지
 - D14: 무료 체험 없이 출시하는 것
+- 3장 끝 표의 "사람" 항목: 애플 유예 일수(16일 또는 28일), TestFlight 참가자에게 선반을 줄지, 만료 직후 버퍼 길이, 앱 오프라인 허용 기간, 구글 요금제 변경의 기본 청구 방식, 반복 환불 제재와 사용 정보 보내기(법률 확인 필요)
 - 가격: 결제 계획 보고 참고
 
 ## 부록 A. 확인 수준
@@ -353,8 +385,8 @@
 |---|---|
 | 구글 3일 확인 규칙, 알림 뒤 API 조회, 계정 보류 기본값, `obfuscatedAccountId` 개인정보 금지 | 구글 공식 문서 |
 | `completePurchase` 3일 규칙 | Flutter 플러그인 공식 README |
-| 애플 유예 기간이 기본 꺼짐, 선택 일수 | 2차 자료 (대행사 문서, 발표 자료). App Store Connect에서 확인 필요 |
-| 애플 알림 재전송 횟수와 간격 | 2차 자료 (중국어 블로그). 공식 문서 확인 필요 |
+| 애플 유예 기간이 기본 꺼짐, 선택 일수(3·16·28일), 한번 배정된 사람은 못 바꿈 | 애플 공식 문서(2026-11-26 확인) |
+| 애플 알림 재전송 횟수와 간격 | 애플 공식 문서(2026-11-26 확인): 실패하면 5번, 앞 시도와 1·12·24·48·72시간 간격. 200~206만 성공. 샌드박스는 재전송 없음 |
 | `appAccountToken`이 첫 값으로 굳음 | 애플 개발자 포럼 사례. 샌드박스에서 확인 필요. 선반 연도는 결제 중 예약을 먼저 보게 해 영향을 막음(2026-11-20, erd.md 3.7) |
 | 소모성 선반의 심사 결과 | 포럼 사례가 엇갈림. 예측 불가 |
 | 로그인을 강제하면 반려 | 포럼 사례 다수. 지침 5.1.1(v) 원문 확인 필요 |
@@ -363,7 +395,7 @@
 ## 부록 B. 확인 못 한 것
 
 - 2026-11-19 조사로 늘어난 항목은 [조사 종합 9장](../reports/2026-11-19-iap-pitfalls.md)과 이슈 #41에 있음
-- 애플 거래 내역 조회가 끝난 소모성 거래도 돌려주는지. 돌려준다면 서버 기록이 없어도 선반을 다시 찾을 수 있음
+- ~~애플 거래 내역 조회가 끝난 소모성 거래도 돌려주는지~~ 공식 문서상 돌려줌(2026-11-26). 서버 기록이 없어도 선반 거래를 다시 찾을 길이 있음. 샌드박스 확인은 아직
 - 구글 계정 하나에 앱 계정이 여럿일 때의 동작. 자료를 찾지 못함
 - 구글 유예 기간의 현재 기본값. 자료끼리 다름
 - 서버(KoDeploy)에서 정기 작업을 돌릴 수 있는지
@@ -386,6 +418,15 @@
 - [Apple: JWSTransactionDecodedPayload](https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload)
 - [Apple: price (가격 단위와 정산 주의)](https://developer.apple.com/documentation/appstoreserverapi/price)
 - [Google Play Developer API: purchases.productsv2](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.productsv2)
+- [Android Developers: 결제 보안(거절한 구매 환불, 환불 뒤 회수)](https://developer.android.com/google/play/billing/security)
+- [Apple: 구독 결제 처리(변경 시점, 유예)](https://developer.apple.com/documentation/storekit/handling-subscriptions-billing)
+- [Apple: 비자발적 이탈 줄이기(유예 일수)](https://developer.apple.com/documentation/storekit/reducing-involuntary-subscriber-churn)
+- [Apple: 알림에 응답하기(재전송)](https://developer.apple.com/documentation/appstoreservernotifications/responding-to-app-store-server-notifications)
+- [Apple: 거래 내역 조회](https://developer.apple.com/documentation/appstoreserverapi/get-transaction-history)
+- [Apple: 사용 정보 보내기](https://developer.apple.com/documentation/appstoreserverapi/send-consumption-information)
+- [Apple: 서버에서 거래 끝내기](https://developer.apple.com/documentation/appstoreserverapi/finish-transaction)
+- [Apple: 앱 안 계정 삭제](https://developer.apple.com/support/offering-account-deletion-in-your-app/)
+- [Apple WWDC24: App Store Server API로 할 수 있는 것](https://developer.apple.com/videos/play/wwdc2024/10062/)
 
 ### 애플 개발자 포럼
 
@@ -394,6 +435,8 @@
 - [appAccountToken을 구매마다 다르게 쓸 수 있나](https://developer.apple.com/forums/thread/854464)
 - [지침 5.1.1: 구매 전 가입 요구로 반려](https://developer.apple.com/forums/thread/731471)
 - [지침 3.1.1 반려 사례](https://developer.apple.com/forums/thread/770266)
+- [방금 산 거래가 4040010(2~5분 지연)](https://developer.apple.com/forums/thread/818605)
+- [REFUND_REVERSED 뒤 상태(답 없음)](https://developer.apple.com/forums/thread/848769)
 
 ### 중국어권
 
@@ -403,12 +446,24 @@
 - [서버에서 iOS 인앱결제 관리하기 WWDC21 (知乎)](https://zhuanlan.zhihu.com/p/1966075578391167782)
 - [App Store Server API 실무 정리 (CSDN)](https://blog.csdn.net/Px01Ih8/article/details/125630740)
 - [iOS 자동 갱신 구독](https://yuluyao.com/ios/cf-iap)
+- [网易云音乐 IAP 정리 (掘金)](https://juejin.cn/post/7233948883045941303)
+- [환불은 회수가 아니다: 구글 플레이 결제 사고 복기 (掘金)](https://juejin.cn/post/7673068632563236873)
+- [애플 인앱결제 WWDC21 정리 (博客园 37手游)](https://www.cnblogs.com/37MobileTeam/articles/14898117.html)
+- [같은 Apple ID로 여러 사용자가 구독 돌려쓰기 막기 (火山引擎)](https://www.volcengine.com/article/949878)
 
 ### 영어권 블로그·문서
 
 - [RevenueCat: 구글 플레이 구독 수명 주기](https://www.revenuecat.com/blog/engineering/google-play-lifecycle)
 - [RevenueCat: 비구독 상품](https://www.revenuecat.com/docs/platform-resources/non-subscriptions)
 - [RevenueCat: 유예 기간 동작](https://www.revenuecat.com/docs/subscription-guidance/how-grace-periods-work.md)
+- [RevenueCat: 복원 때 구독 이전 방식](https://www.revenuecat.com/docs/projects/restore-behavior)
+- [RevenueCat: 샌드박스](https://www.revenuecat.com/docs/test-and-launch/sandbox)
+- [RevenueCat: 환불 요청 응답(Refund Control)](https://www.revenuecat.com/docs/customers/refund-control.md)
+- [RevenueCat: SDK 캐시](https://www.revenuecat.com/docs/test-and-launch/debugging/caching.md)
+- [RevenueCat: 구글 결제 실패 이탈 줄이기](https://www.revenuecat.com/blog/growth/google-play-billing-error-churn-how-to-fix.md)
+- [RevenueCat: 2020-01 앱스토어 장애 사후 분석](https://www.revenuecat.com/blog/engineering/post-mortem-2020-01-24-app-store-outage.md)
+- [RevenueCat: 2026-07 애플 장애 때 임시 권한](https://status.revenuecat.com/incidents/v1qb0qv3scql)
+- [Adapty: 샌드박스 구매 시험](https://adapty.io/docs/test-purchases-in-sandbox)
 - [RevenueCat: 무료 체험을 없애야 하나](https://www.revenuecat.com/blog/growth/should-your-app-stop-offering-free-trials)
 - [Apphud: 구매 복원](https://apphud.com/blog/restoring-purchases)
 - [Adapty: 무료 체험과 바로 구매](https://adapty.io/blog/free-trial-vs-direct-purchase-subscription-apps/)
