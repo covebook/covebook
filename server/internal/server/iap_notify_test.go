@@ -609,3 +609,58 @@ func TestIAPNotifyOverCap(t *testing.T) {
 		t.Fatalf("애플 거래가 다시 시도 목록에: %v %v", rows, err)
 	}
 }
+
+// 연도를 모르는 선반: 제출이 일부러 소비하지 않았으니 정기 대조도 소비하지 않는다(구글 3일 자동 환불을 지킨다).
+// 연도와 함께 다시 내면 그때 지급하고 확인한다
+func TestIAPSweepSkipsShelfWithoutYear(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	tok := iapTestID(t, "tok")
+	// 연도별 값이 아닌 계정 연결 값으로 결제했고 예약도 없다: 서버는 어느 해 책장인지 모른다
+	e.google.Purchases[tok] = e.shelfPurchase(tok, e.accountToken(token))
+	if code, body := e.submit(token, "google", e.shelf, tok, false); code != 422 || errCode(body) != "iap_shelf_year_missing" {
+		t.Fatalf("연도 모르는 선반 제출: %d %v", code, body)
+	}
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET created_at=now()-interval '5 minutes' WHERE transaction_id=$1", tok); err != nil {
+		t.Fatal(err)
+	}
+	e.sweep()
+	for _, id := range e.google.Confirmed {
+		if id == tok {
+			t.Fatal("연도 모르는 선반을 대조 작업이 소비함")
+		}
+	}
+	// 연도를 붙여 다시 내면 지급하고 소비한다
+	if code, _ := e.submitYear(token, "google", e.shelf, tok, 2026); code != 200 {
+		t.Fatalf("연도와 다시 제출: %d", code)
+	}
+	found := false
+	for _, id := range e.google.Confirmed {
+		found = found || id == tok
+	}
+	if !found {
+		t.Fatal("연도와 다시 낸 선반을 소비하지 않음")
+	}
+}
+
+// 알림 하나가 처리 중 패닉을 내도 그 알림만 실패로 남고, 뒤의 알림은 처리된다
+func TestIAPNotifyPanicIsolated(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	account := e.accountToken(token)
+	badOrig, badTxn := iapTestID(t, "bad-orig"), iapTestID(t, "bad-txn")
+	e.apple.Purchases[badTxn] = e.subscription(badOrig, badTxn, account, time.Now().Add(time.Hour))
+	goodOrig, goodTxn := iapTestID(t, "good-orig"), iapTestID(t, "good-txn")
+	e.apple.Purchases[goodTxn] = e.subscription(goodOrig, goodTxn, account, time.Now().Add(time.Hour))
+	e.apple.PanicOn = badOrig
+	bad, good := iapTestID(t, "bad-n"), iapTestID(t, "good-n")
+	e.notify("apple", subNotice(bad, badTxn, badOrig), "")
+	e.notify("apple", subNotice(good, goodTxn, goodOrig), "")
+	e.sweep()
+	if result, note, attempts := e.noticeResult("apple", bad); result != "failed" || attempts != 1 || !strings.Contains(note, "패닉") {
+		t.Fatalf("패닉 난 알림: %s %d %q", result, attempts, note)
+	}
+	if result, note, _ := e.noticeResult("apple", good); result != "processed" {
+		t.Fatalf("뒤의 알림: %s %q", result, note)
+	}
+}

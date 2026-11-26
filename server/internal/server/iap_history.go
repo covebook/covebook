@@ -226,7 +226,7 @@ func (s *Server) iapApplyVoided(ctx context.Context, store iap.Store, v iap.Void
 type iapBacklog struct {
 	PendingNotices         int   `json:"pendingNotifications"`     // 받았지만 아직 처리하지 않은 알림
 	FailedNotices          int   `json:"failedNotifications"`      // 처리에 실패해 다시 시도할 알림
-	Unconfirmed            int   `json:"unconfirmedPurchases"`     // 지급했는데 스토어 확인을 못 마친 구매(구글은 3일 안에 해야 한다)
+	Unconfirmed            int   `json:"unconfirmedPurchases"`     // 지급했는데 스토어 확인을 못 마친 구매(구글은 3일 안에 해야 한다). 일부러 소비하지 않은 연도 모르는 선반은 shelfNoYear로 따로 센다
 	OldestPendingSecs      int64 `json:"oldestPendingSeconds"`     // 가장 오래 기다린 알림의 나이
 	Subscriptions          int   `json:"activeSubscriptions"`      // 지금 유효한 구독 1건(운영 환경)
 	RevokedPurchases       int   `json:"revokedPurchases30Days"`   // 최근 30일에 환불된 거래
@@ -242,7 +242,7 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 	err = q.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM iap_notifications WHERE result='received'),
 		(SELECT count(*) FROM iap_notifications WHERE result='failed' AND received_at > now() - interval '8 days'),
-		(SELECT count(*) FROM iap_purchases WHERE confirmed_at IS NULL AND state='paid'),
+		(SELECT count(*) FROM iap_purchases WHERE confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND shelf_year IS NULL)),
 		coalesce((SELECT extract(epoch FROM now() - min(received_at)) FROM iap_notifications
 			WHERE result IN ('received','failed') AND received_at > now() - interval '8 days'), 0)::bigint,
 		(SELECT count(*) FROM iap_subscriptions WHERE state='paid' AND env='production' AND coalesce(grace_until, expires_at) > now()),
