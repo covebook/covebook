@@ -438,7 +438,7 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	}
 	// 알림만으로 지급한 새 구독은 여기서 스토어 확인을 한다(앱이 꺼져 있어도 3일 기한을 지키게).
 	if granted && cur.State == iap.StatePaid && !cur.Acknowledged {
-		if e := store.Confirm(storeCtx, iap.Ref{Kind: iap.KindSubscription, ID: sub.OriginalID}, cur.ProductID, false); e != nil {
+		if e := iapConfirmAfter(ctx, store, iap.Ref{Kind: iap.KindSubscription, ID: sub.OriginalID}, cur.ProductID, false); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
 		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
@@ -521,12 +521,13 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if err = tx.Commit(ctx); err != nil {
 		return "", err
 	}
-	if inserted && !p.Acknowledged {
+	// 연도를 모르면 소비하지 않는다. 앱이 연도와 함께 내면 그때 소비하고, 끝내 안 내면 구글이 3일 뒤 환불한다(제출 경로와 같다)
+	if inserted && year > 0 && !p.Acknowledged {
 		product, e := iapFindProduct(ctx, s.DB, route, p.ProductID)
 		if e != nil {
 			return "", e
 		}
-		if e = store.Confirm(storeCtx, ref, p.ProductID, product.Consume); e != nil {
+		if e = iapConfirmAfter(ctx, store, ref, p.ProductID, product.Consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
 		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
@@ -543,4 +544,11 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 		return fmt.Sprintf("알림으로 새 구매 기록(%d년 책장, 3칸 넘음: 칸을 주지 않음, 환불은 사용자 요청 또는 다시 시도)", year), nil
 	}
 	return fmt.Sprintf("알림으로 새 구매 지급(%d년 책장)", year), nil
+}
+
+// iapConfirmAfter는 DB 커밋 뒤의 스토어 확인이다. 앞의 조회와 제한 시간을 나눠 쓰지 않게 새로 준다
+func iapConfirmAfter(ctx context.Context, store iap.Store, ref iap.Ref, productID string, consume bool) error {
+	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), iapStoreTimeout)
+	defer cancel()
+	return store.Confirm(c, ref, productID, consume)
 }
