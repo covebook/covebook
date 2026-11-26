@@ -1,14 +1,17 @@
 // 꾸미기 화면 부품(지금 앱 features/home/DecoratePanel.tsx, 2026-10-26 꾸미기 시안을 2026-11-19 사용자 시안으로 바꿈):
 // 맨 위 줄 DecorateBar('책 배치 | 선반 | 벽지' 탭, 되돌리기·완료), 아래는 탭마다
-//  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('위치, 각도 | 디자인' 전환 칸, 2026-11-20 사용자. 이름은 2026-11-23)
+//  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('배치 | 디자인' 전환 칸, 2026-11-20 사용자. 이름은 2026-11-26)
 //  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
-// DecoratePanel: 고른 책 제목, '위치, 각도 | 디자인'. 위치, 각도는 자세 전환 칸(책등·표지·눕힘), 줄마다 '이름 · 막대 · 숫자'(앞뒤 mm, 회전 °),
+// DecoratePanel: 고른 책 제목, '배치 | 디자인'. 배치는 폭 가득 '세우기 | 눕히기', 줄마다 '이름 · 막대 · 값'(돌리기 °, 앞뒤 위치 mm), 세우면 기대기
+// '똑바로 | 왼쪽 | 오른쪽 | 뒤로'(2026-11-26 사용자 시안 '정면이랑 측면을 세우기로 통일하고 디자인 옆에 위치, 각도를 배치로 통일해 기대기도 저렇게'):
+// 책등 · 표지 자세를 '세우기' 하나로 합쳐 돌리기 0° = 책등이 앞, 90° = 표지가 앞(layout_engine setStandTurn).
 // 디자인은 책 옆면(단색 | 실물 | 겹무늬, 고른 책에만)과 이 책의 책 꾸미기(그림, 색상, 재질)로 가는 줄.
 // 2026-11-23 사용자: 책 옆면은 책마다 따로('가호를 눌러 연 화면이니까 여기서 고른 모양은 가호에만'), 그래서 적용 범위 글('모든 책')을 뺐다.
-// 이름도 사용자 정리대로 '움직임 | 겉모습' → '위치, 각도 | 디자인', '실물 측면' → '측면', '표지 이어 쌓기' → '겹무늬', 나열은 쉼표로.
+// 이름도 사용자 정리대로 '움직임 | 겉모습' → '위치, 각도 | 디자인'(2026-11-23) → '배치 | 디자인'(2026-11-26), '실물 측면' → '측면', '표지 이어 쌓기' → '겹무늬'.
 // 2026-11-25 사용자 '책 옆면에 측면 말고 실물로': '측면' → '실물'(YES24 책등 사진 그대로).
-// 기대기는 자세처럼 전환 칸(2026-11-21 사용자 '기대기도 다른 버튼처럼'): 책등 책은 왼쪽 · 바로 · 오른쪽(방향만 고르고 각도는 옆 책과의 틈으로,
-// 기댄 각도를 아래 글로), 표지 책은 바로 · 뒤로(벽에 기대기, 사용자 '표지 쪽은 뒤로 기대기가 안 돼': 머리 손잡이를 끌어야만 됐다).
+// 기대기는 전환 칸 하나(2026-11-21 사용자 '기대기도 다른 버튼처럼', 2026-11-26 네 칸): 왼쪽 · 오른쪽은 책등이 앞으로 서서 옆 책에 기대기
+// (방향만 고르고 각도는 옆 책과의 틈으로, 기댄 각도를 아래 글로), 뒤로는 표지가 앞으로 서서 뒤 벽에 기대기(사용자 '표지 쪽은 뒤로 기대기가 안 돼'),
+// 똑바로는 기대지 않기.
 // 막대에는 갈 수 있는 범위를 진한 띠로.
 // 막대는 놓을 때 확정한다(끄는 동안은 숫자와 손잡이만 따라간다).
 // 2026-11-16 QA 영숙 F7: 큰 글씨에서는 라벨을 따로 줄에 둔다(잘리거나 '위치기대기'로 세로로 섰다).
@@ -20,6 +23,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../domain/geometry.dart';
+import '../../domain/layout_engine.dart' show standTurnMax;
 import '../../domain/types.dart';
 import '../../scene_config/skin.dart';
 import '../../scene_config/spine_look.dart';
@@ -185,12 +189,15 @@ class SkinSheet extends StatelessWidget {
       );
 }
 
-/// 고른 책 조작부의 두 칸: 위치, 각도(자세 · 앞뒤 · 회전/기대기) | 디자인(책 옆면 · 이 책 꾸미기)
+/// 고른 책 조작부의 두 칸: 배치(세우기/눕히기 · 돌리기 · 앞뒤 위치 · 기대기) | 디자인(책 옆면 · 이 책 꾸미기)
 enum DecoPart { move, look }
 
-/// 책 배치 탭에서 책을 골랐을 때: 제목, 전환 칸 '위치, 각도 | 디자인', 그 아래 고른 칸의 조작부
+/// 세운 책 기대기 칸: 똑바로 · 왼쪽 · 오른쪽(책등이 앞, 옆 책에) · 뒤로(표지가 앞, 뒤 벽에)
+enum StandLean { straight, left, right, back }
+
+/// 책 배치 탭에서 책을 골랐을 때: 제목, 전환 칸 '배치 | 디자인', 그 아래 고른 칸의 조작부
 /// (2026-11-20 사용자 '각도 같은 움직임, 책 색상이나 표면 측면 같은 거 선택하는 버튼 … 누르면 그 밑에 해당 내용들이 뜨게').
-/// 자세(책등 · 표지 · 눕힘)도 전환 칸(2026-11-20 사용자 '눕힘 세움 이런 거 버튼으로 하라 하지 않았나? 통계 캘린더 분석 같은')
+/// 자세도 전환 칸(2026-11-20 사용자 '눕힘 세움 이런 거 버튼으로 하라 하지 않았나? 통계 캘린더 분석 같은'): '세우기 | 눕히기'(2026-11-26 시안)
 class DecoratePanel extends StatefulWidget {
   const DecoratePanel({
     super.key,
@@ -203,10 +210,13 @@ class DecoratePanel extends StatefulWidget {
     required this.spin,
     required this.spinMax,
     required this.spinRange,
+    this.turn = 0,
+    this.turnRange,
     required this.depth,
     required this.onPose,
     required this.onLean,
     required this.onSpin,
+    this.onTurn,
     required this.onDepth,
     required this.spine,
     required this.onSpine,
@@ -214,7 +224,6 @@ class DecoratePanel extends StatefulWidget {
     this.bookKey,
     this.leanDeg,
     this.frontBack,
-    this.onFrontLean,
   });
 
   /// 책등 책: 지금 기댄 각도(°, 옆 책과의 틈으로 정해진다)
@@ -222,7 +231,6 @@ class DecoratePanel extends StatefulWidget {
 
   /// 표지 책: 뒤로 기대 있는지(젖힌 각도가 있으면 '뒤로')
   final bool? frontBack;
-  final ValueChanged<bool>? onFrontLean;
 
   final String title;
   final Pose? pose;
@@ -232,13 +240,21 @@ class DecoratePanel extends StatefulWidget {
 
   /// 표지 책: 지금 뒤로 젖힌 각도(머리 손잡이)
   final String? angles;
+  /// 눕힌 책 돌리기(±spinMax)
   final double spin;
   final double spinMax;
   final ({double lo, double hi})? spinRange;
+
+  /// 세운 책 돌리기: 0° 책등이 앞 ~ 90° 표지가 앞(standTurnMax), 그 범위 중 갈 수 있는 곳
+  final double turn;
+  final ({double lo, double hi})? turnRange;
   final ({double lo, double hi, double z, double back})? depth;
+
+  /// 세우기(Pose.upright) | 눕히기(Pose.horizontal)
   final ValueChanged<Pose> onPose;
-  final ValueChanged<int> onLean;
+  final ValueChanged<StandLean> onLean;
   final ValueChanged<double> onSpin;
+  final ValueChanged<double>? onTurn;
   final ValueChanged<double> onDepth;
 
   /// 고른 책의 옆면 모양(이 책에만): 디자인 칸
@@ -258,52 +274,68 @@ class DecoratePanel extends StatefulWidget {
 class _DecoratePanelState extends State<DecoratePanel> {
   DecoPart _part = DecoPart.move;
 
+  /// 세운 책(책등 · 표지 자세). 표지 자세를 다 젖혀 누운 책은 눕히기
+  bool get _standing => widget.pose != Pose.horizontal;
+
+  /// 기대기 칸에서 지금 고른 것
+  StandLean get _leanNow {
+    final w = widget;
+    if (w.pose == Pose.front) return w.frontBack == true ? StandLean.back : StandLean.straight;
+    return w.lean < 0 ? StandLean.left : w.lean > 0 ? StandLean.right : StandLean.straight;
+  }
+
   Widget _move(BuildContext context, bool big) {
-    final w = widget, pose = w.pose;
-    final turns = pose == Pose.horizontal || pose == Pose.front;
+    final w = widget, standing = _standing;
+    // 줄 이름 칸 폭: 보이는 이름 중 가장 긴 것('앞뒤 위치')이 한 줄로 들어가게 글자 크기대로 잰다
+    final names = ['돌리기', if (w.depth != null) '앞뒤 위치', if (standing) '기대기'];
+    final labelW = _labelWidth(context, names) + Space.m;
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _Row(
-        label: '자세',
-        child: Segmented<Pose>(
-          items: [for (final p in const [Pose.upright, Pose.front, Pose.horizontal]) (p, _poseNames[p]!)],
-          // 고른 자세가 없으면(아직 못 놓은 책) 책등 칸이 고른 모양
-          value: pose ?? Pose.upright,
-          onChange: w.onPose,
-        ),
+      // 세우기 | 눕히기: 폭 가득(2026-11-26 사용자 시안). 세우기는 책등이 앞인 자세로 시작한다(돌리기로 표지까지)
+      Segmented<bool>(
+        items: const [(false, '세우기'), (true, '눕히기')],
+        value: !standing,
+        onChange: (lying) => w.onPose(lying ? Pose.horizontal : Pose.upright),
       ),
-      if (w.depth != null)
-        // '위치'는 좌우로 읽혀 '앞뒤'로(2026-11-18 사용자: 옮기면 기대는 각이 바뀌어야 한다고 봄. 이 막대는 앞뒤만 옮긴다)
-        _Row(label: '앞뒤', child: _DepthSlider(key: ValueKey(('d', w.bookKey)), lo: w.depth!.lo, hi: w.depth!.hi, back: w.depth!.back, value: w.depth!.z, onChange: w.onDepth)),
-      if (turns)
-        _Row(label: '회전', child: _SpinSlider(key: ValueKey(('s', w.bookKey, pose)), value: w.spin, max: w.spinMax, range: w.spinRange, onChange: w.onSpin)),
-      // 표지 책: 바로 서기 | 뒤 벽에 기대기
-      if (pose == Pose.front && w.onFrontLean != null)
+      const SizedBox(height: Space.s),
+      if (standing && w.onTurn != null)
         _Row(
-          label: '기대기',
-          child: Segmented<bool>(items: const [(false, '바로'), (true, '뒤로')], value: w.frontBack ?? false, onChange: w.onFrontLean!),
+          label: '돌리기',
+          width: labelW,
+          child: _SpinSlider(key: ValueKey(('t', w.bookKey)), label: '돌리기', value: w.turn, min: 0, max: standTurnMax, range: w.turnRange, onChange: w.onTurn!),
+        )
+      else if (!standing)
+        _Row(
+          label: '돌리기',
+          width: labelW,
+          child: _SpinSlider(key: ValueKey(('s', w.bookKey)), label: '돌리기', value: w.spin, min: -w.spinMax, max: w.spinMax, range: w.spinRange, onChange: w.onSpin),
         ),
-      // 책등 책: 왼쪽 · 바로 · 오른쪽(기댈 옆 책이 없는 쪽은 흐리게)
-      if (!turns)
+      if (w.depth != null)
+        // 앞뒤만 옮긴다(좌우는 책을 끌어서). 2026-11-26 시안 이름 '앞뒤 위치'(2026-11-18 '위치'는 좌우로 읽혀 '앞뒤'였다)
+        _Row(label: '앞뒤 위치', width: labelW, child: _DepthSlider(key: ValueKey(('d', w.bookKey)), lo: w.depth!.lo, hi: w.depth!.hi, back: w.depth!.back, value: w.depth!.z, onChange: w.onDepth)),
+      // 기대기: 똑바로 · 왼쪽 · 오른쪽(옆 책에, 기댈 옆 책이 없는 쪽은 흐리게) · 뒤로(뒤 벽에)
+      if (standing)
         _Row(
           label: '기대기',
-          child: Segmented<int>(
-            items: [for (final d in const [-1, 0, 1]) (d, _leanNames[d]!)],
-            value: pose == Pose.upright ? w.lean : 0,
-            disabled: {if (pose != Pose.upright || !w.canLean.left) -1, if (pose != Pose.upright || !w.canLean.right) 1},
+          width: labelW,
+          child: Segmented<StandLean>(
+            items: [for (final e in _leanNames.entries) (e.key, e.value)],
+            value: _leanNow,
+            disabled: {if (!w.canLean.left) StandLean.left, if (!w.canLean.right) StandLean.right},
             onChange: w.onLean,
           ),
         ),
-      if (_angleNote(pose) case final note?)
-        Padding(padding: EdgeInsets.only(left: big ? 0 : 48), child: Align(alignment: Alignment.centerLeft, child: Text(note, style: AppType.caption))),
+      if (_angleNote() case final note?)
+        Padding(padding: EdgeInsets.only(left: big ? 0 : labelW), child: Align(alignment: Alignment.centerLeft, child: Text(note, style: AppType.caption))),
     ]);
   }
 
-  /// 기댄 각도 글: 표지 책은 뒤로 젖힌 각도, 책등 책은 기댄 쪽과 각도(각도는 옆 책과의 틈만큼이라 늘 같지 않다)
-  String? _angleNote(Pose? pose) {
+  /// 기댄 각도 글: 표지가 앞인 책은 뒤로 젖힌 각도, 책등이 앞인 책은 기댄 쪽과 각도(각도는 옆 책과의 틈만큼이라 늘 같지 않다)
+  String? _angleNote() {
     final w = widget;
-    if (pose == Pose.front) return w.angles;
-    if (pose != Pose.upright || w.lean == 0 || w.leanDeg == null) return null;
-    return '${_leanNames[w.lean]}으로 ${w.leanDeg!.round()}° 기대 있어요(옆 책과의 틈만큼 기울어요)';
+    if (w.pose == Pose.front) return w.angles;
+    if (w.pose != Pose.upright || w.lean == 0 || w.leanDeg == null) return null;
+    final side = w.lean < 0 ? '왼쪽' : '오른쪽';
+    return '$side으로 ${w.leanDeg!.round()}° 기대 있어요(옆 책과의 틈만큼 기울어요)';
   }
 
   Widget _look(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -323,7 +355,7 @@ class _DecoratePanelState extends State<DecoratePanel> {
         ListItem(label: '이 책 꾸미기', value: '그림, 색상, 재질', oneLine: true, chevron: true, onPress: widget.onBinding),
       ]);
 
-  static const _partNames = {DecoPart.move: '위치, 각도', DecoPart.look: '디자인'};
+  static const _partNames = {DecoPart.move: '배치', DecoPart.look: '디자인'};
 
   @override
   Widget build(BuildContext context) {
@@ -335,9 +367,9 @@ class _DecoratePanelState extends State<DecoratePanel> {
         Center(
           child: Container(width: 38, height: 4.5, margin: const EdgeInsets.only(top: 10), decoration: BoxDecoration(color: AppColors.line, borderRadius: BorderRadius.circular(3))),
         ),
-        // 제목 줄 오른쪽에 '위치, 각도 | 디자인'(낮은 전환 칸, 2026-11-21 사용자 '움직임 겉모습 버튼 가호랑 같은 라인 우측에', 이름은 2026-11-23).
+        // 제목 줄 오른쪽에 '배치 | 디자인'(낮은 전환 칸, 2026-11-21 사용자 '움직임 겉모습 버튼 가호랑 같은 라인 우측에', 이름은 2026-11-26).
         // 큰 글씨이거나, 같은 줄에 두면 제목이 세 글자도 안 남을 때(좁은 화면 · 조금 키운 글씨): 제목 두 줄까지, 전환 칸은 아래 줄.
-        // 전환 칸 폭은 굵은 '위치, 각도'가 한 칸에 다 들어가게 글자 크기에 맞춘다(152로 두면 잘렸다)
+        // 전환 칸 폭은 굵은 이름이 한 칸에 다 들어가게 글자 크기에 맞춘다(152로 두면 '위치, 각도'가 잘렸다)
         Padding(
           padding: const EdgeInsets.only(top: Space.s),
           child: LayoutBuilder(builder: (context, box) {
@@ -377,13 +409,16 @@ class _DecoratePanelState extends State<DecoratePanel> {
 bool largeText(BuildContext context) => MediaQuery.textScalerOf(context).scale(10) >= 13;
 
 class _Row extends StatelessWidget {
-  const _Row({required this.label, required this.child});
+  const _Row({required this.label, required this.width, required this.child});
   final String label;
+
+  /// 이름 칸 폭(보이는 이름 중 가장 긴 것에 맞춘 값, _labelWidth)
+  final double width;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(label, softWrap: false, style: AppType.sub.copyWith(color: AppColors.ink));
+    final text = Text(label, softWrap: false, style: _labelStyle);
     // 큰 글씨: 라벨을 위 줄에(48 칸에서 '위치'·'기대기'가 한 글자씩 세로로 섰다)
     if (largeText(context)) {
       return Padding(
@@ -394,16 +429,28 @@ class _Row extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 52),
       child: Row(children: [
-        SizedBox(width: 48, child: text),
+        SizedBox(width: width, child: text),
         Expanded(child: child),
       ]),
     );
   }
 }
 
-const _poseNames = {Pose.upright: '책등', Pose.front: '표지', Pose.horizontal: '눕힘'};
+/// 조작부 줄 이름 글자(꾸미기 시안: 본문색 16 보통, DESIGN 16장)
+TextStyle get _labelStyle => AppType.sub.copyWith(color: AppColors.ink);
 
-const _leanNames = {-1: '왼쪽', 0: '바로', 1: '오른쪽'};
+/// 줄 이름 칸에 이름들이 한 줄로 들어가는 폭(글자 크기를 따른다)
+double _labelWidth(BuildContext context, List<String> names) {
+  var w = 0.0;
+  for (final n in names) {
+    final tp = TextPainter(text: TextSpan(text: n, style: _labelStyle), textDirection: TextDirection.ltr, textScaler: MediaQuery.textScalerOf(context), maxLines: 1)..layout();
+    w = math.max(w, tp.width);
+    tp.dispose();
+  }
+  return w.ceilToDouble();
+}
+
+const _leanNames = {StandLean.straight: '똑바로', StandLean.left: '왼쪽', StandLean.right: '오른쪽', StandLean.back: '뒤로'};
 
 /// 막대 공통 그림: 전체(옅게) · 갈 수 있는 범위(진한 띠) · 기준점에서 손잡이까지 갈색 · 손잡이
 class _BarPainter extends CustomPainter {
@@ -432,10 +479,12 @@ class _BarPainter extends CustomPainter {
   bool shouldRepaint(_BarPainter old) => old.band != band || old.fill != fill || old.thumb != thumb || old.tick != tick;
 }
 
-/// 회전 막대(-max ~ +max): 손잡이를 잡으면 끈 거리만큼, 빈 트랙을 누르면 그 자리 값. 0 근처는 살짝 붙는다
+/// 돌리기 막대(min ~ max): 눕힌 책은 −45 ~ +45(가운데 0 눈금, 값에 부호), 세운 책은 0(책등이 앞) ~ 90(표지가 앞, 왼쪽 끝부터 채움).
+/// 손잡이를 잡으면 끈 거리만큼, 빈 트랙을 누르면 그 자리 값. 0 근처는 살짝 붙는다
 class _SpinSlider extends StatefulWidget {
-  const _SpinSlider({super.key, required this.value, required this.max, required this.range, required this.onChange});
-  final double value, max;
+  const _SpinSlider({super.key, required this.label, required this.value, required this.min, required this.max, required this.range, required this.onChange});
+  final String label;
+  final double value, min, max;
   final ({double lo, double hi})? range;
   final ValueChanged<double> onChange;
 
@@ -447,34 +496,41 @@ class _SpinSliderState extends State<_SpinSlider> {
   double? _live;
   ({double x0, double v0})? _grab;
 
+  double _clamp(double d) => math.max(widget.min, math.min(widget.max, d));
+
   double _snap(double d) {
-    final c = math.max(-widget.max, math.min(widget.max, d));
+    final c = _clamp(d);
     return c.abs() < 0.75 ? 0 : (c * 2).roundToDouble() / 2;
   }
+
+  /// 부호가 있는 막대(가운데 0)는 '+30°', 0부터인 막대는 '30°'
+  String _text(num v) => '${widget.min < 0 && v > 0 ? '+' : ''}$v°';
 
   @override
   Widget build(BuildContext context) {
     final shown = _live ?? widget.value;
+    final span = widget.max - widget.min;
     return Row(children: [
       Expanded(
         child: LayoutBuilder(builder: (context, box) {
           final w = math.max(1.0, box.maxWidth - _inset * 2);
-          double xOf(double d) => (math.max(-widget.max, math.min(widget.max, d)) / widget.max + 1) / 2 * w;
+          double xOf(double d) => (_clamp(d) - widget.min) / span * w;
           double toDeg(double x) {
-            final d = math.max(-1.0, math.min(1.0, x / w * 2 - 1)) * widget.max;
+            final d = widget.min + math.max(0.0, math.min(1.0, x / w)) * span;
             return d.abs() < 1.5 ? 0 : (d * 2).roundToDouble() / 2;
           }
 
           final pos = xOf(shown), zero = xOf(0);
           final band = widget.range != null ? (xOf(widget.range!.lo), xOf(widget.range!.hi)) : (0.0, w);
+          final step = math.max(1.0, span / 45).roundToDouble();
           return Semantics(
             slider: true,
-            label: '회전',
+            label: widget.label,
             value: '${shown.round()}도',
-            increasedValue: '${math.min(widget.max, shown.round() + 2)}도',
-            decreasedValue: '${math.max(-widget.max, shown.round() - 2.0)}도',
-            onIncrease: () => widget.onChange(math.min(widget.max, shown.roundToDouble() + 2)),
-            onDecrease: () => widget.onChange(math.max(-widget.max, shown.roundToDouble() - 2)),
+            increasedValue: '${_clamp(shown.roundToDouble() + step).round()}도',
+            decreasedValue: '${_clamp(shown.roundToDouble() - step).round()}도',
+            onIncrease: () => widget.onChange(_clamp(shown.roundToDouble() + step)),
+            onDecrease: () => widget.onChange(_clamp(shown.roundToDouble() - step)),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onHorizontalDragStart: (e) {
@@ -487,7 +543,7 @@ class _SpinSliderState extends State<_SpinSlider> {
                 final g = _grab;
                 if (g == null) return;
                 final x = e.localPosition.dx - _inset;
-                setState(() => _live = (x - g.x0).abs() < 1 ? g.v0 : _snap(g.v0 + (x - g.x0) / w * 2 * widget.max));
+                setState(() => _live = (x - g.x0).abs() < 1 ? g.v0 : _snap(g.v0 + (x - g.x0) / w * span));
               },
               onHorizontalDragEnd: (_) {
                 final v = _live ?? widget.value;
@@ -498,7 +554,8 @@ class _SpinSliderState extends State<_SpinSlider> {
               onTapUp: (e) => widget.onChange(toDeg(e.localPosition.dx - _inset)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _inset),
-                child: SizedBox(height: Space.hit, child: CustomPaint(painter: _BarPainter(band: band, fill: (math.min(zero, pos), math.max(zero, pos)), thumb: pos, tick: zero))),
+                // 0 눈금은 가운데 0인 막대만(0부터인 막대는 왼쪽 끝이 0)
+                child: SizedBox(height: Space.hit, child: CustomPaint(painter: _BarPainter(band: band, fill: (math.min(zero, pos), math.max(zero, pos)), thumb: pos, tick: widget.min < 0 ? zero : null))),
               ),
             ),
           );
@@ -506,7 +563,7 @@ class _SpinSliderState extends State<_SpinSlider> {
       ),
       ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 52),
-        child: Text('${shown.round() > 0 ? '+' : ''}${shown.round()}°', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink).tnum),
+        child: Text(_text(shown.round()), softWrap: false, textAlign: TextAlign.right, style: _labelStyle.tnum),
       ),
     ]);
   }
@@ -541,7 +598,7 @@ class _DepthSliderState extends State<_DepthSlider> {
           final pos = xOf(shown), back = xOf(widget.hi), wall = xOf(widget.back);
           return Semantics(
             slider: true,
-            label: '앞뒤',
+            label: '앞뒤 위치',
             value: '가장 뒤에서 ${mmOf(shown)}밀리미터 앞',
             // 늘이고 줄인 값도 함께(없으면 화면 읽기를 켠 디버그 빌드에서 의미 구조 검사에 걸렸다)
             increasedValue: '가장 뒤에서 ${mmOf(math.max(widget.lo, math.min(widget.hi, widget.value + 10 * duPerMm)))}밀리미터 앞',
@@ -565,10 +622,10 @@ class _DepthSliderState extends State<_DepthSlider> {
           );
         }),
       ),
-      // 글자를 키워도 '22 / mm'처럼 갈리지 않게 값 칸이 글자 폭만큼 넓어진다(2026-11-16 QA 영숙 F7)
+      // 글자를 키워도 '22 / mm'처럼 갈리지 않게 값 칸이 글자 폭만큼 넓어진다(2026-11-16 QA 영숙 F7). 숫자와 단위 사이 한 칸(2026-11-26 시안 '2 mm')
       ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 52),
-        child: Text('${mmOf(shown)}mm', softWrap: false, textAlign: TextAlign.right, style: AppType.sub.copyWith(color: AppColors.ink).tnum),
+        child: Text('${mmOf(shown)} mm', softWrap: false, textAlign: TextAlign.right, style: _labelStyle.tnum),
       ),
     ]);
   }

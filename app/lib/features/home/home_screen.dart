@@ -147,6 +147,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     double spin,
     double spinMax,
     ({double lo, double hi})? spinRange,
+    double turn,
+    ({double lo, double hi})? turnRange,
     ({double lo, double hi, double z, double back}) depth,
   })? _panel;
 
@@ -518,25 +520,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       setState(() => _panel = null);
       return;
     }
-    // 기울이면 실제로 기대는지(닿을 곳이 없으면 바로 선다). 그 선반만 풀어 본다
+    final fs = p.pose == Pose.front ? frontStateOf(l, s.books, id) : null;
+    final lying = p.pose == Pose.horizontal || (fs != null && fs.state.pitch >= 89.95);
+    // 기울이면 실제로 기대는지(닿을 곳이 없으면 바로 선다). 그 선반만 풀어 본다. 표지가 앞인 책은 책등이 앞으로 세운 뒤 기댈 수 있는지
+    // (기대기 왼쪽 · 오른쪽을 고르면 책등이 앞으로 선다, 2026-11-26)
+    final up = p.pose == Pose.upright ? l : (lying ? null : setPose(l, s.books, id, Pose.upright).layout);
     bool can(int d) {
-      if (p.pose != Pose.upright) return false;
-      if (p.tilt.sign == d) return true;
-      final r = setTilt(l, s.books, id, tiltToward(d));
-      return r.ok && (placementOf(resolveLeans(r.layout!, s.books, p.shelfId), id)?.tilt ?? 0) != 0;
+      final q = up == null ? null : placementOf(up, id);
+      if (up == null || q == null) return false;
+      if (q.tilt.sign == d) return true;
+      final r = setTilt(up, s.books, id, tiltToward(d));
+      return r.ok && (placementOf(resolveLeans(r.layout!, s.books, q.shelfId), id)?.tilt ?? 0) != 0;
     }
 
-    final fs = p.pose == Pose.front ? frontStateOf(l, s.books, id) : null;
+    // 세운 책 돌리기(0° 책등이 앞 ~ 90° 표지가 앞)와 갈 수 있는 범위: 책등 자세는 표지 쪽으로 닿는 데까지, 표지 자세는 돌림 범위를 각으로(0°는 책등 자세로 바꿀 수 있을 때)
+    final turn = fs != null ? standTurnOf(fs.state.spin) : 0.0;
+    ({double lo, double hi})? turnRange;
+    if (!lying && p.stackId == null) {
+      if (p.pose == Pose.upright) {
+        final t = setStandTurn(l, s.books, id, standTurnMax);
+        final f = t.ok ? frontStateOf(t.layout!, s.books, id) : null;
+        turnRange = (lo: 0, hi: f == null ? 0 : math.min(standTurnMax, standTurnOf(f.state.spin)));
+      } else if (fs != null) {
+        final sr = spinRangeOf(l, s.books, id);
+        final back = setStandTurn(l, s.books, id, 0).ok;
+        if (sr != null) {
+          turnRange = (
+            lo: back ? 0 : math.max(0.0, math.min(turn, standTurnOf(sr.hi))),
+            hi: math.min(standTurnMax, math.max(math.min(turn, standTurnMax), standTurnOf(sr.lo))),
+          );
+        }
+      }
+    }
     setState(() => _panel = (
           title: s.books[id]?.title ?? '',
-          pose: p.pose == Pose.front && (p.pitch ?? 0) >= 89.95 ? Pose.horizontal : p.pose,
+          pose: lying ? Pose.horizontal : p.pose,
           lean: p.tilt.sign,
           canLean: (left: can(-1), right: can(1)),
           leanDeg: p.leanAngle?.abs(),
           frontPitch: fs?.state.pitch,
           spin: fs?.state.spin ?? p.spin ?? 0,
           spinMax: p.pose == Pose.front ? maxFrontSpin : maxSpin,
-          spinRange: spinRangeOf(l, s.books, id),
+          spinRange: lying ? spinRangeOf(l, s.books, id) : null,
+          turn: turn,
+          turnRange: turnRange,
           depth: reachableDepth(l, s.books, id),
         ));
   }
@@ -572,16 +599,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     _apply(op(l, s.books, id));
   }
 
+  /// 세우기(Pose.upright, 책등이 앞부터) | 눕히기(Pose.horizontal). 이미 세운 책(표지가 앞이어도)은 세우기를 다시 눌러도 그대로
   void _editPose(Pose pose) {
-    if (_panel?.pose != pose) _edit((l, b, id) => setPose(l, b, id, pose));
+    final now = _panel?.pose;
+    if (now == pose || (pose == Pose.upright && now == Pose.front)) return;
+    _edit((l, b, id) => setPose(l, b, id, pose));
   }
 
-  void _editLean(int d) {
-    if (_panel?.lean != d) _edit((l, b, id) => setTilt(l, b, id, tiltToward(d)));
+  /// 세운 책 기대기(2026-11-26 사용자 시안 '똑바로 | 왼쪽 | 오른쪽 | 뒤로'): 왼쪽 · 오른쪽은 책등이 앞으로 서서 옆 책에(표지가 앞이면 먼저 책등이 앞으로),
+  /// 뒤로는 표지가 앞으로 서서 뒤 벽에(책등이 앞이면 먼저 표지가 앞으로), 똑바로는 기대지 않기. 한 번의 편집(되돌리기 한 번)
+  void _editLean(StandLean v) {
+    final p = _panel;
+    if (p == null) return;
+    _edit((l, b, id) {
+      switch (v) {
+        case StandLean.straight:
+          if (p.pose == Pose.front) return p.frontPitch != null && p.frontPitch! > 0.5 ? setFrontLean(l, b, id, false) : const EditResult.fail('no-change');
+          return p.lean != 0 ? setTilt(l, b, id, 0) : const EditResult.fail('no-change');
+        case StandLean.left || StandLean.right:
+          final d = v == StandLean.left ? -1 : 1;
+          if (p.pose == Pose.upright) return p.lean != d ? setTilt(l, b, id, tiltToward(d)) : const EditResult.fail('no-change');
+          final up = setPose(l, b, id, Pose.upright);
+          if (!up.ok) return up;
+          final t = setTilt(up.layout!, b, id, tiltToward(d));
+          return t.ok ? t : up;
+        case StandLean.back:
+          if (p.pose == Pose.front) return p.frontPitch != null && p.frontPitch! > 0.5 ? const EditResult.fail('no-change') : setFrontLean(l, b, id, true);
+          final front = setPose(l, b, id, Pose.front);
+          if (!front.ok) return front;
+          final leaned = setFrontLean(front.layout!, b, id, true);
+          return leaned.ok ? leaned : front;
+      }
+    });
   }
 
-  /// 표지 책 기대기: 바로 | 뒤로(뒤 벽에 기대기)
-  void _editFrontLean(bool back) => _edit((l, b, id) => setFrontLean(l, b, id, back));
+  /// 세운 책 돌리기(0° 책등이 앞 ~ 90° 표지가 앞, layout_engine setStandTurn)
+  void _editTurn(double deg) => _edit((l, b, id) => setStandTurn(l, b, id, deg));
 
   void _editSpin(double deg) => _edit((l, b, id) {
         if (placementOf(l, id)?.pose != Pose.front) return setSpin(l, b, id, deg);
@@ -1186,12 +1239,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       spin: p.spin,
       spinMax: p.spinMax,
       spinRange: p.spinRange,
+      turn: p.turn,
+      turnRange: p.turnRange,
+      onTurn: _editTurn,
       depth: p.depth,
       onPose: _editPose,
       onLean: _editLean,
       leanDeg: p.leanDeg,
       frontBack: p.frontPitch == null ? null : p.frontPitch! > 0.5,
-      onFrontLean: _editFrontLean,
       onSpin: _editSpin,
       onDepth: _editDepth,
       spine: id == null ? SpineLook.color : spineLooks.of(id),
