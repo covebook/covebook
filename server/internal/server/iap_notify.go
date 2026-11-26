@@ -552,3 +552,21 @@ func iapConfirmAfter(ctx context.Context, store iap.Store, ref iap.Ref, productI
 	defer cancel()
 	return store.Confirm(c, ref, productID, consume)
 }
+
+// iapSyncRevoked는 제출에서 스토어가 환불이라고 답한 거래를 알림 처리와 같은 길로 반영한다.
+// 요청이 끊겨도 끝까지 하도록 취소를 떼어 낸다(안의 스토어 조회는 각자 제한 시간을 둔다)
+func (s *Server) iapSyncRevoked(ctx context.Context, store iap.Store, kind iap.Kind, ref iap.Ref, originalID string) {
+	c := context.WithoutCancel(ctx)
+	var note string
+	var err error
+	if kind == iap.KindSubscription {
+		note, err = s.iapSyncSubscription(c, store, originalID)
+	} else {
+		note, err = s.iapSyncPurchase(c, store, ref)
+	}
+	if err != nil {
+		log.Printf("iap revoked on submit not synced (sweep will retry): route=%s err=%v", store.Route(), err)
+		return
+	}
+	log.Printf("iap revoked on submit: route=%s %s", store.Route(), note)
+}

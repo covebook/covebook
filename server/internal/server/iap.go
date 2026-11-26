@@ -407,6 +407,9 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	case errors.Is(verdict, iap.ErrSandbox):
 		return iapSandbox
 	case errors.Is(verdict, iap.ErrRevoked):
+		// 스토어가 환불이라고 답했다. 알림을 놓쳤을 수 있으니 알림 처리와 같은 길로 원장·구독 줄을 고친다(회수와 고지).
+		// 실패해도 409는 그대로 준다. 정기 대조가 다시 본다
+		s.iapSyncRevoked(ctx, store, asked.Kind, ref, checked.OriginalTransactionID)
 		return iapRefunded
 	case errors.Is(verdict, iap.ErrUnknownProduct):
 		// 스토어에는 있는데 우리 상품 테이블에 없다. 우리 설정 문제라 앱은 거래를 끝내지 않고 다시 낸다(구글은 소비하지 않아 3일 뒤 환불)
