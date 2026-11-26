@@ -192,7 +192,7 @@ type iapSweepResult struct {
 	Notices, NoticesFailed, Confirmed, Refreshed int
 	Backfilled, Voided                           int // 스토어의 목록으로 메운 알림, 반영한 환불
 	Renewals                                     int // 새로 쓴 갱신 예정 고지
-	Refunds                                      int // 3칸을 넘게 산 선반 거래의 환불을 다시 요청해 성공한 수(구글)
+	Refunds                                      int // 칸을 주지 않은 선반 거래(3칸 넘김, 연도 모름, 주인 없음)의 환불을 요청해 성공한 수(구글)
 }
 
 // iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
@@ -274,6 +274,23 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			continue
 		}
 		if s.iapRefundOverCap(ctx, store, o.Key, p.TransactionID) {
+			res.Refunds++
+		}
+	}
+	// 연도를 끝내 모르는 선반(2일 뒤)과 주인 없는 선반. 앱이 연도와 함께 다시 낼 시간을 준 뒤 구글 3일 자동 환불보다 먼저 한다.
+	// 환불하는 순간 앱이 연도를 붙여 내 칸을 받았어도, 구글 환불 알림(voided)이 와서 칸을 회수한다
+	yearless, err := iapYearlessToRefund(ctx, s.DB, refunders, 50)
+	keep(err)
+	for _, o := range yearless {
+		store := s.IAP[o.Route]
+		storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+		p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
+		cancel()
+		if e != nil {
+			log.Printf("iap yearless refund: lookup failed route=%s err=%v", o.Route, e)
+			continue
+		}
+		if s.iapRefundPurchase(ctx, store, o.Key, p.TransactionID) {
 			res.Refunds++
 		}
 	}

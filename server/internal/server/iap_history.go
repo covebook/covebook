@@ -235,7 +235,7 @@ type iapBacklog struct {
 	ShelfOverCapApple      int   `json:"shelfOverCapApple"`        // 넘게 산 애플 거래 중 아직 환불되지 않은 것(운영 환경). 개발자가 환불할 수 없어 사용자가 애플에 요청해야 한다
 	OldestUnconfirmedSecs  int64 `json:"oldestUnconfirmedSeconds"` // 확인 못 한 구글 구매 중 가장 오래된 것의 나이(연도 모르는 선반은 일부러 안 하므로 뺌). 3일(259200초)이 지나면 구글이 환불한다. 하루를 넘으면 사람이 본다
 	SandboxPurchases30Days int   `json:"sandboxPurchases30Days"`   // 운영 서버가 받은 최근 30일 샌드박스 거래(심사·TestFlight). 갑자기 늘면 무료 누출을 의심한다(D15)
-	ShelfNoYear            int   `json:"shelfNoYear"`              // 어느 해 책장인지 모르는 선반 거래(운영 환경, 환불 안 됨). 칸을 주지 않았다. 문의를 받거나 환불할 대상
+	ShelfNoYear            int   `json:"shelfNoYear"`              // 칸을 주지 않은 선반 거래(연도 모름, 주인 없음) 중 환불을 요청하지 못한 것(운영 환경). 구글은 대조가 2일 뒤 환불하고, 애플은 사용자가 요청해야 한다
 }
 
 func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
@@ -250,7 +250,7 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 		(SELECT count(*) FROM iap_purchases WHERE over_cap AND state='paid' AND env='production' AND refund_requested_at IS NULL),
 		(SELECT count(*) FROM iap_purchases WHERE over_cap AND env='production' AND refund_requested_at IS NOT NULL),
 		(SELECT count(*) FROM iap_purchases WHERE over_cap AND state='paid' AND env='production' AND route='apple'),
-		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND shelf_year IS NULL),
+		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND shelf_year IS NULL AND refund_requested_at IS NULL),
 		coalesce((SELECT extract(epoch FROM now() - min(purchased_at)) FROM iap_purchases
 			WHERE route='google' AND confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND shelf_year IS NULL)), 0)::bigint,
 		(SELECT count(*) FROM iap_purchases WHERE env='sandbox' AND purchased_at > now() - interval '30 days')`).
