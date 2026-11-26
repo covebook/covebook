@@ -1,6 +1,6 @@
 // 홈 화면(책장 탭): 서재를 읽어 줄마다 굽고(담아 둔 그림이 있으면 그대로) 실제 책장을 그린다. 지금 앱 features/home/HomeScreen을 옮기는 중.
 // 머리줄·하단바 덮개·책장 그림까지. 측정: 켤 때마다 logcat에 [flbake] 줄마다·[fltotal] 합, 제목을 길게 누르면 다시 굽는다
-// 2026-11-24 사용자 시안: 머리 '+'는 책장에 꽂기 시트(place_sheet.dart, 표지를 끌어 원하는 자리에 꽂는다. 책 추가 화면은 시트의 '목록 보기'),
+// 2026-11-24 사용자 시안: 머리 '+'는 책장에 꽂기 시트(place_sheet.dart, 표지를 끌어 원하는 자리에 꽂는다. 책 추가 화면은 시트의 '새 책 찾기'),
 // 책을 끄는 동안 아래 흰 X(빼기 자리, RemoveZone)에 놓으면 책장에서 뺀다
 library;
 
@@ -2535,7 +2535,7 @@ class _Header extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onDecorate;
 
-  /// '+': 책장에 꽂기 시트(2026-11-24 사용자. 책 추가 화면은 시트의 '목록 보기')
+  /// '+': 책장에 꽂기 시트(2026-11-24 사용자. 책 추가 화면은 시트의 '새 책 찾기')
   final VoidCallback? onAdd;
 
   /// 꾸미는 동안은 오른쪽 아이콘을 숨긴다(지금 앱 editing ? null)

@@ -1,7 +1,7 @@
 // 책장에 꽂기 시트(2026-11-24 사용자 시안: 홈 머리 '+'를 누르면 아래에서 올라온다).
 // 내 책 표지를 옆으로 넘겨 보고, 표지를 위로 끌어 책장 원하는 자리에 꽂는다(놓을 자리 계산 · 미리 보기는 책장 끌기와 같다).
 // 책장에 없는 책이 앞, 이미 책장에 있는 책은 맨 끝(오른쪽)이고 표지 오른쪽 아래에 책장 표시(하단 '책장' 탭 그림). 책장에 있는 책은 끌지 않는다.
-// 오른쪽 위 '목록 보기'는 예전 '+'가 열던 책 추가 화면. 끄는 동안 시트는 숨어 책장이 다 보인다(끄는 손가락은 계속 이 시트가 받는다).
+// 오른쪽 위 '새 책 찾기'는 예전 '+'가 열던 책 추가 화면(2026-11-26 사용자 '목록 보기 그거 새 책 찾기 이걸로 바꿔줘'). 끄는 동안 시트는 숨어 책장이 다 보인다(끄는 손가락은 계속 이 시트가 받는다).
 // 닫기: 손잡이를 누르거나 아래로 밀기, 기기 뒤로
 library;
 
@@ -176,7 +176,7 @@ class _PlaceSheetState extends State<PlaceSheet> {
               padding: const EdgeInsets.symmetric(horizontal: Space.page),
               child: Row(children: [
                 Expanded(child: Semantics(header: true, child: Text('책장에 꽂기', style: AppType.heading))),
-                TextLink(label: '목록 보기', soft: true, onPress: widget.onList),
+                TextLink(label: '새 책 찾기', soft: true, onPress: widget.onList),
               ]),
             ),
             // 제목 줄(누르는 높이 48이라 글 아래 약 8이 이미 빈다) ~ 표지 8: 2026-11-25 사용자 '하단 팝업창 높이 좀만 내려'(16이었다).
