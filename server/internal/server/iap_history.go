@@ -14,7 +14,7 @@ import (
 // 구매 내역, 사업자 정보, 빠진 알림 메우기, 밀린 일의 숫자.
 
 // iapPurchases는 내 구매 내역을 최신순으로 준다(ADR-0003 L17). 원장의 줄 그대로이고 환불된 줄도 보인다.
-// 금액은 스토어가 알려 준 거래에만 있다(구글 구매 조회에는 금액이 없다).
+// 금액은 스토어가 알려 준 거래에만 있다(애플은 거래에, 구글은 주문 조회 orders.get에 있다. 조회가 실패한 구글 거래는 비어 있다).
 //
 // 응답: {"purchases":[{"route","productId","kind","state":"paid|revoked","purchasedAt","revokedAt","shelves","year","overCap","currency","priceMilli"}]}
 // 추가 선반은 shelves(상품이 주는 칸 수)와 year(칸이 열린 연도 책장)를 준다. 연도를 모르는 거래는 year가 없다.
