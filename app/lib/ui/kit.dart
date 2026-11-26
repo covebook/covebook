@@ -312,10 +312,6 @@ class HeadIcon extends StatelessWidget {
   Widget build(BuildContext context) => LucideIcon(name, size: size, color: color);
 }
 
-/// 옛 머리줄 아이콘 사이(4, 누르는 칸 48 사이에 더하던 빈 곳 → 그림 사이 28). 나란한 아이콘은 이제 [IconRow]가 늘어놓는다
-/// (2026-11-26 사용자 '전체적으로 아이콘 같은 라인에 있으면 사이 간격이 큰 거 같아'). 아직 IconRow로 옮기지 않은 줄만 쓴다
-const headIconGap = Space.xs;
-
 /// 한 줄에 나란한 아이콘 단추의 가운데 사이 40: 그림 24 + 사이 16(Space.l). 전에는 누르는 칸 48 + 4 = 52(그림 사이 28)였다
 const iconPitch = IconSize.head + Space.l;
 

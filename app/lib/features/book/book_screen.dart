@@ -323,10 +323,10 @@ class _BookScreenState extends State<BookScreen> {
     final reviews = _reviewsOf(e.isbn13);
 
     return Screen(
-      // 머리줄 아이콘은 공용 HeadIcon(회색 · 사이 4, 2026-11-19 공통 규칙: 여기만 진한 색이었다)
-      right: Row(mainAxisSize: MainAxisSize.min, children: [
+      // 머리줄 아이콘은 공용 HeadIcon(회색, 2026-11-19 공통 규칙: 여기만 진한 색이었다), 나란한 아이콘은 IconRow
+      // (가운데 사이 40, 2026-11-26 사용자 '아이콘 같은 라인에 있으면 사이 간격이 큰 거 같아': 52였다)
+      right: IconRow(children: [
         IconBtn(label: '책 공유', onPress: _share, child: const HeadIcon('Share')),
-        const SizedBox(width: headIconGap),
         IconBtn(label: '더 보기', onPress: _menu, child: const HeadIcon('MoreHorizontal')),
       ]),
       footer: _footer(b, last),
