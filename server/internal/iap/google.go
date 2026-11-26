@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -24,7 +25,11 @@ type googleAPI interface {
 	AcknowledgeProduct(ctx context.Context, packageName, productID, token, developerPayload string) error
 	ConsumeProduct(ctx context.Context, packageName, productID, token string) error
 	Refund(ctx context.Context, packageName, orderID string) error
+	GetOrder(ctx context.Context, packageName, orderID string) (*androidpublisher.Order, error)
 }
+
+// googleOrderTimeout은 금액을 받으려는 주문 조회(orders.get)의 제한 시간이다. 금액은 없어도 되므로 구매 조회보다 짧게 둔다
+const googleOrderTimeout = 3 * time.Second
 
 type Google struct {
 	api         googleAPI
@@ -74,15 +79,45 @@ func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
 		if err != nil {
 			return Purchase{}, googleErr(err)
 		}
-		return g.fromSubscription(ref.ID, s)
+		p, err := g.fromSubscription(ref.ID, s)
+		if err == nil {
+			g.fillPrice(ctx, &p)
+		}
+		return p, err
 	case KindProduct:
-		p, err := g.api.VerifyProductV2(ctx, g.packageName, ref.ID)
+		r, err := g.api.VerifyProductV2(ctx, g.packageName, ref.ID)
 		if err != nil {
 			return Purchase{}, googleErr(err)
 		}
-		return g.fromProduct(ref.ID, p)
+		p, err := g.fromProduct(ref.ID, r)
+		if err == nil {
+			g.fillPrice(ctx, &p)
+		}
+		return p, err
 	}
 	return Purchase{}, fmt.Errorf("google: 모르는 상품 종류 %q", ref.Kind)
+}
+
+// fillPrice는 주문 조회(orders.get, 2025-05 출시)로 실제 결제 금액을 채운다(2026-11-26 결정, ADR-0003 L17).
+// 구매 조회(purchases.*v2)에는 금액이 없다. total은 세금과 할인을 반영해 구매자가 낸 금액이다.
+// 지급 판단에는 쓰지 않으므로 실패해도 구매는 그대로 돌려준다. 결제가 끝난 거래만, 주문 ID가 있을 때만 묻는다(프로모션 코드 구매는 주문 ID가 없다).
+// 서비스 계정에 "재무 데이터 보기" 권한이 없으면 403이 온다. 금액이 계속 비면 이 로그를 본다
+func (g *Google) fillPrice(ctx context.Context, p *Purchase) {
+	if p.State != StatePaid || p.TransactionID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, googleOrderTimeout)
+	defer cancel()
+	o, err := g.api.GetOrder(ctx, g.packageName, p.TransactionID)
+	if err != nil {
+		log.Printf("google order price unavailable: product=%s err=%v", p.ProductID, err)
+		return
+	}
+	if o == nil || o.Total == nil || o.Total.CurrencyCode == "" {
+		return
+	}
+	p.Currency = o.Total.CurrencyCode
+	p.PriceMilli = o.Total.Units*1000 + o.Total.Nanos/1_000_000
 }
 
 // googleErr는 "그런 구매 없음"(404, 410)을 ErrNotFound로 바꾼다. 나머지는 통신·권한 문제로 둔다.

@@ -13,10 +13,16 @@ import (
 )
 
 type fakeGoogleAPI struct {
-	sub   *androidpublisher.SubscriptionPurchaseV2
-	prod  *androidpublisher.ProductPurchaseV2
-	err   error
-	calls *[]string // 확인·소비 호출 기록
+	sub      *androidpublisher.SubscriptionPurchaseV2
+	prod     *androidpublisher.ProductPurchaseV2
+	err      error
+	calls    *[]string               // 확인·소비 호출 기록
+	order    *androidpublisher.Order // 주문 조회(금액) 결과. nil이면 주문 없음
+	orderErr error
+}
+
+func (f fakeGoogleAPI) GetOrder(context.Context, string, string) (*androidpublisher.Order, error) {
+	return f.order, f.orderErr
 }
 
 func (f fakeGoogleAPI) AcknowledgeSubscription(_ context.Context, pkg, id, token string, _ *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error {
@@ -71,7 +77,38 @@ func TestGoogleSubscription(t *testing.T) {
 		t.Fatalf("만료 시각: %s", got)
 	}
 	if p.PriceMilli != 0 || p.Currency != "" {
-		t.Fatalf("구글 조회에는 금액이 없다: %+v", p)
+		t.Fatalf("주문 조회 결과가 없으면 금액은 비어 있다: %+v", p)
+	}
+}
+
+// 금액은 주문 조회(orders.get)의 total로 채운다. 주문 조회가 실패해도 구매 조회는 성공한다
+func TestGooglePriceFromOrder(t *testing.T) {
+	prod := &androidpublisher.ProductPurchaseV2{OrderId: "GPA.9", PurchaseCompletionTime: "2026-11-26T03:00:00Z",
+		PurchaseStateContext: &androidpublisher.PurchaseStateContext{PurchaseState: "PURCHASED"},
+		ProductLineItem:      []*androidpublisher.ProductLineItem{{ProductId: "shelf"}}}
+	for _, c := range []struct {
+		name     string
+		total    *androidpublisher.Money
+		orderErr error
+		currency string
+		milli    int64
+	}{
+		{"원화", &androidpublisher.Money{CurrencyCode: "KRW", Units: 3300}, nil, "KRW", 3_300_000},
+		{"소수 있는 통화", &androidpublisher.Money{CurrencyCode: "USD", Units: 2, Nanos: 990_000_000}, nil, "USD", 2990},
+		{"주문 조회 실패", nil, errors.New("403 권한 없음"), "", 0},
+	} {
+		var order *androidpublisher.Order
+		if c.total != nil {
+			order = &androidpublisher.Order{OrderId: "GPA.9", Total: c.total}
+		}
+		g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{prod: prod, order: order, orderErr: c.orderErr}}
+		p, err := g.Lookup(context.Background(), Ref{Kind: KindProduct, ID: "tok"})
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if p.Currency != c.currency || p.PriceMilli != c.milli {
+			t.Fatalf("%s: %s %d", c.name, p.Currency, p.PriceMilli)
+		}
 	}
 }
 
