@@ -286,8 +286,9 @@ func iapNoticeCounts(ctx context.Context, q dbtx) (map[string]int, error) {
 const iapRenewalEvery = 6 * time.Hour
 
 // iapRenewalNoticeDays는 갱신일 며칠 전부터 알릴지다(ADR-0003 L9·L12, 한국 기본 14일). IAP_RENEWAL_NOTICE_DAYS로 바꾼다.
+// 최소 2일: T4 문구가 "갱신일 하루 전까지 해지"라서, 1일 전에 알리면 스토어의 해지 마감(24시간 전)이 이미 지났을 수 있다
 func iapRenewalNoticeDays() int {
-	if n, err := strconv.Atoi(os.Getenv("IAP_RENEWAL_NOTICE_DAYS")); err == nil && n > 0 && n <= 60 {
+	if n, err := strconv.Atoi(os.Getenv("IAP_RENEWAL_NOTICE_DAYS")); err == nil && n >= 2 && n <= 60 {
 		return n
 	}
 	return 14

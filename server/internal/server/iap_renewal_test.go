@@ -143,7 +143,7 @@ func TestIAPRenewalSchedule(t *testing.T) {
 	if iapRenewalNoticeDays() != 14 {
 		t.Fatal("기본값은 14일")
 	}
-	for v, want := range map[string]int{"7": 7, "0": 14, "-3": 14, "100": 14, "x": 14} {
+	for v, want := range map[string]int{"7": 7, "2": 2, "1": 14, "0": 14, "-3": 14, "100": 14, "x": 14} {
 		t.Setenv("IAP_RENEWAL_NOTICE_DAYS", v)
 		if got := iapRenewalNoticeDays(); got != want {
 			t.Fatalf("%q → %d, 기대 %d", v, got, want)
