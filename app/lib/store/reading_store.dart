@@ -17,8 +17,6 @@ const _stateKey = 'reading-state:v2';
 /// 켤 때 이보다 짧게 읽고 멈춘 독서는 기록할 것이 없어 지운다
 const staleMinMs = 60 * 1000;
 
-/// 켤 때 이보다 오래 멈춰 있던 독서는 작은 타이머 대신 묻는다
-const staleAfterMs = 12 * 60 * 60 * 1000;
 const _oldKey = 'active-reading:v1';
 const _oldPendingKey = 'finished-reading:v1';
 const _beatMs = 5000;
@@ -37,7 +35,8 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
   Active? active;
   Interrupted? interrupted;
 
-  /// 오래 멈춰 둔 독서(켤 때 12시간 넘게 일시정지였던 것): 작은 타이머를 띄우지 않고 앱 틀이 한 번 묻는다(2026-11-18 사용자 '타이머 안 켰는데 들어갈 때마다 뜬다')
+  /// 켤 때 멈춰 있던 독서: 작은 타이머를 띄우지 않고 앱 틀이 멈춘 때까지 기록한다(2026-11-18 사용자 '타이머 안 켰는데 들어갈 때마다 뜬다' → 12시간 넘은 것만 물음,
+  /// 2026-11-26 '그냥 기록해' → 모두 묻지 않고 기록)
   bool stale = false;
   FinishDraft? pending;
   bool pendingRestored = false;
@@ -116,11 +115,12 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
         final r = recoverOnLoad(a, _now());
         var ra = r.active;
         stale = false;
-        // 멈춰 둔 독서(일시정지, 꺼짐 복구 아님): 1분도 안 읽은 것은 남길 기록이 없어 지우고, 12시간 넘게 그대로면 묻는다
+        // 멈춰 둔 독서(일시정지, 꺼짐 복구 아님): 1분도 안 읽은 것은 남길 기록이 없어 지우고, 나머지는 앱 틀이 멈춘 때까지 기록한다
+        // (2026-11-26 사용자 '멈춰 둔 독서가 있어요 이런 거 그냥 기록해', '읽은 적도 없는데 1:37이 계속 떠 있어'. 전에는 12시간 넘은 것만 물었고 그 밖은 작은 타이머로 남았다)
         if (ra != null && ra.runningSince == null && r.interrupted == null) {
           if (ra.accumulatedMs < staleMinMs) {
             ra = null;
-          } else if (_now() - ra.lastBeat > staleAfterMs) {
+          } else {
             stale = true;
           }
         }
@@ -156,7 +156,7 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     _stopBeat();
   }
 
-  /// 오래 멈춰 둔 독서를 이어 읽거나 끝내거나 버린 뒤
+  /// 켤 때 멈춰 있던 독서를 기록한 뒤
   void clearStale() {
     if (!stale) return;
     stale = false;

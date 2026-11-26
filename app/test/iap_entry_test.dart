@@ -90,8 +90,9 @@ void main() {
     final titles = [for (final a in termsArticles) a.$1];
     expect(titles.length, 10 + paidArticles.length);
     expect(titles[6], '제7조 (유료 서비스)');
-    expect(titles[10], '제11조 (서비스의 변경과 중단)');
-    expect(titles.last, '제14조 (문의)');
+    expect(titles[8], '제9조 (유료 서비스에 관한 알림)');
+    expect(titles[11], '제12조 (서비스의 변경과 중단)');
+    expect(titles.last, '제15조 (문의)');
     expect(termsArticles[3].$2.last, contains('결제 기록은 관계 법령에 따라'));
   }, skip: !iapOn);
 

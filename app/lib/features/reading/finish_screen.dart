@@ -23,13 +23,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart';
 import '../stats/chart_data.dart' show hasPause, timeRange;
-import '../stats/stats_widgets.dart' show LinkedCover, bookAuthor;
-
-int? _page(String? v) {
-  final digits = (v ?? '').replaceAll(RegExp(r'[^\d]'), '');
-  final n = int.tryParse(digits);
-  return v != null && v.trim().isNotEmpty && n != null && n > 0 ? n : null;
-}
+import '../stats/stats_widgets.dart' show LinkedCover, bookAuthor, bookTitle;
 
 /// 일시정지가 있었는지: 통계 기록 줄과 같은 판정(hasPause, 시작~끝이 독서 시간보다 1분 넘게 길면)
 bool _paused(FinishDraft d) => hasPause(Session(id: d.id, startedAt: d.startedAt, endedAt: d.endedAt, durationMs: d.durationMs, createdAt: d.endedAt, updatedAt: d.endedAt));
@@ -122,25 +116,28 @@ class _FinishScreenState extends State<FinishScreen> {
     Navigator.of(context).popUntil((r) => r.isFirst || !(r.settings.name?.startsWith('/reading/') ?? false));
   }
 
-  /// 적는 중인 값을 바로 초안에 남긴다(나갈 때)
-  void _flushNotes() {
+  // 저장하지 않고 뒤로: 묻지 않고 적은 데까지 저장하고 시작한 화면으로 돌아가 토스트로 알린다
+  // (2026-11-26 사용자 '화면 나가면 그냥 거기까지 기록하고 (팝업이나 그렇게 떠서 하는 거면 그냥 기록하고)'. 전에는 '저장하지 않고 나갈까요?'를 물었다).
+  // 막힌 쪽 칸(전체 쪽수보다 큼 · 시작 쪽보다 앞)은 빼고 시간 · 메모는 남긴다. 1초가 안 되는 기록은 남길 것이 없어 버린다(finish_reading saveDraftAsIs).
+  // 저장하지 못하면 초안은 적은 칸까지 읽기 탭에 남고 돌아온 화면에서 확인창으로 알린다
+  void _leaveSaving() {
+    if (_leaving || _saving || _saved != null) return;
     _notes?.cancel();
-    if (_saved == null) _reading.setPendingNotes(startPage: _startPage, pages: _pages, memo: _memo);
+    _reading.setPendingNotes(startPage: _startPage, pages: _pages, memo: _memo);
+    final draft = _reading.pending;
+    _leaving = true;
+    if (draft == null) return _toStart();
+    _savedDraft = draft;
+    Ambient.instance.stop();
+    final nav = Navigator.of(context);
+    final title = bookTitle(_lib.lib, draft.myBookId);
+    _toStart();
+    saveDraftAsIs(draft).then((saved) {
+      if (saved && nav.mounted) showToast(nav.context, '${title == null ? '' : '‘$title’ '}${withJosa(formatDurationPrecise(draft.durationMs), '을', '를')} 기록했어요.');
+    }, onError: (Object e) {
+      if (nav.mounted) appAlert(nav.context, '저장하지 못했어요', '독서 기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
+    });
   }
-
-  // 저장하지 않고 뒤로: 갈피 화면처럼 묻는다. 나가도 기록은 읽기 탭에 남아 나중에 저장·버릴 수 있다(2026-11-15 QA 민혁 F3)
-  // 단추는 다른 나가기 확인과 같은 '취소' · '확인'(2026-11-20 사용자 '취소 확인으로 테마색으로')
-  void _askLeave() => appAlert(context, '저장하지 않고 나갈까요?', '이 기록은 읽기 탭에 남아 있어 나중에 저장하거나 버릴 수 있어요.', [
-        const AlertButton('취소', style: AlertStyle.cancel),
-        AlertButton('확인', onPress: () {
-          if (!mounted) return;
-          _flushNotes();
-          setState(() => _leaving = true);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) Navigator.of(context).maybePop();
-          });
-        }),
-      ]);
 
   /// 숫자 칸에는 숫자만(붙여 넣은 글자가 섞여 '61rainy…'가 613쪽이 됐다, 2026-11-15 QA 수아 F6)
   static String _digits(String v) => v.replaceAll(RegExp(r'[^\d]'), '');
@@ -217,7 +214,7 @@ class _FinishScreenState extends State<FinishScreen> {
     final b = pending.myBookId == null ? null : lib.books[pending.myBookId];
     final e = b == null ? null : lib.editions[b.editionId];
     final author = bookAuthor(lib, pending.myBookId);
-    final sp = _page(_startPage), ep = _page(_pages);
+    final sp = pageOf(_startPage), ep = pageOf(_pages);
     // 전체 쪽수를 넘는 쪽은 막는다(234쪽 책에 613쪽 → '이번에 588쪽'으로 저장됐다)
     final total = e?.pageCount != null && e!.pageCount! > 0 ? e.pageCount!.toInt() : null;
     final startOver = total != null && sp != null && sp > total;
@@ -330,7 +327,7 @@ class _FinishScreenState extends State<FinishScreen> {
         ),
       ],
     );
-    return PopScope(canPop: _leaving, onPopInvokedWithResult: (didPop, _) => didPop ? null : _askLeave(), child: screen);
+    return PopScope(canPop: _leaving, onPopInvokedWithResult: (didPop, _) => didPop ? null : _leaveSaving(), child: screen);
   }
 }
 

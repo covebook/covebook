@@ -3,7 +3,6 @@
 // 하단바는 화면 양옆·아래에서 띄운 흰 알약(옅은 그림자), 글자 없이 아이콘만: 고르지 않은 탭은 속이 빈 회색, 고른 탭은 검정으로 속이 찬 모양
 library;
 
-import '../features/reading/start_book.dart' show resumeReadingOrTell;
 import 'dart:async';
 import 'dart:io';
 
@@ -16,29 +15,28 @@ import '../features/iap/notice.dart' show checkIapNotice;
 import '../features/iap/subscription_screen.dart' show iapPriceOf;
 import '../services/renewal_reminder.dart' show syncRenewalReminder;
 import '../store/entitlement_store.dart' show EntitlementStore;
-import '../domain/reading.dart' show askGapMs, withJosa;
+import '../domain/reading.dart' show FinishDraft, withJosa;
 import '../features/book/my_books_tab.dart' show MyBooksTab;
 import '../features/community/community_screens.dart' show watchCommunityOpen;
 import '../features/home/home_screen.dart';
-import '../features/reading/finish_screen.dart';
 import '../features/reading/read_list.dart';
-import '../features/reading/reading_screen.dart';
 import '../features/record/record_tab.dart' show RecordTab;
-import '../features/book/labels.dart' show dateTimeLabel, relativeDay;
 import '../features/stats/stats_screen.dart';
 import '../features/stats/stats_widgets.dart' show bookTitle;
 import '../services/ambient.dart';
 import '../services/cover_colors.dart';
+import '../services/error_text.dart';
 import '../services/sync.dart';
 import '../services/iap.dart';
 import '../services/warmup.dart';
-import '../store/finish_reading.dart' show resumeReading;
+import '../store/finish_reading.dart' show resumeReading, settleLeftoverReading;
 import '../store/bookcase_store.dart';
 import '../store/library_model.dart';
 import '../store/mini_timer_store.dart';
 import '../store/reading_store.dart';
 import '../store/settings_store.dart';
 import '../ui/alert.dart';
+import '../ui/feedback.dart' show showToast;
 import '../ui/tab_icons.dart';
 import '../ui/kit.dart' show Pressable;
 import '../ui/theme.dart';
@@ -53,9 +51,6 @@ const _coverLimit = Duration(seconds: 15);
 
 /// 꾸미기 중 탭 바 숨기기(홈이 켠다)
 final tabBarHidden = ValueNotifier<bool>(false);
-
-/// 이보다 오래 꺼져 있었던 독서는 꺼진 시간을 넣을지 묻지 않고 뺀다
-const longGapMs = 3 * 60 * 60 * 1000;
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -126,7 +121,7 @@ class _AppShellState extends State<AppShell> {
       shelfReady.addListener(_shelfChanged);
       _coverTimer = Timer(_coverLimit, _dropCover);
     }
-    // 지난 독서가 중간에 멈췄거나 끝낸 기록을 저장하지 않았으면 다시 켰을 때 묻는다(지금 앱 RecoveryDialog)
+    // 지난 독서가 중간에 멈췄거나 멈춰 뒀거나 끝낸 기록을 저장하지 않았으면 다시 켰을 때 묻지 않고 거기까지 기록한다(2026-11-26)
     AppNav.instance.addListener(_nav);
     final reading = ReadingStore.instance;
     // 서재는 첫 화면이 뜬 뒤 미리 읽어 둔다(복구 창·다른 탭이 책을 바로 찾게)
@@ -167,7 +162,7 @@ class _AppShellState extends State<AppShell> {
       });
     });
     reading.load().then((_) {
-      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => _askRecovery());
+      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_settleLeftover()));
     }, onError: (_) {});
   }
 
@@ -238,135 +233,51 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
-  void _askRecovery() {
-    final reading = ReadingStore.instance;
-    final it = reading.interrupted;
-    final pending = reading.pending;
-    if (it == null && pending != null && reading.pendingRestored) {
-      appAlert(context, '저장하지 않은 독서 기록이 있어요', '지난번에 끝낸 ${formatDuration(pending.durationMs)} 기록을 아직 저장하거나 버리지 않았어요.', [
-        AlertButton('기록 확인하기', onPress: () {
-          reading.ackPendingRestored();
-          openFinish(context);
-        }),
-        AlertButton('나중에', style: AlertStyle.cancel, onPress: reading.ackPendingRestored),
-      ], true, true);
+  /// 다시 켰을 때 남아 있던 독서는 묻지 않고 거기까지 기록하고 토스트로 알린다(2026-11-26 사용자 '멈춰 둔 독서가 있어요 이런 거 그냥 기록해'):
+  /// 멈춰 둔 독서는 멈춘 때까지, 앱이 꺼져 멈춘 독서는 마지막으로 확인된 때까지, 끝내고 저장하지 않은 기록은 적어 둔 그대로(finish_reading settleLeftoverReading).
+  /// 전에는 창 셋(저장하지 않은 독서 기록이 있어요 · 멈춰 둔 독서가 있어요 · 지난 독서가 중간에 멈췄어요)이 물었다.
+  /// 저장하지 못하면 확인창(실패는 늘 알린다, DESIGN 11장). 그 기록은 읽기 탭 '저장하지 않은 독서 기록'에 남는다
+  Future<void> _settleLeftover() async {
+    final List<FinishDraft> saved;
+    try {
+      saved = await settleLeftoverReading();
+    } catch (e) {
+      if (mounted) appAlert(context, '지난 독서 기록을 저장하지 못했어요', '기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
       return;
     }
-    if (it == null && reading.stale && reading.active != null) {
-      final a = reading.active!;
-      final title = bookTitle(LibraryModel.instance.lib, a.myBookId);
-      // 달력 날짜로(12~24시간 전 어제를 '오늘'로 적었다, 점검 B12). 앱 공통 가까운 날 글자(relativeDay)
-      final when = relativeDay(DateTime.fromMillisecondsSinceEpoch(a.lastBeat.toInt()));
-      appAlert(
-        context,
-        '멈춰 둔 독서가 있어요',
-        '$when ${title == null ? '' : '${withJosa('‘$title’', '을', '를')} '}${formatDuration(a.accumulatedMs)} 읽다가 멈춰 뒀어요.',
-        [
-          AlertButton('이어서 읽기', onPress: () async {
-            reading.clearStale();
-            if (!await resumeReadingOrTell(context) || !mounted) return;
-            // 이어 읽으면 소리도 함께(복구 창 이어 읽기와 같게, 점검 B14)
-            Ambient.instance.resumeIfWanted();
-            openReadingScene(context);
-          }),
-          AlertButton('여기서 끝내고 기록하기', onPress: () {
-            reading.clearStale();
-            reading.finish();
-            openFinish(context);
-          }),
-          // 지우는 일은 확인을 거친다(DESIGN 12장, 독서 끝 '이번 독서 기록을 버릴까요?'와 같은 창)
-          AlertButton('기록 버리기', style: AlertStyle.destructive, onPress: () {
-            appAlert(context, '이번 독서 기록을 버릴까요?', '${withJosa(formatDuration(a.accumulatedMs), '이', '가')} 저장되지 않아요.', [
-              const AlertButton('취소', style: AlertStyle.cancel),
-              AlertButton('버리기', style: AlertStyle.destructive, onPress: () => reading.discardActive()),
-            ]);
-          }),
-          // 다른 복구 창처럼 미룰 수 있게: 멈춘 채로 두고(작은 타이머) 다시 묻지 않는다
-          AlertButton('나중에', style: AlertStyle.cancel, onPress: reading.clearStale),
-        ],
-        true,
-        true,
-      );
-      return;
-    }
-    if (it == null) return;
-    // 날과 시각: 며칠 꺼져 있었어도 언제인지 보이게('어제 오후 9:05', DESIGN 4장 dateTimeLabel)
-    final hm = dateTimeLabel(DateTime.fromMillisecondsSinceEpoch(it.lastBeat.toInt()));
-    // 1분 미만 꺼졌던 것은 묻지 않고 넣는다(읽던 중일 가능성이 크다)
-    if (it.gapMs < askGapMs) {
-      _askContinue(true, '지난 독서가 중간에 멈췄어요', '앱이 잠깐(1분 미만) 꺼져 있었어요. 그 시간도 읽은 시간에 넣었어요.');
-      return;
-    }
-    // 오래(3시간 넘게) 꺼져 있었으면 그 시간은 묻지 않고 뺀다(2026-11-19 타이머 점검 B8: 사흘 꺼져 있다 '넣기'면 72시간 기록이 됐다)
-    if (it.gapMs >= longGapMs) {
-      _askContinue(false, '지난 독서가 중간에 멈췄어요',
-          '앱이 ${formatDuration(it.gapMs)} 꺼져 있어서 그 시간은 뺐어요. 마지막으로 확인된 $hm까지 ${withJosa(formatDuration(it.countedMs), '을', '를')} 읽었어요.');
-      return;
-    }
-    // 꺼져 있던 시간을 넣을지 먼저 묻는다(사용자 결정 2026-11-15 '물어보기'). 넣거나 빼도 안내창이 떠 있던 동안은 읽은 시간에 들어간다.
-    // 고르면 바로 이어서 읽는다: 그 뒤 '이어서 읽을까요?'를 또 물었다(2026-11-20 사용자 '결국 둘 다 멈춘 거잖아'). 끝내기는 읽기 장면에서.
-    // 넣기 · 빼기는 좌우 두 단추(2026-11-20 사용자 '굳이 2줄로 놔야 돼? 좌우로'), 나중에는 아래 글자 단추
-    appAlert(
+    if (!mounted || saved.isEmpty) return;
+    final d = saved.last;
+    final title = bookTitle(LibraryModel.instance.lib, d.myBookId);
+    showToast(
       context,
-      '지난 독서가 중간에 멈췄어요',
-      '마지막으로 확인된 $hm까지 ${withJosa(formatDuration(it.countedMs), '을', '를')} 읽었어요. 앱이 꺼져 있던 ${formatDuration(it.gapMs)}도 읽은 시간에 넣고 이어서 읽을까요?',
-      [
-        AlertButton('넣기', onPress: () => _continueNow(true)),
-        AlertButton('빼기', onPress: () => _continueNow(false)),
-        AlertButton('나중에 정하기(일시정지로 둠)', style: AlertStyle.cancel, onPress: reading.dismissInterrupted),
-      ],
+      saved.length > 1
+          ? '지난 독서 기록 ${saved.length}개를 저장했어요.'
+          : '지난 독서${title == null ? '' : ' ‘$title’'} ${withJosa(formatDurationPrecise(d.durationMs), '을', '를')} 기록했어요.',
     );
   }
 
   /// 알림 · 잠금 화면 · 이어폰 단추로 소리를 멈추거나 켜면 독서 타이머도 같이(앱 안에서는 타이머 일시정지가 소리도 멈춘다: pauseReading).
   /// 통화로 끊긴 소리(ReadingStore.interrupting)는 타이머를 그대로 둔다. 끊김 알림이 소리 멈춤보다 늦게 올 수 있어 잠깐 기다려 본다
+  /// 밖에서 소리를 켜면 타이머는 밖에서 소리를 멈춰 멈춘 그 독서일 때만 이어 간다. 앱 안에서 멈춘 독서는 소리만 난다
+  /// (2026-11-26 사용자 '읽은 적도 없는데 1:37이 떠 있어': 블루투스 · 이어폰 연결로 시스템이 소리를 다시 켜면 멈춰 둔 타이머가 저절로 돌았다)
   void _soundToggledOutside(bool playing) {
     final rs = ReadingStore.instance;
     if (playing) {
-      if (rs.active != null && !rs.running && !rs.stale) unawaited(resumeReading());
+      final id = _soundPaused;
+      _soundPaused = null;
+      if (rs.active != null && rs.active!.id == id && !rs.running && !rs.stale) unawaited(resumeReading());
       return;
     }
     Future<void>.delayed(const Duration(milliseconds: 600), () {
-      if (rs.running && !rs.interrupting && !Ambient.instance.playing) rs.pause();
+      if (rs.running && !rs.interrupting && !Ambient.instance.playing) {
+        _soundPaused = rs.active?.id;
+        rs.pause();
+      }
     });
   }
 
-  /// 꺼져 있던 시간을 정하고 바로 이어서 읽기(읽기 장면을 연다)
-  void _continueNow(bool includeGap) {
-    final reading = ReadingStore.instance;
-    if (reading.interrupted == null || !mounted) return;
-    reading.resumeInterrupted(includeGap: includeGap);
-    // 소리를 켜 둔 채 꺼졌으면 다시 켠다(이어 읽기 뒤 빗소리가 꺼져 있었다, 2026-11-15 QA 수아 F2)
-    Ambient.instance.resumeIfWanted();
-    openReadingScene(context);
-  }
-
-  /// 묻지 않고 정한 경우(1분 미만은 넣고, 3시간 넘으면 뺀다): 이어 읽기 · 여기서 끝내기 · 나중에
-  void _askContinue(bool includeGap, String title, String message) {
-    final reading = ReadingStore.instance;
-    final it = reading.interrupted;
-    if (it == null || !mounted) return;
-    appAlert(
-      context,
-      title,
-      message,
-      [
-        AlertButton('이어서 읽기', onPress: () {
-          reading.resumeInterrupted(includeGap: includeGap);
-          // 소리를 켜 둔 채 꺼졌으면 다시 켠다(이어 읽기 뒤 빗소리가 꺼져 있었다, 2026-11-15 QA 수아 F2)
-          Ambient.instance.resumeIfWanted();
-          openReadingScene(context);
-        }),
-        AlertButton('여기서 끝내고 기록하기', onPress: () {
-          reading.finishInterrupted(includeGap: includeGap);
-          openFinish(context);
-        }),
-        AlertButton('나중에 정하기(일시정지로 둠)', style: AlertStyle.cancel, onPress: reading.dismissInterrupted),
-      ],
-      true,
-      true,
-    );
-  }
+  /// 밖에서 소리를 멈춰 같이 멈춘 독서(그 독서만 밖에서 소리를 켜면 이어 간다)
+  String? _soundPaused;
 
   @override
   Widget build(BuildContext context) {

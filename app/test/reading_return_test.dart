@@ -14,7 +14,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'all_books_select_toast_test.dart' show fakeDb;
+import 'all_books_select_toast_test.dart' show fakeDb, plain;
 
 const t1 = '2026-11-16T01:00:00.000Z';
 
@@ -132,5 +132,34 @@ void main() {
     expect(find.textContaining('기록했어요'), findsOneWidget);
     await t.tap(find.text('확인'));
     await t.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, settle);
+
+    // 4) 뒤로 나가면 묻지 않고 적은 데까지 저장(2026-11-26 사용자 '화면 나가면 그냥 거기까지 기록하고'): 막힌 쪽(전체 216쪽보다 큼)은 빼고 시작 쪽 · 메모는 남긴다
+    r.pending = FinishDraft(
+      id: 'ss_back',
+      myBookId: 'bk1',
+      startedAt: now.subtract(const Duration(minutes: 3)).toUtc().toIso8601String(),
+      endedAt: now.toUtc().toIso8601String(),
+      durationMs: 180000,
+      notes: const FinishNotes(startPage: '10', pages: '999', memo: ' 좋았다 '),
+    );
+    unawaited(openFinish(t.element(find.text('탭 화면')), root: true));
+    await t.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, settle);
+    expect(find.byType(FinishScreen), findsOneWidget);
+    await t.binding.handlePopRoute();
+    // 토스트는 지나간 화면 시간으로 걷힌다(3초): 다 가라앉히지 않고 화면이 닫힐 만큼만 민다
+    for (var i = 0; i < 8; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.textContaining('나갈까요'), findsNothing, reason: '묻지 않는다');
+    expect(find.byType(FinishScreen), findsNothing);
+    expect(find.text('탭 화면'), findsOneWidget);
+    final s = LibraryModel.instance.lib.sessions['ss_back'];
+    expect(s, isNotNull, reason: '뒤로 나가도 기록된다');
+    expect(s!.startPage, 10);
+    expect(s.pagesRead, isNull, reason: '전체 쪽수보다 큰 쪽은 뺀다');
+    expect(s.memo, '좋았다');
+    expect(r.pending, isNull);
+    expect(plain('‘소년이 온다’ 3분을 기록했어요.'), findsOneWidget, reason: '돌아온 화면에서 토스트');
+    await t.pump(const Duration(seconds: 4));
   });
 }
