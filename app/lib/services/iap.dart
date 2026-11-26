@@ -2,7 +2,7 @@
 //
 // 흐름: 서버에서 계정 연결 값을 받는다 → 스토어 결제 → 스토어가 준 구매 증거를 서버에 낸다 → 서버가 지급했다고 답하면 거래를 끝낸다.
 // - 지급 근거는 서버가 스토어에 다시 물어 받은 답이다. 앱은 증거를 전달만 한다.
-// - 거래를 끝내는 것은 서버 응답 뒤다(D10). 끝내지 않은 거래는 스토어가 앱을 켤 때 다시 준다. 그러면 다시 낸다.
+// - 거래를 끝내는 것은 서버 응답 뒤다(D10). 끝내지 않은 거래는 iOS는 앱을 켤 때 스토어가 다시 주고, 안드로이드는 앱이 직접 물어 다시 낸다.
 // - 구매 증거: 애플은 스토어가 서명한 거래(StoreKit 2의 JWS), 구글은 구매 토큰. 둘 다 verificationData.serverVerificationData에 있다.
 // - 안드로이드의 확인(acknowledge·consume)은 서버가 한다. 앱은 completePurchase를 부르지 않는다(서버가 거절한 구매를 앱이 확인해 버리지 않게).
 library;
@@ -24,12 +24,14 @@ import 'sync.dart' show ApiError, api, syncTokenKey;
 /// 서버 응답을 보고 스토어 거래를 끝내도 되는지 정한다.
 /// - 200: 지급했거나 전에 지급한 거래 → 끝낸다
 /// - 409, 422: 환불됐거나 다른 계정·다른 앱의 구매. 다시 내도 결과가 같다 → 끝낸다
+///   (다른 계정이 결제한 선반은 서버가 결제한 계정에 넣은 뒤 409를 준다)
 /// - 그 밖(결제 대기 202, 스토어 확인 실패 503, 요청이 많음 429, 통신 실패): 끝내지 않는다. 다시 낼 수 있어야 한다
 /// - 증거를 확인할 수 없음(iap_bad_proof), 스토어에 없는 거래(404): 끝내지 않는다. 서버 쪽 문제일 수 있어 구매를 버리지 않는다
 /// - 어느 해 책장인지 모름(iap_shelf_year_missing): 끝내지 않는다. 서버가 소비하지 않았으니 연도를 붙여 다시 낼 수 있다
+/// - 우리 상품 테이블에 없는 상품(iap_unknown_product): 끝내지 않는다. 우리 설정 문제라 고친 뒤 다시 낸다
 bool iapShouldFinish({required int status, String code = ''}) {
   if (status == 200) return true;
-  if (code == 'iap_bad_proof' || code == 'iap_shelf_year_missing') return false;
+  if (code == 'iap_bad_proof' || code == 'iap_shelf_year_missing' || code == 'iap_unknown_product') return false;
   return status == 409 || status == 422;
 }
 
@@ -106,6 +108,9 @@ class IapService extends ChangeNotifier {
   /// 선반 결제 중 예약 번호(서버가 5분 동안 그 해 칸을 잡아 둔다. 두 기기가 함께 사서 3칸을 넘지 않게).
   /// 결제를 취소하거나 실패하면 바로 푼다. 제출하면 서버가 푼다
   String? _reservation;
+
+  /// 지금 결제창을 띄운 상품. 예약 번호와 연도는 이 상품의 거래에만 붙인다(전에 끝내지 못한 다른 거래가 가져가지 않게)
+  String? _buying;
   bool _restoring = false;
 
   /// 결제·복원이 진행 중인지(버튼을 잠근다. 연타와 결제 중 계정 전환을 막는다)
@@ -128,12 +133,28 @@ class IapService extends ChangeNotifier {
   List<IapPlan> plans = const [];
 
   /// 앱을 켤 때 한 번: 스토어가 주는 거래를 듣기 시작하고 서버에서 내 상태를 받는다.
-  /// 끝내지 않은 거래는 여기서 다시 와서 서버에 다시 낸다.
+  /// iOS는 끝내지 않은 거래가 구매 스트림으로 다시 온다. 안드로이드는 다시 오지 않아 직접 묻는다(_resubmitAndroid)
   Future<void> start() async {
     if (!iapOn || _sub != null) return;
     await EntitlementStore.instance.restore();
     _sub = _store.purchaseStream.listen(_onPurchases, onError: (Object _) {});
     await refresh();
+    if (Platform.isAndroid) unawaited(_resubmitAndroid());
+  }
+
+  /// 안드로이드: 결제는 됐는데 서버가 아직 확인(소비)하지 못한 구매를 스토어에 물어 다시 낸다.
+  /// 구매 스트림은 앱이 떠 있을 때만 와서, 제출이 실패한 채 앱이 꺼지면 다시 오지 않는다. 3일 안에 확인하지 않으면 구글이 환불한다.
+  /// 복원(restore)으로 내지 않는다. 다른 계정의 구독을 이 계정으로 옮기지 않게
+  Future<void> _resubmitAndroid() async {
+    try {
+      final past = await _store.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>().queryPastPurchases();
+      for (final p in past.pastPurchases) {
+        if (p.status != PurchaseStatus.purchased || p.billingClientPurchase.isAcknowledged) continue;
+        await _submit(p, restore: false);
+      }
+    } catch (_) {
+      // 스토어에 닿지 못했다. 다음 실행에 다시 본다
+    }
   }
 
   /// 서버에서 내 상태와 상품 목록을 받고, 스토어에서 그 상품의 가격을 받는다
@@ -196,6 +217,7 @@ class IapService extends ChangeNotifier {
           rethrow;
         }
         _shelfYear = y;
+        _buying = product.productId;
       }
       if (account == null || account.isEmpty) {
         _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
@@ -206,8 +228,8 @@ class IapService extends ChangeNotifier {
       if (product.kind == 'subscription') {
         await _store.buyNonConsumable(purchaseParam: param);
       } else {
-        // 소비는 서버가 한다(autoConsume을 끈다)
-        await _store.buyConsumable(purchaseParam: param, autoConsume: false);
+        // 안드로이드 소비는 서버가 한다(autoConsume을 끈다). iOS 플러그인은 true만 받는다(디버그 빌드 assert). iOS는 앱이 거래를 끝낸다
+        await _store.buyConsumable(purchaseParam: param, autoConsume: Platform.isIOS);
       }
     } catch (_) {
       unawaited(_release());
@@ -299,13 +321,21 @@ class IapService extends ChangeNotifier {
     final proof = d.verificationData.serverVerificationData;
     if (token == null || proof.isEmpty) return (IapResult.retryLater, false, '구매를 확인하지 못했어요. 앱을 다시 켜면 이어서 확인해요.');
     try {
-      final res = await api('POST', '/iap/purchases', token, {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, 'year': _shelfYear ?? liveShelfYear(), if (_reservation != null) 'reservation': _reservation});
+      final current = d.productID == _buying;
+      final res = await api('POST', '/iap/purchases', token, {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, 'year': (current ? _shelfYear : null) ?? liveShelfYear(), if (current && _reservation != null) 'reservation': _reservation});
       if (res is! Map<String, dynamic>) {
         // 202: 결제가 아직 끝나지 않았다
         return (IapResult.pending, false, '결제를 확인하고 있어요. 끝나면 자동으로 반영돼요.');
       }
       EntitlementStore.instance.apply(res);
-      _reservation = null; // 서버가 제출을 처리하며 예약을 풀었다
+      if (current) {
+        _reservation = null; // 서버가 제출을 처리하며 예약을 풀었다
+        _buying = null;
+      }
+      if (res['overCap'] == true) {
+        // 다른 기기에서 먼저 3칸을 다 열었다. 칸은 열리지 않고 돌려준다(자세한 안내는 알림함과 창, 고지 T15)
+        return (IapResult.granted, true, '이 책장의 선반은 이미 모두 열려 있어 이번 결제는 칸을 열지 않았어요. 환불 안내는 알림에서 확인해 주세요.');
+      }
       return switch (res['status']) {
         'already' => (IapResult.already, true, restore ? '구매를 복원했어요.' : null),
         'inactive' => (IapResult.inactive, true, '구독 기간이 끝난 구매예요.'),

@@ -96,9 +96,9 @@ void main() {
     expect(iapShouldFinish(status: 409, code: 'iap_other_account'), isTrue);
     expect(iapShouldFinish(status: 422, code: 'iap_purchase_rejected'), isTrue);
     expect(iapShouldFinish(status: 422, code: 'iap_sandbox_not_allowed'), isTrue);
+    // 연도를 모르는 선반 거래: 서버가 소비하지 않고 돌려준다(연도와 함께 다시 내면 칸을 준다). 우리 상품 테이블에 없는 상품: 우리 설정 문제
     expect(iapShouldFinish(status: 422, code: 'iap_shelf_year_missing'), isFalse);
-    // 연도를 모르는 선반 거래: 서버가 기록해 두었다(연도와 함께 다시 내면 칸을 준다)
-    expect(iapShouldFinish(status: 422, code: 'iap_shelf_year_missing'), isTrue);
+    expect(iapShouldFinish(status: 422, code: 'iap_unknown_product'), isFalse);
     // 다시 낼 수 있어야 하는 것: 결제 대기, 스토어 확인 실패, 요청 많음, 서버 오류, 없는 거래, 증거 확인 실패
     for (final (status, code) in [(202, ''), (503, 'iap_store_unavailable'), (429, 'iap_too_many'), (500, 'internal_error'), (404, 'iap_purchase_not_found'), (422, 'iap_bad_proof'), (401, 'unauthorized')]) {
       expect(iapShouldFinish(status: status, code: code), isFalse, reason: '$status $code');
