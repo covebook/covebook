@@ -110,7 +110,7 @@ type Store interface {
 
 // Refunder는 개발자가 거래를 환불할 수 있는 스토어다. 구글만 된다(Play Developer API orders.refund).
 // 애플은 개발자가 환불하는 API가 없다. 사용자가 애플에 직접 요청해야 한다.
-// 쓰는 곳: 두 기기에서 동시에 사서 그 해 책장의 유료 칸(3칸)을 넘은 선반 거래(ADR-0002 D1).
+// 쓰는 곳: 칸을 주지 않은 선반 거래. 3칸을 넘음(ADR-0002 D1), 연도를 끝내 모름, 결제한 계정이 탈퇴(D8)
 type Refunder interface {
 	// Refund는 주문을 환불한다. orderID는 Purchase.TransactionID다(구글 주문 ID). 비어 있으면 오류다(프로모션 코드 구매 등).
 	Refund(ctx context.Context, orderID string) error
