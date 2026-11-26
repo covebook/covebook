@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -950,6 +951,57 @@ func TestIAPShelfPaidByOtherAccount(t *testing.T) {
 	// 결제한 계정이 나중에 내면 이미 지급
 	if code, body := e.submit(payer, "google", e.shelf, id, false); code != 200 || body["status"] != "already" {
 		t.Fatalf("결제한 계정의 제출: %d %v", code, body)
+	}
+}
+
+// 결제한 계정이 제출 전에 탈퇴했다(계정 연결 값 줄이 함께 지워짐). 같은 기기의 새 계정이 그 거래를 내면
+// 칸을 주지 않고, 주인 없이 원장에 남기고, 구글은 서버가 환불한다. 애플은 사용자에게 환불 요청을 안내한다. 소비하지 않는다
+func TestIAPShelfOwnerGone(t *testing.T) {
+	e := newIAPEnv(t)
+	for _, route := range []string{"google", "apple"} {
+		payer, payerID := e.user()
+		other, _ := e.user()
+		id := iapTestID(t, "gone-"+route)
+		p := e.shelfPurchase(id, e.shelfToken(payer, 2026))
+		if route == "google" {
+			e.google.Purchases[id] = p
+		} else {
+			p.Route = iap.RouteApple
+			e.apple.Purchases[id] = p
+		}
+		if _, err := e.db.Exec(e.ctx, "DELETE FROM users WHERE id=$1", payerID); err != nil {
+			t.Fatal(err)
+		}
+		code, body := e.submit(other, route, e.shelf, id, false)
+		if code != 409 || errCode(body) != "iap_owner_gone" {
+			t.Fatalf("%s 주인 없는 선반: %d %v", route, code, body)
+		}
+		msg, _ := body["error"].(map[string]any)["message"].(string)
+		if route == "apple" && !strings.Contains(msg, "App Store") {
+			t.Fatalf("애플 안내: %q", msg)
+		}
+		var owner *int64
+		var requested bool
+		if err := e.db.QueryRow(e.ctx, "SELECT user_id, refund_requested_at IS NOT NULL FROM iap_purchases WHERE transaction_id IN ($1, $2)", id, p.TransactionID).Scan(&owner, &requested); err != nil {
+			t.Fatalf("%s 원장에 없음: %v", route, err)
+		}
+		if owner != nil {
+			t.Fatalf("%s 주인이 생김: %d", route, *owner)
+		}
+		if requested != (route == "google") || iapTestHas(e.google.Refunded, p.TransactionID) != (route == "google") {
+			t.Fatalf("%s 환불 요청 %v, 구글 환불 %v", route, requested, e.google.Refunded)
+		}
+		if iapTestHas(e.google.Confirmed, id) {
+			t.Fatalf("%s 주인 없는 선반을 소비함", route)
+		}
+		if _, me := e.call("GET", "/iap/me", other, nil); shelvesIn(me, 2026) != 0 {
+			t.Fatalf("%s 낸 계정에 칸이 생김: %v", route, me)
+		}
+		// 다시 내도 같은 답이고 환불은 한 번이다
+		before := len(e.google.Refunded)
+		if code, body := e.submit(other, route, e.shelf, id, false); code != 409 || errCode(body) != "iap_owner_gone" || len(e.google.Refunded) != before {
+			t.Fatalf("%s 다시 제출: %d %v 환불 %d→%d", route, code, body, before, len(e.google.Refunded))
+		}
 	}
 }
 
