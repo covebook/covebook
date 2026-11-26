@@ -100,6 +100,16 @@ class IapProduct {
   }
 }
 
+/// 기기에 남긴 plus를 서버에 닿기 전까지 믿어도 되는지(ADR-0002 3장 끝 표, 오프라인 캐시).
+/// 스토어가 준 만료 시각(유예 중이면 유예 끝)까지만 믿는다. 그 뒤 갱신됐는지는 서버만 안다.
+/// 구독 정보가 없는 옛 사본은 그대로 둔다(서버에 닿으면 바로 고쳐진다)
+bool iapCachedPlusValid({required bool plus, IapSubscription? subscription, required DateTime now}) {
+  if (!plus || subscription == null) return plus;
+  final grace = subscription.graceUntil;
+  final until = grace != null && grace.isAfter(subscription.expiresAt) ? grace : subscription.expiresAt;
+  return now.isBefore(until);
+}
+
 class EntitlementStore extends ChangeNotifier {
   EntitlementStore._();
   static final instance = EntitlementStore._();
@@ -144,6 +154,11 @@ class EntitlementStore extends ChangeNotifier {
     if (raw == null) return;
     try {
       apply(jsonDecode(raw) as Map<String, dynamic>, save: false);
+      // 만료가 지난 사본의 plus는 서버 확인 전까지 끈다(오프라인에서 끝없이 쓰지 않게)
+      if (!iapCachedPlusValid(plus: plus, subscription: subscription, now: DateTime.now())) {
+        plus = false;
+        notifyListeners();
+      }
     } catch (_) {
       // 사본이 깨졌으면 서버 값으로 다시 채운다
     }

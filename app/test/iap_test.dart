@@ -457,6 +457,16 @@ void main() {
     });
   }
 
+  test('기기에 남긴 plus는 스토어가 준 만료(유예 포함)까지만 믿는다', () {
+    final now = DateTime.utc(2026, 11, 26, 12);
+    IapSubscription? sub(String expires, [String? grace]) => IapSubscription.from({'expiresAt': expires, 'graceUntil': grace});
+    expect(iapCachedPlusValid(plus: true, subscription: sub('2026-11-27T00:00:00Z'), now: now), isTrue);
+    expect(iapCachedPlusValid(plus: true, subscription: sub('2026-11-26T00:00:00Z'), now: now), isFalse);
+    expect(iapCachedPlusValid(plus: true, subscription: sub('2026-11-26T00:00:00Z', '2026-12-10T00:00:00Z'), now: now), isTrue, reason: '유예 중');
+    expect(iapCachedPlusValid(plus: true, now: now), isTrue, reason: '구독 정보가 없는 옛 사본');
+    expect(iapCachedPlusValid(plus: false, subscription: sub('2026-11-27T00:00:00Z'), now: now), isFalse);
+  });
+
   group('알림함', () {
     IapNotice n(int id, String kind, String at, {bool read = false, Map<String, dynamic> params = const {}}) => IapNotice.from({
           'id': id,
