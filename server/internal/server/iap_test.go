@@ -1020,3 +1020,39 @@ func TestIAPRevokedAndQuantity(t *testing.T) {
 		t.Fatal("수량 구매를 소비함")
 	}
 }
+
+// 알림을 놓쳤어도, 앱이 낸 거래를 스토어가 환불이라고 답하면 그때 권한을 거둔다(코드 리뷰 #43, 이슈 #32)
+func TestIAPRevokedOnSubmit(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	orig, txn := iapTestID(t, "rorig"), iapTestID(t, "rtxn")
+	p := e.subscription(orig, txn, e.accountToken(token), time.Now().Add(time.Hour))
+	e.apple.Purchases[txn] = p
+	if code, body := e.submit(token, "apple", e.plus, txn, false); code != 200 || body["plus"] != true {
+		t.Fatalf("구독 지급: %d %v", code, body)
+	}
+	p.State, p.RevokedAt = iap.StateRevoked, time.Now().UTC()
+	e.apple.Purchases[txn] = p
+	if code, body := e.submit(token, "apple", e.plus, txn, false); code != 409 || errCode(body) != "iap_purchase_refunded" {
+		t.Fatalf("환불된 구독 제출: %d %v", code, body)
+	}
+	if _, body := e.call("GET", "/iap/me", token, nil); body["plus"] != false {
+		t.Fatalf("환불 뒤에도 plus: %v", body)
+	}
+	// 선반도 같다
+	y := e.shelfToken(token, 2026)
+	id := iapTestID(t, "rshelf")
+	sp := e.shelfPurchase(id, y)
+	e.google.Purchases[id] = sp
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 || shelvesIn(body, 2026) != 2 {
+		t.Fatalf("선반 지급: %d %v", code, body)
+	}
+	sp.State, sp.RevokedAt = iap.StateRevoked, time.Now().UTC()
+	e.google.Purchases[id] = sp
+	if code, _ := e.submit(token, "google", e.shelf, id, false); code != 409 {
+		t.Fatalf("환불된 선반 제출: %d", code)
+	}
+	if _, body := e.call("GET", "/iap/me", token, nil); shelvesIn(body, 2026) != 0 {
+		t.Fatalf("환불 뒤에도 칸: %v", body)
+	}
+}
