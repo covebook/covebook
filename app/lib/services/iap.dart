@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
@@ -101,6 +102,8 @@ class IapService extends ChangeNotifier {
   // 스토어 플러그인은 실제로 쓸 때 처음 만든다(결제가 꺼진 빌드와 시험에서는 만들지 않는다)
   InAppPurchase get _store => InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _sub;
+  AppLifecycleListener? _life;
+  DateTime? _lastResubmit;
 
   /// 이번 실행에서 선반을 사려고 연 책장의 연도. 구매 제출에 같이 보낸다(서버는 계정 연결 값의 연도를 먼저 본다)
   int? _shelfYear;
@@ -139,13 +142,29 @@ class IapService extends ChangeNotifier {
     await EntitlementStore.instance.restore();
     _sub = _store.purchaseStream.listen(_onPurchases, onError: (Object _) {});
     await refresh();
-    if (Platform.isAndroid) unawaited(_resubmitAndroid());
+    if (Platform.isAndroid) {
+      unawaited(_resubmitAndroid());
+      // 다시 앞으로 올 때도 묻는다(결제 대기가 앱 밖에서 끝난 경우 등). 결제창에서 돌아올 때는 구매 스트림이 처리하므로 건너뛴다
+      _life = AppLifecycleListener(onResume: () {
+        if (!busy) unawaited(_resubmitAndroid());
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _life?.dispose();
+    unawaited(_sub?.cancel());
+    super.dispose();
   }
 
   /// 안드로이드: 결제는 됐는데 서버가 아직 확인(소비)하지 못한 구매를 스토어에 물어 다시 낸다.
   /// 구매 스트림은 앱이 떠 있을 때만 와서, 제출이 실패한 채 앱이 꺼지면 다시 오지 않는다. 3일 안에 확인하지 않으면 구글이 환불한다.
   /// 복원(restore)으로 내지 않는다. 다른 계정의 구독을 이 계정으로 옮기지 않게
   Future<void> _resubmitAndroid() async {
+    final now = DateTime.now();
+    if (_lastResubmit != null && now.difference(_lastResubmit!) < const Duration(minutes: 1)) return;
+    _lastResubmit = now;
     try {
       final past = await _store.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>().queryPastPurchases();
       for (final p in past.pastPurchases) {
