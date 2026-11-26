@@ -444,6 +444,10 @@ func TestIAPNoticeShelfOverCapRefund(t *testing.T) {
 		t.Fatalf("구글 요청 실패: %v", p)
 	}
 	e.google.RefundErr = nil
+	// 실패한 환불은 간격(2분부터)이 지나야 다시 한다
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET updated_at=now()-interval '10 minutes' WHERE over_cap AND refund_requested_at IS NULL"); err != nil {
+		t.Fatal(err)
+	}
 	if r := e.sweep(); r.Refunds != 1 {
 		t.Fatalf("다시 요청: %+v", r)
 	}
