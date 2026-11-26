@@ -17,6 +17,7 @@ type Fake struct {
 	ConfirmErr error               // 값이 있으면 Confirm이 실패한다
 	History    []Notice            // NoticeHistory가 돌려줄, 스토어가 보냈던 알림
 	VoidedList []VoidedPurchase    // Voided가 돌려줄, 스토어가 환불한 구매
+	PanicOn    string              // Ref.ID나 원 거래 ID가 이 값이면 조회가 패닉한다(알림 하나의 패닉이 다른 처리를 막지 않는지 보는 시험용)
 }
 
 func (f *Fake) Route() Route  { return f.R }
@@ -31,6 +32,9 @@ func (f *Fake) Verify(kind Kind, proof string) (Ref, error) {
 }
 
 func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
+	if f.PanicOn != "" && ref.ID == f.PanicOn {
+		panic("fake panic " + ref.ID)
+	}
 	if f.Err != nil {
 		return Purchase{}, f.Err
 	}
@@ -70,6 +74,9 @@ var (
 
 // Subscription은 Purchases에서 원 거래 ID가 같은 것을 찾는다. 여러 개면 만료가 가장 늦은 것이다.
 func (f *Fake) Subscription(_ context.Context, originalID string) (Purchase, error) {
+	if f.PanicOn != "" && originalID == f.PanicOn {
+		panic("fake panic " + originalID)
+	}
 	if f.Err != nil {
 		return Purchase{}, f.Err
 	}
