@@ -233,7 +233,7 @@ func iapFindProduct(ctx context.Context, q dbtx, route iap.Route, productID stri
 
 // iapRecordPurchase는 거래를 원장에 넣는다. 처음 들어갔으면 true, 이미 있던 거래면 false다.
 // "먼저 조회하고 없으면 넣기"를 하지 않는다. 유일 키에 맡기고 들어간 줄 수로 판단한다(D6).
-// 결제가 끝난 거래만 받는다.
+// 결제가 끝난 거래만 받는다. user가 0이면 주인 없이(user_id NULL) 넣는다(결제한 계정이 탈퇴한 거래).
 // 선반 거래는 계정 연결 값으로 연도 책장을 찾아 함께 적는다. 연도용 값이 아니면 연도는 NULL이고 어느 책장에도 칸을 주지 않는다.
 func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase) (bool, error) {
 	if p.State != iap.StatePaid {
@@ -245,7 +245,7 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 	}
 	tag, err := q.Exec(ctx, `INSERT INTO iap_purchases
 		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country,confirmed_at,shelf_year)
-		VALUES($1,$2,$3,$4,nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''),CASE WHEN $13 THEN now() END,
+		VALUES($1,$2,$3,nullif($4::bigint,0),nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''),CASE WHEN $13 THEN now() END,
 			CASE WHEN $7='product' THEN (SELECT year FROM iap_account_tokens WHERE token=nullif($5,'')::uuid) END)
 		ON CONFLICT (route,transaction_id) DO NOTHING`,
 		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, account, p.ProductID, string(kind), string(p.Env),
@@ -625,6 +625,34 @@ func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNotic
 			return nil, err
 		}
 		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// iapYearlessToRefund는 서버가 환불할 칸 없는 선반 거래를 준다(구글 권고: 받을 수 없는 구매는 자동 환불에 맡기지 않는다, 2026-11-26 결정).
+//   - 연도를 모르는 선반: 2일 기다린다. 앱이 연도와 함께 다시 내면 칸을 받는다(그러면 shelf_year가 채워져 빠진다)
+//   - 주인 없는 선반(결제한 계정이 탈퇴, user_id NULL): 제출 때 이미 환불을 시도했으니 기다리지 않고 다시 한다
+//
+// 3일이 지나면 구글이 이미 자동 환불했으니 뺀다. 20번 넘게 실패한 거래도 빼고 운영자가 본다
+func iapYearlessToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
+	rows, err := q.Query(ctx, `SELECT route, transaction_id FROM iap_purchases
+		WHERE kind='product' AND shelf_year IS NULL AND NOT over_cap AND confirmed_at IS NULL AND state='paid'
+		  AND refund_requested_at IS NULL AND refund_attempts < 20 AND route = ANY($1)
+		  AND (created_at < now() - interval '2 days' OR user_id IS NULL) AND created_at > now() - interval '3 days'
+		ORDER BY created_at LIMIT $2`, routes, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []iapOverCapRow
+	for rows.Next() {
+		var r iapOverCapRow
+		var route string
+		if err = rows.Scan(&route, &r.Key); err != nil {
+			return nil, err
+		}
+		r.Route = iap.Route(route)
+		out = append(out, r)
 	}
 	return out, rows.Err()
 }
