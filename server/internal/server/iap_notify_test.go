@@ -697,6 +697,20 @@ func TestIAPSweepRefundsShelfWithoutYear(t *testing.T) {
 	if len(e.google.Refunded) != before {
 		t.Fatalf("환불을 두 번 요청함: %v", e.google.Refunded)
 	}
+	// 구글이 환불을 처리하면(voided) 환불 고지(T9)가 남는다. 칸을 연 적이 없으니 opened=false
+	if _, err := iapRevokePurchase(e.ctx, e.db, iap.RouteGoogle, old.OriginalTransactionID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, n := range e.notices(token) {
+		params, _ := n["params"].(map[string]any)
+		if n["kind"] == "shelf_refunded" && params["opened"] == false {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("칸을 열지 않은 선반의 환불 고지에 opened=false가 없음: %v", e.notices(token))
+	}
 }
 
 // 알림 하나가 처리 중 패닉을 내도 그 알림만 실패로 남고, 뒤의 알림은 처리된다
