@@ -23,7 +23,7 @@ import '../services/cover_colors.dart';
 import '../services/error_text.dart';
 import '../services/sync.dart';
 import '../services/warmup.dart';
-import '../store/finish_reading.dart' show resumeReading, settleLeftoverReading;
+import '../store/finish_reading.dart' show resumeReading, saveDraftAsIs, settleLeftoverReading;
 import '../store/bookcase_store.dart';
 import '../store/library_model.dart';
 import '../store/mini_timer_store.dart';
@@ -100,14 +100,13 @@ class _AppShellState extends State<AppShell> {
   /// 시작 덮개(지난 책장 사진이 없을 때 첫 책장이 다 그려질 때까지)
   bool _cover = !startedWithSnapshot;
   Timer? _coverTimer;
-  bool _spanAsking = false;
 
   @override
   void initState() {
     super.initState();
     // 목표·소리 크기·장면 설정은 앱을 켤 때 읽는다(읽기 탭을 열기 전에 복구 창에서 이어 읽으면 기본값으로 보였다, 2026-11-15 QA 수아 F2)
     SettingsStore.instance.load();
-    ReadingStore.instance.addListener(_readingChanged);
+    ReadingStore.instance.onInterrupted = _callCut;
     ReadingStore.instance.watchInterruptions();
     Ambient.instance.onExternal = _soundToggledOutside;
     if (_cover && shelfReady.value) _cover = false;
@@ -177,16 +176,25 @@ class _AppShellState extends State<AppShell> {
     if (mounted && _cover) setState(() => _cover = false);
   }
 
-  // 통화 등으로 소리가 끊긴 동안을 넣을지(사용자 결정 2026-11-15 '물어보기'). 타이머는 그동안에도 흘렀다
-  void _readingChanged() {
-    final g = ReadingStore.instance.spanGap;
-    if (g == null || _spanAsking || !mounted) return;
-    _spanAsking = true;
-    final span = formatDuration(g.counted);
-    appAlert(context, '소리가 멈췄던 동안도 넣을까요?', '통화 등으로 소리가 $span 동안 멈췄어요. 그동안도 읽은 시간에 넣을까요?', [
-      AlertButton('빼기', onPress: () => ReadingStore.instance.answerSpan(include: false)),
-      AlertButton('넣기', onPress: () => ReadingStore.instance.answerSpan(include: true)),
-    ], false).whenComplete(() => _spanAsking = false);
+  /// 통화 등으로 소리가 끊기면 묻지 않고 그 자리에서 독서를 끝내 그 책에 거기까지 기록한다(2026-11-26 사용자 '중간에 멈췄어요 이딴 거 넣지말고
+  /// 그냥 바로 끊으라고 전화오면 없애고 그냥 해당 책에 끊긴거까지 기록해 자꾸 쳐묻지말고'. 전에는 끝난 뒤 '소리가 멈췄던 동안도 넣을까요?'를 물었다).
+  /// 밖에서 소리가 먼저 멈춰 막 같이 멈춘 독서도 끊는다(멈춘 때까지). 읽기 장면은 닫아 시작한 화면으로, 토스트는 앱으로 돌아왔을 때 보인다
+  /// (앱이 뒤에 있는 동안은 토스트 시간이 흐르지 않는다). 소리를 켜지 않고 읽으면 통화를 알 수 없어 그대로 잰다
+  void _callCut(num at, {required bool running}) {
+    final rs = ReadingStore.instance;
+    final a = rs.active;
+    if (a == null || !(running || _soundPaused == a.id)) return;
+    _soundPaused = null;
+    final d = rs.finish(running ? at : a.lastBeat);
+    Ambient.instance.stop();
+    if (d == null || !mounted) return;
+    Navigator.of(context).popUntil((r) => r.isFirst || r.settings.name != '/reading/session');
+    final title = bookTitle(LibraryModel.instance.lib, d.myBookId);
+    saveDraftAsIs(d).then((saved) {
+      if (saved && mounted) showToast(context, '전화 등으로 끊겨서 ${title == null ? '' : '‘$title’ '}${withJosa(formatDurationPrecise(d.durationMs), '을', '를')} 기록했어요.');
+    }, onError: (Object e) {
+      if (mounted) appAlert(context, '독서 기록을 저장하지 못했어요', '기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
+    });
   }
 
   // 맨 아래 화면에서 뒤로 키: 다른 탭이면 책장 탭으로, 책장 탭이면 앱을 끝내지 않고 뒤로 보낸다
@@ -206,7 +214,7 @@ class _AppShellState extends State<AppShell> {
   void dispose() {
     IdleBars.instance.stop();
     AppNav.instance.removeListener(_nav);
-    ReadingStore.instance.removeListener(_readingChanged);
+    ReadingStore.instance.onInterrupted = null;
     shelfReady.removeListener(_shelfChanged);
     _coverTimer?.cancel();
     for (final c in _tabScroll) {
@@ -239,7 +247,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   /// 알림 · 잠금 화면 · 이어폰 단추로 소리를 멈추거나 켜면 독서 타이머도 같이(앱 안에서는 타이머 일시정지가 소리도 멈춘다: pauseReading).
-  /// 통화로 끊긴 소리(ReadingStore.interrupting)는 타이머를 그대로 둔다. 끊김 알림이 소리 멈춤보다 늦게 올 수 있어 잠깐 기다려 본다
+  /// 통화로 끊긴 소리는 _callCut이 독서를 끝낸다. 끊김 알림이 소리 멈춤보다 늦게 올 수 있어 잠깐 기다려 본다(그 사이 끊기면 여기서는 할 일이 없다)
   /// 밖에서 소리를 켜면 타이머는 밖에서 소리를 멈춰 멈춘 그 독서일 때만 이어 간다. 앱 안에서 멈춘 독서는 소리만 난다
   /// (2026-11-26 사용자 '읽은 적도 없는데 1:37이 떠 있어': 블루투스 · 이어폰 연결로 시스템이 소리를 다시 켜면 멈춰 둔 타이머가 저절로 돌았다)
   void _soundToggledOutside(bool playing) {
@@ -251,7 +259,7 @@ class _AppShellState extends State<AppShell> {
       return;
     }
     Future<void>.delayed(const Duration(milliseconds: 600), () {
-      if (rs.running && !rs.interrupting && !Ambient.instance.playing) {
+      if (rs.running && !Ambient.instance.playing) {
         _soundPaused = rs.active?.id;
         rs.pause();
       }

@@ -237,17 +237,6 @@ const askGapMs = 60000;
 Active resumeInterruptedActive(Interrupted it, {required bool includeGap, required num now}) =>
     it.active.copyWith(runningSince: includeGap ? it.lastBeat : it.reopenAt, lastBeat: now, interruptedAt: null);
 
-/// 통화 등으로 소리가 끊긴 동안을 빼기: 달리는 중이면 시작 시각을 그만큼 뒤로, 멈춰 있으면 쌓인 시간에서 뺀다(0 아래로는 안 간다)
-Active excludeSpan(Active a, num spanMs, num now) {
-  final span = math.max(0, spanMs);
-  if (a.runningSince != null) {
-    final shifted = math.min(now, a.runningSince! + span);
-    final overflow = a.runningSince! + span - shifted; // 이번 달린 시간보다 길면 남는 몫은 쌓인 시간에서
-    return a.copyWith(runningSince: shifted, accumulatedMs: math.max(0, a.accumulatedMs - overflow));
-  }
-  return a.copyWith(accumulatedMs: math.max(0, a.accumulatedMs - span));
-}
-
 /// 저장하는 독서 시간은 초 단위로 내린다(읽기 탭 시계(내림)와 기록 화면(초 반올림)이 1초씩 달랐다, 2026-11-15 QA)
 FinishDraft wholeSeconds(FinishDraft p) => FinishDraft(
       id: p.id,
