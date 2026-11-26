@@ -9,6 +9,7 @@ import '../../services/iap.dart';
 import '../../store/entitlement_store.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import 'notice.dart' show kIapMinorNote;
 import 'subscription_screen.dart' show storeName;
 
 /// 그 해 책장에서 살 수 있는 선반 상품(칸 수가 적은 것부터). 이미 산 칸과 합쳐 유료 칸 최대(3칸)를 넘는 상품은 뺀다.
@@ -112,6 +113,7 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
       line('구매한 선반은 로그인한 계정에 기록되어 기기를 바꿔도 유지됩니다.'),
       // 청약철회 제한 표시(전자상거래법 제17조 제6항, T2 v3). 시험 사용은 잠긴 선반 미리보기(locked_rows)
       line('결제하면 바로 선반이 열려 청약철회가 제한됩니다. 환불은 $store의 환불 절차를 따릅니다.'),
+      line(kIapMinorNote),
       if (failed != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(failed, style: AppType.sub.copyWith(color: AppColors.danger))),
       if (_iap.lastResult == IapResult.pending && _iap.lastMessage != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(_iap.lastMessage!, style: AppType.body)),
       Padding(

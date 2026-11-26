@@ -254,6 +254,7 @@ void main() {
     expect(find.text('한 번 결제하면 이 책장에서 계속 쓸 수 있습니다.'), findsOneWidget);
     expect(find.text('구매한 선반은 로그인한 계정에 기록되어 기기를 바꿔도 유지됩니다.'), findsOneWidget);
     expect(find.textContaining('환불 절차를 따릅니다'), findsOneWidget);
+    expect(find.text(kIapMinorNote), findsOneWidget); // 미성년자 취소 고지(전자상거래법 제13조 제3항)
     expect(find.text('구매하기'), findsOneWidget);
     // 가격이 버튼보다 위에 있다
     expect(t.getTopLeft(head).dy, lessThan(t.getTopLeft(find.text('구매하기')).dy));
@@ -328,7 +329,7 @@ void main() {
     await t.pumpAndSettle();
     final head = find.bySemanticsLabel('책장 한켠 플러스 연간, 연 스토어 가격 / 매년');
     expect(head, findsOneWidget);
-    for (final text in ['매년 자동으로 결제됩니다.', '24시간 전까지 해지하지 않으면', '구독 관리에서 할 수 있습니다', '이미 결제한 기간이 끝날 때까지', '환불 절차를 따릅니다']) {
+    for (final text in ['매년 자동으로 결제됩니다.', '24시간 전까지 해지하지 않으면', '구독 관리에서 할 수 있습니다', '이미 결제한 기간이 끝날 때까지', '환불 절차를 따릅니다', kIapMinorNote]) {
       expect(find.textContaining(text), findsOneWidget, reason: text);
     }
     final button = find.widgetWithText(Btn, '구독하기');
@@ -401,13 +402,13 @@ void main() {
     expect(hasSellerInfo, isFalse);
     // 시험용 가짜 값(실제 사업자 정보는 저장소에 적지 않는다)
     EntitlementStore.instance.apply({
-      'seller': {'name': '시험 상호', 'owner': '홍길동', 'address': '시험시 시험구 시험로 1', 'phone': '000-0000-0000', 'email': 'test@example.com', 'bizNo': '000-00-00000', 'saleNo': '제0000-시험-0000호', 'memo': ''},
+      'seller': {'name': '시험 상호', 'owner': '홍길동', 'address': '시험시 시험구 시험로 1', 'phone': '000-0000-0000', 'email': 'test@example.com', 'bizNo': '000-00-00000', 'saleNo': '제0000-시험-0000호', 'host': '시험 호스팅', 'memo': ''},
     }, save: false);
     expect(hasSellerInfo, isTrue);
     await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showSellerSheet(ctx))))));
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
-    for (final label in ['상호', '대표자', '주소', '전화번호', '전자우편', '사업자등록번호', '통신판매업 신고번호']) {
+    for (final label in ['상호', '대표자', '주소', '전화번호', '전자우편', '사업자등록번호', '통신판매업 신고번호', '호스팅서비스 제공자']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     expect(find.text('시험 상호'), findsOneWidget);

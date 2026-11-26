@@ -15,7 +15,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../settings/settings_screen.dart' show privacyUrl;
 import '../settings/terms.dart' show openTermsPage;
-import 'notice.dart' show showPurchaseDone;
+import 'notice.dart' show kIapMinorNote, showPurchaseDone;
 import 'subscription_screen.dart' show openSubscription, showRefundSheet, storeName;
 
 Future<void> openPlans(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -132,6 +132,7 @@ class _PlanScreenState extends State<PlanScreen> {
         line('해지해도 이미 결제한 기간이 끝날 때까지 이용할 수 있습니다.'),
         // 청약철회 제한 표시(전자상거래법 제17조 제6항, T1 v2)
         line('결제하면 바로 이용이 시작됩니다. 이용을 시작한 유료 서비스는 청약철회가 제한될 수 있으며, 환불은 $store의 환불 절차를 따릅니다.'),
+        line(kIapMinorNote),
       ] else
         line('요금제를 고르면 결제 조건을 보여 드려요.'),
       if (failed != null) Padding(padding: const EdgeInsets.only(top: 4), child: WordText(failed, style: AppType.sub.copyWith(color: AppColors.danger))),

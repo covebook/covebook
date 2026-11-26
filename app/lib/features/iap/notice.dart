@@ -248,6 +248,9 @@ final appleRefundUrl = Uri.parse('https://reportaproblem.apple.com');
 /// 결제 완료 고지(T3 v2)가 계약 내용 서면(전자상거래법 제13조 제2항)을 겸하도록 판매자 정보와 철회·환불 기준이 있는 곳을 알린다
 const kIapContractNote = '판매자 정보와 청약철회·환불 기준은 내 정보의 사업자 정보와 이용약관에 있습니다.';
 
+/// 미성년자 취소 고지(전자상거래법 제13조 제3항: 계약을 맺을 때 미성년자에게 알린다). 연령을 확인하지 않으니 모든 구매 화면에 둔다. 약관과 같은 문장
+const kIapMinorNote = '미성년자가 법정대리인의 동의 없이 결제한 경우 미성년자 본인이나 법정대리인이 결제를 취소할 수 있습니다.';
+
 Future<void> showPurchaseDone(BuildContext context, IapSubscription sub, {String? price}) => appAlert(
       context,
       '결제가 완료됐습니다',

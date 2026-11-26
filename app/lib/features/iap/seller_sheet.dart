@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../../store/entitlement_store.dart';
 import '../../ui/kit.dart';
 
-/// 표시 순서와 이름(전자상거래법 제10조·제13조의 표시 항목)
+/// 표시 순서와 이름(전자상거래법 제10조·제13조, 시행령 제11조의4의 표시 항목)
 const sellerFields = [
   ('name', '상호'),
   ('owner', '대표자'),
@@ -16,6 +16,7 @@ const sellerFields = [
   ('email', '전자우편'),
   ('bizNo', '사업자등록번호'),
   ('saleNo', '통신판매업 신고번호'),
+  ('host', '호스팅서비스 제공자'), // 전자상거래법 시행령 제11조의4
 ];
 
 bool get hasSellerInfo => EntitlementStore.instance.seller.isNotEmpty;
