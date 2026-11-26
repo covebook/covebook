@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
 )
 
@@ -119,9 +120,13 @@ var (
 	iapOtherAccount     = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요. 구독은 구매 복원으로 이 계정에 옮길 수 있어요"}
 	iapProductNoRestore = apiError{409, "iap_other_account", "다른 계정에 연결된 구매예요"}
 	iapGrantedToOwner   = apiError{409, "iap_other_account", "결제한 다른 계정에 선반을 넣었어요. 그 계정으로 로그인하면 보여요"}
-	iapShelfFull        = apiError{409, "iap_shelf_full", "이 책장의 추가 선반을 모두 열었어요"}
-	iapShelfTooMany     = apiError{409, "iap_shelf_full", "이 책장에 남은 칸보다 많아요"}
-	iapShelfYearMissing = apiError{422, "iap_shelf_year_missing", "어느 해 책장의 선반인지 알 수 없어요. 문의해 주시면 확인해 드릴게요"}
+	// 결제한 계정이 탈퇴한 선반 거래(아래 grantee == 0). 앱은 409라 거래를 끝낸다. 칸은 주지 않고 환불한다
+	iapOwnerGoneRefunded = apiError{409, "iap_owner_gone", "결제한 계정이 탈퇴해 선반을 열 수 없어요. 결제는 환불돼요"}
+	iapOwnerGoneLater    = apiError{409, "iap_owner_gone", "결제한 계정이 탈퇴해 선반을 열 수 없어요. 결제는 며칠 안에 환불돼요"}
+	iapOwnerGoneApple    = apiError{409, "iap_owner_gone", "결제한 계정이 탈퇴해 선반을 열 수 없어요. App Store에서 환불을 요청해 주세요"}
+	iapShelfFull         = apiError{409, "iap_shelf_full", "이 책장의 추가 선반을 모두 열었어요"}
+	iapShelfTooMany      = apiError{409, "iap_shelf_full", "이 책장에 남은 칸보다 많아요"}
+	iapShelfYearMissing  = apiError{422, "iap_shelf_year_missing", "어느 해 책장의 선반인지 알 수 없어요. 문의해 주시면 확인해 드릴게요"}
 )
 
 // iapMe는 결제에 필요한 내 정보를 준다: 스토어에 넘길 계정 연결 값, 지금 가진 것, 구독 상태, 파는 상품.
@@ -494,6 +499,17 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 		mine := owner.found && owner.user == user
+		// 주인 없는 줄인데 연도도 없으면 칸을 한 번도 주지 않은 거래다(결제한 계정이 탈퇴). 다시 내도 같은 답과 환불이다.
+		// 연도가 있으면 칸을 받은 뒤 탈퇴한 것이라 아래처럼 거절한다
+		if owner.found && owner.user == 0 {
+			var year *int
+			if e = tx.QueryRow(ctx, "SELECT shelf_year FROM iap_purchases WHERE route=$1 AND transaction_id=$2", string(route), key).Scan(&year); e != nil {
+				return e
+			}
+			if year == nil {
+				return s.iapShelfOwnerGone(ctx, tx, store, asked.Kind, submitted, key, user, false)
+			}
+		}
 		// 한 번 사는 상품은 다른 계정으로 옮기지 않는다(D8).
 		if !mine && owner.found {
 			return iapProductNoRestore
@@ -505,7 +521,10 @@ func (s *Server) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 				return e
 			}
 			if grantee == 0 {
-				return iapProductNoRestore
+				// 결제한 계정이 탈퇴해 계정 연결 값 줄이 함께 지워졌다. 낸 계정에 주지 않는다(D8: 한 번 사는 상품은 계정을 옮기지 않는다, 2026-11-26 결정).
+				// 주인 없이 원장에 남기고(거래 기록 보존) 커밋 뒤 환불한다. 기록 없이 거절하면 iOS는 거래를 끝내 돈만 나가고 남는 것이 없다.
+				// 소비(확인)는 하지 않는다. 구글 환불이 실패해도 정기 대조가 2일 뒤 다시 환불하고, 그것도 안 되면 3일 자동 환불이 받친다
+				return s.iapShelfOwnerGone(ctx, tx, store, asked.Kind, submitted, key, user, true)
 			}
 			log.Printf("iap shelf for other account: route=%s submitter=%d owner=%d", route, user, grantee)
 		}
@@ -680,4 +699,62 @@ func iapShortKey(key string) string {
 		return key[:8] + "…"
 	}
 	return key
+}
+
+// iapShelfOwnerGone은 결제한 계정이 탈퇴해 주인이 없는 선반 거래에 답한다. 칸은 주지 않는다(D8, 2026-11-26 결정).
+// record면 주인 없이 원장에 넣는다(거래 기록 보존). 기록 없이 거절하면 iOS는 거래를 끝내 돈만 나가고 남는 것이 없다.
+// 커밋한 뒤 환불한다. 소비(확인)는 하지 않는다: 구글 환불이 실패해도 정기 대조가 2일 뒤 다시 하고, 3일 자동 환불이 마지막으로 받친다
+func (s *Server) iapShelfOwnerGone(ctx context.Context, tx pgx.Tx, store iap.Store, kind iap.Kind, p iap.Purchase, key string, submitter int64, record bool) error {
+	if record {
+		if _, err := iapRecordPurchase(ctx, tx, 0, kind, p); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	log.Printf("iap shelf owner gone: route=%s submitter=%d", store.Route(), submitter)
+	if _, ok := store.(iap.Refunder); !ok {
+		return iapOwnerGoneApple
+	}
+	if s.iapRefundPurchase(context.WithoutCancel(ctx), store, key, p.TransactionID) {
+		return iapOwnerGoneRefunded
+	}
+	return iapOwnerGoneLater
+}
+
+// iapRefundPurchase는 칸을 주지 않은 선반 거래(결제한 계정이 탈퇴, 끝내 연도를 모름)의 환불을 스토어에 요청한다. DB 커밋 뒤에 부른다.
+// 구글만 된다(orders.refund). 3칸 넘김(iapRefundOverCap)과 같은 순서지만, 넘김 고지를 고치지 않고 over_cap 줄로 좁히지 않는다.
+// 구글 권고: 받을 수 없는 구매는 3일 자동 환불에 맡기지 말고 서버가 환불한다. 이미 요청했으면 다시 부르지 않고 true다
+func (s *Server) iapRefundPurchase(ctx context.Context, store iap.Store, key, orderID string) bool {
+	rf, ok := store.(iap.Refunder)
+	if !ok {
+		return false
+	}
+	route := store.Route()
+	var requested bool
+	if err := s.DB.QueryRow(ctx, `SELECT refund_requested_at IS NOT NULL FROM iap_purchases WHERE route=$1 AND transaction_id=$2`,
+		string(route), key).Scan(&requested); err != nil {
+		log.Printf("iap refund: route=%s err=%v", route, err)
+		return false
+	}
+	if requested {
+		return true
+	}
+	if orderID == "" {
+		log.Printf("iap refund needs manual handling: route=%s key=%s (no order id)", route, iapShortKey(key))
+		return false
+	}
+	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
+	defer cancel()
+	err := rf.Refund(refundCtx, orderID)
+	if err != nil {
+		log.Printf("iap refund failed (will retry): route=%s err=%v", route, err)
+	}
+	if _, e := s.DB.Exec(ctx, `UPDATE iap_purchases SET refund_attempts=refund_attempts+1,
+		refund_requested_at=CASE WHEN $3 THEN coalesce(refund_requested_at, now()) ELSE refund_requested_at END, updated_at=now()
+		WHERE route=$1 AND transaction_id=$2`, string(route), key, err == nil); e != nil {
+		log.Printf("iap refund not recorded: route=%s err=%v", route, e)
+	}
+	return err == nil
 }
