@@ -277,7 +277,7 @@ func TestIAPRejections(t *testing.T) {
 		err    string
 	}{
 		{"다른 앱", func(p *iap.Purchase) { p.BundleID = "com.other" }, 422, "iap_purchase_rejected"},
-		{"스토어가 알려 준 상품이 우리 것이 아님", func(p *iap.Purchase) { p.ProductID = "모르는 상품" }, 422, "iap_purchase_rejected"},
+		{"스토어가 알려 준 상품이 우리 것이 아님(우리 설정 문제라 끝내지 않게 따로 답함)", func(p *iap.Purchase) { p.ProductID = "모르는 상품" }, 422, "iap_unknown_product"},
 		{"환불됨", func(p *iap.Purchase) { p.State = iap.StateRevoked }, 409, "iap_purchase_refunded"},
 	} {
 		if code, body := e.submit(token, "google", e.shelf, put(c.change), false); code != c.code || errCode(body) != c.err {
@@ -925,5 +925,80 @@ func TestIAPOverCapRefundNoOrderID(t *testing.T) {
 	var attempts int
 	if err := e.db.QueryRow(e.ctx, "SELECT refund_attempts FROM iap_purchases WHERE route='google' AND transaction_id=$1", second).Scan(&attempts); err != nil || attempts != 0 {
 		t.Fatalf("시도가 쌓임: %d %v", attempts, err)
+	}
+}
+
+// 결제한 뒤 제출하기 전에 계정을 바꿨다: 선반은 결제한 계정에 넣고 소비한다. 낸 계정에는 409(앱이 거래를 끝내도 된다)(코드 리뷰 #43)
+func TestIAPShelfPaidByOtherAccount(t *testing.T) {
+	e := newIAPEnv(t)
+	payer, _ := e.user()
+	other, _ := e.user()
+	id := iapTestID(t, "switch")
+	e.google.Purchases[id] = e.shelfPurchase(id, e.shelfToken(payer, 2026))
+	if code, body := e.submit(other, "google", e.shelf, id, false); code != 409 || errCode(body) != "iap_other_account" {
+		t.Fatalf("다른 계정이 냄: %d %v", code, body)
+	}
+	if !iapTestHas(e.google.Confirmed, id) {
+		t.Fatal("결제한 계정에 넣고도 소비하지 않음")
+	}
+	if _, body := e.call("GET", "/iap/me", payer, nil); shelvesIn(body, 2026) != 2 {
+		t.Fatalf("결제한 계정에 칸이 없음: %v", body)
+	}
+	if _, body := e.call("GET", "/iap/me", other, nil); shelvesIn(body, 2026) != 0 {
+		t.Fatalf("낸 계정에 칸이 생김: %v", body)
+	}
+	// 결제한 계정이 나중에 내면 이미 지급
+	if code, body := e.submit(payer, "google", e.shelf, id, false); code != 200 || body["status"] != "already" {
+		t.Fatalf("결제한 계정의 제출: %d %v", code, body)
+	}
+}
+
+// 앱이 지금 결제의 예약 번호를 붙여 옛 거래를 내도 옛 거래는 그 예약을 쓰지도 풀지도 않는다(코드 리뷰 #43)
+func TestIAPOldPurchaseKeepsReservation(t *testing.T) {
+	e := newIAPEnv(t)
+	token, user := e.user()
+	old := iapTestID(t, "old")
+	p := e.shelfPurchase(old, e.shelfToken(token, 2025))
+	p.PurchasedAt = time.Now().Add(-time.Hour).UTC()
+	e.google.Purchases[old] = p
+	code, r := e.call("POST", "/iap/shelf-token", token, map[string]any{"year": 2026, "shelves": 2})
+	if code != 200 {
+		t.Fatalf("예약: %d %v", code, r)
+	}
+	code, body := e.call("POST", "/iap/purchases", token, map[string]any{"route": "google", "productId": e.shelf, "proof": old, "reservation": r["reservation"]})
+	if code != 200 || body["year"] != float64(2025) || shelvesIn(body, 2026) != 0 {
+		t.Fatalf("옛 거래가 예약 연도로 감: %d %v", code, body)
+	}
+	var held int
+	if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=$2", user, r["reservation"]).Scan(&held); err != nil || held != 1 {
+		t.Fatalf("지금 결제의 예약이 풀림: %d %v", held, err)
+	}
+}
+
+// 환불로 닫힌 거래를 다시 내면 409 환불됨, 구글 수량 구매는 받지 않고 소비하지도 않는다(코드 리뷰 #43)
+func TestIAPRevokedAndQuantity(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	y := e.shelfToken(token, 2026)
+	id := iapTestID(t, "rev")
+	e.google.Purchases[id] = e.shelfPurchase(id, y)
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 {
+		t.Fatalf("지급: %d %v", code, body)
+	}
+	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET state='revoked', revoked_at=now() WHERE route='google' AND transaction_id=$1", id); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 409 || errCode(body) != "iap_purchase_refunded" {
+		t.Fatalf("환불된 거래 다시 제출: %d %v", code, body)
+	}
+	q := iapTestID(t, "qty")
+	p := e.shelfPurchase(q, y)
+	p.Quantity = 2
+	e.google.Purchases[q] = p
+	if code, body := e.submit(token, "google", e.shelf, q, false); code != 422 || errCode(body) != "iap_purchase_rejected" {
+		t.Fatalf("수량 구매: %d %v", code, body)
+	}
+	if iapTestHas(e.google.Confirmed, q) {
+		t.Fatal("수량 구매를 소비함")
 	}
 }

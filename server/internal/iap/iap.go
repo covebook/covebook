@@ -61,6 +61,7 @@ type Purchase struct {
 	PlanID                string // 구글 구독의 요금제(base plan). 애플은 상품 ID가 요금제라 비어 있다
 	State                 State
 	AccountToken          string // 우리가 유저마다 발급한 결제용 UUID. 스토어에 안 넘겼으면 빈 문자열(ADR-0002 D7)
+	Quantity              int    // 구글 수량 구매에서 산 개수. 0이면 1개로 본다
 	Env                   Env
 	PurchasedAt           time.Time
 	ExpiresAt             time.Time // 구독만. 없으면 zero

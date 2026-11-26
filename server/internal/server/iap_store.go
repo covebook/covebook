@@ -85,9 +85,12 @@ func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKe
 
 // iapReservationYear는 이 유저의 결제 중 예약이 어느 해 책장의 것인지 알려 준다.
 // 5분이 지난 예약도 아직 지워지지 않았으면 연도를 준다(결제창에서 오래 머문 경우). 없거나 남의 예약이거나 UUID 모양이 아니면 0이다.
-func iapReservationYear(ctx context.Context, q dbtx, user int64, id string) (int, error) {
+func iapReservationYear(ctx context.Context, q dbtx, user int64, id string, purchasedAt time.Time) (int, error) {
+	// 예약보다 먼저 끝난 결제는 이 예약의 결제가 아니다. 스토어와 우리 시계의 차이를 1분 봐준다
 	var year int
-	err := q.QueryRow(ctx, "SELECT year FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=lower($2)", user, id).Scan(&year)
+	err := q.QueryRow(ctx, `SELECT year FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=lower($2)
+		AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz + interval '1 minute')`,
+		user, id, iapNullTime(purchasedAt)).Scan(&year)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
@@ -244,6 +247,9 @@ type iapSubscription struct {
 // user가 다르면 소유자가 바뀐다(구매 복원, D8). 이전 소유자의 번호를 돌려준다(없었거나 같으면 0).
 func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubscription) (int64, error) {
 	var previous *int64
+	if err := iapLockSubscription(ctx, tx, s.Route, s.OriginalID); err != nil {
+		return 0, err
+	}
 	err := tx.QueryRow(ctx, "SELECT user_id FROM iap_subscriptions WHERE route=$1 AND original_id=$2 FOR UPDATE", string(s.Route), s.OriginalID).Scan(&previous)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return 0, err
@@ -252,13 +258,13 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 	if !s.GraceUntil.IsZero() {
 		grace = &s.GraceUntil
 	}
-	// 읽은 뒤 다른 곳이 고친 줄이면(updated_at이 읽기 시작보다 뒤) 상태 칸은 그 값을 둔다. 트랜잭션 시각에서 거슬러 재서 서버와 DB의 시계 차이를 타지 않는다
+	// 읽은 뒤 다른 곳이 고친 줄이면(updated_at이 읽기 시작보다 뒤) 상태 칸은 그 값을 둔다. DB의 지금 시각(clock_timestamp, 잠금을 기다린 시간 포함)에서 거슬러 재서 서버와 DB의 시계 차이를 타지 않는다
 	var readAgo *float64
 	if s.ReadAgo > 0 {
 		sec := s.ReadAgo.Seconds()
 		readAgo = &sec
 	}
-	fresh := "($12::float8 IS NULL OR iap_subscriptions.updated_at <= now() - make_interval(secs => $12::float8))"
+	fresh := "($12::float8 IS NULL OR iap_subscriptions.updated_at <= clock_timestamp() - make_interval(secs => $12::float8))"
 	pick := func(col string) string {
 		return col + "=CASE WHEN " + fresh + " THEN EXCLUDED." + col + " ELSE iap_subscriptions." + col + " END"
 	}
@@ -389,6 +395,9 @@ func iapPurchaseOwner(ctx context.Context, q dbtx, route iap.Route, key string) 
 
 // iapSubscriptionOwner는 구독 1건의 지금 주인을 찾고 그 줄을 잠근다. 트랜잭션 안에서만 부른다.
 func iapSubscriptionOwner(ctx context.Context, tx pgx.Tx, route iap.Route, originalID string) (iapOwner, error) {
+	if err := iapLockSubscription(ctx, tx, route, originalID); err != nil {
+		return iapOwner{}, err
+	}
 	var user *int64
 	err := tx.QueryRow(ctx, "SELECT user_id FROM iap_subscriptions WHERE route=$1 AND original_id=$2 FOR UPDATE", string(route), originalID).Scan(&user)
 	return iapOwnerOf(user, err)
@@ -509,5 +518,33 @@ func iapReleaseOldestReservation(ctx context.Context, q dbtx, user int64, year i
 	_, err := q.Exec(ctx, `DELETE FROM iap_shelf_reservations WHERE id = (
 		SELECT id FROM iap_shelf_reservations WHERE user_id=$1 AND year=$2 AND expires_at > now()
 		ORDER BY created_at, id LIMIT 1)`, user, year)
+	return err
+}
+
+// iapTokenOwner는 계정 연결 값(구독용이든 연도용이든)을 발급받은 유저다. 모르는 값이면 0이다
+func iapTokenOwner(ctx context.Context, q dbtx, token string) (int64, error) {
+	if _, err := uuid.Parse(token); err != nil {
+		return 0, nil
+	}
+	var user int64
+	err := q.QueryRow(ctx, "SELECT user_id FROM iap_account_tokens WHERE token=$1::uuid", token).Scan(&user)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return user, err
+}
+
+// iapNullTime은 0 시각을 NULL로 넘긴다
+func iapNullTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+// iapLockSubscription은 구독 1건(경로, 원 거래 ID)을 트랜잭션 끝까지 잠근다. 줄이 아직 없을 때도 잠기므로
+// 두 계정이 같은 새 구독을 동시에 내도 하나씩 처리된다(FOR UPDATE는 없는 줄을 잠그지 못한다)
+func iapLockSubscription(ctx context.Context, tx pgx.Tx, route iap.Route, originalID string) error {
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1 || '/' || $2, 0))", string(route), originalID)
 	return err
 }
