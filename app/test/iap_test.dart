@@ -18,6 +18,7 @@ import 'package:chaekjang/features/iap/subscription_screen.dart';
 import 'package:chaekjang/features/iap/withdraw_notice.dart';
 import 'package:chaekjang/services/iap.dart';
 import 'package:chaekjang/services/renewal_reminder.dart';
+import 'package:chaekjang/features/book/place_books.dart' show enforceShelfLimit;
 import 'package:chaekjang/store/entitlement_store.dart';
 import 'package:chaekjang/ui/kit.dart';
 import 'package:flutter/material.dart';
@@ -99,6 +100,7 @@ void _reset() {
 void main() {
   setUpAll(_fonts);
   setUp(_reset);
+  _resetAfterLogout();
 
   test('거래를 끝내도 되는 때: 지급됐거나, 다시 내도 결과가 같을 때만', () {
     expect(iapShouldFinish(status: 200), isTrue);
@@ -801,4 +803,25 @@ void main() {
     await t.pumpAndSettle();
     expect(_says('추가 선반이 열리지 않았습니다'), findsNothing);
   });
+}
+
+void _resetAfterLogout() {
+  test('로그아웃 초기화: 앞 계정의 서버 상태 표시를 지워, 새 계정 상태를 받기 전에는 선반을 닫지 않는다', () async {
+    final s = IapService.instance
+      ..synced = true
+      ..details = {'shelf': _detail('shelf', '추가 선반', '스토어 가격')}
+      ..plans = [IapPlan(details: _detail('plus', '플러스', '월 스토어 가격'), period: 'month')]
+      ..busy = true
+      ..lastResult = IapResult.granted
+      ..lastMessage = '앞 계정의 결과';
+    s.reset();
+    expect(s.synced, isFalse);
+    expect(s.details, isEmpty);
+    expect(s.plans, isEmpty);
+    expect(s.busy, isFalse);
+    expect(s.lastResult, isNull);
+    expect(s.lastMessage, isNull);
+    // synced가 false면 칸 수가 비어 있어도 선반을 닫지 않는다
+    expect(await enforceShelfLimit(), 0);
+  }, skip: !iapOn);
 }

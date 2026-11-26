@@ -11,9 +11,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart' hide kIAPSource; // 같은 이름이 storekit에도 있다. 여기서는 애플 값을 쓴다
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart';
 import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
@@ -135,20 +136,40 @@ class IapService extends ChangeNotifier {
   /// 살 수 있는 구독 요금제(월간 먼저)
   List<IapPlan> plans = const [];
 
-  /// 앱을 켤 때 한 번: 스토어가 주는 거래를 듣기 시작하고 서버에서 내 상태를 받는다.
+  /// 책장 화면이 뜰 때마다(앱을 켤 때, 로그아웃 뒤 다시 로그인했을 때): 서버에서 지금 계정의 상태를 받는다.
+  /// 스토어의 거래를 듣는 일은 앱 실행당 한 번이고, 상태 받기는 계정마다 한다(로그인하면 셸이 새로 만들어져 다시 불린다).
   /// iOS는 끝내지 않은 거래가 구매 스트림으로 다시 온다. 안드로이드는 다시 오지 않아 직접 묻는다(_resubmitAndroid)
   Future<void> start() async {
-    if (!iapOn || _sub != null) return;
+    if (!iapOn) return;
+    final first = _sub == null;
+    if (first) _sub = _store.purchaseStream.listen(_onPurchases, onError: (Object _) {});
     await EntitlementStore.instance.restore();
-    _sub = _store.purchaseStream.listen(_onPurchases, onError: (Object _) {});
     await refresh();
     if (Platform.isAndroid) {
       unawaited(_resubmitAndroid());
       // 다시 앞으로 올 때도 묻는다(결제 대기가 앱 밖에서 끝난 경우 등). 결제창에서 돌아올 때는 구매 스트림이 처리하므로 건너뛴다
-      _life = AppLifecycleListener(onResume: () {
-        if (!busy) unawaited(_resubmitAndroid());
-      });
+      if (first) {
+        _life = AppLifecycleListener(onResume: () {
+          if (!busy) unawaited(_resubmitAndroid());
+        });
+      }
     }
+  }
+
+  /// 로그아웃·계정 전환 때(local_reset) 앞 계정의 값을 비운다. 특히 synced: 남아 있으면 새 계정의 상태를 받기 전에
+  /// 비워진 칸 수(0)로 선반을 닫는 일(enforceShelfLimit)이 돈다. 스토어 듣기는 그대로 둔다(앱 실행당 한 번)
+  void reset() {
+    synced = false;
+    details = const {};
+    plans = const [];
+    busy = false;
+    lastResult = null;
+    lastMessage = null;
+    _buying = null;
+    _shelfYear = null;
+    _reservation = null;
+    _lastResubmit = null;
+    notifyListeners();
   }
 
   @override
@@ -244,15 +265,56 @@ class IapService extends ChangeNotifier {
       }
       // 계정 연결 값을 스토어에 넘긴다(애플 appAccountToken, 구글 obfuscatedAccountId). 서버가 이 값으로 누구의 구매인지 본다
       final param = PurchaseParam(productDetails: d, applicationUserName: account);
-      if (product.kind == 'subscription') {
-        await _store.buyNonConsumable(purchaseParam: param);
-      } else {
-        // 안드로이드 소비는 서버가 한다(autoConsume을 끈다). iOS 플러그인은 true만 받는다(디버그 빌드 assert). iOS는 앱이 거래를 끝낸다
-        await _store.buyConsumable(purchaseParam: param, autoConsume: Platform.isIOS);
+      // 결제창을 띄우지 못하면 false가 온다(구글 launchBillingFlow가 OK가 아님). 이때는 구매 스트림이 오지 않을 수 있어 여기서 끝낸다
+      final started = product.kind == 'subscription'
+          ? await _store.buyNonConsumable(purchaseParam: param)
+          // 안드로이드 소비는 서버가 한다(autoConsume을 끈다). iOS 플러그인은 true만 받는다(디버그 빌드 assert). iOS는 앱이 거래를 끝낸다
+          : await _store.buyConsumable(purchaseParam: param, autoConsume: Platform.isIOS);
+      if (!started) _failStart();
+    } on PlatformException catch (e) {
+      // iOS: 같은 상품에 끝내지 않은 거래가 있으면 새 결제를 받지 않는다(서버가 404·503이라 앱이 끝내지 않은 거래).
+      // 그 거래는 앱을 다시 켜야 스트림으로 다시 오므로, 여기서 꺼내 서버에 다시 내고 결과대로 끝낸다
+      if (Platform.isIOS && e.code == 'storekit_duplicate_product_object') {
+        unawaited(_release());
+        _buying = null;
+        _shelfYear = null;
+        await _resubmitIos();
+        _done(IapResult.retryLater, '끝나지 않은 지난 결제를 먼저 확인했어요. 반영된 내용을 확인한 뒤 필요하면 다시 결제해 주세요.');
+        return;
+      }
+      _failStart();
+    } catch (_) {
+      _failStart();
+    }
+  }
+
+  void _failStart() {
+    unawaited(_release());
+    _buying = null;
+    _shelfYear = null;
+    _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+  }
+
+  /// iOS: 끝내지 않은 거래(StoreKit 2 Transaction.unfinished)를 서버에 다시 내고, 끝내도 되는 것만 끝낸다
+  Future<void> _resubmitIos() async {
+    try {
+      for (final t in await SK2Transaction.unfinishedTransactions()) {
+        final proof = t.receiptData ?? '';
+        if (proof.isEmpty) continue;
+        final d = SK2PurchaseDetails(
+          productID: t.productId,
+          purchaseID: t.id,
+          verificationData: PurchaseVerificationData(localVerificationData: t.jsonRepresentation ?? '', serverVerificationData: proof, source: kIAPSource),
+          transactionDate: t.purchaseDate,
+          status: PurchaseStatus.purchased,
+          appAccountToken: t.appAccountToken,
+          sk2Transaction: t,
+        );
+        final result = await _submit(d, restore: false);
+        if (result.$2) await _store.completePurchase(d);
       }
     } catch (_) {
-      unawaited(_release());
-      _done(IapResult.retryLater, '결제를 시작하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+      // 스토어에 닿지 못했다. 앱을 다시 켜면 스트림으로 다시 온다
     }
   }
 
