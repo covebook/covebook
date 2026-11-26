@@ -136,7 +136,17 @@ var _ Store = (*Apple)(nil)
 - 클라이언트가 연결을 끊으면 `r.Context()`가 취소되고, 그 `ctx`를 받은 DB 쿼리와 HTTP 호출이 같이 멈춤
 - Java에는 딱 맞는 것이 없음. 스레드 인터럽트와 요청 범위 값을 합친 것에 가까움
 - 규칙: 받은 `ctx`를 아래 함수에 그대로 넘김. 구조체 필드에 저장하지 않음
-- 주의: 지급 트랜잭션은 요청이 끊겨도 끝까지 가야 하는지 #10에서 정해야 함. 정하면 여기에 추가
+- 결제에서 정한 것(#10, 2026-11-26)
+  - 지급 트랜잭션은 요청 `ctx`를 그대로 씀. 앱이 끊으면 롤백되고, 앱이 같은 거래를 다시 내면 처음부터 다시 함(멱등)
+  - 커밋 뒤 스토어 확인은 끊기면 안 됨(구글은 3일 안에 확인하지 않으면 환불). `context.WithoutCancel(ctx)`로 취소만 떼어 내고 `context.WithTimeout`으로 시간을 새로 줌
+
+```go
+after, cancel := context.WithTimeout(context.WithoutCancel(ctx), iapStoreTimeout)
+defer cancel()
+store.Confirm(after, ref, productID, consume)
+```
+
+  - 앞의 조회에 쓴 `storeCtx`를 다시 쓰지 않음. 같은 15초를 나눠 써서, 조회가 오래 걸리면 확인이 바로 시간 초과가 됨
 
 ## 6. 트랜잭션
 

@@ -37,7 +37,7 @@
 | 서버 검증 | 앱이 "샀다"고 해도 믿지 않고 서버가 스토어에 직접 물어 확인하는 것 | `POST /iap/purchases` (D18) |
 | 확인(acknowledge) | 구글에 "받았다"고 알리는 것. 3일 안에 안 하면 구글이 자동 환불한다 | `confirmed_at` |
 | 소비(consume) | 구글 소모성 상품을 "다 썼다"고 알리는 것. 해야 같은 상품을 다시 살 수 있다. 소비도 확인으로 친다 | `consume` 칸 |
-| 거래 끝내기(finish) | 앱이 스토어에 "처리했다"고 알리는 것. 안 끝내면 다음 실행에 같은 거래가 다시 온다 | 앱 `iapShouldFinish` |
+| 거래 끝내기(finish) | 앱이 스토어에 "처리했다"고 알리는 것. 애플은 안 끝내면 다음 실행에 같은 거래가 다시 온다. 구글은 다시 오지 않아 앱이 `queryPastPurchases`로 묻는다 | 앱 `iapShouldFinish`. 200·409·대부분의 422는 끝내고, 202·404·429·503과 `iap_bad_proof`·`iap_shelf_year_missing`·`iap_unknown_product`는 끝내지 않음 |
 | 복원(restore) | 기기를 바꾸거나 다시 깔았을 때 스토어에 산 것을 다시 묻는 것. 소모성은 돌아오지 않는다 | 구매 복원 단추, D8 |
 | 멱등(idempotent) | 같은 요청을 여러 번 해도 결과가 한 번 한 것과 같음 | 유일 제약 (D6) |
 | 원장(ledger) | 지우지 않고 쌓기만 하는 기록. 바뀐 것도 새 상태로 남긴다 | `iap_purchases` |
