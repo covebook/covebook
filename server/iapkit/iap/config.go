@@ -2,6 +2,7 @@ package iap
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -18,42 +19,57 @@ const (
 
 // FromEnv는 환경변수로 설정된 스토어만 만들어 돌려준다.
 // 한 스토어의 값이 전부 비어 있으면 그 스토어는 꺼진 것이다(오류 아님).
-// 일부만 있으면 오류다. 반쯤 설정된 채로 켜지는 것을 막는다.
+// 일부만 있거나 키 형식이 틀리면 그 스토어만 켜지지 않고 오류에 적는다. 반쯤 설정된 채로 켜지는 것을 막는다.
+// 스토어마다 따로 본다. 구글 키를 잘못 넣었다고 이미 돌던 애플 결제까지 꺼지면, 돈을 낸 사용자의 제출이 모두 실패한다.
+// 그래서 오류가 있어도 제대로 설정된 스토어는 돌려준다. 부르는 쪽은 오류를 경보로 올린다.
 // getenv를 인자로 받는 것은 시험에서 가짜 환경을 넣기 위해서다. 실제로는 os.Getenv를 넘긴다.
 func FromEnv(getenv func(string) string) (map[Route]Store, error) {
 	stores := map[Route]Store{}
+	var errs []error
 
-	apple := []string{envAppleKey, envAppleKeyID, envAppleIssuer, envAppleBundle}
-	on, err := allOrNone(getenv, apple)
+	if s, err := appleFromEnv(getenv); err != nil {
+		errs = append(errs, err)
+	} else if s != nil {
+		stores[RouteApple] = s
+	}
+	if s, err := googleFromEnv(getenv); err != nil {
+		errs = append(errs, err)
+	} else if s != nil {
+		stores[RouteGoogle] = s
+	}
+	return stores, errors.Join(errs...)
+}
+
+// appleFromEnv는 애플 값이 모두 비면 nil, nil이다.
+func appleFromEnv(getenv func(string) string) (Store, error) {
+	on, err := allOrNone(getenv, []string{envAppleKey, envAppleKeyID, envAppleIssuer, envAppleBundle})
+	if err != nil || !on {
+		return nil, err
+	}
+	key, err := decodeKey(getenv(envAppleKey), "-----BEGIN")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", envAppleKey, err)
+	}
+	return NewApple(AppleConfig{
+		KeyP8: key, KeyID: getenv(envAppleKeyID), IssuerID: getenv(envAppleIssuer), BundleID: getenv(envAppleBundle),
+	}), nil
+}
+
+// googleFromEnv는 구글 값이 모두 비면 nil, nil이다.
+func googleFromEnv(getenv func(string) string) (Store, error) {
+	on, err := allOrNone(getenv, []string{envGoogleKey, envGooglePkg})
+	if err != nil || !on {
+		return nil, err
+	}
+	key, err := decodeKey(getenv(envGoogleKey), "{")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", envGoogleKey, err)
+	}
+	g, err := NewGoogle(key, getenv(envGooglePkg))
 	if err != nil {
 		return nil, err
 	}
-	if on {
-		key, err := decodeKey(getenv(envAppleKey), "-----BEGIN")
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", envAppleKey, err)
-		}
-		stores[RouteApple] = NewApple(AppleConfig{
-			KeyP8: key, KeyID: getenv(envAppleKeyID), IssuerID: getenv(envAppleIssuer), BundleID: getenv(envAppleBundle),
-		})
-	}
-
-	on, err = allOrNone(getenv, []string{envGoogleKey, envGooglePkg})
-	if err != nil {
-		return nil, err
-	}
-	if on {
-		key, err := decodeKey(getenv(envGoogleKey), "{")
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", envGoogleKey, err)
-		}
-		g, err := NewGoogle(key, getenv(envGooglePkg))
-		if err != nil {
-			return nil, err
-		}
-		stores[RouteGoogle] = g
-	}
-	return stores, nil
+	return g, nil
 }
 
 // allOrNone은 이름들이 전부 채워졌으면 true, 전부 비었으면 false, 섞였으면 오류를 돌려준다.

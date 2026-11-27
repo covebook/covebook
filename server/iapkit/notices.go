@@ -186,6 +186,10 @@ func iapNoteSubscriptionChange(ctx context.Context, q dbtx, user int64, before i
 		if refunded, err := iapRecentlyRefunded(ctx, q, user, line); err != nil || refunded {
 			return err
 		}
+		// 같은 권한의 다른 구독이 유효하면 "구독이 끝났습니다"는 틀린 말이다(구글 요금제 교체로 옛 구독이 끝남, 두 스토어 중복 구독)
+		if covered, err := iapStillEntitled(ctx, q, user, s); err != nil || covered {
+			return err
+		}
 		return iapWriteNotice(ctx, q, user, noticeExpired, s.Env, "expired:"+line+":"+iapStamp(s.ExpiresAt), with("expiresAt", iapStamp(s.ExpiresAt)))
 	case s.State != iap.StatePaid:
 		return nil
@@ -356,6 +360,17 @@ func iapNoteRenewals(ctx context.Context, q dbtx, now time.Time, days int) (int,
 
 // iapRecentlyRefunded는 이 구독(경로:원래 거래 ID)의 환불을 하루 안에 이미 알렸는지 본다.
 // 환불 키는 "subscription_refunded:<경로>:<원래 거래 ID>:<거래 번호>"라 앞부분으로 찾는다
+// iapStillEntitled는 이 구독 말고도 같은 권한을 주는 유효한 구독이 유저에게 있는지 본다.
+func iapStillEntitled(ctx context.Context, q dbtx, user int64, s iapSubscription) (bool, error) {
+	var covered bool
+	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM iap_subscriptions o
+		JOIN iap_products p ON p.route=o.route AND p.product_id=o.product_id
+		WHERE o.user_id=$1 AND NOT (o.route=$2 AND o.original_id=$3) AND o.state='paid' AND coalesce(o.grace_until, o.expires_at) > now()
+		  AND p.entitlement = (SELECT entitlement FROM iap_products WHERE route=$2 AND product_id=$4))`,
+		user, string(s.Route), s.OriginalID, s.ProductID).Scan(&covered)
+	return covered, err
+}
+
 func iapRecentlyRefunded(ctx context.Context, q dbtx, user int64, line string) (bool, error) {
 	var refunded bool
 	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM iap_notices WHERE user_id=$1

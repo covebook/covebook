@@ -657,11 +657,12 @@ type iapNoticeRow struct {
 }
 
 // iapPendingNotifications는 아직 처리하지 못한 알림을 오래된 것부터 고른다.
-// 실패한 것은 시도할수록 간격을 늘린다(1분, 2분, 4분 … 최대 약 17시간). 8일이 지난 것은 더 시도하지 않는다.
+// 실패한 것은 시도할수록 간격을 늘린다(1분, 2분, 4분 … 최대 약 17시간). 30일이 지난 것은 더 시도하지 않는다.
+// 8일에서 끊지 않는다. 스토어 키나 권한 문제가 길어져도 고친 뒤 환불·되돌림이 반영되게(8일이 넘으면 경보가 울린다)
 func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNoticeRow, error) {
 	rows, err := q.Query(ctx, `SELECT route, notification_id, coalesce(target_kind,''), coalesce(target_id,''), coalesce(original_id,''), coalesce(order_id,''), kind
 		FROM iap_notifications
-		WHERE result IN ('received','failed') AND received_at > now() - interval '8 days'
+		WHERE result IN ('received','failed') AND received_at > now() - interval '30 days'
 		  AND (processed_at IS NULL OR processed_at < now() - interval '1 minute' * power(2, least(attempts, 10)))
 		ORDER BY received_at LIMIT $1`, limit)
 	if err != nil {
@@ -742,10 +743,13 @@ func iapUnconfirmedPurchases(ctx context.Context, q dbtx, limit int) ([]iapUncon
 // iapDueSubscriptions는 스토어에 다시 물어볼 구독을 고른다(애플이 권하는 "갱신 시점 재확인").
 //   - 유효한데 만료(유예 중이면 유예 끝)가 5분 안으로 다가왔거나 지난 것. 갱신됐는지 확인한다. 10분에 한 번
 //   - 권한이 없지만 만료된 지 60일이 안 된 것. 결제 재시도로 되살아났는지 확인한다. 하루에 한 번
+//   - 유효하거나 환불된 것 중 아직 만료 전인 것. 놓친 환불·환불 되돌림을 찾는다. 하루에 한 번
 func iapDueSubscriptions(ctx context.Context, q dbtx, limit int) ([][2]string, error) {
 	rows, err := q.Query(ctx, `SELECT route, original_id FROM iap_subscriptions
 		WHERE (state='paid' AND coalesce(grace_until, expires_at) < now() + interval '5 minutes' AND updated_at < now() - interval '10 minutes')
 		   OR (state='inactive' AND expires_at > now() - interval '60 days' AND updated_at < now() - interval '24 hours')
+		   -- 유효한 구독과 환불된 구독도 하루에 한 번 묻는다. 환불·환불 되돌림 알림을 놓치면 만료일(연 구독은 최대 1년)까지 틀린 채로 남기 때문이다
+		   OR (state IN ('paid','revoked') AND coalesce(grace_until, expires_at) > now() AND updated_at < now() - interval '24 hours')
 		ORDER BY updated_at LIMIT $1`, limit)
 	if err != nil {
 		return nil, err

@@ -39,18 +39,25 @@ func EnvEnabled() bool {
 	return false
 }
 
-// StoresFromEnv는 스위치가 켜져 있을 때 환경변수로 스토어를 만든다(iap.FromEnv, README의 환경 변수 표). 실패하면 결제를 끈 채로 둔다.
+// storeConfigProblem은 마지막 StoresFromEnv가 찾은 설정 문제다. New가 키트에 옮겨 담아 경보로 올린다
+var storeConfigProblem string
+
+// StoresFromEnv는 스위치가 켜져 있을 때 환경변수로 스토어를 만든다(iap.FromEnv, README의 환경 변수 표).
+// 한 스토어의 설정이 틀려도 나머지는 켠다. 틀린 것은 "iap alert:" 로그로 남기고, 대조가 돌 때마다(한 시간에 한 번) 다시 알린다
 func StoresFromEnv() map[iap.Route]iap.Store {
+	storeConfigProblem = ""
 	if !EnvEnabled() {
 		return nil
 	}
 	stores, err := iap.FromEnv(os.Getenv)
-	if err != nil {
-		log.Printf("iap disabled: %v", err)
-		return nil
+	switch {
+	case err != nil:
+		storeConfigProblem = "store config invalid: " + strings.ReplaceAll(err.Error(), "\n", "; ")
+	case len(stores) == 0:
+		storeConfigProblem = "IAP_ENABLED is set but no store keys are configured"
 	}
-	if len(stores) == 0 {
-		log.Printf("iap disabled: IAP_ENABLED is set but no store keys are configured")
+	if storeConfigProblem != "" {
+		log.Printf("iap alert: %s (enabled stores: %d)", storeConfigProblem, len(stores))
 	}
 	return stores
 }

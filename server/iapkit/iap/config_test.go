@@ -30,6 +30,14 @@ func TestFromEnv(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), envGoogleKey) {
 		t.Fatalf("구글 일부 설정: %v", err)
 	}
+	// 구글만 틀려도 제대로 된 애플은 켜진다(오류는 함께 준다)
+	stores, err = FromEnv(env(map[string]string{
+		envAppleKey: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----", envAppleKeyID: "K", envAppleIssuer: "I", envAppleBundle: "app.covebook",
+		envGooglePkg: "app.covebook",
+	}))
+	if err == nil || stores[RouteApple] == nil || stores[RouteGoogle] != nil {
+		t.Fatalf("구글만 틀림: %v %v", stores, err)
+	}
 }
 
 func TestDecodeKey(t *testing.T) {

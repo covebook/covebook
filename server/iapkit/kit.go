@@ -32,22 +32,32 @@ type Kit struct {
 	// HTTP는 구글 알림 인증서를 받을 때 쓴다
 	HTTP *http.Client
 
-	iapMu        sync.Mutex
-	iapHits      map[int64]iapHit
-	iapRenewalAt time.Time                                             // 갱신 예정 고지를 마지막으로 찾은 때
-	iapCatchUpAt map[iap.Route]time.Time                               // 경로마다 스토어 목록으로 메우기를 마지막으로 돌린 때
-	iapLoggedAt  time.Time                                             // 대조 요약 로그를 마지막으로 남긴 때
-	iapAlertedAt map[string]time.Time                                  // 경보 종류마다 로그를 마지막으로 남긴 때
-	iapWake      chan struct{}                                         // 새 알림이 오면 처리 작업을 깨운다
-	iapPushAuth  func(ctx context.Context, authorization string) error // 구글 알림 요청의 인증 확인. 없으면 구글 알림을 받지 않는다
+	iapMu             sync.Mutex
+	iapHits           map[int64]iapHit
+	iapRenewalAt      time.Time                                             // 갱신 예정 고지를 마지막으로 찾은 때
+	iapCatchUpAt      map[iap.Route]time.Time                               // 경로마다 스토어 목록으로 메우기를 마지막으로 돌린 때
+	iapLoggedAt       time.Time                                             // 대조 요약 로그를 마지막으로 남긴 때
+	iapConfigProblems []string                                              // 켤 때 찾은 설정 문제(틀린 스토어 설정, 구글 알림 인증 없음). 경보와 운영자 통계에 나온다
+	iapAlertedAt      map[string]time.Time                                  // 경보 종류마다 로그를 마지막으로 남긴 때
+	iapWake           chan struct{}                                         // 새 알림이 오면 처리 작업을 깨운다
+	iapPushAuth       func(ctx context.Context, authorization string) error // 구글 알림 요청의 인증 확인. 없으면 구글 알림을 받지 않는다
 }
 
 // New는 결제 서버를 만든다. stores가 비어 있으면 결제를 끈 것이다(경로도 정기 처리도 없다).
 // 구글 경로가 있으면 구글 알림 요청의 인증 설정(IAP_GOOGLE_PUSH_AUDIENCE, IAP_GOOGLE_PUSH_EMAIL)을 환경 변수에서 읽는다.
 func New(db *pgxpool.Pool, stores map[iap.Route]iap.Store, rules Rules, sandbox bool) *Kit {
 	k := &Kit{DB: db, IAP: stores, IAPRules: rules, IAPSandbox: sandbox, HTTP: &http.Client{Timeout: 8 * time.Second}, iapWake: make(chan struct{}, 1)}
+	if storeConfigProblem != "" && len(stores) > 0 {
+		k.iapConfigProblems = append(k.iapConfigProblems, storeConfigProblem)
+	}
 	if stores[iap.RouteGoogle] != nil {
 		k.iapPushAuth = k.iapGooglePushAuth()
+		if k.iapPushAuth == nil {
+			// 구글 알림 주소가 열리지 않는다. 환불·갱신은 6시간마다 도는 메우기와 구독 재조회로만 따라온다
+			p := "google push auth not configured (IAP_GOOGLE_PUSH_AUDIENCE, IAP_GOOGLE_PUSH_EMAIL): google notifications route is off"
+			log.Printf("iap alert: %s", p)
+			k.iapConfigProblems = append(k.iapConfigProblems, p)
+		}
 	}
 	return k
 }
