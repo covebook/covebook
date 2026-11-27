@@ -153,7 +153,7 @@ func (s *Kit) iapMe(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (s *Kit) iapIntent(w http.ResponseWriter, r *http.Request) error {
 		return iapTooMany
 	}
 	ctx := r.Context()
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return err
 	}
@@ -477,7 +477,7 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// 4. 짧은 트랜잭션: 주인 확인 → 원장 → 커밋.
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return err
 	}

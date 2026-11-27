@@ -195,23 +195,75 @@ type iapSweepResult struct {
 	Backfilled, Voided                           int // 스토어의 목록으로 메운 알림, 반영한 환불
 	Renewals                                     int // 새로 쓴 갱신 예정 고지
 	Refunds                                      int // 주지 않은 거래(상한 넘김, 대상 모름, 주인 없음)의 환불을 요청해 성공한 수(구글)
+	Resting                                      int // 스토어가 한도(429)에 걸려 쉬는 중이라 이번에 건너뛴 건
+	Cut                                          int // 단계 마감 시각이 지나 이번 바퀴에 못 한 단계 수
+}
+
+// 대조 한 바퀴(2분) 안에서 단계마다 끝나야 하는 시각(시작부터). 앞 단계가 느린 스토어에 묶여도 뒤 단계가 돌 시간을 남긴다.
+// 마감은 누적이라 앞 단계가 빨리 끝나면 남은 시간을 뒤 단계가 쓴다. 기한이 있는 일(구글 확인 3일)에 가장 많이 준다.
+// 마감에 걸린 건은 다음 바퀴(1분 뒤)에 이어서 한다. 모두 다시 해도 되는 일이다
+var iapSweepStages = struct {
+	confirm, catchUp, notices, refunds, subscriptions time.Duration
+}{
+	confirm:       30 * time.Second,
+	catchUp:       60 * time.Second,
+	notices:       80 * time.Second,
+	refunds:       95 * time.Second,
+	subscriptions: 115 * time.Second, // 남은 5초는 DB만 쓰는 갱신 예정 고지
 }
 
 // iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
 // 순서: 기한이 있는 것(구글 확인 3일)을 가장 먼저 한다. 한 단계가 실패해도 다음 단계는 돈다.
-func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
+func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 	var res iapSweepResult
 	var firstErr error
 	keep := func(err error) {
-		if err != nil && firstErr == nil {
+		if err != nil && firstErr == nil && jobCtx.Err() == nil {
 			firstErr = err
 		}
 	}
+	start := time.Now()
+	// stage는 단계의 마감 시각까지 쓰는 ctx를 준다. 마감이 지난 단계는 건너뛴다(ok=false)
+	stage := func(until time.Duration) (context.Context, context.CancelFunc, bool) {
+		c, cancel := context.WithDeadline(jobCtx, start.Add(until))
+		if c.Err() != nil {
+			res.Cut++
+			return c, cancel, false
+		}
+		return c, cancel, true
+	}
+	// over는 단계 도중 마감이 지났는지 본다. 지났으면 남은 건은 다음 바퀴로 넘긴다
+	over := func(c context.Context) bool {
+		if c.Err() != nil {
+			res.Cut++
+			return true
+		}
+		return false
+	}
+	// resting은 그 경로의 스토어가 한도에 걸려 쉬는 중인지 본다. 쉬는 중이면 부르지 않고 건너뛴다(시도 횟수도 쓰지 않는다)
+	resting := func(route iap.Route) bool {
+		if r, ok := s.IAP[route].(iap.Rester); ok && time.Now().Before(r.RestingUntil()) {
+			res.Resting++
+			return true
+		}
+		return false
+	}
 
 	// 1. 스토어 확인을 못 마친 거래
-	unconfirmed, err := iapUnconfirmedPurchases(ctx, s.DB, 100)
-	keep(err)
+	ctx, cancel, ok := stage(iapSweepStages.confirm)
+	var unconfirmed []iapUnconfirmed
+	if ok {
+		var err error
+		unconfirmed, err = iapUnconfirmedPurchases(ctx, s.DB, 100)
+		keep(err)
+	}
 	for _, u := range unconfirmed {
+		if over(ctx) {
+			break
+		}
+		if resting(u.Route) {
+			continue
+		}
 		iapSafely("confirm", func() {
 			store := s.IAP[u.Route]
 			if store == nil {
@@ -237,33 +289,65 @@ func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			res.Confirmed++
 		})
 	}
+	cancel()
 
 	// 2. 스토어의 목록으로 빠진 알림과 환불을 메운다(6시간에 한 번). 넣은 알림은 바로 아래에서 처리된다
-	s.iapCatchUp(ctx, &res)
+	if ctx, cancel, ok = stage(iapSweepStages.catchUp); ok {
+		s.iapCatchUp(ctx, &res)
+	}
+	cancel()
 	// 3. 밀린 알림
-	notices, err := iapPendingNotifications(ctx, s.DB, 100)
-	keep(err)
+	ctx, cancel, ok = stage(iapSweepStages.notices)
+	var notices []iapNoticeRow
+	if ok {
+		var err error
+		notices, err = iapPendingNotifications(ctx, s.DB, 100)
+		keep(err)
+	}
 	for _, n := range notices {
+		if over(ctx) {
+			break
+		}
+		if resting(n.Route) {
+			continue
+		}
 		result, note := s.iapProcessNoticeSafely(ctx, n)
+		if ctx.Err() != nil && result == "failed" {
+			// 마감 때문에 끊긴 것은 알림의 실패가 아니다. 시도 횟수를 쓰지 않고 다음 바퀴에 다시 한다
+			res.Cut++
+			break
+		}
 		if result == "failed" {
 			res.NoticesFailed++
 			log.Printf("iap notification failed (will retry): route=%s id=%s err=%s", n.Route, n.ID, note)
 		} else {
 			res.Notices++
 		}
-		keep(iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note))
+		// 처리 결과는 마감과 상관없이 남긴다. 처리하고도 못 적으면 다음 바퀴에 같은 알림을 또 처리한다
+		keep(iapFinishNotification(jobCtx, s.DB, n.Route, n.ID, result, note))
 	}
+	cancel()
 
 	// 4. 상한을 넘게 산 거래 중 환불 요청을 못 마친 것(구글). 처음 요청은 제출·알림 처리에서 한다
 	var refunders []string
 	for route, store := range s.IAP {
-		if _, ok := store.(iap.Refunder); ok {
+		if _, ok := store.(iap.Refunder); ok && !resting(route) {
 			refunders = append(refunders, string(route))
 		}
 	}
-	overCap, err := iapOverCapToRefund(ctx, s.DB, refunders, 50)
-	keep(err)
+	ctx, cancel, ok = stage(iapSweepStages.refunds)
+	var overCap, ungranted []iapOverCapRow
+	if ok && len(refunders) > 0 {
+		var err error
+		overCap, err = iapOverCapToRefund(ctx, s.DB, refunders, 50)
+		keep(err)
+		ungranted, err = iapUngrantedToRefund(ctx, s.DB, refunders, 50)
+		keep(err)
+	}
 	for _, o := range overCap {
+		if over(ctx) {
+			break
+		}
 		iapSafely("over cap refund", func() {
 			store := s.IAP[o.Route]
 			if _, ok := store.(iap.Refunder); !ok {
@@ -285,9 +369,10 @@ func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	}
 	// 대상을 끝내 모르는 거래(2일 뒤)와 주인 없는 거래. 앱이 대상과 함께 다시 낼 시간을 준 뒤 구글 3일 자동 환불보다 먼저 한다.
 	// 환불하는 순간 앱이 대상을 붙여 내 받았어도, 구글 환불 알림(voided)이 와서 회수한다
-	ungranted, err := iapUngrantedToRefund(ctx, s.DB, refunders, 50)
-	keep(err)
 	for _, o := range ungranted {
+		if over(ctx) {
+			break
+		}
 		iapSafely("ungranted refund", func() {
 			store := s.IAP[o.Route]
 			storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
@@ -303,11 +388,24 @@ func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		})
 	}
 
+	cancel()
+
 	// 5. 만료가 다가왔거나 지난 구독
-	due, err := iapDueSubscriptions(ctx, s.DB, 200)
-	keep(err)
+	ctx, cancel, ok = stage(iapSweepStages.subscriptions)
+	var due [][2]string
+	if ok {
+		var err error
+		due, err = iapDueSubscriptions(ctx, s.DB, 200)
+		keep(err)
+	}
 	for _, d := range due {
+		if over(ctx) {
+			break
+		}
 		route, original := iap.Route(d[0]), d[1]
+		if resting(route) {
+			continue // 미루지 않는다(bump). 쉬는 동안 순서를 흐트러뜨릴 이유가 없다
+		}
 		if iapSafely("subscription", func() {
 			store := s.IAP[route]
 			if store == nil {
@@ -316,6 +414,9 @@ func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
 				return
 			}
 			if _, e := s.iapSyncSubscription(ctx, store, original); e != nil {
+				if ctx.Err() != nil {
+					return // 마감에 끊긴 것. 다음 바퀴에 같은 순서로 다시 한다
+				}
 				log.Printf("iap subscription refresh failed: route=%s err=%v", route, e)
 				keep(iapBumpSubscription(ctx, s.DB, route, original))
 				return
@@ -323,13 +424,14 @@ func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			res.Refreshed++
 		}) {
 			// 패닉 난 구독이 다음 바퀴에도 맨 앞에 뽑혀 뒤의 구독을 막지 않게 뒤로 보낸다
-			keep(iapBumpSubscription(ctx, s.DB, route, original))
+			keep(iapBumpSubscription(jobCtx, s.DB, route, original))
 		}
 	}
+	cancel()
 
-	// 6. 곧 갱신될 연 구독에 갱신 예정 고지(T4). 5에서 만료일을 새로 받은 뒤에 본다. 6시간에 한 번
-	if now := time.Now().UTC(); s.iapRenewalDue(now) {
-		n, e := iapNoteRenewals(ctx, s.DB, now, iapRenewalNoticeDays())
+	// 6. 곧 갱신될 연 구독에 갱신 예정 고지(T4). 5에서 만료일을 새로 받은 뒤에 본다. 6시간에 한 번. DB만 쓰고 남은 시간을 다 쓴다
+	if now := time.Now().UTC(); jobCtx.Err() == nil && s.iapRenewalDue(now) {
+		n, e := iapNoteRenewals(jobCtx, s.DB, now, iapRenewalNoticeDays())
 		keep(e)
 		res.Renewals = n
 	}
@@ -462,7 +564,7 @@ func (s *Kit) iapSyncSubscription(ctx context.Context, store iap.Store, original
 		return "결제 대기", iapBumpSubscription(ctx, s.DB, route, originalID)
 	}
 
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return "", err
 	}
@@ -598,7 +700,7 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 		return "", err
 	}
 	// 원장, 상한 넘김 판정, 결제 중 예약 풀기, 고지(T3 또는 넘김)를 한 트랜잭션에 쓴다(앱보다 알림이 먼저 온 경우)
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return "", err
 	}

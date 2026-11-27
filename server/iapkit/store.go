@@ -23,6 +23,35 @@ type dbtx interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+// 결제 트랜잭션의 DB 제한 시간. 잠금을 기다리다 연결 풀을 다 잡아먹지 않게 짧게 둔다.
+// 넘으면 PostgreSQL이 그 문장을 취소하고(55P03, 57014) 트랜잭션은 롤백된다. 요청은 503, 대조는 다음 바퀴에 다시 한다.
+const (
+	iapLockTimeout      = "5s"  // 행 잠금·advisory lock을 기다리는 최대 시간
+	iapStatementTimeout = "10s" // 문장 하나의 최대 시간
+)
+
+// iapBegin은 결제 트랜잭션을 연다. 제한 시간은 SET LOCAL과 같은 set_config(..., true)라 이 트랜잭션에만 걸리고,
+// 연결이 풀로 돌아갈 때 남지 않는다(키트를 붙인 앱의 다른 쿼리에 영향 없음).
+func iapBegin(ctx context.Context, db interface {
+	Begin(context.Context) (pgx.Tx, error)
+}) (pgx.Tx, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, "SELECT set_config('lock_timeout', $1, true), set_config('statement_timeout', $2, true)", iapLockTimeout, iapStatementTimeout); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
+}
+
+// iapDBBusy는 위 제한 시간에 걸려 취소된 것인지 본다.
+func iapDBBusy(err error) bool {
+	var pe *pgconn.PgError
+	return errors.As(err, &pe) && (pe.Code == "55P03" || pe.Code == "57014")
+}
+
 // 대상마다의 상한(Rules.Cap)은 두 겹으로 지킨다(D1)
 //   - 결제 전: 결제 중 예약(iap_reservations)으로 두 기기가 동시에 상한을 넘게 사지 못하게 막는다
 //   - 결제 뒤: 그래도 넘은 거래는 over_cap으로 표시해 주지 않고 환불한다. 수량을 셀 때도 상한에서 한 번 더 자른다

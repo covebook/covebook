@@ -161,6 +161,11 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 		if (!hasHistory && !hasVoided) || !s.iapCatchUpDue(route, now) {
 			continue
 		}
+		if r, ok := store.(iap.Rester); ok && now.Before(r.RestingUntil()) {
+			// 한도에 걸려 쉬는 중. 이번 차례를 쓰지 않았으니 iapCatchUpDue가 다음 바퀴에 다시 고른다
+			res.Resting++
+			continue
+		}
 		since := iapCatchUpSince(ctx, s.DB, route, now)
 		if hasHistory {
 			storeCtx, cancel := context.WithTimeout(ctx, 2*iapStoreTimeout)
@@ -303,8 +308,8 @@ func (s *Kit) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	if skip {
 		return
 	}
-	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds over_cap=%d over_cap_apple=%d no_target=%d no_plan=%d",
-		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals, res.Refunds,
+	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d resting=%d cut=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds over_cap=%d over_cap_apple=%d no_target=%d no_plan=%d",
+		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals, res.Refunds, res.Resting, res.Cut,
 		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestUnconfirmedSecs, b.OldestPendingSecs, b.OverCap, b.OverCapApple, b.NoTarget, b.NoPlan)
 }
 

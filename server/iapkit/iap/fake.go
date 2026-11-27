@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Fake는 시험용 Store다. 스토어에 "있는" 거래를 미리 넣어 두고 쓴다.
@@ -18,6 +19,34 @@ type Fake struct {
 	History    []Notice            // NoticeHistory가 돌려줄, 스토어가 보냈던 알림
 	VoidedList []VoidedPurchase    // Voided가 돌려줄, 스토어가 환불한 구매
 	PanicOn    string              // Ref.ID나 원 거래 ID가 이 값이면 조회가 패닉한다(알림 하나의 패닉이 다른 처리를 막지 않는지 보는 시험용)
+	RestUntil  time.Time           // 이 시각 전에는 모든 스토어 호출이 한도 초과(RateLimitError)로 실패한다(429 흉내)
+	Calls      int                 // 스토어 API를 부른 횟수(쉬는 중에 부르지 않는지 보는 시험용)
+	Delay      time.Duration       // 조회·확인이 이만큼 걸린다(느린 스토어 흉내). ctx가 먼저 끝나면 그 오류로 실패한다
+}
+
+// slow는 Delay만큼 기다린다. 진짜 클라이언트처럼 ctx의 마감을 지킨다.
+func (f *Fake) slow(ctx context.Context) error {
+	if f.Delay <= 0 {
+		return nil
+	}
+	select {
+	case <-time.After(f.Delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// RestingUntil은 한도 초과 흉내가 언제까지인지 준다(Rester).
+func (f *Fake) RestingUntil() time.Time { return f.RestUntil }
+
+// limited는 한도 초과 흉내 중이면 오류를 준다. 아니면 호출 횟수를 센다.
+func (f *Fake) limited() error {
+	if time.Now().Before(f.RestUntil) {
+		return &RateLimitError{Route: f.R, Until: f.RestUntil}
+	}
+	f.Calls++
+	return nil
 }
 
 func (f *Fake) Route() Route  { return f.R }
@@ -31,7 +60,13 @@ func (f *Fake) Verify(kind Kind, proof string) (Ref, error) {
 	return Ref{Kind: kind, ID: proof}, nil
 }
 
-func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
+func (f *Fake) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
+	if err := f.limited(); err != nil {
+		return Purchase{}, err
+	}
+	if err := f.slow(ctx); err != nil {
+		return Purchase{}, err
+	}
 	if f.PanicOn != "" && ref.ID == f.PanicOn {
 		panic("fake panic " + ref.ID)
 	}
@@ -53,6 +88,9 @@ type FakeRefunder struct {
 }
 
 func (f *FakeRefunder) Refund(_ context.Context, orderID string) error {
+	if err := f.limited(); err != nil {
+		return err
+	}
 	if f.RefundErr != nil {
 		return f.RefundErr
 	}
@@ -73,7 +111,13 @@ var (
 )
 
 // Subscription은 Purchases에서 원 거래 ID가 같은 것을 찾는다. 여러 개면 만료가 가장 늦은 것이다.
-func (f *Fake) Subscription(_ context.Context, originalID string) (Purchase, error) {
+func (f *Fake) Subscription(ctx context.Context, originalID string) (Purchase, error) {
+	if err := f.limited(); err != nil {
+		return Purchase{}, err
+	}
+	if err := f.slow(ctx); err != nil {
+		return Purchase{}, err
+	}
 	if f.PanicOn != "" && originalID == f.PanicOn {
 		panic("fake panic " + originalID)
 	}
@@ -93,7 +137,13 @@ func (f *Fake) Subscription(_ context.Context, originalID string) (Purchase, err
 	return best, nil
 }
 
-func (f *Fake) Confirm(_ context.Context, ref Ref, _ string, _ bool) error {
+func (f *Fake) Confirm(ctx context.Context, ref Ref, _ string, _ bool) error {
+	if err := f.limited(); err != nil {
+		return err
+	}
+	if err := f.slow(ctx); err != nil {
+		return err
+	}
 	if f.ConfirmErr != nil {
 		return f.ConfirmErr
 	}

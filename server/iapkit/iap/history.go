@@ -57,8 +57,14 @@ func (a *Apple) NoticeHistory(ctx context.Context, since time.Time) ([]PastNotic
 	if limit := now.Add(-180 * 24 * time.Hour); since.Before(limit) {
 		since = limit
 	}
+	if err := a.lim.check(RouteApple); err != nil {
+		return nil, 0, err
+	}
 	items, err := a.api.GetAllNotificationHistory(ctx, api.NotificationHistoryRequest{StartDate: since.UnixMilli(), EndDate: now.UnixMilli()}, appleHistoryPause)
 	if err != nil {
+		if rl := a.lim.note(RouteApple, err); isRateLimit(rl) {
+			return nil, 0, rl
+		}
 		return nil, 0, fmt.Errorf("apple 알림 이력 조회: %w", err)
 	}
 	var out []PastNotice
@@ -88,11 +94,17 @@ func (g *Google) Voided(ctx context.Context, since time.Time) ([]VoidedPurchase,
 	if limit := now.Add(-30*24*time.Hour + time.Hour); since.Before(limit) {
 		since = limit
 	}
+	if err := g.lim.check(RouteGoogle); err != nil {
+		return nil, err
+	}
 	var out []VoidedPurchase
 	token := ""
 	for page := 0; page < googleVoidedPages; page++ {
 		rsp, err := g.api.VoidedPurchases(ctx, g.packageName, since.UnixMilli(), now.UnixMilli(), 1000, token, 0, playstore.VoidedPurchaseTypeWithSubscription)
 		if err != nil {
+			if rl := g.lim.note(RouteGoogle, err); isRateLimit(rl) {
+				return nil, rl
+			}
 			return nil, fmt.Errorf("google 무효 구매 목록: %w", googleErr(err))
 		}
 		for _, v := range rsp.VoidedPurchases {
@@ -111,6 +123,9 @@ func (g *Google) Voided(ctx context.Context, since time.Time) ([]VoidedPurchase,
 
 // NoticeHistory는 History에 넣어 둔 알림을 돌려준다(시험용).
 func (f *Fake) NoticeHistory(context.Context, time.Time) ([]PastNotice, int, error) {
+	if err := f.limited(); err != nil {
+		return nil, 0, err
+	}
 	if f.Err != nil {
 		return nil, 0, f.Err
 	}
@@ -125,6 +140,9 @@ func (f *Fake) NoticeHistory(context.Context, time.Time) ([]PastNotice, int, err
 
 // Voided는 VoidedList에 넣어 둔 목록을 돌려준다(시험용).
 func (f *Fake) Voided(context.Context, time.Time) ([]VoidedPurchase, error) {
+	if err := f.limited(); err != nil {
+		return nil, err
+	}
 	if f.Err != nil {
 		return nil, f.Err
 	}
