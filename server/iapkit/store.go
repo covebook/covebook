@@ -28,6 +28,10 @@ type dbtx interface {
 const (
 	iapLockTimeout      = "5s"  // 행 잠금·advisory lock을 기다리는 최대 시간
 	iapStatementTimeout = "10s" // 문장 하나의 최대 시간
+	// 트랜잭션을 연 채 아무것도 안 하고 있을 수 있는 최대 시간. 넘으면 PostgreSQL이 그 연결을 끊고(25P03) 잠금을 푼다.
+	// 결제 트랜잭션 안에서는 스토어를 부르지 않아 문장 사이가 밀리초다. 코드 실수나 요청 취소로 트랜잭션이 열린 채 남아
+	// 유저 줄 잠금을 쥐고 있는 사고(pgx #2100 보고)를 서버 쪽에서 끊는 안전망이다. 운영 DB 역할 설정(ALTER ROLE) 대신 여기서 건다
+	iapIdleInTxTimeout = "30s"
 )
 
 // iapBegin은 결제 트랜잭션을 연다. 제한 시간은 SET LOCAL과 같은 set_config(..., true)라 이 트랜잭션에만 걸리고,
@@ -39,17 +43,33 @@ func iapBegin(ctx context.Context, db interface {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, "SELECT set_config('lock_timeout', $1, true), set_config('statement_timeout', $2, true)", iapLockTimeout, iapStatementTimeout); err != nil {
+	if _, err = tx.Exec(ctx, "SELECT set_config('lock_timeout', $1, true), set_config('statement_timeout', $2, true), set_config('idle_in_transaction_session_timeout', $3, true)",
+		iapLockTimeout, iapStatementTimeout, iapIdleInTxTimeout); err != nil {
 		_ = tx.Rollback(ctx)
 		return nil, err
 	}
 	return tx, nil
 }
 
-// iapDBBusy는 위 제한 시간에 걸려 취소된 것인지 본다.
+// iapDBBusy는 DB가 바빠 이 요청을 끊은 것인지 본다. 같은 요청을 조금 뒤 다시 내면 될 수 있는 오류다.
+//   - 55P03 lock_not_available: 잠금을 lock_timeout 넘게 기다림
+//   - 57014 query_canceled: 문장이 statement_timeout을 넘김
+//   - 40P01 deadlock_detected: 교착. PostgreSQL이 한쪽을 끊는다. 잠금 순서를 지키면 나지 않지만, 나도 다시 내면 된다
 func iapDBBusy(err error) bool {
 	var pe *pgconn.PgError
-	return errors.As(err, &pe) && (pe.Code == "55P03" || pe.Code == "57014")
+	return errors.As(err, &pe) && (pe.Code == "55P03" || pe.Code == "57014" || pe.Code == "40P01")
+}
+
+// iapLockUser는 유저 줄을 잠근다. 같은 유저의 결제 쓰기(제출, 상한 판정, 회수, 환불 되돌림)는 모두 이 잠금을 먼저 잡고 차례로 돈다.
+// 상한(대상마다 N칸) 합계는 이 잠금 위에서만 맞다. 상한 개수를 바꾸는 쓰기가 하나라도 이 잠금 없이 돌면
+// 두 트랜잭션이 서로의 변경을 못 보고 센다(READ COMMITTED). 구독은 iapLockLine을 먼저 잡고 이것을 잡는다.
+//
+// FOR UPDATE가 아니라 FOR NO KEY UPDATE다. 결제끼리는 똑같이 차례로 서지만(이 잠금끼리 충돌),
+// 유저 줄을 FK로 가리키는 다른 테이블의 INSERT(FK 확인이 FOR KEY SHARE를 잡음)는 기다리지 않는다.
+// 키트를 붙인 앱의 다른 기능(책 추가 등)이 결제 트랜잭션 때문에 멈추지 않게. 유저 줄의 키를 바꾸거나 지우지 않으니 충분하다
+func iapLockUser(ctx context.Context, tx pgx.Tx, user int64) error {
+	var locked int64
+	return tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR NO KEY UPDATE", user).Scan(&locked)
 }
 
 // 대상마다의 상한(Rules.Cap)은 두 겹으로 지킨다(D1)
@@ -60,8 +80,7 @@ func iapDBBusy(err error) bool {
 // 구독이든 한 번 사는 상품이든 같은 값을 쓴다. 대상은 여기에 싣지 않고 결제 의도(iap_reservations)로 찾는다(D1).
 // 여러 개면(대상마다 따로 주던 2026-11-27 전의 값) 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
 func iapAccountToken(ctx context.Context, tx pgx.Tx, user int64) (string, error) {
-	var locked int64
-	if err := tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+	if err := iapLockUser(ctx, tx, user); err != nil {
 		return "", err
 	}
 	var token string
@@ -109,8 +128,7 @@ func iapSettleCap(ctx context.Context, tx pgx.Tx, user int64, route iap.Route, t
 	if cap <= 0 {
 		return false, nil
 	}
-	var locked int64
-	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+	if err = iapLockUser(ctx, tx, user); err != nil {
 		return
 	}
 	err = tx.QueryRow(ctx, `WITH me AS (

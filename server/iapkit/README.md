@@ -26,7 +26,7 @@
 
 - Go: 이 저장소의 `go.mod` 판(1.27). `net/http`의 메서드 경로 패턴(`"POST /iap/purchases"`)을 쓴다
 - PostgreSQL: CI는 14로 시험한다. `hashtextextended`를 쓰므로 11 이상
-- 앱 DB에 `users (id BIGINT PRIMARY KEY)` 테이블. 키트 테이블이 이 테이블을 가리키고, 유저 단위 잠금에 `SELECT 1 FROM users WHERE id=$1 FOR UPDATE`를 쓴다
+- 앱 DB에 `users (id BIGINT PRIMARY KEY)` 테이블. 키트 테이블이 이 테이블을 가리키고, 유저 단위 잠금에 `SELECT id FROM users WHERE id=$1 FOR NO KEY UPDATE`를 쓴다(FK를 가진 다른 테이블의 쓰기는 막지 않음)
 - 키트가 쓰는 테이블 이름은 모두 `iap_`로 시작하고, 마이그레이션 이력은 `iapkit_schema_history`에 따로 남는다. 앱 테이블과 이름이 겹치면 안 된다
 
 ### 2. 코드
@@ -151,7 +151,7 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 | 422 | `iap_target_missing` | 안 끝냄 | 대상을 모름. 대상을 붙여 다시 낸다 |
 | 429 | `iap_too_many` | 안 끝냄 | 유저당 1분 제출 횟수 넘음 |
 | 503 | `iap_store_unavailable` | 안 끝냄 | 스토어 조회 실패, 스토어가 한도(429)에 걸려 쉬는 중 |
-| 503 | `iap_busy` | 안 끝냄 | DB 잠금을 5초 넘게 기다림(결제 트랜잭션의 `lock_timeout`) |
+| 503 | `iap_busy` | 안 끝냄 | DB 잠금을 5초 넘게 기다림(결제 트랜잭션의 `lock_timeout`), 문장이 10초를 넘김, 교착(40P01) |
 
 같은 응답 코드에 상황마다 다른 문구를 주려고 문구 키를 따로 둔다.
 
@@ -190,6 +190,14 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 한 바퀴는 2분이 기준이다. 단계마다 마감 시각(`iapSweepStages`, 시작부터 30·60·80·95·115초)이 있어 느린 스토어가 앞 단계를 붙잡아도 뒤 단계가 돈다. 마감에 걸린 건은 다음 바퀴에 이어서 한다. 마감은 새 일을 시작하지 않게만 하고, 이미 시작한 환불 요청·스토어 확인과 그 기록은 끝까지 한다(최대 15초 넘김).
 
 스토어가 한도 초과(429, 구글은 403의 한도 사유도)로 답하면 그 경로는 `Retry-After`까지 부르지 않는다(`iap.RateLimitError`, `iap.Rester`). 쉬는 동안 건너뛴 건과 처리 도중 한도에 걸린 건은 시도 횟수를 쓰지 않는다. 목록 조회(애플 알림 이력, 구글 무효 구매 목록)의 한도는 구매 조회·확인과 따로 센다(`iap.ListRester`). 목록이 쉬어도 결제 제출은 막히지 않고, 쉬는 동안 건너뛴 메우기는 쉬기가 끝난 다음 바퀴에 바로 돈다. 요약 로그의 `resting`은 건너뛴 건, `cut`은 마감에 걸린 단계 수다.
+
+사람이 봐야 하는 일은 `iap alert:`로 시작하는 로그를 한 시간에 한 번 남긴다. 로그 기반 경보를 이 문자열에 건다.
+
+| 경보 | 조건 | 할 일 |
+|---|---|---|
+| 구글 구매 미확인 | 확인 못 한 구글 구매가 48시간을 넘김(72시간이면 구글이 환불) | 구글 API 상태·키를 본다 |
+| 환불 포기 | 주지 않은 거래의 환불 요청이 20번 실패했거나 주문 ID가 없음(`refundsGaveUp`) | 콘솔에서 직접 환불한다 |
+| 알림 포기 | 8일 동안 처리하지 못한 알림(`notificationsGaveUp30Days`) | 원인을 고치고 다시 처리한다 |
 
 ## 시험
 

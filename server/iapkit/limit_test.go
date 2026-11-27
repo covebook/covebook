@@ -122,12 +122,12 @@ func TestIAPBeginTimeouts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var lock, stmt string
-	if err := tx.QueryRow(e.ctx, "SELECT current_setting('lock_timeout'), current_setting('statement_timeout')").Scan(&lock, &stmt); err != nil {
+	var lock, stmt, idle string
+	if err := tx.QueryRow(e.ctx, "SELECT current_setting('lock_timeout'), current_setting('statement_timeout'), current_setting('idle_in_transaction_session_timeout')").Scan(&lock, &stmt, &idle); err != nil {
 		t.Fatal(err)
 	}
-	if lock != iapLockTimeout || stmt != iapStatementTimeout {
-		t.Fatalf("트랜잭션 안 제한 시간 %s/%s", lock, stmt)
+	if lock != iapLockTimeout || stmt != iapStatementTimeout || idle != iapIdleInTxTimeout {
+		t.Fatalf("트랜잭션 안 제한 시간 %s/%s/%s", lock, stmt, idle)
 	}
 	if err := tx.Commit(e.ctx); err != nil {
 		t.Fatal(err)

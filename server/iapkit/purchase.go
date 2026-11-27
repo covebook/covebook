@@ -263,8 +263,7 @@ func (s *Kit) iapIntent(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer tx.Rollback(ctx)
 	// 유저 줄을 잠근다. 두 기기의 요청이 차례로 예약을 본다
-	var locked int64
-	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+	if err = iapLockUser(ctx, tx, user); err != nil {
 		return err
 	}
 	paid, err := iapTargetPaid(ctx, tx, user, target, s.IAPSandbox)
@@ -490,8 +489,7 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	var locked int64
-	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+	if err = iapLockUser(ctx, tx, user); err != nil {
 		return err
 	}
 	status := "granted"

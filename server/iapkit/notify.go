@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/jackc/pgx/v5"
 	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
@@ -278,6 +279,11 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 			// 시작한 확인은 단계 마감과 상관없이 끝까지 한다(iapConfirmAfter). 구글에는 적용됐는데 응답 전에 끊기면
 			// 원장에는 미확인으로 남아 이미 소비한 구매에 다시 소비를 요청하게 된다
 			e := iapConfirmAfter(ctx, store, ref, u.ProductID, consume)
+			if e != nil && !iap.IsRateLimit(e) && iapAlreadyConfirmed(ctx, store, ref, consume) {
+				// 앞선 확인이 구글에는 적용됐는데 원장 기록만 실패한 경우다. 다시 요청하면 구글이 400(invalidPurchaseState)을 주니
+				// 스토어 상태를 보고 확인을 마친 것으로 적는다. 안 그러면 4일 동안 매 바퀴 다시 부르고 미확인 경보가 거짓으로 울린다
+				e = nil
+			}
 			if e != nil {
 				log.Printf("iap confirm retry failed: route=%s product=%s err=%v", u.Route, u.ProductID, e)
 				return
@@ -500,7 +506,7 @@ func (s *Kit) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, not
 				continue
 			}
 			keys = append(keys, key)
-			if _, err := iapRevokePurchase(ctx, s.DB, n.Route, key, now); err != nil {
+			if _, _, err := s.iapApplyPurchaseState(ctx, n.Route, key, iap.StateRevoked, now); err != nil {
 				return "failed", err.Error()
 			}
 		}
@@ -662,6 +668,54 @@ func (s *Kit) iapSyncSubscription(ctx context.Context, store iap.Store, original
 	return note, nil
 }
 
+// iapApplyPurchaseState는 스토어가 알려 준 거래 상태(환불, 애플의 환불 되돌림)를 원장에 반영한다. 바뀐 줄이 있으면 changed다.
+// 환불·되돌림은 상한(대상마다 N칸)의 개수를 바꾸는 쓰기라서, 제출·상한 판정과 같은 유저 줄 잠금(iapLockUser)을 잡은
+// 트랜잭션 안에서 한다. 잠금 없이 하면 동시에 도는 제출이 바뀌기 전 개수를 세서 판정한다(2026-11-28 조사, 우아한형제들 WMS의 취소 경로 사례).
+// 되돌림(revoked→paid)이면 상한을 다시 판정한다. 환불된 동안 같은 대상을 또 샀으면 되돌린 거래가 넘은 거래가 되고(overCap),
+// 넘김 고지(T15)를 쓴다. 애플은 개발자가 환불할 수 없어 고지가 "애플에 환불을 요청해 주세요"를 안내한다
+func (s *Kit) iapApplyPurchaseState(ctx context.Context, route iap.Route, key string, state iap.State, revokedAt time.Time) (changed, overCap bool, err error) {
+	tx, err := iapBegin(ctx, s.DB)
+	if err != nil {
+		return false, false, err
+	}
+	defer tx.Rollback(ctx)
+	// 잠글 유저를 먼저 읽는다. 한 번 사는 상품은 주인이 바뀌지 않는다(D8). 주인이 없는 줄(탈퇴)은 셀 상한이 없어 잠그지 않는다
+	var user *int64
+	var kind string
+	err = tx.QueryRow(ctx, "SELECT user_id, kind FROM iap_purchases WHERE route=$1 AND transaction_id=$2", string(route), key).Scan(&user, &kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil // 원장에 없는 거래(다른 환경, 지급 전 환불). 부르는 쪽이 따로 다룬다
+	}
+	if err != nil {
+		return false, false, err
+	}
+	if user != nil {
+		if err = iapLockUser(ctx, tx, *user); err != nil {
+			return false, false, err
+		}
+	}
+	if changed, err = iapSyncPurchaseState(ctx, tx, route, key, state, revokedAt); err != nil {
+		return false, false, err
+	}
+	if changed && state == iap.StatePaid && kind == string(iap.KindProduct) && user != nil {
+		if overCap, err = iapSettleCap(ctx, tx, *user, route, key, s.IAPSandbox, s.IAPRules.Cap); err != nil {
+			return false, false, err
+		}
+		if overCap {
+			if err = iapNoteOverCapRow(ctx, tx, *user, route, key); err != nil {
+				return false, false, err
+			}
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, false, err
+	}
+	if overCap {
+		log.Printf("iap over cap after refund reversal: route=%s user=%d", route, *user)
+	}
+	return changed, overCap, nil
+}
+
 // iapSyncPurchase는 거래 하나를 스토어에 다시 묻고 원장의 환불 상태를 맞춘다.
 // 한 번 사는 상품이 원장에 없으면(앱이 제출하기 전에 알림이 먼저 옴) 계정 연결 값으로 주인을 찾아 지급한다.
 func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref) (string, error) {
@@ -676,13 +730,16 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 		return "", fmt.Errorf("거래 조회: %w", err)
 	}
 	key := iapTransactionKey(ref.Kind, p)
-	changed, err := iapSyncPurchaseState(ctx, s.DB, route, key, p.State, p.RevokedAt)
+	changed, reversedOverCap, err := s.iapApplyPurchaseState(ctx, route, key, p.State, p.RevokedAt)
 	if err != nil {
 		return "", err
 	}
 	if changed {
 		if p.State == iap.StateRevoked {
 			return "환불 반영", nil
+		}
+		if reversedOverCap {
+			return "환불 되돌림 반영(그사이 같은 대상을 또 사서 상한 넘음: 되돌린 거래는 주지 않음)", nil
 		}
 		return "환불 되돌림 반영", nil
 	}
@@ -720,8 +777,7 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 	}
 	defer tx.Rollback(ctx)
 	// 유저 줄을 잠근다. 같은 유저의 제출과 차례로 결제 의도를 보고 지운다
-	var locked int64
-	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+	if err = iapLockUser(ctx, tx, user); err != nil {
 		return "", err
 	}
 	inserted, err := iapRecordPurchase(ctx, tx, user, iap.KindProduct, p, s.IAPRules.TargetRequired)
@@ -777,6 +833,22 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 }
 
 // iapConfirmAfter는 DB 커밋 뒤의 스토어 확인이다. 앞의 조회와 제한 시간을 나눠 쓰지 않게 새로 준다
+// iapAlreadyConfirmed는 스토어에 다시 물어 이 거래가 이미 확인(소비)됐는지 본다. 조회에 실패하면 false다.
+// 소비해야 하는 구글 상품은 소비까지 됐어야 한다. 확인만 되고 소비 안 된 구매를 끝난 것으로 적으면
+// 재시도가 멈추고, 그 상품을 다시 살 수 없게 된다
+func iapAlreadyConfirmed(ctx context.Context, store iap.Store, ref iap.Ref, consume bool) bool {
+	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), iapStoreTimeout)
+	defer cancel()
+	p, err := store.Lookup(c, ref)
+	if err != nil {
+		return false
+	}
+	if consume && store.Route() == iap.RouteGoogle {
+		return p.Consumed
+	}
+	return p.Acknowledged
+}
+
 func iapConfirmAfter(ctx context.Context, store iap.Store, ref iap.Ref, productID string, consume bool) error {
 	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), iapStoreTimeout)
 	defer cancel()
