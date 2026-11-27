@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/awa/go-iap/appstore/api"
+	"github.com/awa/go-iap/playstore"
 	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/googleapi"
 )
@@ -89,7 +90,6 @@ func TestGoogleRestsAfterRateLimit(t *testing.T) {
 		func() error { _, e := g.Lookup(ctx, Ref{Kind: KindSubscription, ID: "y"}); return e },
 		func() error { return g.Confirm(ctx, Ref{Kind: KindProduct, ID: "x"}, "p", false) },
 		func() error { return g.Refund(ctx, "GPA.1") },
-		func() error { _, e := g.Voided(ctx, time.Now().Add(-time.Hour)); return e },
 	} {
 		if e := call(); !errors.As(e, &rl) || rl.Err != nil {
 			t.Fatalf("쉬는 중인데 부름(또는 다른 오류): %v", e)
@@ -97,6 +97,16 @@ func TestGoogleRestsAfterRateLimit(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("API 호출 %d번, 기대 1번", calls)
+	}
+	// 목록 조회는 한도를 따로 센다. 구매 조회가 쉬어도 목록은 부르고, 목록이 429를 맞으면 그때부터 목록만 쉰다
+	if _, e := g.Voided(ctx, time.Now().Add(-time.Hour)); !errors.As(e, &rl) || rl.Err == nil || calls != 2 {
+		t.Fatalf("목록 조회가 구매 조회의 쉬기에 막힘: %v, 호출 %d번", e, calls)
+	}
+	if _, e := g.Voided(ctx, time.Now().Add(-time.Hour)); !errors.As(e, &rl) || rl.Err != nil || calls != 2 {
+		t.Fatalf("목록이 429를 맞았는데 다시 부름: %v, 호출 %d번", e, calls)
+	}
+	if time.Until(g.ListRestingUntil()) < 50*time.Second {
+		t.Fatalf("목록 쉬는 시각이 짧음: %v", time.Until(g.ListRestingUntil()))
 	}
 }
 
@@ -109,4 +119,9 @@ type countingGoogleAPI struct {
 func (c countingGoogleAPI) VerifyProductV2(ctx context.Context, pkg, token string) (*androidpublisher.ProductPurchaseV2, error) {
 	*c.n++
 	return c.fakeGoogleAPI.VerifyProductV2(ctx, pkg, token)
+}
+
+func (c countingGoogleAPI) VoidedPurchases(ctx context.Context, pkg string, start, end, max int64, token string, skip int64, kind playstore.VoidedPurchaseType) (*androidpublisher.VoidedPurchasesListResponse, error) {
+	*c.n++
+	return c.fakeGoogleAPI.VoidedPurchases(ctx, pkg, start, end, max, token, skip, kind)
 }
