@@ -44,14 +44,15 @@ func (r Rules) message(code string) string {
 }
 
 // DefaultMessages는 앱이 문구를 주지 않은 오류의 기본 문구다(대상·수량을 모르는 말로 쓴다).
+// 키는 문구 키다. 응답 코드와 다른 것이 있다: iap_cap_too_many → 응답 iap_cap_full, iap_granted_owner → iap_other_account,
+// iap_owner_* → iap_owner_gone. 같은 응답 코드에 상황마다 다른 문구를 주려는 것이다(README의 오류 코드 표).
 var DefaultMessages = map[string]string{
-	"iap_cap_full":        "더 살 수 없어요",
-	"iap_cap_too_many":    "남은 수량보다 많아요",
-	"iap_target_busy":     "다른 기기에서 결제하고 있어요. 잠시 뒤 다시 시도해 주세요",
-	"iap_target_missing":  "어디에 쓸 구매인지 알 수 없어요. 문의해 주시면 확인해 드릴게요",
-	"iap_granted_owner":   "결제한 다른 계정에 넣었어요. 그 계정으로 로그인하면 보여요",
-	"iap_owner_refunded":  "결제한 계정이 탈퇴해 받을 수 없어요. 결제는 환불돼요",
-	"iap_owner_later":     "결제한 계정이 탈퇴해 받을 수 없어요. 결제는 며칠 안에 환불돼요",
-	"iap_owner_apple":     "결제한 계정이 탈퇴해 받을 수 없어요. App Store에서 환불을 요청해 주세요",
-	"iap_other_account_p": "다른 계정에 연결된 구매예요",
+	"iap_cap_full":       "더 살 수 없어요",
+	"iap_cap_too_many":   "남은 수량보다 많아요",
+	"iap_target_busy":    "다른 기기에서 결제하고 있어요. 잠시 뒤 다시 시도해 주세요",
+	"iap_target_missing": "어디에 쓸 구매인지 알 수 없어요. 문의해 주시면 확인해 드릴게요",
+	"iap_granted_owner":  "결제한 다른 계정에 넣었어요. 그 계정으로 로그인하면 보여요",
+	"iap_owner_refunded": "결제한 계정이 탈퇴해 받을 수 없어요. 결제는 환불돼요",
+	"iap_owner_later":    "결제한 계정이 탈퇴해 받을 수 없어요. 결제는 며칠 안에 환불돼요",
+	"iap_owner_apple":    "결제한 계정이 탈퇴해 받을 수 없어요. App Store에서 환불을 요청해 주세요",
 }
