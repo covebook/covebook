@@ -2,6 +2,7 @@ package iap
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -14,6 +15,9 @@ type Fake struct {
 	Err        error               // 값이 있으면 조회가 항상 이 오류로 실패한다(통신 장애 흉내)
 	Confirmed  []string            // Confirm이 불린 Ref.ID. 순서대로
 	ConfirmErr error               // 값이 있으면 Confirm이 실패한다
+	History    []Notice            // NoticeHistory가 돌려줄, 스토어가 보냈던 알림
+	VoidedList []VoidedPurchase    // Voided가 돌려줄, 스토어가 환불한 구매
+	PanicOn    string              // Ref.ID나 원 거래 ID가 이 값이면 조회가 패닉한다(알림 하나의 패닉이 다른 처리를 막지 않는지 보는 시험용)
 }
 
 func (f *Fake) Route() Route  { return f.R }
@@ -28,6 +32,9 @@ func (f *Fake) Verify(kind Kind, proof string) (Ref, error) {
 }
 
 func (f *Fake) Lookup(_ context.Context, ref Ref) (Purchase, error) {
+	if f.PanicOn != "" && ref.ID == f.PanicOn {
+		panic("fake panic " + ref.ID)
+	}
 	if f.Err != nil {
 		return Purchase{}, f.Err
 	}
@@ -67,6 +74,9 @@ var (
 
 // Subscription은 Purchases에서 원 거래 ID가 같은 것을 찾는다. 여러 개면 만료가 가장 늦은 것이다.
 func (f *Fake) Subscription(_ context.Context, originalID string) (Purchase, error) {
+	if f.PanicOn != "" && originalID == f.PanicOn {
+		panic("fake panic " + originalID)
+	}
 	if f.Err != nil {
 		return Purchase{}, f.Err
 	}
@@ -89,4 +99,25 @@ func (f *Fake) Confirm(_ context.Context, ref Ref, _ string, _ bool) error {
 	}
 	f.Confirmed = append(f.Confirmed, ref.ID)
 	return nil
+}
+
+// ParseNotice는 본문을 Notice의 JSON으로 읽는다. 시험에서 알림을 직접 만들어 넣을 때 쓴다.
+// {"bad":"signature"}는 서명 실패, 읽을 수 없는 본문은 형식 오류, {"app":"other"}는 다른 앱의 알림이다.
+func (f *Fake) ParseNotice(body []byte) (Notice, error) {
+	var probe struct{ Bad, App string }
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return Notice{}, fmt.Errorf("fake 알림: %w", ErrBadNotice)
+	}
+	if probe.Bad != "" {
+		return Notice{}, fmt.Errorf("fake 알림 서명 확인 실패")
+	}
+	if probe.App != "" {
+		return Notice{}, fmt.Errorf("fake 알림: %w", ErrWrongApp)
+	}
+	var n Notice
+	if err := json.Unmarshal(body, &n); err != nil || n.ID == "" {
+		return Notice{}, fmt.Errorf("fake 알림: %w", ErrBadNotice)
+	}
+	n.Route = f.R
+	return n, nil
 }

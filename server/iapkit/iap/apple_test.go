@@ -18,6 +18,8 @@ type fakeAppleAPI struct {
 	parseErr error
 	status   *api.StatusResponse
 	renewal  *api.JWSRenewalInfoDecodedPayload
+	history  []api.NotificationHistoryResponseItem
+	since    *int64 // 이력을 물은 시작 시각(밀리초)
 }
 
 func (f fakeAppleAPI) GetTransactionInfo(context.Context, string) (*api.TransactionInfoResponse, error) {
@@ -32,12 +34,21 @@ func (f fakeAppleAPI) ParseSignedTransaction(string) (*api.JWSTransaction, error
 func (f fakeAppleAPI) GetALLSubscriptionStatuses(context.Context, string, *url.Values) (*api.StatusResponse, error) {
 	return f.status, f.lookup
 }
-func (f fakeAppleAPI) ParseJWSEncodeString(string) (interface{}, error) {
-	if f.renewal == nil {
-		return nil, f.parseErr
+
+func (f fakeAppleAPI) GetAllNotificationHistory(_ context.Context, body api.NotificationHistoryRequest, _ time.Duration) ([]api.NotificationHistoryResponseItem, error) {
+	if f.since != nil {
+		*f.since = body.StartDate
 	}
+	return f.history, f.lookup
+}
+
+// renewalParser는 Apple.parseRenewal 자리에 끼우는 가짜다.
+func (f fakeAppleAPI) renewalParser(string) (*api.JWSRenewalInfoDecodedPayload, error) {
 	return f.renewal, f.parseErr
 }
+
+// appleWith는 가짜 API로 Apple을 만든다.
+func appleWith(f fakeAppleAPI) *Apple { return &Apple{api: f, parseRenewal: f.renewalParser} }
 
 func TestAppleLookup(t *testing.T) {
 	a := &Apple{api: fakeAppleAPI{tx: &api.JWSTransaction{
@@ -111,8 +122,8 @@ func TestAppleSubscription(t *testing.T) {
 		{"환불·취소", api.SubscriptionRevoked, StateRevoked},
 		{"모르는 값", 99, StateInactive},
 	} {
-		a := &Apple{api: fakeAppleAPI{tx: tx, status: appleStatusResponse("100", c.status),
-			renewal: &api.JWSRenewalInfoDecodedPayload{AutoRenewStatus: api.AutoRenewStatusOn, GracePeriodExpiresDate: 1_800_000_600_000}}}
+		a := appleWith(fakeAppleAPI{tx: tx, status: appleStatusResponse("100", c.status),
+			renewal: &api.JWSRenewalInfoDecodedPayload{AutoRenewStatus: api.AutoRenewStatusOn, GracePeriodExpiresDate: 1_800_000_600_000}})
 		p, err := a.Subscription(ctx, "100")
 		if err != nil {
 			t.Fatal(c.name, err)
@@ -122,32 +133,32 @@ func TestAppleSubscription(t *testing.T) {
 		}
 	}
 	// 해지 예약: 자동 갱신이 꺼졌어도 활성이면 권한은 그대로다. 유예가 없으면 GraceUntil은 zero
-	a := &Apple{api: fakeAppleAPI{tx: tx, status: appleStatusResponse("100", api.SubscriptionActive), renewal: &api.JWSRenewalInfoDecodedPayload{AutoRenewStatus: api.AutoRenewStatusOff}}}
+	a := appleWith(fakeAppleAPI{tx: tx, status: appleStatusResponse("100", api.SubscriptionActive), renewal: &api.JWSRenewalInfoDecodedPayload{AutoRenewStatus: api.AutoRenewStatusOff}})
 	if p, err := a.Subscription(ctx, "100"); err != nil || p.State != StatePaid || p.AutoRenew || !p.GraceUntil.IsZero() {
 		t.Fatalf("해지 예약: %+v %v", p, err)
 	}
 	// 환불된 거래는 상태 값이 활성이어도 환불로 본다
 	revoked := *tx
 	revoked.RevocationDate = 1_800_000_000_000
-	a = &Apple{api: fakeAppleAPI{tx: &revoked, status: appleStatusResponse("100", api.SubscriptionActive), renewal: &api.JWSRenewalInfoDecodedPayload{}}}
+	a = appleWith(fakeAppleAPI{tx: &revoked, status: appleStatusResponse("100", api.SubscriptionActive), renewal: &api.JWSRenewalInfoDecodedPayload{}})
 	if p, _ := a.Subscription(ctx, "100"); p.State != StateRevoked {
 		t.Fatalf("환불된 거래: %s", p.State)
 	}
 	// 답에 그 줄기가 없으면, 그리고 스토어가 없다고 하면 ErrNotFound
-	a = &Apple{api: fakeAppleAPI{tx: tx, status: appleStatusResponse("다른 것", api.SubscriptionActive), renewal: &api.JWSRenewalInfoDecodedPayload{}}}
+	a = appleWith(fakeAppleAPI{tx: tx, status: appleStatusResponse("다른 것", api.SubscriptionActive), renewal: &api.JWSRenewalInfoDecodedPayload{}})
 	if _, err := a.Subscription(ctx, "100"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("줄기 없음: %v", err)
 	}
-	a = &Apple{api: fakeAppleAPI{lookup: api.OriginalTransactionIdNotFoundError}}
+	a = appleWith(fakeAppleAPI{lookup: api.OriginalTransactionIdNotFoundError})
 	if _, err := a.Subscription(ctx, "100"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("스토어에 없음: %v", err)
 	}
 	// 통신 실패와 서명 실패는 ErrNotFound가 아니다
-	a = &Apple{api: fakeAppleAPI{lookup: errors.New("timeout")}}
+	a = appleWith(fakeAppleAPI{lookup: errors.New("timeout")})
 	if _, err := a.Subscription(ctx, "100"); err == nil || errors.Is(err, ErrNotFound) {
 		t.Fatalf("통신 실패: %v", err)
 	}
-	a = &Apple{api: fakeAppleAPI{tx: tx, status: appleStatusResponse("100", api.SubscriptionActive), parseErr: errors.New("bad signature")}}
+	a = appleWith(fakeAppleAPI{tx: tx, status: appleStatusResponse("100", api.SubscriptionActive), parseErr: errors.New("bad signature")})
 	if p, err := a.Subscription(ctx, "100"); err == nil || p.TransactionID != "" {
 		t.Fatalf("서명 실패인데 답이 나옴: %+v %v", p, err)
 	}
@@ -242,5 +253,14 @@ func TestAppleVerify(t *testing.T) {
 	a = &Apple{bundleID: "app.covebook", api: fakeAppleAPI{tx: &api.JWSTransaction{BundleID: "app.covebook"}}}
 	if _, err = a.Verify(KindProduct, "빈 거래"); !errors.Is(err, ErrBadProof) {
 		t.Fatalf("거래 ID 없음: %v", err)
+	}
+}
+
+// 서명된 갱신 정보의 형식이 틀리면 패닉하지 않고 오류를 돌려준다(라이브러리 함수는 점이 없는 문자열에서 패닉했다).
+func TestAppleRenewalMalformed(t *testing.T) {
+	for _, bad := range []string{"", "점이없음", "a.b", "a.b.c.d", "a.b.c"} {
+		if r, err := parseAppleRenewal(bad); err == nil || r != nil {
+			t.Errorf("%q가 통과", bad)
+		}
 	}
 }

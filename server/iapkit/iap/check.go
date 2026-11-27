@@ -10,7 +10,7 @@ import (
 type Expect struct {
 	BundleID      string          // 우리 앱 (Store.AppID)
 	Products      map[string]bool // 우리가 파는 상품 ID
-	AccountTokens []string        // 요청한 유저의 결제용 UUID(소문자). 구독을 넘겨받은 유저는 여러 개일 수 있다
+	AccountTokens []string        // 요청한 유저의 결제용 UUID(소문자)
 	AllowSandbox  bool            // 샌드박스(시험) 거래에도 지급할지. 운영에서는 기본 false
 }
 

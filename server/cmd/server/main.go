@@ -52,6 +52,7 @@ func main() {
 		log.Fatal("account deletion journal initialization failed")
 	}
 	app.StartDeletionWorker(ctx)
+	app.StartIAPWorker(ctx) // 결제가 꺼져 있으면 아무 일도 하지 않는다
 	srv := &http.Server{Addr: ":" + port, Handler: app.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	log.Printf("listening on :%s", port)
 	log.Fatal(srv.ListenAndServe())

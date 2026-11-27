@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -26,6 +27,7 @@ type googleAPI interface {
 	AcknowledgeSubscription(ctx context.Context, packageName, subscriptionID, token string, req *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error
 	AcknowledgeProduct(ctx context.Context, packageName, productID, token, developerPayload string) error
 	ConsumeProduct(ctx context.Context, packageName, productID, token string) error
+	VoidedPurchases(ctx context.Context, packageName string, startTime, endTime, maxResult int64, token string, startIndex int64, productType playstore.VoidedPurchaseType) (*androidpublisher.VoidedPurchasesListResponse, error)
 	Refund(ctx context.Context, packageName, orderID string) error
 	GetOrder(ctx context.Context, packageName, orderID string) (*androidpublisher.Order, error)
 }
@@ -65,9 +67,9 @@ type googleClient struct {
 	svc *androidpublisher.Service
 }
 
-// Refund는 orders.refund를 revoke=true로 부른다. 우리가 환불하는 선반 거래는 둘로 나뉜다
-//   - 3칸 넘김: 이미 소비했다. revoke는 할 일이 없다(소비한 상품은 개발자가 처리한다는 것이 구글 설명)
-//   - 연도 모름, 주인 없음: 소비하지 않았다. revoke 없이 환불만 하면 구매가 사용자 소유로 남아 같은 상품을 다시 살 수 없다
+// Refund는 orders.refund를 revoke=true로 부른다. 우리가 환불하는 한 번 사는 상품 거래는 둘로 나뉜다
+//   - 상한 넘김: 이미 소비했다. revoke는 할 일이 없다(소비한 상품은 개발자가 처리한다는 것이 구글 설명)
+//   - 대상 모름, 주인 없음: 소비하지 않았다. revoke 없이 환불만 하면 구매가 사용자 소유로 남아 같은 상품을 다시 살 수 없다
 //     (ADR-0002 표 "받지 않은 구글 구매 (#27)"의 사고 사례)
 func (c googleClient) Refund(ctx context.Context, packageName, orderID string) error {
 	return c.svc.Orders.Refund(packageName, orderID).Revoke(true).Context(ctx).Do()
@@ -77,7 +79,7 @@ func (g *Google) Route() Route  { return RouteGoogle }
 func (g *Google) AppID() string { return g.packageName }
 
 // Refund는 주문을 환불하고 구매를 거둔다(orders.refund, revoke=true. googleClient.Refund).
-// 칸은 우리 서버가 주지 않은 거래만 환불하므로 거둘 칸은 없다. revoke는 소비하지 않은 구매의 소유를 풀려는 것이다.
+// 우리 서버가 주지 않은 거래만 환불하므로 거둘 것은 없다. revoke는 소비하지 않은 구매의 소유를 풀려는 것이다.
 func (g *Google) Refund(ctx context.Context, orderID string) error {
 	if orderID == "" {
 		return errors.New("google: 주문 ID가 없는 구매는 환불할 수 없다")
@@ -153,7 +155,17 @@ func googleErr(err error) error {
 	if errors.As(err, &ge) && (ge.Code == http.StatusNotFound || ge.Code == http.StatusGone) {
 		return fmt.Errorf("google: %w", ErrNotFound)
 	}
-	return fmt.Errorf("google 구매 조회: %w", err)
+	return fmt.Errorf("google 구매 조회: %w", scrubURL(err))
+}
+
+// scrubURL은 통신 오류에서 요청 주소를 뺀다. 구글 API 주소에는 구매 토큰이 들어 있고,
+// 구매 토큰은 그 자체가 구매 증거라 로그나 DB에 남으면 안 된다(남의 구독을 복원으로 가져갈 수 있다).
+func scrubURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s 요청 실패: %w", ue.Op, ue.Err)
+	}
+	return err
 }
 
 func (g *Google) fromSubscription(token string, s *androidpublisher.SubscriptionPurchaseV2) (Purchase, error) {
@@ -193,6 +205,7 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 		ProductID:             item.ProductId,
 		State:                 subscriptionState(s.SubscriptionState),
 		Acknowledged:          s.AcknowledgementState == googleAcknowledged,
+		LinkedID:              s.LinkedPurchaseToken,
 		Env:                   EnvProduction,
 		PurchasedAt:           started,
 		ExpiresAt:             expires,
@@ -303,7 +316,7 @@ func (g *Google) Confirm(ctx context.Context, ref Ref, productID string, consume
 		return fmt.Errorf("google 확인: 종류 %q, 소비 %v는 맞지 않는 조합", ref.Kind, consume)
 	}
 	if err != nil {
-		return fmt.Errorf("google 확인 %s: %w", productID, err)
+		return fmt.Errorf("google 확인 %s: %w", productID, scrubURL(err))
 	}
 	return nil
 }
@@ -319,15 +332,15 @@ func (g *Google) ParseNotice(body []byte) (Notice, error) {
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(body, &push); err != nil || push.Message.MessageID == "" {
-		return Notice{}, errors.New("google 알림: 본문 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 본문: %w", ErrBadNotice)
 	}
 	raw, err := base64.StdEncoding.DecodeString(push.Message.Data)
 	if err != nil {
-		return Notice{}, errors.New("google 알림: data를 풀 수 없음")
+		return Notice{}, fmt.Errorf("google 알림 data: %w", ErrBadNotice)
 	}
 	var d playstore.DeveloperNotificationV2
 	if err = json.Unmarshal(raw, &d); err != nil {
-		return Notice{}, errors.New("google 알림: 내용 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 내용: %w", ErrBadNotice)
 	}
 	n := Notice{Route: RouteGoogle, ID: push.Message.MessageID}
 	if ms, e := strconv.ParseInt(d.EventTimeMillis, 10, 64); e == nil {

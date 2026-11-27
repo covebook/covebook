@@ -32,7 +32,7 @@ type Kind string
 
 const (
 	KindSubscription Kind = "subscription"
-	KindProduct      Kind = "product" // 한 번 사는 상품 (추가 선반)
+	KindProduct      Kind = "product" // 한 번 사는 상품 (책장 한켠: 추가 선반)
 )
 
 // State는 지급 판단에 쓰는 거래 상태다. 구독 만료는 여기 없다. ExpiresAt과 서버 시계로 따로 본다(ADR-0002 D23).
@@ -69,6 +69,7 @@ type Purchase struct {
 	GraceUntil            time.Time // 결제 실패 유예가 끝나는 시각. 유예 중이 아니면 zero. Subscription으로 물었을 때만 채워진다
 	AutoRenew             bool      // 자동 갱신이 켜져 있는가. false면 해지 예약. Subscription으로 물었을 때만 믿는다
 	Acknowledged          bool      // 스토어에 확인(acknowledge)이 이미 된 거래인가. 애플은 확인이 없어 항상 true
+	LinkedID              string    // 구글: 이 구독이 대신하는 옛 구독의 구매 토큰(요금제 변경, 만료 전 재가입). 옛 줄기는 끝내야 한다
 	Currency              string    // ISO 4217. 구글은 주문 조회(orders.get)로 채우고, 실패하면 비어 있다
 	PriceMilli            int64     // 금액 x 1000 (ADR-0002 D20). 구글은 주문의 total(세금·할인 반영), 주문 조회가 실패하면 0
 	Country               string    // 판매 국가. ISO 3166-1 두 글자(KR). 모르는 코드는 빈 값
@@ -76,6 +77,9 @@ type Purchase struct {
 
 // ErrNotFound는 스토어에 그 거래가 없다는 뜻이다. 통신 실패와 구분해서 다룬다.
 var ErrNotFound = errors.New("iap: 스토어에 없는 거래")
+
+// ErrBadNotice는 알림 본문의 형식이 틀렸다는 뜻이다. 서명 확인 실패와 구분한다(형식이 틀린 것은 다시 받아도 같다).
+var ErrBadNotice = errors.New("iap: 알림 형식이 다름")
 
 // ErrBadProof는 앱이 낸 구매 증거가 스토어가 서명한 것이 아니거나 형식이 틀렸다는 뜻이다.
 var ErrBadProof = errors.New("iap: 구매 증거가 올바르지 않음")
@@ -106,7 +110,7 @@ type Store interface {
 
 // Refunder는 개발자가 거래를 환불할 수 있는 스토어다. 구글만 된다(Play Developer API orders.refund).
 // 애플은 개발자가 환불하는 API가 없다. 사용자가 애플에 직접 요청해야 한다.
-// 쓰는 곳: 칸을 주지 않은 선반 거래. 3칸을 넘음(ADR-0002 D1), 연도를 끝내 모름, 결제한 계정이 탈퇴(D8)
+// 쓰는 곳: 주지 않은 한 번 사는 상품 거래. 대상의 상한을 넘음(ADR-0002 D1), 대상을 끝내 모름, 결제한 계정이 탈퇴(D8)
 type Refunder interface {
 	// Refund는 주문을 환불한다. orderID는 Purchase.TransactionID다(구글 주문 ID). 비어 있으면 오류다(프로모션 코드 구매 등).
 	Refund(ctx context.Context, orderID string) error

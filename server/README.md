@@ -28,7 +28,16 @@ Docker 이미지: `docker build -t chaekjang-go server`. 운영에서는 사진�
 
 ## 결제 스위치
 
-결제 API(`/iap/me`, `/iap/purchases`, 선반 결제 중 예약 `/iap/shelf-token`·`/iap/shelf-token/release`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다.
+스토어 알림은 `/iap/notifications/apple`, `/iap/notifications/google`로 받는다. 받으면 원문을 저장하고 바로 200을 주며, 처리와 정기 대조(1분마다: 밀린 알림, 스토어 확인 재시도, 만료가 다가온 구독 재확인)는 뒤에서 돈다. 구글 알림은 `IAP_GOOGLE_PUSH_AUDIENCE`, `IAP_GOOGLE_PUSH_EMAIL`이 있어야 받는다. 6시간마다 애플 알림 이력과 구글 무효 구매 목록을 받아 빠진 알림과 환불을 메운다. 대조가 돌 때 한 일과 밀린 일(대기·실패 알림, 확인 못 한 구매, 가장 오래된 대기 알림의 나이)을 `iap sweep:` 한 줄로 남기고, 같은 숫자를 `GET /admin/iap/stats`(`X-Admin-Token`)로 볼 수 있다.
+
+알림함(결제 고지, ADR-0003 L8)은 `GET /iap/notices`(최신순 100건), `POST /iap/notices/read`(`{"ids":[...]}` 또는 `{"all":true}`)이고, `/iap/me`의 `unreadNotices`가 안 읽은 수다. 고지는 상태가 바뀐 순간(결제 완료, 결제 실패 유예 시작, 만료, 해지 접수, 환불)에 한 번 쓰이고 문구가 아니라 문구 번호와 값만 저장한다. `GET /admin/iap/stats`의 `notices30Days`가 최근 30일에 쓴 고지 수다. 계정을 지워도 고지 줄은 남고 `user_id`만 비워진다(알렸다는 증빙, ADR-0003 L11). 보관 기간(처리방침 초안 5년)이 지난 줄을 지우는 작업은 아직 없다. 연 구독은 갱신일 `IAP_RENEWAL_NOTICE_DAYS`일(기본 14) 전에 갱신 예정 고지(T4)를 한 번 쓴다(대조 안에서 6시간에 한 번 찾음). 월인지 연인지는 스토어가 알려 주지 않아 `iap_plans`(경로, 상품, 구글 요금제 ID → `month`/`year`)에 운영자가 채운다. 줄이 없는 요금제에는 갱신 예정 고지를 보내지 않고 `/iap/me`의 `subscription.period`도 비운다.
+
+추가 선반은 연도 책장마다 따로 산다(ADR-0002 D1). 책장 6칸 중 3칸은 무료이고, 돈을 내고 여는 칸은 해마다 최대 3칸(`iapPaidShelfMax`)이다. 상품은 `iap_products.shelves`가 1인 것과 3인 것(묶음)을 둔다. 앱은 선반 결제 전에 `POST /iap/shelf-token`(`{"year":2026}`)으로 그 해의 계정 연결 값을 받아 스토어에 넘기고, 서버는 거래에 돌아온 그 값으로 연도를 찾아 `iap_purchases.shelf_year`에 적는다. 다 연 해에는 409 `iap_shelf_full`이다. `/iap/me`의 `shelvesByYear`(`{"2026":2}`)가 해마다 산 칸 수, `paidShelfMax`가 상한이다. 계정 연결 값이 없는 선반 구매(앱 밖 구매)는 제출 본문의 `year`를 쓰고, 그것도 없으면 거래만 기록하고 422 `iap_shelf_year_missing`이다. 두 기기에서 동시에 사서 3칸을 넘는 일은 두 겹으로 막는다.
+- 결제 전: `POST /iap/shelf-token`(`{"year":2026,"shelves":1|3}`)이 그 해 책장에 5분짜리 결제 중 예약을 잡는다(응답의 `reservation`, `expiresAt`). 다른 기기가 결제 중이라 넘치면 409 `iap_shelf_busy`와 `retryAfter`(초)다. 남은 칸보다 많은 상품이면 409 `iap_shelf_full`이다. 앱은 결제를 취소하면 `POST /iap/shelf-token/release`(`{"reservation":"..."}`, 204)로 풀고, 구매 제출 본문에 `reservation`을 넣으면 서버가 푼다
+- 결제 뒤: 그래도 넘은 거래는 통째로 칸을 주지 않는다(`iap_purchases.over_cap`). 구글은 서버가 `orders.refund`로 환불을 요청하고, 실패하면 정기 처리가 다시 요청한다. 애플은 개발자가 환불할 수 없어 사용자가 애플에 요청해야 한다. 제출 응답의 `overCap`, `autoRefund`, 고지 `shelf_over_cap`(T15, params `route, productId, year, shelves, autoRefund`), 구매 내역의 `overCap`으로 보인다. 넘은 거래가 환불돼도 `shelf_refunded` 고지는 쓰지 않는다
+- `GET /admin/iap/stats`: `shelfOverCap`(넘은 거래 중 돈이 아직 안 돌아간 것), `shelfOverCapRefunded`(구글 자동 환불 요청), `shelfOverCapApple`(애플 넘은 거래), `shelfNoYear`(연도 모르는 거래)
+
+결제 API(`/iap/me`, `/iap/purchases`, 선반 결제 중 예약 `/iap/shelf-token`·`/iap/shelf-token/release`)는 `IAP_ENABLED=1`이고 스토어 키(`IAP_APPLE_*`, `IAP_GOOGLE_*`)가 있을 때만 등록된다. 꺼져 있으면 `/healthz`의 `iap`가 false다. 스토어 키가 일부만 있거나 틀리면 로그를 남기고 결제만 끈 채 서버는 뜬다. 샌드박스(TestFlight, 심사) 구매는 `IAP_ALLOW_SANDBOX=1`일 때만 지급한다. 기본은 꺼짐이고, 끄면 전에 준 샌드박스 권한도 사라진다. 결정 기록은 `../docs/adr/0002-iap-design.md`, 코드는 `internal/iap`(스토어 호출)와 `internal/server/iap*.go`(지급)다. `GET /iap/purchases`는 내 구매 내역이다. 앱에 보여 줄 사업자 정보는 `IAP_SELLER_JSON`(JSON 객체, 칸: `name`, `owner`, `address`, `phone`, `email`, `bizNo`, `saleNo`, 호스팅서비스 제공자 `host`)에 넣으면 `/iap/me`의 `seller`로 나간다. 값은 저장소에 적지 않는다.
 
 ## 검증과 남은 작업
 
