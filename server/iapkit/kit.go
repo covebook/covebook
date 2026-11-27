@@ -37,7 +37,7 @@ type Kit struct {
 	iapRenewalAt time.Time                                             // 갱신 예정 고지를 마지막으로 찾은 때
 	iapCatchUpAt map[iap.Route]time.Time                               // 경로마다 스토어 목록으로 메우기를 마지막으로 돌린 때
 	iapLoggedAt  time.Time                                             // 대조 요약 로그를 마지막으로 남긴 때
-	iapAlertedAt time.Time                                             // 경보 로그를 마지막으로 남긴 때
+	iapAlertedAt map[string]time.Time                                  // 경보 종류마다 로그를 마지막으로 남긴 때
 	iapWake      chan struct{}                                         // 새 알림이 오면 처리 작업을 깨운다
 	iapPushAuth  func(ctx context.Context, authorization string) error // 구글 알림 요청의 인증 확인. 없으면 구글 알림을 받지 않는다
 }

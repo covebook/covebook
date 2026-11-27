@@ -274,24 +274,36 @@ type iapBacklog struct {
 	NoTarget               int   `json:"noTarget"`                  // 주지 않은 거래(대상 모름, 주인 없음) 중 환불을 요청하지 못한 것(운영 환경). 구글은 대조가 2일 뒤 환불하고, 애플은 사용자가 요청해야 한다
 	NoPlan                 int   `json:"noPlan"`                    // 이용 중인 운영 구독 중 요금제 주기(iap_plans)를 모르는 것. 0이 아니면 연 구독의 갱신 예정 고지(T4)가 나가지 않으니 iap_plans에 줄을 넣는다
 	RefundsGaveUp          int   `json:"refundsGaveUp"`             // 서버가 환불 요청을 그만둔 주지 않은 거래(시도 상한 20번, 주문 ID 없음 포함, 운영 환경). 돈이 돌아가지 않았으니 사람이 환불한다
-	NoticesGaveUp          int   `json:"notificationsGaveUp30Days"` // 8일 동안 다시 해도 처리하지 못해 그만둔 알림(최근 30일). 원문이 남아 있으니 원인을 고친 뒤 다시 처리한다
+	NoticesGaveUp          int   `json:"notificationsGaveUp30Days"` // 8일 동안 다시 해도 처리하지 못해 그만둔 알림(최근 30일). 원문이 남아 있으니 원인을 고친 뒤 다시 처리한다. 앱이 제출하기 전에 환불된 구글 거래의 알림(원장에 없음)은 할 일이 없어 뺀다
+	StuckSecs              int64 `json:"oldestUnprocessedSeconds"`  // 한 번도 처리하지 않은 알림(received) 중 가장 오래된 것의 나이. 대조가 1분마다 처리하므로 2시간을 넘으면 대조가 막힌 것이다
 }
 
-// iapAlertUnconfirmedSecs는 확인 못 한 구글 구매를 경보로 올리는 나이다. 3일(72시간)이 지나면 구글이 환불하므로 하루를 남기고 알린다
-const iapAlertUnconfirmedSecs = 48 * 3600
+// 경보로 올리는 나이. 확인 못 한 구글 구매는 3일(72시간)이 지나면 구글이 환불하므로 하루를 남기고 알린다.
+// 처리하지 않은 알림은 대조가 1분마다 처리하고 한도에 걸려도 1시간이면 풀리므로 2시간이면 막힌 것이다
+const (
+	iapAlertUnconfirmedSecs = 48 * 3600
+	iapAlertStuckSecs       = 2 * 3600
+)
+
+// iapAlert는 경보 한 건이다. Key는 경보 종류이고 종류마다 따로 한 시간에 한 번 남긴다.
+type iapAlert struct{ Key, Msg string }
 
 // iapAlerts는 사람이 봐야 하는 밀린 일을 돌려준다. 없으면 빈 목록이다.
-// 로그에 "iap alert:"로 남기므로, 로그 기반 경보(로그 검색·알림)를 이 문자열에 걸면 된다
-func iapAlerts(b iapBacklog) []string {
-	var out []string
+// 로그에 "iap alert:"로 남기므로, 로그 기반 경보(로그 검색·알림)를 이 문자열에 걸면 된다.
+// 대조 안에서 남기므로 대조 자체가 멈추면 경보도 멈춘다. 그것은 바깥에서 /admin/iap/stats를 주기적으로 보는 것으로 잡는다
+func iapAlerts(b iapBacklog) []iapAlert {
+	var out []iapAlert
 	if b.OldestUnconfirmedSecs > iapAlertUnconfirmedSecs {
-		out = append(out, fmt.Sprintf("google purchase unconfirmed for %dh (auto refund at 72h)", b.OldestUnconfirmedSecs/3600))
+		out = append(out, iapAlert{"unconfirmed", fmt.Sprintf("google purchase unconfirmed for %dh (auto refund at 72h)", b.OldestUnconfirmedSecs/3600)})
 	}
 	if b.RefundsGaveUp > 0 {
-		out = append(out, fmt.Sprintf("%d refunds gave up (refund manually)", b.RefundsGaveUp))
+		out = append(out, iapAlert{"refunds", fmt.Sprintf("%d refunds gave up (refund manually)", b.RefundsGaveUp)})
 	}
 	if b.NoticesGaveUp > 0 {
-		out = append(out, fmt.Sprintf("%d notifications gave up after 8 days (fix and reprocess)", b.NoticesGaveUp))
+		out = append(out, iapAlert{"notices", fmt.Sprintf("%d notifications gave up after 8 days (fix and reprocess)", b.NoticesGaveUp)})
+	}
+	if b.StuckSecs > iapAlertStuckSecs {
+		out = append(out, iapAlert{"stuck", fmt.Sprintf("notification unprocessed for %dh (sweep stuck?)", b.StuckSecs/3600)})
 	}
 	return out
 }
@@ -316,10 +328,12 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 			AND NOT EXISTS(SELECT 1 FROM iap_plans pl WHERE pl.route=s.route AND pl.product_id=s.product_id AND pl.plan_id=s.plan_id)),
 		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND refund_requested_at IS NULL
 			AND refund_attempts >= 20 AND (over_cap OR target IS NULL OR user_id IS NULL)),
-		(SELECT count(*) FROM iap_notifications WHERE result='failed' AND received_at <= now() - interval '8 days' AND received_at > now() - interval '30 days')`).
+		(SELECT count(*) FROM iap_notifications n WHERE n.result='failed' AND n.received_at <= now() - interval '8 days' AND n.received_at > now() - interval '30 days'
+			AND NOT (n.kind LIKE 'voided/%' AND NOT EXISTS(SELECT 1 FROM iap_purchases b WHERE b.route=n.route AND b.transaction_id IN (n.target_id, n.order_id)))),
+		coalesce((SELECT extract(epoch FROM now() - min(received_at)) FROM iap_notifications WHERE result='received'), 0)::bigint`).
 		Scan(&b.PendingNotices, &b.FailedNotices, &b.Unconfirmed, &b.OldestPendingSecs, &b.Subscriptions, &b.RevokedPurchases,
 			&b.OverCap, &b.OverCapRefunded, &b.OverCapApple, &b.NoTarget, &b.OldestUnconfirmedSecs, &b.SandboxPurchases30Days, &b.NoPlan,
-			&b.RefundsGaveUp, &b.NoticesGaveUp)
+			&b.RefundsGaveUp, &b.NoticesGaveUp, &b.StuckSecs)
 	return
 }
 
@@ -332,17 +346,18 @@ func (s *Kit) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	}
 	now := time.Now()
 	// 경보는 조건이 이어지는 동안 한 시간에 한 번 남긴다(1분마다 같은 경보가 쌓이지 않게)
-	if alerts := iapAlerts(b); len(alerts) > 0 {
+	for _, a := range iapAlerts(b) {
 		s.iapMu.Lock()
-		due := now.Sub(s.iapAlertedAt) >= time.Hour
+		if s.iapAlertedAt == nil {
+			s.iapAlertedAt = map[string]time.Time{}
+		}
+		due := now.Sub(s.iapAlertedAt[a.Key]) >= time.Hour
 		if due {
-			s.iapAlertedAt = now
+			s.iapAlertedAt[a.Key] = now
 		}
 		s.iapMu.Unlock()
 		if due {
-			for _, a := range alerts {
-				log.Printf("iap alert: %s", a)
-			}
+			log.Printf("iap alert: %s", a.Msg)
 		}
 	}
 	quiet := res == iapSweepResult{} && b.PendingNotices == 0 && b.FailedNotices == 0 && b.Unconfirmed == 0

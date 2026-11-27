@@ -279,7 +279,7 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 			// 시작한 확인은 단계 마감과 상관없이 끝까지 한다(iapConfirmAfter). 구글에는 적용됐는데 응답 전에 끊기면
 			// 원장에는 미확인으로 남아 이미 소비한 구매에 다시 소비를 요청하게 된다
 			e := iapConfirmAfter(ctx, store, ref, u.ProductID, consume)
-			if e != nil && !iap.IsRateLimit(e) && iapAlreadyConfirmed(ctx, store, ref) {
+			if e != nil && !iap.IsRateLimit(e) && iapAlreadyConfirmed(ctx, store, ref, consume) {
 				// 앞선 확인이 구글에는 적용됐는데 원장 기록만 실패한 경우다. 다시 요청하면 구글이 400(invalidPurchaseState)을 주니
 				// 스토어 상태를 보고 확인을 마친 것으로 적는다. 안 그러면 4일 동안 매 바퀴 다시 부르고 미확인 경보가 거짓으로 울린다
 				e = nil
@@ -834,11 +834,19 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 
 // iapConfirmAfter는 DB 커밋 뒤의 스토어 확인이다. 앞의 조회와 제한 시간을 나눠 쓰지 않게 새로 준다
 // iapAlreadyConfirmed는 스토어에 다시 물어 이 거래가 이미 확인(소비)됐는지 본다. 조회에 실패하면 false다.
-func iapAlreadyConfirmed(ctx context.Context, store iap.Store, ref iap.Ref) bool {
+// 소비해야 하는 구글 상품은 소비까지 됐어야 한다. 확인만 되고 소비 안 된 구매를 끝난 것으로 적으면
+// 재시도가 멈추고, 그 상품을 다시 살 수 없게 된다
+func iapAlreadyConfirmed(ctx context.Context, store iap.Store, ref iap.Ref, consume bool) bool {
 	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), iapStoreTimeout)
 	defer cancel()
 	p, err := store.Lookup(c, ref)
-	return err == nil && p.Acknowledged
+	if err != nil {
+		return false
+	}
+	if consume && store.Route() == iap.RouteGoogle {
+		return p.Consumed
+	}
+	return p.Acknowledged
 }
 
 func iapConfirmAfter(ctx context.Context, store iap.Store, ref iap.Ref, productID string, consume bool) error {

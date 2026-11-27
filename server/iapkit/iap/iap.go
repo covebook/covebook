@@ -69,6 +69,7 @@ type Purchase struct {
 	GraceUntil            time.Time // 결제 실패 유예가 끝나는 시각. 유예 중이 아니면 zero. Subscription으로 물었을 때만 채워진다
 	AutoRenew             bool      // 자동 갱신이 켜져 있는가. false면 해지 예약. Subscription으로 물었을 때만 믿는다
 	Acknowledged          bool      // 스토어에 확인(acknowledge)이 이미 된 거래인가. 애플은 확인이 없어 항상 true
+	Consumed              bool      // 구글 한 번 사는 상품을 소비했는가. 소비하는 상품은 Acknowledged만으로 확인을 마친 것이 아니다(확인만 되고 소비 안 된 구매는 다시 살 수 없음)
 	LinkedID              string    // 구글: 이 구독이 대신하는 옛 구독의 구매 토큰(요금제 변경, 만료 전 재가입). 옛 줄기는 끝내야 한다
 	Currency              string    // ISO 4217. 구글은 주문 조회(orders.get)로 채우고, 실패하면 비어 있다
 	PriceMilli            int64     // 금액 x 1000 (ADR-0002 D20). 구글은 주문의 total(세금·할인 반영), 주문 조회가 실패하면 0

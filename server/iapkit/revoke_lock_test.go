@@ -187,9 +187,9 @@ func TestIAPAlerts(t *testing.T) {
 	if a := iapAlerts(iapBacklog{OldestUnconfirmedSecs: 47 * 3600}); len(a) != 0 {
 		t.Fatalf("47시간은 아직 경보가 아님: %v", a)
 	}
-	a := iapAlerts(iapBacklog{OldestUnconfirmedSecs: 49 * 3600, RefundsGaveUp: 2, NoticesGaveUp: 1})
-	if len(a) != 3 {
-		t.Fatalf("경보 3개여야 함: %v", a)
+	a := iapAlerts(iapBacklog{OldestUnconfirmedSecs: 49 * 3600, RefundsGaveUp: 2, NoticesGaveUp: 1, StuckSecs: 3 * 3600})
+	if len(a) != 4 {
+		t.Fatalf("경보 4개여야 함: %v", a)
 	}
 }
 
@@ -206,14 +206,55 @@ func TestIAPConfirmRetryAlreadyConfirmed(t *testing.T) {
 	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET created_at = now() - interval '2 minutes' WHERE transaction_id=$1", tok); err != nil {
 		t.Fatal(err)
 	}
-	// 구글에는 이미 확인돼 있고, 다시 요청하면 거절한다
-	p.Acknowledged = true
-	e.google.Purchases[tok] = p
 	e.google.ConfirmErr = errors.New("400 invalidPurchaseState")
 	defer func() { e.google.ConfirmErr = nil }()
-	e.sweep()
 	var confirmed *time.Time
-	if err := e.db.QueryRow(e.ctx, "SELECT confirmed_at FROM iap_purchases WHERE transaction_id=$1", tok).Scan(&confirmed); err != nil || confirmed == nil {
-		t.Fatalf("이미 확인된 구매가 미확인으로 남음: %v %v", confirmed, err)
+	confirmedAt := func() *time.Time {
+		t.Helper()
+		if err := e.db.QueryRow(e.ctx, "SELECT confirmed_at FROM iap_purchases WHERE transaction_id=$1", tok).Scan(&confirmed); err != nil {
+			t.Fatal(err)
+		}
+		return confirmed
+	}
+	// 선반은 소비하는 상품이다. 확인(acknowledge)만 되고 소비가 안 됐으면 끝난 것이 아니다(다시 살 수 없음). 재시도를 계속한다
+	p.Acknowledged = true
+	e.google.Purchases[tok] = p
+	if e.sweep(); confirmedAt() != nil {
+		t.Fatal("소비 안 된 구매를 확인 완료로 적음")
+	}
+	// 소비까지 됐으면 확인을 마친 것으로 적는다
+	p.Consumed = true
+	e.google.Purchases[tok] = p
+	if e.sweep(); confirmedAt() == nil {
+		t.Fatal("이미 소비된 구매가 미확인으로 남음")
+	}
+}
+
+// 앱이 제출하기 전에 환불된 구글 거래의 알림은 원장에 거래가 없어 일부러 실패로 남는다. 사람이 할 일이 없으니 "알림 포기" 경보에서 뺀다
+func TestIAPGaveUpNoticesSkipsPreSubmitRefunds(t *testing.T) {
+	e := newIAPEnv(t)
+	count := func() int {
+		t.Helper()
+		b, err := iapBacklogNow(e.ctx, e.db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b.NoticesGaveUp
+	}
+	before := count()
+	insert := func(id, kind, target string) {
+		t.Helper()
+		if _, err := e.db.Exec(e.ctx, `INSERT INTO iap_notifications(route,notification_id,kind,payload,target_kind,target_id,result,received_at)
+			VALUES('google',$1,$2,'{}','product',$3,'failed',now()-interval '9 days')`, id, kind, target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert(iapTestID(t, "pre"), "voided/1", iapTestID(t, "unknown-token"))
+	if n := count(); n != before {
+		t.Fatalf("제출 전 환불 알림을 포기로 셈: %d → %d", before, n)
+	}
+	insert(iapTestID(t, "other"), "4", iapTestID(t, "tok"))
+	if n := count(); n != before+1 {
+		t.Fatalf("다른 실패 알림을 세지 않음: %d → %d", before, n)
 	}
 }
