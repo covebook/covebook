@@ -11,5 +11,5 @@ class MyBooksTab extends StatelessWidget {
   const MyBooksTab({super.key});
 
   @override
-  Widget build(BuildContext context) => const AllBooksScreen(tab: true);
+  Widget build(BuildContext context) => const AllBooksScreen();
 }

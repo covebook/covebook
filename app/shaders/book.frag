@@ -1,5 +1,5 @@
 #version 460 core
-// 이 파일은 tool/gen_shaders.sh 가 만든다. 손으로 고치지 말 것(출처: ../app/src/ui/scene-light-sksl.ts)
+// 이 파일은 tool/gen_shaders.sh 가 만든다. 손으로 고치지 말 것(출처: 옛 RN 앱 커밋 4f9e1d9의 app/src/ui/scene-light-sksl.ts + tool/rn_light.patch, tool/README.md)
 #include <flutter/runtime_effect.glsl>
 
 precision highp float;
@@ -7,46 +7,49 @@ layout(location = 0) out vec4 fragColor;
 
 
   uniform sampler2D tex;
-  uniform vec2 texSize;   // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다)
-  uniform mat3 texMat;    // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬)
-  uniform float texDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)       // 줄 아틀라스(그림 px 그대로 읽는다)
+  // 낱개 uniform을 묶은 것(tool/pack_uniforms.dart): 아이폰 Metal은 버퍼 칸이 31개까지라 낱개로는 셰이더가 만들어지지 않는다.
+  // 아래 같은 이름의 전역 변수들은 main() 맨 앞에서 채운다
+  uniform vec4 uP[34];
+  vec2 texSize; // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다) uP@0
+  mat3 texMat; // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬) uP@2
+  float texDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)       // 줄 아틀라스(그림 px 그대로 읽는다) uP@11
   uniform sampler2D keyTex;
-  uniform vec2 keyTexSize;   // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다)
-  uniform mat3 keyTexMat;    // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬)
-  uniform float keyTexDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)    // 이 책 면이 받는 창빛 그림자(다른 책이 창빛 원반을 가리는 몫, 알파): 면마다 칸(kRect)
+  vec2 keyTexSize; // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다) uP@12
+  mat3 keyTexMat; // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬) uP@14
+  float keyTexDecal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)    // 이 책 면이 받는 창빛 그림자(다른 책이 창빛 원반을 가리는 몫, 알파): 면마다 칸(kRect) uP@23
   uniform sampler2D tex2;
-  uniform vec2 tex2Size;   // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다)
-  uniform mat3 tex2Mat;    // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬)
-  uniform float tex2Decal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)      // 앞 굽기 아틀라스(그림 px 그대로)
+  vec2 tex2Size; // 그림 칸 수(SkSL 화소 좌표를 0~1로 바꾼다) uP@24
+  mat3 tex2Mat; // 그리는 좌표 → 그림 칸(SkSL에서는 자식 그림에 붙인 행렬) uP@26
+  float tex2Decal; // 1이면 그림 밖은 비워 둔다(SkSL TileMode.Decal)      // 앞 굽기 아틀라스(그림 px 그대로) uP@35
   uniform vec4 rect2[6];  // 앞 굽기에서 면마다 칸(rect와 같은 틀)
-  uniform float mixT;       // 새 굽기 몫(1이면 tex만)
+  float mixT; // 새 굽기 몫(1이면 tex만) uP@36
   uniform vec4 kRect[6];  // 면마다 그림자 칸: (칸 원점 x, y, 배율 px/DU, 있으면 1)
-  uniform vec4 cam4;      // 눈(x, y, 기준면 z, 거리). 거리 ≤ 0이면 사선 카메라(kx, ky = cam4.xy)
-  uniform vec3 pxa;       // 캔버스 px = 화면 점 × s + (tx, ty): (s, tx, ty)
-  uniform vec3 bO;        // 책 좌표 원점(줄 공간)과 축(단위): 책 좌표 (x 두께, y 높이, z 깊이)
-  uniform vec3 bX;
-  uniform vec3 bY;
-  uniform vec3 bZ;
-  uniform vec3 dims;      // T, H, W
-  uniform vec3 rig;       // 판 두께 bd, 책등 띠 sp, 속지가 들어간 깊이 sq(book-parts rigOf)
+  vec4 cam4; // 눈(x, y, 기준면 z, 거리). 거리 ≤ 0이면 사선 카메라(kx, ky = cam4.xy) uP@37
+  vec3 pxa; // 캔버스 px = 화면 점 × s + (tx, ty): (s, tx, ty) uP@41
+  vec3 bO; // 책 좌표 원점(줄 공간)과 축(단위): 책 좌표 (x 두께, y 높이, z 깊이) uP@44
+  vec3 bX; // uP@47
+  vec3 bY; // uP@50
+  vec3 bZ; // uP@53
+  vec3 dims; // T, H, W uP@56
+  vec3 rig; // 판 두께 bd, 책등 띠 sp, 속지가 들어간 깊이 sq(book-parts rigOf) uP@59
   uniform vec4 rect[6];   // 면마다 아틀라스 칸 (0, 0) 자리와 칸 수(x, y, w, h). w ≤ 0이면 구운 값 없음
-  uniform float keyOn;
-  uniform vec3 albedo;    // 장정 색(선형 RGB)
-  uniform vec3 erefB;     // 장정 재질의 대표 자리 빛·반사광(light-model bookEref·bookSref), 속지 단면의 대표 자리 반사광
-  uniform vec3 srefB;
-  uniform vec3 srefP;
-  uniform float specK;     // 장정 재질의 표면 반사 몫 배수(materials specular)
-  uniform vec2 mR;        // 장정 재질(domain/surface-pattern matUniforms): 거칠기·기울기 RMS, 미세 높이, 결, 결 크기, 책마다 무늬 자리 어긋남
-  uniform vec4 mB;
-  uniform vec4 mG;
-  uniform vec2 mS;
-  uniform vec2 mSeed;
-  uniform vec2 pR;        // 속지 단면 재질(materials.pages, 같은 꼴)
-  uniform vec4 pB;
-  uniform vec4 pG;
-  uniform vec2 pS;
+  float keyOn; // uP@62
+  vec3 albedo; // 장정 색(선형 RGB) uP@63
+  vec3 erefB; // 장정 재질의 대표 자리 빛·반사광(light-model bookEref·bookSref), 속지 단면의 대표 자리 반사광 uP@66
+  vec3 srefB; // uP@69
+  vec3 srefP; // uP@72
+  float specK; // 장정 재질의 표면 반사 몫 배수(materials specular) uP@75
+  vec2 mR; // 장정 재질(domain/surface-pattern matUniforms): 거칠기·기울기 RMS, 미세 높이, 결, 결 크기, 책마다 무늬 자리 어긋남 uP@76
+  vec4 mB; // uP@78
+  vec4 mG; // uP@82
+  vec2 mS; // uP@86
+  vec2 mSeed; // uP@88
+  vec2 pR; // 속지 단면 재질(materials.pages, 같은 꼴) uP@90
+  vec4 pB; // uP@92
+  vec4 pG; // uP@96
+  vec2 pS; // uP@100
 
-  uniform vec3 env;
+  vec3 env; // uP@102
 
   const float PI = 3.14159265;
   const float AMB = 0.620000000;
@@ -57,7 +60,7 @@ layout(location = 0) out vec4 fragColor;
   const vec3 LU = vec3(-0.102940441, 0.173648178, -0.979412873);
   // 맞추기 값(스킨마다 다르다: 스토어에서 색을 고르면 셰이더를 다시 만들지 않고 값만 바꾼다, light-model lightSet().u)
   // 카메라 기준 빛(벽 대표 자리 빛 / 노출 기준 CAM.gain, 반사광을 장면 밝기로)
-  uniform vec3 ECAM;
+  vec3 ECAM; // uP@105
   const float LELEV = 0.175474740;
   const float LRAD = 0.104719755;
   const float LAZ = -0.104719755;
@@ -74,13 +77,13 @@ layout(location = 0) out vec4 fragColor;
   const int ENV_COLS = 18;
   const float FARV = 10000.0000;
   // 둘레 면 밝기(선형 RGB: 반사율 × 받는 빛)와 속지 반사율(되비침): 맞추기 값. 속지 색(그림이 칠하는 색)은 스킨과 상관없다
-  uniform vec3 RADF;
-  uniform vec3 RADU;
-  uniform vec3 RADW;
-  uniform vec3 RADE;
-  uniform vec3 RADSL;
-  uniform vec3 RADSR;
-  uniform vec3 PAPER;
+  vec3 RADF; // uP@108
+  vec3 RADU; // uP@111
+  vec3 RADW; // uP@114
+  vec3 RADE; // uP@117
+  vec3 RADSL; // uP@120
+  vec3 RADSR; // uP@123
+  vec3 PAPER; // uP@126
   const vec3 PAPER_COLOR = vec3(0.883179738, 0.859173570, 0.796916543);
   const float EDGER = 3.05000000;
   const float SEAMR = 5.33750000;
@@ -594,8 +597,8 @@ layout(location = 0) out vec4 fragColor;
   }
 
 
-  uniform float DODGE;      // 겹: 0 곱하기 · 1 닷지 · 2 한 번에(단색 재질) · 3 반사광 더하기
-  uniform float SPLIT;      // 1이면 곱하기·닷지가 확산 몫만(반사광은 겹 3)
+  float DODGE; // 겹: 0 곱하기 · 1 닷지 · 2 한 번에(단색 재질) · 3 반사광 더하기 uP@129
+  float SPLIT; // 1이면 곱하기·닷지가 확산 몫만(반사광은 겹 3) uP@130
   float plankKey(vec3 p) { return keyOn < 0.5 ? 0.0 : plankKeyOf(p); }
   // 카메라: 노출과 필름형 톤 곡선(light-model tone·toneInv)
   const float EXPO = 1.00000000;
@@ -702,7 +705,7 @@ layout(location = 0) out vec4 fragColor;
   }
 
   const float CURVE = 0.500000000;
-  uniform vec3 EREF_PAPER;
+  vec3 EREF_PAPER; // uP@131
 vec4 _tex(vec2 q) {
   vec3 t = texMat * vec3(q, 1.0);
   vec2 uv = (t.xy / t.z) / texSize;
@@ -727,6 +730,51 @@ vec4 _tex2(vec2 q) {
 
   
 void main() {
+  texSize = uP[0].xy;
+  texMat = mat3(vec3(uP[0].zw, uP[1].x), uP[1].yzw, uP[2].xyz);
+  texDecal = uP[2].w;
+  keyTexSize = uP[3].xy;
+  keyTexMat = mat3(vec3(uP[3].zw, uP[4].x), uP[4].yzw, uP[5].xyz);
+  keyTexDecal = uP[5].w;
+  tex2Size = uP[6].xy;
+  tex2Mat = mat3(vec3(uP[6].zw, uP[7].x), uP[7].yzw, uP[8].xyz);
+  tex2Decal = uP[8].w;
+  mixT = uP[9].x;
+  cam4 = vec4(uP[9].yzw, uP[10].x);
+  pxa = uP[10].yzw;
+  bO = uP[11].xyz;
+  bX = vec3(uP[11].w, uP[12].xy);
+  bY = vec3(uP[12].zw, uP[13].x);
+  bZ = uP[13].yzw;
+  dims = uP[14].xyz;
+  rig = vec3(uP[14].w, uP[15].xy);
+  keyOn = uP[15].z;
+  albedo = vec3(uP[15].w, uP[16].xy);
+  erefB = vec3(uP[16].zw, uP[17].x);
+  srefB = uP[17].yzw;
+  srefP = uP[18].xyz;
+  specK = uP[18].w;
+  mR = uP[19].xy;
+  mB = vec4(uP[19].zw, uP[20].xy);
+  mG = vec4(uP[20].zw, uP[21].xy);
+  mS = uP[21].zw;
+  mSeed = uP[22].xy;
+  pR = uP[22].zw;
+  pB = uP[23];
+  pG = uP[24];
+  pS = uP[25].xy;
+  env = vec3(uP[25].zw, uP[26].x);
+  ECAM = uP[26].yzw;
+  RADF = uP[27].xyz;
+  RADU = vec3(uP[27].w, uP[28].xy);
+  RADW = vec3(uP[28].zw, uP[29].x);
+  RADE = uP[29].yzw;
+  RADSL = uP[30].xyz;
+  RADSR = vec3(uP[30].w, uP[31].xy);
+  PAPER = vec3(uP[31].zw, uP[32].x);
+  DODGE = uP[32].y;
+  SPLIT = uP[32].z;
+  EREF_PAPER = vec3(uP[32].w, uP[33].xy);
   vec2 p = FlutterFragCoord().xy;
 
     vec3 E;

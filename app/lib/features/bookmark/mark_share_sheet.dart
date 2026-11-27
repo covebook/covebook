@@ -1,5 +1,6 @@
 // 갈피 공유 시트(지금 앱 features/bookmark/MarkShare.tsx, 2026-11-10 사용자 시안): 위에서 '책 페이지'·'종이 메모' 모양을 고르면 가운데 큰 미리보기가 바뀌고,
-// 아래 '저장'(사진첩)·'공유'(공유창)를 누르면 그 모양을 폭 1080px로 그려 보낸다(11-10 댓글 '가운데 박스, 밑쪽에 다운로드 공유')
+// 아래 '사진 저장'(사진첩)·'공유'(공유창)를 누르면 그 모양을 폭 1080px로 그려 보낸다(11-10 댓글 '가운데 박스, 밑쪽에 다운로드 공유').
+// 2026-11-19 공통 규칙 9장: 사진첩에 넣는 단추는 '사진 저장'(기록의 '○○ 저장'과 같은 말이었다), 실패 글은 예외 원문 대신 사람 문장
 // 글이 길어 그림에 다 못 넣으면(끝에 '…') 미리보기 아래에 알린다(2026-11-16 QA 은서 F3)
 library;
 
@@ -10,7 +11,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../services/share_image.dart';
-import '../../ui/alert.dart';
+import '../../ui/feedback.dart' show shareFailAlert;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../share/mark_scene.dart';
@@ -79,7 +80,8 @@ class _MarkShareState extends State<_MarkShare> {
         if (mounted) nav.pop();
       }
     } catch (e) {
-      if (mounted) appAlert(context, shareErrorTitle(e), '$e');
+      // 책 공유와 같은 창: 앱이 쓴 안내는 그대로, 공유창 · 사진첩 실패는 사람 문장. 취소 · 다시 시도
+      if (mounted) shareFailAlert(context, e, () => _act(kind));
     } finally {
       if (mounted) setState(() => _busy = null);
     }
@@ -110,12 +112,12 @@ class _MarkShareState extends State<_MarkShare> {
         child: Center(
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Shape.card),
               border: Border.all(color: AppColors.line, width: hair),
               boxShadow: const [BoxShadow(color: Color(0x14191F28), offset: Offset(0, 6), blurRadius: 20)],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Shape.card),
               child: Container(
                 width: pw,
                 height: ph,
@@ -129,14 +131,16 @@ class _MarkShareState extends State<_MarkShare> {
       if (cut)
         Padding(
           padding: const EdgeInsets.only(bottom: Space.m),
-          child: Text('글이 길어 그림에는 앞부분만 들어가요. 끝에 \'…\'로 표시돼요.', textAlign: TextAlign.center, style: AppType.caption),
+          // 공통 규칙: 안내 글은 sub(2026-11-19. caption이었다)
+          child: WordText('글이 길어 그림에는 앞부분만 들어가요. 끝에 \'…\'로 표시돼요.', textAlign: TextAlign.center, style: AppType.sub),
         ),
+      // 시트 안 단추는 xlarge(TDS Button 기본값, 공통 규칙 7장)
       Row(children: [
         if (_canSave) ...[
-          Expanded(child: Btn(label: _saved ? '저장했어요' : '저장', kind: 'secondary', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
+          Expanded(child: Btn(label: _saved ? '저장했어요' : '사진 저장', kind: 'secondary', size: 'xlarge', busy: _busy == 'save', disabled: _busy != null && _busy != 'save', onPress: () => _act('save'))),
           const SizedBox(width: Space.s),
         ],
-        Expanded(child: Btn(label: '공유', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
+        Expanded(child: Btn(label: '공유', size: 'xlarge', busy: _busy == 'share', disabled: _busy != null && _busy != 'share', onPress: () => _act('share'))),
       ]),
     ]);
   }

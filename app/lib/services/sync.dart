@@ -18,12 +18,16 @@ import '../domain/sync.dart';
 import '../store/bookcase_store.dart';
 import '../store/files.dart' show imageDir;
 import '../store/library_model.dart';
-import '../store/first_shelf.dart' show exampleLayoutAt;
+import '../domain/sample_cleanup.dart' show exampleLayoutAt;
 import '../store/library_store.dart' show layoutState, markBookcasesSynced, readBookcases, saveRemoteLayout, unsyncedBookcaseIds, writeBookcase;
 import '../store/local_reset.dart';
 import '../store/placement_store.dart';
+import 'api_error.dart';
 import 'auth_link.dart';
+import 'error_text.dart';
 import 'native_login.dart';
+
+export 'api_error.dart';
 
 const syncBase = String.fromEnvironment('SYNC_URL');
 
@@ -34,14 +38,6 @@ const _filesKey = 'sync-files:v1'; // 이미 올린 파일 id
 const _accountKey = 'account:v1'; // 소셜 연결 여부·닉네임(화면 표시용 사본)
 const _pauseKey = 'sync-paused:v1';
 
-class ApiError implements Exception {
-  ApiError(this.status, this.code, this.message);
-  final int status;
-  final String code, message;
-
-  @override
-  String toString() => message;
-}
 
 String get _base => syncBase.replaceAll(RegExp(r'/+$'), '');
 
@@ -492,7 +488,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         _refreshAccount(token);
       }
     } catch (e) {
-      _set(state: paused ? SyncState.off : SyncState.error, error: e is StateError ? e.message : '$e');
+      _set(state: paused ? SyncState.off : SyncState.error, error: errorText(e));
       _schedule(const Duration(minutes: 1)); // 연결이 안 되면 1분 뒤 다시
     } finally {
       _running = false;
@@ -665,7 +661,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       syncAfter = true;
       return (ok: true, cancelled: false, switched: switched, message: nickname);
     } catch (e) {
-      return fail(e is StateError ? e.message : '$e');
+      return fail(errorText(e));
     } finally {
       _linking = false;
       if (syncAfter || _again) {

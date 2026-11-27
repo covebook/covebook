@@ -34,24 +34,6 @@ void main() {
     });
   });
 
-  group('통화 등으로 끊긴 동안 빼기', () {
-    test('달리는 중: 시작 시각을 그만큼 뒤로', () {
-      final a = excludeSpan(_running(since: 0), 120000, 600000);
-      expect(elapsedMs(a, 600000), 480000);
-    });
-
-    test('이번에 달린 시간보다 길면 쌓인 시간에서 뺀다(0 아래로는 안 간다)', () {
-      final a = excludeSpan(_running(acc: 50000, since: 500000), 200000, 600000);
-      // 이번 달린 100초는 다 빠지고 남은 100초를 쌓인 50초에서 → 0
-      expect(elapsedMs(a, 600000), 0);
-    });
-
-    test('멈춰 있으면 쌓인 시간에서', () {
-      final a = Active(id: 'ss_1', startedAt: isoOf(0), accumulatedMs: 300000, runningSince: null, lastBeat: 0);
-      expect(excludeSpan(a, 60000, 999999).accumulatedMs, 240000);
-    });
-  });
-
   test('저장하는 시간은 초 단위로 내린다(읽기 탭 시계와 기록 화면이 같은 초)', () {
     final p = finishActive(_running(since: 0), 924600);
     expect(p.durationMs, 924600);

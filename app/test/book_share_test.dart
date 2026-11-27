@@ -1,4 +1,5 @@
-// 지금 앱 features/book/__tests__/book-share.test.ts와 같은 시험 + 갈피 공유 문장 줄 나누기
+// 옛 앱(RN) features/book/__tests__/book-share.test.ts와 같은 시험 + 갈피 공유 문장 줄 나누기
+// (옛 앱 시험을 옮겨 온 것이다. 지금은 이 Flutter 코드의 규칙 시험이다)
 import 'package:chaekjang/features/book/book_share.dart';
 import 'package:chaekjang/features/share/mark_scene.dart' show breakLines;
 import 'package:chaekjang/ui/keep_all.dart';

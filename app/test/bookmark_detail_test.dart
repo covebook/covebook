@@ -1,7 +1,8 @@
 // 갈피 보기(2026-11-16 QA 은서 F1·영숙 F18): 옆으로 넘긴 뒤 수정에 들어갔다 나와도(뒤로·저장 모두) 보이는 갈피가 수정·삭제 대상이다.
-// 삭제 확인창에 어느 갈피인지 보인다. 큰 글씨에서는 아래 줄이 '수정·공유'만 가운데로 모인다(빈 구분선 없음)
+// 삭제 확인창에 어느 갈피인지 보인다. 큰 글씨에서는 아래 줄이 '수정·공유'만 가운데로 모인다(빈 구분선 없음).
+// 2026-11-19: 수정에서 고친 글이 있으면 나갈 때 묻는다(고치지 않았으면 바로 돌아온다)
 import 'package:chaekjang/domain/library.dart';
-import 'package:chaekjang/features/bookmark/bookmark_card.dart' show BookmarkCard;
+import 'package:chaekjang/features/bookmark/bookmark_card.dart' show BookmarkCard, BookmarkCardData;
 import 'package:chaekjang/features/bookmark/bookmark_detail_screen.dart';
 import 'package:chaekjang/store/library_model.dart';
 import 'package:flutter/material.dart';
@@ -130,6 +131,29 @@ void main() {
     expect(shown(t), 'C');
   });
 
+  testWidgets('수정에서 글을 고치고 뒤로 가면 묻는다(갈피 남기기 · 감상과 같은 확인창), 버리면 갈피 보기로', (t) async {
+    await open(t);
+    await t.tap(find.text('수정'));
+    await t.pumpAndSettle();
+    expect(find.text('갈피 저장'), findsOneWidget);
+    await t.enterText(find.byType(TextField).first, '고친 글');
+    await t.pump();
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    expect(plain('수정을 그만할까요?').evaluate().isNotEmpty, isTrue);
+    await t.tap(find.text('취소'));
+    await t.pumpAndSettle();
+    expect(find.byType(PageView), findsNothing, reason: '취소면 수정 화면 그대로');
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    await t.tap(find.text('확인'));
+    await t.pumpAndSettle();
+    expect(find.byType(PageView), findsOneWidget);
+    expect(shown(t), 'A');
+    expect(LibraryModel.instance.lib.bookmarks['A']!.text.startsWith('그날 밤'), isTrue, reason: '버린 글은 저장하지 않는다');
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('F18: 보통 글씨는 서명과 수정·공유가 한 줄, 큰 글씨는 수정·공유만 가운데', (t) async {
     await open(t);
     expect(find.text('책장 한켠'), findsOneWidget);
@@ -143,4 +167,37 @@ void main() {
     expect(((edit.dx + share.dx) / 2 - mid).abs(), lessThan(40));
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('3단계(2026-11-24): 카드 아래 출처를 누르면 그 책 화면, 화면 읽기는 \'작별하지 않는다 책 정보\' 단추, 넘기기 · 세로 밀기는 그대로, 더 보기에 책 정보 없음', (t) async {
+    await open(t);
+    final src = find.bySemanticsLabel('작별하지 않는다 책 정보');
+    expect(src, findsOneWidget, reason: '보이는 카드(A)만 단추(넘기기 칸의 다른 카드는 화면 밖)');
+    final r = t.getRect(src);
+    expect(r.height, greaterThanOrEqualTo(48));
+    // 옆으로 넘기기 · 세로로 밀기
+    await swipeNext(t);
+    expect(shown(t), 'B');
+    await t.drag(find.byType(PageView), const Offset(0, -200));
+    await t.pumpAndSettle();
+    expect(shown(t), 'B');
+    // 더 보기에는 책 정보가 없다
+    await t.tap(find.bySemanticsLabel('더 보기'));
+    await t.pumpAndSettle();
+    expect(find.text('책 정보'), findsNothing);
+    expect(find.text('수정'), findsWidgets);
+    await t.tapAt(const Offset(10, 10));
+    await t.pumpAndSettle();
+    // 출처를 누르면 책 화면(전환 칸 '내 기록')
+    await t.tap(find.bySemanticsLabel('작별하지 않는다 책 정보').first);
+    await t.pumpAndSettle();
+    expect(find.text('내 기록'), findsWidgets);
+    expect(find.text('평가'), findsWidgets);
+  });
+
+  testWidgets('기록 탭 목록 카드 · 공유 카드는 출처가 단추가 아니다(onBook을 넘기지 않음)', (t) async {
+    final data = BookmarkCardData(title: '작별하지 않는다', author: '한강', text: '문장', date: '11월 16일', bookId: 'bk1');
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: Center(child: BookmarkCard(data: data, width: 360, seed: 'A')))));
+    expect(find.bySemanticsLabel('작별하지 않는다 책 정보'), findsNothing);
+  });
 }
+

@@ -16,6 +16,7 @@ import '../domain/geometry.dart';
 import '../domain/shelf_geom.dart';
 import '../domain/title_layout.dart';
 import '../domain/vec3.dart';
+import '../scene_config/spine_look.dart';
 import 'artwork_images.dart';
 import 'cover_photo.dart';
 import 'glyph_metrics.dart';
@@ -122,20 +123,17 @@ void drawBookArt(ui.Canvas canvas, Book3 b, BookLook look, GlyphMetrics glyphs, 
     canvas.scale(1 / pn.w, 1 / pn.h);
     // 기본 정면 장정 그림: 늘이지 않고 면을 채우고(위아래가 잘리면 위에서 focusY만큼), 제목은 그림마다 정한 색으로 위 여백에(지금 앱 CoverFaceArt)
     final art = f == FaceId.cover && look.artwork != null ? artworkImage(look.artwork!) : null;
-    final sp = f == FaceId.spine ? spineArtOf(photo) : null;
+    final sp = f == FaceId.spine ? spineArtOf(photo, spineLooks.of(b.id)) : null;
     if (art != null) {
       final r = focusedRect(art.width.toDouble(), art.height.toDouble(), pn.w, pn.h, artworkFocusY);
       canvas.drawImageRect(art, ui.Rect.fromLTWH(0, 0, art.width.toDouble(), art.height.toDouble()), ui.Rect.fromLTWH(r.x, r.y, r.width, r.height),
           ui.Paint()..filterQuality = ui.FilterQuality.medium);
       if (look.title.isNotEmpty) _coverTitle(canvas, look, b.dims, glyphs, ink: modernInk(artworkInk[coverArtwork(look.artwork)!.ink]!));
-    } else if (f == FaceId.cover && look.reference != null && referenceImage(look.reference!) != null) {
-      // 시안 그림 표지(새 서재 예시 책): 그림 안에 제목이 있다
-      _referenceCover(canvas, referenceImage(look.reference!)!, pn.w, pn.h);
     } else if (f == FaceId.cover && photo != null) {
       // 표지 사진이 있으면 앞표지는 사진만(제목은 사진 안에 있다)
       drawPhotoCover(canvas, photo, pn.w, pn.h);
     } else if (sp != null) {
-      // 고른 책등 모양(실물 측면 사진·표지 이어 쌓기 줄무늬). 사진은 제목이 사진 안에 있어 쓰지 않는다
+      // 이 책에 고른 옆면 모양(실물 사진·겹무늬 줄무늬). 사진은 제목이 사진 안에 있어 쓰지 않는다
       drawSpineImage(canvas, sp.image, pn.w, pn.h);
       if (sp.ink != null && look.title.isNotEmpty) {
         final op = titleOpacity(b.roll);
@@ -147,28 +145,12 @@ void drawBookArt(ui.Canvas canvas, Book3 b, BookLook look, GlyphMetrics glyphs, 
         final op = titleOpacity(b.roll);
         if (op.v > 0.001) _verticalTitle(canvas, look, b.dims, glyphs, op.v);
         if (op.h > 0.001) _lyingTitle(canvas, look, b.dims, glyphs, op.h);
-      } else if (!look.plainCover) {
+      } else {
         _coverTitle(canvas, look, b.dims, glyphs);
       }
     }
     canvas.restore();
   }
-}
-
-/// 시안 그림 표지(지금 앱 ReferenceCover): 시안 책은 모서리가 둥글어 오린 사각형 네 귀퉁이에 시안 벽(크림색)이 묻어 있다.
-/// 귀퉁이 반지름만큼 안쪽을 늘여 바닥에 깔고 그 위에 원래 그림을 둥글게 잘라 얹어, 귀퉁이도 표지 가장자리 색이 되게 한다
-void _referenceCover(ui.Canvas canvas, ui.Image img, double w, double h) {
-  final iw = img.width.toDouble(), ih = img.height.toDouble();
-  final sx = w / iw, sy = h / ih;
-  final rc = math.min(2 * edgeR, math.min(w / 2, h / 2));
-  final paint = ui.Paint()..filterQuality = ui.FilterQuality.medium;
-  final dst = ui.Rect.fromLTWH(0, 0, w, h);
-  canvas.save();
-  canvas.clipRect(dst);
-  canvas.drawImageRect(img, ui.Rect.fromLTWH(rc / sx, rc / sy, iw - 2 * rc / sx, ih - 2 * rc / sy), dst, paint);
-  canvas.clipRRect(ui.RRect.fromRectXY(dst, rc, rc));
-  canvas.drawImageRect(img, ui.Rect.fromLTWH(0, 0, iw, ih), dst, paint);
-  canvas.restore();
 }
 
 // ---------- 제목 ----------
@@ -207,7 +189,9 @@ void _verticalTitle(ui.Canvas canvas, BookLook look, Dims d, GlyphMetrics g, dou
   final fs = t.fontSize;
   final gy = -(g.ascent(fs) + g.descent(fs)) / 2;
   final colW = fs * 1.2;
-  final cols = t.columns.reversed.toList();
+  // 두 열이면 첫 열이 왼쪽(왼쪽 → 오른쪽으로 읽는다). 옛 세로쓰기처럼 오른쪽부터 두어 '있는 당신에게 | 오늘은 빼앗기고'로 읽혔다
+  // (2026-11-26 사용자 '보통 글씨가 왼쪽 -> 오른쪽 이렇게 세로로 가지 않나? 지금 반대인데')
+  final cols = t.columns;
   final x0 = w / 2 - cols.length * colW / 2;
   final ink = _alpha(_color(look.ink), opacity);
   final top = look.titleTop != null ? math.max(0.12, look.titleTop! - _titleLift) : t.textTop;

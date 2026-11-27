@@ -49,20 +49,26 @@ const termsArticles = <(String, List<String>)>[
   ('제10조 (문의)', ['서비스 이용 문의는 앱의 \'내 정보 › 문의하기\'로 보내 주세요.']),
 ];
 
-/// 이용약관 화면(시트): 조마다 굵은 제목과 문단
-Future<void> showTermsSheet(BuildContext context) => showSheet<void>(
-      context,
-      title: '이용약관',
-      scroll: true,
-      maxHeight: 0.85,
-      builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        for (final (i, (title, paras)) in termsArticles.indexed) ...[
-          Padding(
-            padding: EdgeInsets.only(top: i == 0 ? 0 : Space.l, bottom: Space.xs),
-            child: Semantics(header: true, child: Text(title, style: AppType.labelStrong)),
-          ),
-          for (final p in paras) Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: WordText(p, style: AppType.bodySmall)),
-        ],
-        Padding(padding: const EdgeInsets.only(top: Space.l, bottom: Space.s), child: Text('시행일은 정식 출시 때 정합니다.', style: AppType.caption)),
-      ]),
+/// 안내 시트 문단(이용약관 · 개인정보 처리 안내가 같이 쓴다): 진한 16 · 아래 4
+Widget legalParagraph(String text) => Padding(padding: const EdgeInsets.only(bottom: Space.xs), child: WordText(text, style: AppType.bodySmall));
+
+/// 이용약관 화면: 조마다 굵은 제목(16)과 문단. 글이 길어 시트가 아니라 밀어 넣은 화면(2026-11-20 사용자 '이정도면 그냥 한 페이지 만들어 이용약관').
+/// 내 정보 · 로그인 화면이 같은 화면을 연다
+Future<void> openTermsPage(BuildContext context) => Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/terms'),
+        builder: (_) => Screen(
+          title: '이용약관',
+          children: [
+            for (final (i, (title, paras)) in termsArticles.indexed) ...[
+              Padding(
+                padding: EdgeInsets.only(top: i == 0 ? Space.s : Space.l, bottom: Space.xs),
+                child: Semantics(header: true, child: Text(title, style: AppType.legalHeading)),
+              ),
+              for (final p in paras) legalParagraph(p),
+            ],
+            Padding(padding: const EdgeInsets.only(top: Space.l), child: Text('시행일은 정식 출시 때 정합니다.', style: AppType.caption)),
+          ],
+        ),
+      ),
     );

@@ -70,7 +70,7 @@ func TestNativeLogin(t *testing.T) {
 	}
 	now := time.Now().Unix()
 	stamp := fmt.Sprintf("%d", time.Now().UnixNano())
-	kakaoID, kakaoApp := stamp[len(stamp)-12:], "1234"
+	kakaoID, kakaoApp := "1"+stamp[len(stamp)-11:], "1234" // 0으로 시작하면 JSON 숫자가 아니다
 	appleSub := "apple-native-" + stamp
 	appleServerToken := ""
 	var revokeClient string
@@ -205,10 +205,10 @@ func TestNativeLogin(t *testing.T) {
 	}
 }
 
-// 소개 홈페이지·개인정보 처리방침(Google 브랜딩 인증용)은 DB 없이 열린다
+// 소개 홈페이지·개인정보 처리방침(Google 브랜딩 인증용)·이용약관(애플 3.1.2)은 DB 없이 열린다
 func TestSitePages(t *testing.T) {
 	h := New(nil).Handler()
-	for path, want := range map[string]string{"/": "책장 한켠", "/privacy": "개인정보 처리방침", "/icon.png": "\x89PNG"} {
+	for path, want := range map[string]string{"/": "책장 한켠", "/privacy": "개인정보 처리방침", "/terms": "제1조 (목적)", "/icon.png": "\x89PNG"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 || !strings.Contains(w.Body.String(), want) {

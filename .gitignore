@@ -21,3 +21,6 @@ __pycache__/
 
 # 페르소나 QA 결과(.claude/commands/persona-qa.md)
 .qa-runs/
+
+# 로컬 전용 메모. 공개 저장소라 올리지 않는다
+docs/local/

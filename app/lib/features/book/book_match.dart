@@ -10,22 +10,30 @@ String normTitle(String s) => s.toLowerCase().replaceAll(RegExp(r'\([^)]*\)|\[[^
 
 String _normName(String s) => s.toLowerCase().replaceAll(RegExp(r'[\s\p{P}]', unicode: true), '');
 
-/// 같은 책으로 볼 서재 책 id(숨긴 책은 빼고): ISBN이 같거나, ISBN이 없으면 제목·첫 저자가 같은 책
+/// 같은 책으로 볼 서재 책 id(숨긴 책은 빼고): 둘 다 ISBN이 있으면 ISBN이 같은 책(다른 ISBN은 다른 판),
+/// 어느 한쪽이라도 ISBN이 없으면 제목·첫 저자가 같은 책. 2026-11-20 QA: ISBN 없이 넣은 책(사진 · 직접 입력)이 ISBN이 있는 검색 결과와
+/// 견줘지지 않아 목록 가져오기 · 검색이 같은 책을 또 넣었다(예시 CSV의 소년이 온다 · 데미안 · 모순이 '찾은 책 3권')
 String? ownedBookId(Library lib, BookCandidate c) {
   final code = c.isbn13 == null ? null : isbn13Of(c.isbn13!);
   final title = normTitle(c.title);
   final author = c.authors.isEmpty ? '' : _normName(c.authors.first);
+  String? byTitle;
   for (final b in lib.books.values) {
     if (b.hiddenAt != null) continue;
     final e = lib.editions[b.editionId];
     if (e == null) continue;
-    if (code != null) {
-      if (e.isbn13 != null && isbn13Of(e.isbn13!) == code) return b.id;
+    final own = e.isbn13 == null ? null : isbn13Of(e.isbn13!);
+    if (code != null && own != null) {
+      if (own == code) return b.id;
       continue;
     }
-    if (title.isNotEmpty && normTitle(e.title) == title && (author.isEmpty || (e.authors.isNotEmpty && _normName(e.authors.first) == author))) return b.id;
+    // ISBN이 같은 책이 뒤에 있으면 그 책이 먼저다
+    if (byTitle == null && title.isNotEmpty && normTitle(e.title) == title && (author.isEmpty || (e.authors.isNotEmpty && _normName(e.authors.first) == author))) {
+      if (code == null) return b.id;
+      byTitle = b.id;
+    }
   }
-  return null;
+  return byTitle;
 }
 
 /// 가져오기 한 줄에 맞는 검색 결과: ISBN이 있으면 같은 ISBN(검색 결과가 한 권뿐이면 그 책), 없으면 제목이 같거나 겹치는 책 중 저자·출판사가 맞는 쪽

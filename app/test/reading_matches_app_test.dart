@@ -1,4 +1,5 @@
-// 읽기 탭 규칙이 지금 앱과 같은지(tool/dump_reading.test.ts가 지금 앱 함수로 뽑은 값)
+// 읽기 탭 규칙이 옛 앱(RN)과 같은지(tool/dump_reading.test.ts가 옛 앱(RN) 함수로 뽑은 값)
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 import 'dart:convert';
 import 'dart:io';
 

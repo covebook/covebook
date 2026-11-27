@@ -1,4 +1,4 @@
-// 3D 점·방향과 선형 RGB 색. app/src/domain/camera.ts의 Vec3, light-model.ts의 C3를 옮긴 것.
+// 3D 점·방향과 선형 RGB 색. 옛 RN 앱(커밋 4f9e1d9) app/src/domain/camera.ts의 Vec3, light-model.ts의 C3를 옮긴 것.
 // 좌표는 책장 좌표(DU, 1DU ≈ 1mm): x 오른쪽, y 위, z 앞(벽에서 나오는 쪽)
 library;
 

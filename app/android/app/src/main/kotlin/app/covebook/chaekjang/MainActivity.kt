@@ -93,7 +93,11 @@ class MainActivity : AudioServiceActivity() {
           try {
             (contentResolver.openOutputStream(uri) ?: throw IllegalStateException("No output stream")).use { o -> File(path).inputStream().use { it.copyTo(o) } }
             contentResolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
-            result.success(uri.toString())
+            // 같은 이름 파일이 있으면 기기가 'name (1).csv'처럼 바꿔 저장한다: 실제로 저장된 이름을 돌려준다(못 읽으면 고른 이름)
+            val saved = runCatching {
+              contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+            }.getOrNull() ?: name
+            result.success(saved)
           } catch (e: Exception) {
             contentResolver.delete(uri, null, null)
             result.error("ERR_SAVE", e.message ?: "save failed", null)

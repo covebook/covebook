@@ -1,5 +1,7 @@
-// 홈 책장 넘기기·모아 보기(지금 앱 features/home/YearPager.tsx, 2026-11-07 사용자 '왼쪽으로 화면 넘기면 전년도 책장, 양손으로 화면 줄이면 옆에 보이게').
-// 쪽 0 = 지금 책장, k = k년 전 책장. 지난 책장은 오른쪽에 이어 있어 손가락을 왼쪽으로 밀면 한 해 전으로 간다.
+// 홈 책장 넘기기·모아 보기(지금 앱 features/home/YearPager.tsx, 2026-11-07 사용자 '양손으로 화면 줄이면 옆에 보이게').
+// 쪽 0 = 지금 책장, k = k년 전 책장. 해는 왼쪽에서 오른쪽으로 흐른다: 지난 책장은 왼쪽에 이어 있어 손가락을 오른쪽으로 밀면 한 해 전으로 간다
+// (2026-11-21 사용자 '2026이 오른쪽에 있는 게 맞지 않냐': 모아 보기에서 올해가 맨 오른쪽. 넘기는 방향도 같은 자리 배치를 따른다).
+// 화면 위 자리 = (_at - k) × 폭: 쪽 번호가 클수록(오래된 해) 왼쪽.
 // 두 손가락으로 줄이면 모든 쪽이 함께 작아져 옆 해 책장이 나란히 보이고(모아 보기), 한 쪽을 누르거나 벌리면 그 쪽으로 돌아온다.
 // 꾸미는 중·책을 끄는 중에는 넘기지 않는다(blocked). 책 꾹 눌러 끌기와는 먼저 시작한 쪽이 이긴다(가로로 먼저 움직이면 넘기기)
 library;
@@ -11,8 +13,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/bookcase.dart';
+import '../../store/settings_store.dart' show SettingsStore;
 import '../../ui/engraved_year.dart';
-import '../../ui/theme.dart';
+import '../../ui/scene.dart' show shelfWallColor;
 import 'home_screen.dart' show homeHeaderHeight;
 import 'year_shelf.dart';
 
@@ -84,7 +87,11 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
     super.dispose();
   }
 
-  bool get _reduce => MediaQuery.of(context).disableAnimations;
+  // 움직임 줄이기: 앱 설정(내 정보 › 움직임 줄이기: 기기 설정 · 켜기 · 끄기)을 따른다(홈 _reduceMotion과 같은 판단)
+  bool get _reduce {
+    final m = SettingsStore.instance.reduceMotion;
+    return m == 'on' || (m == 'system' && MediaQuery.disableAnimationsOf(context));
+  }
 
   void _animate(double at, double zoom) {
     _anim.stop();
@@ -152,7 +159,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
     if (_pinching || _pinched) return;
     _dragDx += d.delta.dx;
     final n = _count.toDouble();
-    final raw = _startAt - _dragDx / (_w * _startZ);
+    final raw = _startAt + _dragDx / (_w * _startZ);
     // 끝 너머는 손가락의 1/3만 따라간다
     setState(() => _at = raw < 0 ? raw / 3 : raw > n ? n + (raw - n) / 3 : raw);
   }
@@ -160,7 +167,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
   void _dragEnd(DragEndDetails d) {
     if (_pinching || _pinched) return;
     final z = _startZ;
-    final v = -d.velocity.pixelsPerSecond.dx / (_w * z); // 쪽/초
+    final v = d.velocity.pixelsPerSecond.dx / (_w * z); // 쪽/초(오른쪽으로 밀면 지난해 쪽으로)
     // 한 쪽 보기에서는 한 번에 한 해씩: 빠르게 밀었거나 4분의 1 넘게 밀었으면 그 쪽으로. 모아 보기에서는 민 만큼 미끄러진다
     if (z > 0.99) {
       final base = _startAt.roundToDouble();
@@ -183,7 +190,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
     _startZ = _zoom;
     // 손가락 가운데 아래의 쪽 자리(줄이기 전 단위)가 그대로 손가락 아래에 남게 한다
     final fx = (p[0].dx + p[1].dx) / 2 - _w / 2;
-    _u = _at * _w + fx / _zoom;
+    _u = fx / _zoom - _at * _w;
     _pinching = true;
     _pinched = true;
     widget.onPinch(true);
@@ -202,7 +209,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
     final fx = (p[0].dx + p[1].dx) / 2 - _w / 2;
     setState(() {
       _zoom = z;
-      _at = _clamp((_u - fx / z) / _w, -0.3, _count + 0.3);
+      _at = _clamp((fx / z - _u) / _w, -0.3, _count + 0.3);
     });
   }
 
@@ -217,7 +224,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
   }
 
   // 모아 보기에서 한 쪽을 누르면 그 책장으로
-  void _pick(TapUpDetails d) => _settle(_at + (d.localPosition.dx - _w / 2) / (_w * _zoom), 1);
+  void _pick(TapUpDetails d) => _settle(_at - (d.localPosition.dx - _w / 2) / (_w * _zoom), 1);
 
   String _yearOf(int k) => k == 0 ? '${DateTime.now().year}' : '${widget.bookcases[_count - k].year}';
 
@@ -233,7 +240,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
       Matrix4 frame(int k) => Matrix4.identity()
         ..translateByDouble(_w / 2, h / 2, 0, 1)
         ..scaleByDouble(_zoom, _zoom, 1, 1)
-        ..translateByDouble(-_w / 2 + (k - _at) * _w, -h / 2, 0, 1);
+        ..translateByDouble(-_w / 2 + (_at - k) * _w, -h / 2, 0, 1);
       final pages = <Widget>[];
       for (var k = 0; k <= _count; k++) {
         final near = (k - _at).abs() < (_engaged ? 1.999 : 0.999);
@@ -247,7 +254,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
           child: Transform(
             transform: frame(k),
             // 보이지 않는 쪽은 누를 수 없고 화면 읽기에서도 뺀다
-            child: IgnorePointer(ignoring: !active, child: ExcludeSemantics(excluding: !active, child: ColoredBox(color: AppColors.bg, child: child))),
+            child: IgnorePointer(ignoring: !active, child: ExcludeSemantics(excluding: !active, child: ColoredBox(color: shelfWallColor, child: child))),
           ),
         ));
       }
@@ -283,7 +290,7 @@ class YearPagerState extends State<YearPager> with SingleTickerProviderStateMixi
                   child: IgnorePointer(
                     child: Opacity(
                       opacity: show,
-                      child: Transform.translate(offset: Offset((k - _at) * _w * _zoom, 0), child: Center(child: EngravedYear(label: _yearOf(k), size: _labelSize))),
+                      child: Transform.translate(offset: Offset((_at - k) * _w * _zoom, 0), child: Center(child: EngravedYear(label: _yearOf(k), size: _labelSize))),
                     ),
                   ),
                 ),

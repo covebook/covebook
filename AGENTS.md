@@ -1,6 +1,7 @@
 # 작업 규칙 (사람·AI 에이전트 공통)
 
 ## Git: 무조건 main (결제의 일부 변경만 예외)
+- 작업을 시작할 때 지금 브랜치가 main이면 먼저 `git pull --rebase origin main`으로 최신을 받고 시작한다.
 - 브랜치를 따로 만들지 않는다. 실험·점검도 main에서 한다(`git checkout -b`, `git worktree add`로 다른 브랜치 만들기 금지).
 - 단계가 끝날 때마다(코드나 문서가 바뀐 단계) 그 단계에서 바꾼 파일만 골라 main에 커밋하고 바로 push한다.
 - 다른 사람이 먼저 push했으면 `git pull --rebase origin main`으로 받아 합친 뒤 push한다. 강제 push 금지.
@@ -9,7 +10,12 @@
 - 커밋하지 않는 것: `server/.env`, `server/.gradle`·`server/bin`·`server/build`·`server/data`.
 - 앱은 Flutter(`app/`)다. main push에 `app/**` 변경이 있으면 iOS TestFlight CI(`.github/workflows/ios-testflight.yml`)가 돈다. 결과를 확인한다.
 - main push에 `app/**` 변경이 있으면 안드로이드 Play 배포(`.github/workflows/android-flutter-play.yml`)도 자동으로 돌아 비공개 테스트(alpha)에 올라간다. 결과를 확인한다. 버전 이름은 `app/pubspec.yaml`의 `version`.
-- 서버(`server/**`) 변경은 push만으로 운영에 반영되지 않는다. KoDeploy에서 재배포해야 한다.
+- main push에 서버(`server/**`) 변경이 있으면 시험 뒤 KoDeploy로 자동 배포된다(`.github/workflows/kodeploy-server.yml`, 2026-11-25부터). 서버 PR 머지는 곧 운영 배포이고 마이그레이션도 그때 적용된다. 결과를 확인한다.
+
+## 화면 디자인
+- Flutter 앱에서 사용자가 보는 화면, 문구, 상태 또는 조작 방식을 바꿀 때는 먼저 docs/design/DESIGN.md의 해당 절과 16장 예외를 확인하고, 기존 공용 위젯과 디자인 토큰을 사용한다.
+- 화면, 상태, 시트, 창, 알림을 새로 만들거나 없애면 같은 작업에서 docs/design/SCREENS.md(화면 목록)도 고쳐 늘 최신으로 둔다. 번호는 바꾸지 않고, 새 항목은 다음 번호를 붙이며, 없앤 항목은 줄을 지우지 말고 삭제 날짜를 적는다.
+- 화면을 고치거나 추가할 때 사용자의 구체적 지시 때문에 DESIGN.md나 공통 규칙을 지키지 못했으면, SCREENS.md의 그 항목 바로 아래에 `- 예외: 어긴 규칙 — 이유` 한 줄을 적는다.
 
 ## 결제(인앱결제) 작업: 돈과 DB가 걸린 변경만 PR
 - 위 "무조건 main"의 예외다. 아래 변경은 main에 바로 올리지 않고 브랜치와 PR로 한다. 다른 사람이 확인한 뒤 머지하고, 머지 뒤 브랜치를 지운다.

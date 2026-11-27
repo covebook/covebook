@@ -6,15 +6,16 @@ import 'package:flutter/material.dart';
 
 import 'services/frame_log.dart';
 
-import 'domain/reference_home.dart';
 import 'scene_config/spine_look.dart';
 import 'store/skin_store.dart';
 import 'package:flutter/services.dart';
 
 import 'app/app_shell.dart';
+import 'app/net_gate.dart';
 import 'app/startup.dart';
 import 'features/auth/login_screen.dart' show AuthGate;
 import 'services/sync.dart';
+import 'services/net_status.dart';
 import 'services/ambient.dart';
 import 'services/cover_colors.dart';
 import 'features/reading/mini_timer.dart';
@@ -37,6 +38,8 @@ Future<void> main() async {
   if (_qaProxy.isNotEmpty) HttpOverrides.global = _QaProxy();
   bootAt = DateTime.now();
   WidgetsFlutterBinding.ensureInitialized();
+  // 인터넷 연결 확인(서버 있는 빌드만): 앱 화면보다 먼저 등록해 막혀 있는 동안 기기 뒤로를 먼저 받는다(app/net_gate.dart)
+  NetStatus.instance.start();
   // 시작 화면부터 그린다: 아래 준비가 몇 초 걸려 그동안 흰 화면만 보였다(지난 책장 사진이 있으면 그 사진)
   final snap = await usableSnapshot(homeSnapshotFile);
   startedWithSnapshot = snap != null;
@@ -47,16 +50,15 @@ Future<void> main() async {
     // ignore: avoid_print
     print('환경음 배경 재생 준비 실패 $e');
   });
-  await initBake();
+  // 준비 하나가 실패해도 시작 그림에 멈추지 않고 기본값으로 연다(2026-11-19 규칙: 실패가 있으면 시작 그림에 영원히 머물렀다)
+  await _startStep('굽기 준비', initBake);
   // 기기에 재 둔 책등 비율·갈피 색(책장 책 크기·갈피 색)
-  await loadCoverMeasures();
+  await _startStep('책 크기', loadCoverMeasures);
   // 고른 스킨(선반·벽지·벽)·책 측면 모양: 책장을 굽기 전에
-  await loadSkin();
-  await loadSpineLook();
-  // 새 서재 예시 책장(표시 전용 예시 책): 책장을 읽기 전에
-  await loadReferenceHome();
+  await _startStep('스킨', loadSkin);
+  await _startStep('책 측면', loadSpineLook);
   // 로그인 화면을 띄울지: 이 기기에 남긴 계정 사본을 먼저 읽는다(서버 있는 빌드만)
-  await SyncService.instance.loadLocalState();
+  await _startStep('계정', SyncService.instance.loadLocalState);
   startStep.value = 2;
   runApp(const ChaekjangApp());
 }
@@ -156,7 +158,7 @@ class ChaekjangApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: '책장한켠',
+        title: '책장 한켠',
         debugShowCheckedModeBanner: false,
         theme: appTheme,
         localizationsDelegates: const [KoMaterialLocalizations.delegate],
@@ -183,12 +185,24 @@ class ChaekjangApp extends StatelessWidget {
                 systemNavigationBarIconBrightness: Brightness.dark,
                 systemNavigationBarContrastEnforced: false,
               ),
-              child: Stack(children: [
-                ?child,
-                Material(type: MaterialType.transparency, child: MiniTimer(navigator: appNavigator)),
-              ]),
+              // 인터넷이 없으면 앱 전체(모든 화면 · 작은 타이머) 위를 막는다(서버 있는 빌드, 2026-11-21 사용자 '인터넷이 없으면 막자')
+              child: NetGate(
+                child: Stack(children: [
+                  ?child,
+                  Material(type: MaterialType.transparency, child: MiniTimer(navigator: appNavigator)),
+                ]),
+              ),
             ),
           );
         },
       );
+}
+
+/// 시작 준비 한 단계: 실패하면 기록만 남기고 기본값으로 계속한다
+Future<void> _startStep(String name, Future<void> Function() step) async {
+  try {
+    await step();
+  } catch (e) {
+    debugPrint('[start] $name 준비 실패, 기본값으로 계속: $e');
+  }
 }

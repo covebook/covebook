@@ -1,4 +1,4 @@
-// 서재의 값들(책·자리). app/src/domain/types.ts에서 책장을 그리는 데 쓰는 것만 옮긴 것.
+// 서재의 값들(책·자리). 옛 RN 앱(커밋 4f9e1d9) app/src/domain/types.ts에서 책장을 그리는 데 쓰는 것만 옮긴 것.
 library;
 
 /// 책 높이 등급
@@ -47,8 +47,6 @@ class Book {
     this.finishedAt,
     this.material,
     this.coverArtId,
-    this.plainCover = false,
-    this.reference,
   });
 
   final String id;
@@ -91,11 +89,28 @@ class Book {
   /// 고른 기본 정면 장정 그림(cover-artworks id). 있으면 실제 표지 사진 대신 이 그림
   final String? coverArtId;
 
-  /// 앞표지에 제목을 쓰지 않는다(새 서재 예시 책 일부, 지금 앱 art.plainCover)
-  final bool plainCover;
-
-  /// 시안 그림 표지(새 서재 예시 책: night·forest·sunset, assets/reference). 있으면 앞표지는 그 그림
-  final String? reference;
+  /// 갈피(색 · 수)만 바꾼 같은 책(책 꾸미기 › 갈피 미리보기)
+  Book withRibbon(String? color, int count) => Book(
+        id: id,
+        title: title,
+        author: author,
+        themeColor: themeColor,
+        heightClass: heightClass,
+        thicknessClass: thicknessClass,
+        coverAspectRatio: coverAspectRatio,
+        physical: physical,
+        coverUri: coverUri,
+        inkColor: inkColor,
+        dims: dims,
+        coverArtUri: coverArtUri,
+        ribbonColor: color,
+        titleTop: titleTop,
+        quotes: count,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        material: material,
+        coverArtId: coverArtId,
+      );
 }
 
 /// 책 하나의 자리(선반 안에서)

@@ -10,24 +10,8 @@ import 'package:flutter/widgets.dart';
 import 'bookmark_paper.dart';
 import 'paper_grain.dart';
 
-Color _c(int rgb, double a) => Color(0xFF000000 | rgb).withValues(alpha: a);
-
 const _max = 16;
 final _baked = <String, ui.Image>{};
-
-Paint _line(int rgb, double w, double a, {StrokeCap cap = StrokeCap.butt, StrokeJoin join = StrokeJoin.miter}) => Paint()
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = w
-  ..strokeCap = cap
-  ..strokeJoin = join
-  ..color = _c(rgb, a);
-
-void _at(Canvas c, double dx, double dy, void Function() draw) {
-  c.save();
-  c.translate(dx, dy);
-  draw();
-  c.restore();
-}
 
 /// 같은 색 채움+선을 한 겹으로(겹친 곳이 두 번 칠해지지 않게) 투명도를 준다
 void _layer(Canvas c, Rect bounds, double alpha, void Function() draw) {
@@ -50,24 +34,24 @@ void paintTape(Canvas c, Color color, String seed, double join) {
   const spreads = [10.0, 8.5, 7.0, 5.5, 4.0, 2.5, 1.0, 0.0];
   for (final (i, spread) in spreads.indexed) {
     _layer(c, view, .012 + i * .001, () {
-      _at(c, .8, 2.7, () {
+      paperShifted(c, .8, 2.7, () {
         c.drawPath(shape, Paint()..color = const Color(0xFF94765B));
-        if (spread > 0) c.drawPath(shape, _line(0x94765B, spread, 1, join: StrokeJoin.round));
+        if (spread > 0) c.drawPath(shape, paperStroke(0x94765B, spread, 1, join: StrokeJoin.round));
       });
     });
   }
   for (final spread in const [5.0, 3.5, 2.0, .5]) {
     _layer(c, view, .026, () {
-      _at(c, .6, 1.2, () {
+      paperShifted(c, .6, 1.2, () {
         c.drawPath(_underShadow, Paint()..color = const Color(0xFF89705A));
-        c.drawPath(_underShadow, _line(0x89705A, spread, 1, join: StrokeJoin.round));
+        c.drawPath(_underShadow, paperStroke(0x89705A, spread, 1, join: StrokeJoin.round));
       });
     });
   }
   c.restore();
-  _at(c, .3, .8, () {
-    c.drawPath(shape, Paint()..color = _c(0x6E6255, 0.17));
-    c.drawPath(shape, _line(0x6E6255, .7, .06));
+  paperShifted(c, .3, .8, () {
+    c.drawPath(shape, Paint()..color = paperRgba(0x6E6255, 0.17));
+    c.drawPath(shape, paperStroke(0x6E6255, .7, .06));
   });
   c.drawPath(shape, Paint()..color = color);
   c.save();
@@ -78,44 +62,44 @@ void paintTape(Canvas c, Color color, String seed, double join) {
       ..shader = ui.Gradient.linear(
         Offset.zero,
         const Offset(0.6, 1),
-        [_c(0xFFFFFF, .18), _c(0xFFFFFF, .015), _c(0x384D57, .045), _c(0xFFF6E9, .16)],
+        [paperRgba(0xFFFFFF, .18), paperRgba(0xFFFFFF, .015), paperRgba(0x384D57, .045), paperRgba(0xFFF6E9, .16)],
         [0, .25, .75, 1],
         TileMode.clamp,
         (Matrix4.identity()..scaleByDouble(44, 45, 1, 1)).storage,
       ),
   );
-  c.drawPath(svgPath(m.pulp), Paint()..color = _c(0x46606A, .035));
+  c.drawPath(svgPath(m.pulp), Paint()..color = paperRgba(0x46606A, .035));
   // 물결 주름: 골(어둡게)과 바로 옆 등(밝게). 위에서 오는 빛이라 등은 골보다 조금 위
   final swirl = svgPath(m.swirl);
   for (final w in const [3.2, 1.8]) {
-    _at(c, 0, .7, () => c.drawPath(swirl, _line(0x3E5560, w, .022, cap: StrokeCap.round)));
+    paperShifted(c, 0, .7, () => c.drawPath(swirl, paperStroke(0x3E5560, w, .022, cap: StrokeCap.round)));
   }
   for (final w in const [2.6, 1.3]) {
-    c.drawPath(swirl, _line(0xFFFCF2, w, .05, cap: StrokeCap.round));
+    c.drawPath(swirl, paperStroke(0xFFFCF2, w, .05, cap: StrokeCap.round));
   }
   final short = svgPath(m.short), long = svgPath(m.long);
-  c.drawPath(short, _line(0x4D6269, .32, .07, cap: StrokeCap.round));
-  _at(c, .12, .22, () => c.drawPath(short, _line(0xF6F3E8, .36, .1, cap: StrokeCap.round)));
-  c.drawPath(long, _line(0x61747A, .36, .11, cap: StrokeCap.round));
-  _at(c, 0, .3, () => c.drawPath(long, _line(0xFFFCF0, .42, .15, cap: StrokeCap.round)));
-  c.drawPath(svgPath(m.flecks), _line(0x334B56, .45, .11, cap: StrokeCap.round));
+  c.drawPath(short, paperStroke(0x4D6269, .32, .07, cap: StrokeCap.round));
+  paperShifted(c, .12, .22, () => c.drawPath(short, paperStroke(0xF6F3E8, .36, .1, cap: StrokeCap.round)));
+  c.drawPath(long, paperStroke(0x61747A, .36, .11, cap: StrokeCap.round));
+  paperShifted(c, 0, .3, () => c.drawPath(long, paperStroke(0xFFFCF0, .42, .15, cap: StrokeCap.round)));
+  c.drawPath(svgPath(m.flecks), paperStroke(0x334B56, .45, .11, cap: StrokeCap.round));
   c.drawRect(
     Rect.fromLTWH(0, join - 2.2, 44, 4.4),
     Paint()
       ..shader = ui.Gradient.linear(
         Offset(0, join - 2.2),
         Offset(0, join + 2.2),
-        [_c(0x50606A, 0), _c(0x50606A, .065), _c(0xFFFFFF, .065), _c(0xFFFFFF, 0)],
+        [paperRgba(0x50606A, 0), paperRgba(0x50606A, .065), paperRgba(0xFFFFFF, .065), paperRgba(0xFFFFFF, 0)],
         [0, .4, .55, 1],
       ),
   );
   c.restore();
   // 빛 받는 윗변과 찢긴 섬유(굵은 윤곽선은 없다)
-  c.drawPath(_topEdge, _line(0xFFFCEF, .65, .52, cap: StrokeCap.round));
+  c.drawPath(_topEdge, paperStroke(0xFFFCEF, .65, .52, cap: StrokeCap.round));
   final torn = svgPath(m.torn);
-  c.drawPath(torn, _line(0x566B70, .55, .38, join: StrokeJoin.round));
-  _at(c, 0, -.65, () => c.drawPath(torn, _line(0xFFF5E6, .5, .34)));
-  c.drawPath(svgPath(m.fringe), _line(0xF5F0DF, .3, .55, cap: StrokeCap.round));
+  c.drawPath(torn, paperStroke(0x566B70, .55, .38, join: StrokeJoin.round));
+  paperShifted(c, 0, -.65, () => c.drawPath(torn, paperStroke(0xFFF5E6, .5, .34)));
+  c.drawPath(svgPath(m.fringe), paperStroke(0xF5F0DF, .3, .55, cap: StrokeCap.round));
 }
 
 /// 테이프 위젯: width×height 자리에 붙고, 그림자·여백은 자리 밖(-12/44, -8/45)까지 그린다
@@ -165,4 +149,121 @@ class _TapePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TapePainter old) => old.img != img;
+}
+
+final _stripBaked = <String, ui.Image>{};
+
+/// 사진에 붙인 한지 테이프 띠(사진 갈피 PhotoPlate). 띠 모양 · 섬유는 [tapeStrip](씨앗마다 같다), 각도는 부르는 쪽이 [TapeStrip.angle]로 돌린다.
+/// 비치는 종이라 바탕색은 반투명으로 칠하고(아래 흰 테두리 · 사진이 옅게 비친다), 섬유는 그 위에 그린다.
+/// [join] · [joinAngle]: 사진틀 위 끝이 테이프 아래를 지나는 자리(띠 좌표의 한 점과 띠에 대한 기울기, 라디안). 그 선을 따라 틀 두께만큼 턱이 진다
+class WashiStrip extends StatelessWidget {
+  const WashiStrip({super.key, required this.color, required this.seed, required this.width, required this.height, this.join, this.joinAngle = 0});
+  final Color color;
+  final String seed;
+  final double width, height;
+  final Offset? join;
+  final double joinAngle;
+
+  static double margin(double height) => 6 * height / 30;
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final m = margin(height);
+    final key = '$seed|${color.toARGB32()}|$width|$height|${join?.dx.toStringAsFixed(1)},${join?.dy.toStringAsFixed(1)}|${joinAngle.toStringAsFixed(3)}|${dpr.toStringAsFixed(2)}';
+    var img = _stripBaked.remove(key);
+    if (img == null) {
+      final rec = ui.PictureRecorder();
+      final c = Canvas(rec);
+      c.scale(dpr);
+      c.translate(m, m);
+      paintWashiStrip(c, color, tapeStrip(seed, width, height), width, height, join, joinAngle);
+      final pic = rec.endRecording();
+      img = pic.toImageSync(((width + 2 * m) * dpr).ceil(), ((height + 2 * m) * dpr).ceil());
+      pic.dispose();
+    }
+    _stripBaked[key] = img;
+    if (_stripBaked.length > _max) _stripBaked.remove(_stripBaked.keys.first);
+    return IgnorePointer(child: SizedBox(width: width, height: height, child: CustomPaint(painter: _StripPainter(img, m, dpr))));
+  }
+}
+
+/// 띠 그리기(화면 좌표 w×h, 그림자 · 섬유 끝은 밖으로 조금 나간다)
+void paintWashiStrip(Canvas c, Color color, TapeStrip s, double w, double h, Offset? join, double joinAngle) {
+  final k = h / 30;
+  final shape = svgPath(s.outline);
+  // 그림자: 붙어 있어 아주 옅다. 들뜬 가장자리만 살짝 번진다(위에서 오는 빛이라 아래로)
+  c.drawPath(shape.shift(Offset(.3 * k, 1.3 * k)), Paint()
+    ..color = paperRgba(0x5A4630, .13)
+    ..maskFilter = MaskFilter.blur(BlurStyle.normal, 1.7 * k));
+  c.drawPath(shape.shift(Offset(0, .35 * k)), Paint()
+    ..color = paperRgba(0x5A4630, .10)
+    ..maskFilter = MaskFilter.blur(BlurStyle.normal, .45 * k));
+  // 바탕: 비치는 한지
+  c.drawPath(shape, Paint()..color = color.withValues(alpha: .8));
+  c.save();
+  c.clipPath(shape);
+  final box = Rect.fromLTWH(-2 * k, -2 * k, w + 4 * k, h + 4 * k);
+  // 고르지 않은 비침: 섬유가 뭉친 곳은 희고 탁하게, 얇은 곳은 조금 더 비친다
+  for (final (x, y, rx, ry, light) in s.clouds) {
+    c.drawOval(Rect.fromCenter(center: Offset(x, y), width: rx * 2, height: ry * 2), Paint()
+      ..color = light ? paperRgba(0xFFFFFF, .16) : paperRgba(0x8A7C6C, .05)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3 * k));
+  }
+  // 위에서 오는 빛: 위쪽이 조금 밝고 아래로 갈수록 아주 조금 어둡다
+  c.drawRect(
+    box,
+    Paint()
+      ..shader = ui.Gradient.linear(Offset(0, 0), Offset(w * .15, h), [paperRgba(0xFFFFFF, .14), paperRgba(0xFFFFFF, .02), paperRgba(0x384D57, .04), paperRgba(0xFFF6E9, .10)], [0, .3, .75, 1]),
+  );
+  c.drawPath(svgPath(s.pulp), Paint()..color = paperRgba(0x46606A, .035));
+  final short = svgPath(s.short), long = svgPath(s.long);
+  c.drawPath(short, paperStroke(0x4D6269, .32 * k, .045, cap: StrokeCap.round));
+  paperShifted(c, .12 * k, .22 * k, () => c.drawPath(short, paperStroke(0xF6F3E8, .36 * k, .12, cap: StrokeCap.round)));
+  c.drawPath(long, paperStroke(0x61747A, .36 * k, .065, cap: StrokeCap.round));
+  paperShifted(c, 0, .3 * k, () => c.drawPath(long, paperStroke(0xFFFCF0, .42 * k, .16, cap: StrokeCap.round)));
+  // 사진틀 위 끝을 넘는 턱: 틀 두께만큼 올라서는 자리 바로 위는 옅은 그늘, 올라선 면은 빛을 받아 밝다
+  if (join != null) {
+    c.save();
+    c.translate(join.dx, join.dy);
+    c.rotate(joinAngle);
+    c.drawRect(
+      Rect.fromLTWH(-w * 2, -2.4 * k, w * 4, 4.8 * k),
+      Paint()
+        ..shader = ui.Gradient.linear(Offset(0, -2.4 * k), Offset(0, 2.4 * k), [paperRgba(0x50606A, 0), paperRgba(0x50606A, .07), paperRgba(0xFFFFFF, .09), paperRgba(0xFFFFFF, 0)], [0, .42, .56, 1]),
+    );
+    c.restore();
+  }
+  c.restore();
+  // 재단선: 윗변은 빛을 받고 아랫변은 두께만큼 아주 옅게 어둡다
+  c.save();
+  c.clipRect(Rect.fromLTWH(-4 * k, h - 1.2 * k, w + 8 * k, 4 * k));
+  c.drawPath(shape, paperStroke(0x6E6255, .55 * k, .12));
+  c.restore();
+  c.save();
+  c.clipRect(Rect.fromLTWH(-4 * k, -4 * k, w + 8 * k, 1.2 * k + 4 * k));
+  c.drawPath(shape, paperStroke(0xFFFCEF, .7 * k, .45));
+  c.restore();
+  // 찢긴 끝: 섬유가 드러나 희고 보송하다(안쪽에 아주 옅은 그늘 한 줄)
+  final torn = svgPath(s.torn);
+  c.drawPath(torn, paperStroke(0x566B70, .45 * k, .16, join: StrokeJoin.round));
+  c.drawPath(torn, paperStroke(0xFFFBF2, .95 * k, .55, join: StrokeJoin.round, cap: StrokeCap.round));
+  final fringe = svgPath(s.fringe);
+  c.drawPath(fringe, paperStroke(0xF7F2E4, .38 * k, .7, cap: StrokeCap.round));
+  paperShifted(c, 0, .25 * k, () => c.drawPath(fringe, paperStroke(0x6E6255, .25 * k, .12, cap: StrokeCap.round)));
+}
+
+class _StripPainter extends CustomPainter {
+  _StripPainter(this.img, this.m, this.dpr);
+  final ui.Image img;
+  final double m, dpr;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final dst = Rect.fromLTWH(-m, -m, img.width / dpr, img.height / dpr);
+    canvas.drawImageRect(img, Offset.zero & Size(img.width.toDouble(), img.height.toDouble()), dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(_StripPainter old) => old.img != img;
 }

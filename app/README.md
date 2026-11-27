@@ -1,8 +1,35 @@
-# 책장 한켠 — Flutter 이식 (2026-11-13 시작)
+# 책장 한켠 앱 (Flutter)
 
-옛 앱(React Native + Skia, `app/`)을 Flutter로 옮겼다. `app/` 폴더는 2026-11-18에 저장소에서 지웠고, 코드는 커밋 `4f9e1d9`에 남아 있다.
-아래에서 "지금 앱"·"RN"은 그 옛 앱을 가리킨다(이식 당시 기록).
-셰이더 생성기(`tool/gen_shaders.sh`)는 아직 옛 앱 코드를 쓰므로 그 커밋에서 꺼내 돌린다.
+```bash
+flutter pub get
+flutter run                          # 서버 붙여 쓰기: --dart-define=SYNC_URL=…
+flutter analyze --no-fatal-infos     # 경로에 한글이 있어 분석 서버가 멈추면: dart analyze
+flutter test                         # 디자인 토큰 · 옛 앱과 견줌 시험 포함
+```
+
+| 폴더 | 담는 것 |
+|---|---|
+| `lib/domain/` | 서재 값 · 규칙 · 3D 구조 · 빛 계산(화면과 상관없는 순수 계산) |
+| `lib/scene_config/` | 빛 · 카메라 · 스킨 값 |
+| `lib/db/`, `lib/store/` | 기기 DB와 서재 읽기 · 쓰기 |
+| `lib/services/` | 서버 동기화 · 도서 검색 · 사진 등 바깥 연동 |
+| `lib/features/` | 화면 |
+| `lib/ui/` | 디자인 값(`theme.dart` · `kit.dart`)과 공용 부품, 책장 그리기 |
+| `lib/gen/` | 만든 코드(손으로 고치지 않음, `tool/README.md`) |
+| `shaders/` | 빛 셰이더(`tool/gen_shaders.sh`가 만든다) |
+| `design-system/` | 시안용 디자인 토큰(`test/design_tokens_test.dart`가 만든다) |
+| `tool/` | 셰이더 · 견줌 자료 · 아이콘 만드는 도구([설명](tool/README.md)) |
+
+- 화면 디자인 규칙과 '어디를 고치나': [`docs/design/DESIGN.md`](../docs/design/DESIGN.md)
+- 작업 규칙(커밋 · 배포): [`AGENTS.md`](../AGENTS.md)
+- 코드 주석의 **"지금 앱"·"RN"·"옛 앱"은 이식 당시의 React Native 앱**(2026-11-18에 지움, 마지막 커밋 `4f9e1d9`, 그때 경로 `app/src/…`)을 가리킨다. 지금 `app/`은 이 Flutter 앱이다.
+- 셰이더 생성기와 견줌 자료(`tool/gen_shaders.sh`, `tool/dump_*.test.ts`)는 아직 그 옛 코드를 커밋에서 꺼내 쓴다. 빛을 바꿀 때만 돌린다([`tool/README.md`](tool/README.md)).
+
+---
+
+# 이식 기록 (2026-11-13 시작)
+
+옛 앱(React Native + Skia, 당시 `app/`)을 Flutter(당시 `flutter/`, 11-18부터 `app/`)로 옮겼다. 아래는 이식 당시 기록이라 "지금 앱"은 옛 RN 앱이다.
 
 ## 왜 옮기나 (11-13 측정 기준, 에뮬 x86_64)
 
@@ -43,8 +70,8 @@ RN = 지금 앱(c0751c2, QA 측정 빌드) · Flutter = 이 폴더. 줄 6개, �
 
 ## 옮기는 순서
 
-1. 뼈대 · 상수(`scene_config`, `domain` 상수) ← 지금 여기
-2. 셰이더 생성기(`tool/gen_shaders.dart` → `shaders/*.frag`), 빛 격자 · 굽기부터
+1. 뼈대 · 상수(`scene_config`, `domain` 상수)
+2. 셰이더 생성기(`tool/gen_shaders.sh` → `shaders/*.frag`), 빛 격자 · 굽기부터
 3. 굽기 파이프라인(`lib/ui/scene_light.dart`) + 줄 하나 그리기
 4. **관문: S23에서 한 줄 굽기 측정.** 지금 앱보다 낫거나 같으면 계속
 5. 화면 · 저장소 · 동기화 · 위젯
@@ -54,11 +81,11 @@ RN = 지금 앱(c0751c2, QA 측정 빌드) · Flutter = 이 폴더. 줄 6개, �
 ## 지금 앱과 다르게 가는 것
 
 - **셰이더 소스는 빌드할 때 만든다.** 지금은 켤 때마다 문자열로 만들어 컴파일했다.
-  `dart run tool/gen_shaders.dart` → `shaders/*.frag`(저장소에 함께 둔다) → `flutter build`가 미리 컴파일.
+  `bash tool/gen_shaders.sh` → `shaders/*.frag`(저장소에 함께 둔다) → `flutter build`가 미리 컴파일.
 - **SkSL → GLSL**: `float2/3/4`→`vec2/3/4`, `half`→`float`, 진입점은 `out vec4 fragColor; void main()`,
   화면 좌표는 `FlutterFragCoord()`, 자식 그림은 `sampler2D` + `texture()`.
 
 ## 값의 기준
 
-빛 값은 **커밋된 값**(`git show HEAD:app/src/scene-config/lighting.ts`)으로 옮긴다.
+빛 값은 **커밋된 값**(당시 `git show HEAD:app/src/scene-config/lighting.ts`, 지금은 `git show 4f9e1d9:app/src/scene-config/lighting.ts`)으로 옮긴다.
 다른 세션이 11-10부터 미커밋으로 들고 있는 빛 조정(창빛 0.22→0.5 등)은 그 작업이 끝나 커밋되면 그때 반영한다.

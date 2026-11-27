@@ -1,4 +1,4 @@
-// 기록 화면 부품: 달력(날마다 읽은 책 표지를 겹쳐), 막대 그래프(말풍선), 작은 막대(시간대·길이·요일), 책 한 권 기록.
+// 기록 화면 부품: 달력(날마다 읽은 책 표지를 겹쳐), 막대 그래프, 작은 막대(시간대·길이·요일), 책 한 권 기록, 서재 책 표지·제목·저자.
 // 지금 앱 features/stats/ReadingCalendar·ReadingChart·MiniBars·BookRecord와 ui/BookVisual LinkedCover를 옮긴 것
 library;
 
@@ -8,76 +8,18 @@ import 'package:flutter/material.dart';
 
 import '../../domain/cover_url.dart';
 import '../../domain/library.dart';
-import '../../services/cover_cache.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'chart_data.dart';
-import '../book/labels.dart' show dateShort;
 
-final _small = AppType.micro;
+// 표지 부품은 lib/ui/book_cover.dart(책장 시트 등이 이 파일에서 가져다 써서 다시 내보낸다)
+export '../../ui/book_cover.dart';
+import '../../ui/book_cover.dart';
+import '../book/labels.dart' show dateRange;
 
-Color _hex(String hex) => Color(0xFF000000 | int.parse(hex.replaceAll('#', ''), radix: 16));
+// 글자는 쓸 때마다 읽는다(모듈 final은 처음 한 번만 읽어 화소 맞춤 배율을 놓친다, theme.dart rnPx)
+TextStyle get _small => AppType.micro;
 
-/// 표지 그림(기기에 받아 둔 것). 없거나 못 받으면 책 색 바탕
-class CoverImage extends StatefulWidget {
-  const CoverImage({super.key, required this.uris, required this.color, required this.width, required this.height, this.radius = 2.5});
-  final List<String?> uris;
-  final Color color;
-  final double width;
-  final double height;
-  final double radius;
-
-  @override
-  State<CoverImage> createState() => _CoverImageState();
-}
-
-class _CoverImageState extends State<CoverImage> {
-  RawImage? _img;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    for (final u in {...widget.uris.whereType<String>()}) {
-      final img = coverInMemory(u) ?? await loadCover(u);
-      if (img != null) {
-        if (mounted) setState(() => _img = RawImage(image: img, fit: BoxFit.cover, width: widget.width, height: widget.height));
-        return;
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => ClipRRect(
-        borderRadius: BorderRadius.circular(widget.radius),
-        child: Container(width: widget.width, height: widget.height, color: widget.color, child: _img),
-      );
-}
-
-/// 서재 책의 표지: 실제 표지가 있으면 그것, 없으면 책 색 대체 표지(제목)
-class LinkedCover extends StatelessWidget {
-  const LinkedCover({super.key, required this.lib, required this.id, required this.width});
-  final Library lib;
-  final String id;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    final b = lib.books[id];
-    final e = b == null ? null : lib.editions[b.editionId];
-    final color = (b?.bindingId != null ? lib.bindings[b!.bindingId]?.spineColor : null) ?? '#F2F4F6';
-    if (e?.coverUri != null) {
-      return Semantics(
-        label: '${e!.title} 표지',
-        child: CoverImage(uris: [coverAtSize(e.coverUri, 'M'), e.coverUri], color: AppColors.surface, width: width, height: width / 0.68, radius: 3),
-      );
-    }
-    return RealCover(title: e?.title ?? '', color: color, width: width);
-  }
-}
 
 // ---------- 달력 ----------
 const _maxLayers = 4, _stepX = 4.0, _stepY = 2.0, _coverH = 46.0, _coverRatio = 1.42, _numH = 24.0;
@@ -96,6 +38,7 @@ class ReadingCalendar extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: LayoutBuilder(builder: (context, c) {
           final cell = c.maxWidth / 7;
+          final weeks = calendarWeeks(y, m);
           return Column(children: [
             Container(
               padding: const EdgeInsets.only(bottom: 8),
@@ -103,10 +46,11 @@ class ReadingCalendar extends StatelessWidget {
               child: Row(children: [for (final d in weekdays) SizedBox(width: cell, child: Text(d, textAlign: TextAlign.center, style: _small))]),
             ),
             // 주 사이에만 선(맨 아래 선은 없다: 아래 구역 선과 겹쳐 두 줄로 보였다, 2026-11-17 사용자 댓글)
-            for (final (wi, week) in calendarWeeks(y, m).indexed)
+            // 주마다 표지 자리를 늘 둔다(기록 없는 주도 같은 높이). 11-25 빈 주를 낮췄다가 11-26 사용자 '기존이 낫다'로 되돌림
+            for (final (wi, week) in weeks.indexed)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                decoration: wi == calendarWeeks(y, m).length - 1 ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 0.5))),
+                decoration: wi == weeks.length - 1 ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 0.5))),
                 child: Row(children: [
                   for (final day in week)
                     day == null
@@ -134,17 +78,19 @@ class _DayCell extends StatelessWidget {
     final w = math.min((_coverH / _coverRatio).roundToDouble(), math.max(16.0, cell - 4));
     final side = (cell - w) / 2;
     final ids = (row?.books ?? const <String>[]).where((id) => lib.books.containsKey(id)).take(_maxLayers).toList();
-    final titles = [for (final id in ids) lib.editions[lib.books[id]!.editionId]?.title].whereType<String>().toList();
+    final titles = [for (final id in ids) bookTitle(lib, id)].whereType<String>().toList();
     final label = row != null
         ? '$n일, ${titles.isNotEmpty ? '${titles.first}${row!.books.length > 1 ? ' 외 ${row!.books.length - 1}권' : ''}, ' : ''}${formatDuration(row!.ms)}'
         : '$n일, 기록 없음';
+    // 기록이 없는 날도 오늘까지는 누른다(그날 독서 기록 추가, 2026-11-23). 앞날은 누르지 않는다
+    final can = row != null || day.compareTo(todayKey()) <= 0;
     return Semantics(
       button: true,
       selected: selected,
-      enabled: row != null,
+      enabled: can,
       label: label,
       child: Pressable(
-        onPress: row == null ? null : () => onSelect(day),
+        onPress: can ? () => onSelect(day) : null,
         child: SizedBox(
           width: cell,
           child: Column(children: [
@@ -169,10 +115,10 @@ class _DayCell extends StatelessWidget {
               height: _coverH + (_maxLayers - 1) * _stepY,
               child: Stack(children: [
                 // 뒤 책부터 그린다
-                for (final id in ids.reversed)
+                for (final (i, id) in ids.indexed.toList().reversed)
                   Positioned(
-                    right: side + ids.indexOf(id) * _stepX,
-                    top: ids.indexOf(id) * _stepY,
+                    right: side + i * _stepX,
+                    top: i * _stepY,
                     child: _Paper(lib: lib, id: id, w: w, h: _coverH),
                   ),
                 if (ids.isEmpty && row != null) Positioned(right: side, top: 0, child: _Paper(w: w, h: _coverH)),
@@ -205,63 +151,38 @@ class _Paper extends StatelessWidget {
         border: Border.all(color: const Color(0x24191F28), width: 0.5),
         boxShadow: const [BoxShadow(color: Color(0x1F000000), offset: Offset(0, 1), blurRadius: 2)],
       ),
-      child: CoverImage(uris: [coverAtSize(e?.coverUri, 'M'), e?.coverUri], color: color != null ? _hex(color) : AppColors.input, width: w, height: h),
+      child: CoverImage(uris: [coverAtSize(e?.coverUri, 'M'), e?.coverUri], color: color != null ? hexColor(color) : AppColors.input, width: w, height: h),
     );
   }
 }
 
 // ---------- 막대 그래프 ----------
-const _plotH = 170.0, _axisW = 38.0, _labelH = 26.0;
+/// 그래프 높이 160(시안의 약 1.5배, 2026-11-17 사용자: 높낮이를 좀 더 높게), 위 여유 14(고른 값은 그래프 위 머리줄 StatHead가 보인다)
+const _plotH = 160.0, _topH = 14.0, _axisW = 38.0, _labelH = 26.0;
 
 class ReadingChart extends StatelessWidget {
-  const ReadingChart({super.key, required this.bars, required this.selected, required this.unit, required this.onSelect, this.tip = true, this.plotH = _plotH});
+  const ReadingChart({super.key, required this.bars, required this.selected, required this.unit, required this.onSelect});
   final List<Bar> bars;
   final String? selected;
   final String unit;
   final ValueChanged<String> onSelect;
 
-  /// 고른 막대 위 말풍선. 끄면 값은 그래프 위 머리줄이 보인다(2026-11-17 통계 시안)
-  final bool tip;
-  final double plotH;
-
+  // 고른 막대 위 말풍선은 뺐다(늘 꺼져 있었다: 값은 그래프 위 머리줄, 2026-11-17 통계 시안)
   @override
-  Widget build(BuildContext context) {
-    final tipH = tip ? _ReadingChartDims.tipH : 14.0;
-    return SizedBox(
-        height: tipH + plotH + _labelH,
+  Widget build(BuildContext context) => SizedBox(
+        height: _topH + _plotH + _labelH,
         child: LayoutBuilder(builder: (context, c) {
           final w = c.maxWidth;
           final max = bars.fold<num>(0, (a, b) => math.max(a, b.ms));
           final ticks = yTicks(max);
-          double scale(num ms) => max > 0 ? ms / max * (plotH - 6) : 0;
+          double scale(num ms) => max > 0 ? ms / max * (_plotH - 6) : 0;
           final plotW = math.max(0.0, w - _axisW);
           final cell = bars.isEmpty ? 0.0 : plotW / bars.length;
           final barW = math.max(3.0, math.min(unit == '월' ? 14.0 : 7.0, cell * 0.6));
           double cx(int i) => _axisW + cell * (i + 0.5);
           final sel = bars.indexWhere((b) => b.key == selected && b.ms > 0);
-          final base = tipH + plotH;
+          const base = _topH + _plotH;
           double barH(num ms) => math.max(barW, scale(ms));
-          final tip = sel < 0 || !this.tip ? null : '${bars[sel].label}$unit | ${formatDuration(bars[sel].ms)}';
-          // 말풍선 폭(글자 폭 + 좌우 10)
-          final tipW = tip == null
-              ? 0.0
-              : (TextPainter(
-                    text: TextSpan(children: [
-                      TextSpan(text: '${bars[sel].label}$unit | ', style: AppType.micro),
-                      TextSpan(text: formatDuration(bars[sel].ms), style: AppType.micro.copyWith(fontFamily: AppFonts.uiBold)),
-                    ]),
-                    textDirection: TextDirection.ltr,
-                    textScaler: MediaQuery.textScalerOf(context), // 그릴 때와 같은 글자 크기(RnTextScaler)로 잰다
-                  )..layout())
-                      .width +
-                  20;
-          final tipLeft = sel < 0 ? 0.0 : (cx(sel) + tipW / 2 > w ? w - tipW : math.max(0.0, cx(sel) - tipW / 2).roundToDouble());
-          final barTop = sel >= 0 ? base - barH(bars[sel].ms) : 0.0;
-          var tipBase = barTop;
-          for (var i = 0; i < bars.length; i++) {
-            final b = bars[i];
-            if (b.ms > 0 && cx(i) + barW / 2 >= tipLeft && cx(i) - barW / 2 <= tipLeft + tipW) tipBase = math.min(tipBase, base - barH(b.ms));
-          }
           return Stack(clipBehavior: Clip.none, children: [
             CustomPaint(
               size: Size(w, base + 6),
@@ -275,8 +196,8 @@ class ReadingChart extends StatelessWidget {
               Positioned(
                 left: _axisW + cell * i,
                 width: cell,
-                top: tipH,
-                height: plotH + _labelH,
+                top: _topH,
+                height: _plotH + _labelH,
                 child: Semantics(
                   button: bars[i].ms > 0,
                   selected: i == sel,
@@ -284,36 +205,9 @@ class ReadingChart extends StatelessWidget {
                   child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: bars[i].ms > 0 ? () => onSelect(bars[i].key) : null),
                 ),
               ),
-            if (sel >= 0 && tip != null) ...[
-              if (tipBase < barTop) Positioned(left: cx(sel) - 0.5, top: tipBase - 12, width: 1, height: barTop - tipBase + 12, child: const ColoredBox(color: AppColors.accent)),
-              Positioned(
-                left: tipLeft,
-                top: tipBase - 42,
-                height: 30,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
-                  child: Text.rich(TextSpan(children: [
-                    TextSpan(text: '${bars[sel].label}$unit | ', style: AppType.micro.copyWith(color: AppColors.onAccent)),
-                    TextSpan(text: formatDuration(bars[sel].ms), style: AppType.micro.copyWith(fontFamily: AppFonts.uiBold, color: AppColors.onAccent)),
-                  ])),
-                ),
-              ),
-              Positioned(
-                left: cx(sel) - 5,
-                top: tipBase - 17,
-                child: Transform.rotate(angle: math.pi / 4, child: const SizedBox(width: 10, height: 10, child: ColoredBox(color: AppColors.accent))),
-              ),
-            ],
           ]);
         }),
       );
-  }
-}
-
-abstract final class _ReadingChartDims {
-  static const tipH = 44.0;
 }
 
 class _ChartPainter extends CustomPainter {
@@ -358,7 +252,8 @@ class MiniBar {
   final num value;
 }
 
-const _miniLabelH = 24.0, _miniBarMax = 52.0;
+/// 작은 막대 그래프 높이 96(2026-11-17 사용자: 높낮이를 더 높게)
+const _miniPlotH = 96.0, _miniLabelH = 24.0, _miniBarMax = 52.0;
 
 /// 통계 한 칸 머리줄(2026-11-17 시안): 왼쪽 제목, 오른쪽 가장 많은(또는 고른) 것 굵게와 그 값 회색 한 줄 아래
 class StatHead extends StatelessWidget {
@@ -373,15 +268,15 @@ class StatHead extends StatelessWidget {
           Semantics(
             liveRegion: true,
             child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(top!, style: AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-              if (value != null) Text(value!, style: AppType.caption.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+              Text(top!, style: AppType.section.tnum),
+              if (value != null) Text(value!, style: AppType.caption.tnum),
             ]),
           ),
       ]);
 }
 
 class MiniBars extends StatefulWidget {
-  const MiniBars({super.key, required this.title, required this.bars, required this.labels, required this.emptyText, required this.valueText, this.extra, this.plotH = 96, this.labelLines = 1});
+  const MiniBars({super.key, required this.title, required this.bars, required this.labels, required this.emptyText, required this.valueText, this.extra, this.labelLines = 1});
   final String title;
   final List<MiniBar> bars;
   final List<(int, String)> labels;
@@ -390,9 +285,6 @@ class MiniBars extends StatefulWidget {
 
   /// 머리줄과 그래프 사이(한 번에 읽은 시간의 평균·가장 오래 카드)
   final Widget? extra;
-
-  /// 그래프 높이(2026-11-17 사용자: 높낮이를 더 높게)
-  final double plotH;
 
   /// 아래 이름 줄 수(길이 칸은 '30분~1시간'처럼 두 줄)
   final int labelLines;
@@ -411,7 +303,7 @@ class _MiniBarsState extends State<MiniBars> {
     final peak = max > 0 ? bars.firstWhere((b) => b.value == max) : null;
     final chosen = bars.where((b) => b.key == _picked && b.value > 0).firstOrNull;
     final shown = chosen ?? peak;
-    final plotH = widget.plotH;
+    const plotH = _miniPlotH;
     final labelH = _miniLabelH + (widget.labelLines - 1) * 18.0;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       StatHead(title: widget.title, top: shown?.name, value: shown == null ? null : widget.valueText(shown)),
@@ -486,24 +378,31 @@ class _MiniPainter extends CustomPainter {
 }
 
 // ---------- 책 한 권 기록 ----------
+/// 이름 + 숫자 칸(작은 회색 이름 위, 굵은 숫자 19 아래): 통계 요약 · 평균 카드 · 책 한 권 기록이 모두 이것
+/// (2026-11-19 공통 규칙: 같은 '읽은 날'이 24와 19로 달랐고, 같은 칸을 세 벌로 만들었다)
 class StatNumber extends StatelessWidget {
-  const StatNumber({super.key, required this.label, required this.value});
+  const StatNumber({super.key, required this.label, required this.value, this.flex = 1});
   final String label;
   final String value;
+  /// 한 줄에 놓인 칸끼리 나누는 몫(값이 긴 '읽은 시간'은 넓게)
+  final int flex;
 
+  // 화면 읽기는 '이름 값' 한 번(안쪽 글자까지 두 번 읽혔다)
   @override
   Widget build(BuildContext context) => Expanded(
+        flex: flex,
         child: Semantics(
+          container: true,
           label: '$label $value',
+          excludeSemantics: true,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: AppType.caption),
             const SizedBox(height: Space.xs),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(value,
-                  maxLines: 1,
-                  style: AppType.section.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+              // 숫자 값 역할(figure 24: 통계 읽은 날 · 독서 횟수). 분석 위 요약이 쓰던 크기로 하나(2026-11-19 공통 규칙)
+              child: Text(value, maxLines: 1, style: AppType.figure),
             ),
           ]),
         ),
@@ -518,41 +417,60 @@ class BookRecordView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = bookRecord(lib, id);
-    final title = lib.editions[lib.books[id]?.editionId]?.title ?? '';
-    String dot(String d) => dateShort(d);
-    final span = r.firstDay != null ? (r.firstDay == r.lastDay ? dot(r.firstDay!) : '${dot(r.firstDay!)} ~ ${dot(r.lastDay!)}') : '아직 기록이 없어요';
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.s),
-      child: Column(children: [
-        Row(children: [
-          SizedBox(width: 40, child: Center(child: LinkedCover(lib: lib, id: id, width: 40))),
-          const SizedBox(width: Space.m),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-              Padding(padding: const EdgeInsets.only(top: 2), child: Text(span, maxLines: 1, style: AppType.sub)),
-            ]),
-          ),
-        ]),
+    final span = r.firstDay != null ? dateRange(r.firstDay, r.lastDay) : '아직 기록이 없어요';
+    // 책은 화면 맨 위 책 칸에 이미 있어 책 줄을 되풀이하지 않는다. 아래 달 숫자와 헷갈리지 않게 '이 책 전체'와 읽은 기간을 머리로
+    // (2026-11-21: 맨 위 책 칸을 넣으며 책 줄이 두 번 보였다)
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SectionHead(title: '이 책 전체', note: span),
+      const SizedBox(height: Space.m),
+      Row(children: [
+        StatNumber(label: '총 독서 시간', value: formatDuration(r.readMs)),
+        const SizedBox(width: Space.m),
+        StatNumber(label: '읽은 날', value: '${r.days}일'),
+        const SizedBox(width: Space.m),
+        StatNumber(label: '완독', value: '${r.finished}회'),
+      ]),
+      if (r.pagesPerMin != null) ...[
         const SizedBox(height: Space.l),
         Row(children: [
-          StatNumber(label: '총 독서 시간', value: formatDuration(r.readMs)),
+          StatNumber(label: '읽는 속도', value: '분당 ${r.pagesPerMin!.toStringAsFixed(1)}쪽'),
           const SizedBox(width: Space.m),
-          StatNumber(label: '읽은 날', value: '${r.days}일'),
+          if (r.remainingMs != null) StatNumber(label: '다 읽기까지', value: '약 ${formatDuration(r.remainingMs!)}') else const Spacer(),
           const SizedBox(width: Space.m),
-          StatNumber(label: '완독', value: '${r.finished}회'),
+          const Spacer(),
         ]),
-        if (r.pagesPerMin != null) ...[
-          const SizedBox(height: Space.l),
-          Row(children: [
-            StatNumber(label: '읽는 속도', value: '분당 ${r.pagesPerMin!.toStringAsFixed(1)}쪽'),
-            const SizedBox(width: Space.m),
-            if (r.remainingMs != null) StatNumber(label: '다 읽기까지', value: '약 ${formatDuration(r.remainingMs!)}') else const Spacer(),
-            const SizedBox(width: Space.m),
-            const Spacer(),
-          ]),
-        ],
-        const SectionBand(),
+      ],
+      // 아래 구역과 나누는 회색 띠는 다음 흰 띠(Band)가 깐다(여기도 띠를 두면 회색 띠 둘 사이에 빈 흰 칸이 생겼다, 2026-11-21 촬영 확인)
+    ]);
+  }
+}
+
+/// 독서 기록 한 줄(책 줄 BookRow 작게 40): 시간대 · 오른쪽 읽은 시간(일시정지가 있었으면 아래 '일시정지 시간 제외'). 누르면 [onPress](기록 수정).
+/// 통계 캘린더의 그날 기록과 읽기 탭의 다른 날 기록이 같은 줄을 쓴다(2026-11-26)
+class SessionRow extends StatelessWidget {
+  const SessionRow({super.key, required this.lib, required this.session, required this.onPress});
+  final Library lib;
+  final Session session;
+  final VoidCallback onPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = session;
+    final name = bookTitle(lib, s.myBookId) ?? NoBookCover.name;
+    final range = timeRange(s.startedAt, s.endedAt);
+    final pause = hasPause(s);
+    final w = BookRow.coverWidth(BookRowSize.small);
+    final id = s.myBookId;
+    return BookRow(
+      cover: id != null && lib.books.containsKey(id) ? LinkedCover(lib: lib, id: id, width: w) : NoBookCover(width: w),
+      title: name,
+      meta: range,
+      label: [name, range, formatDurationShort(s.durationMs), if (pause) '일시정지 시간 제외'].join(', '),
+      onPress: onPress,
+      trailing: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+        Text(formatDurationShort(s.durationMs), style: AppType.recordDuration),
+        // 공통 규칙 9장: 일시정지를 뺀 시간 표시는 '일시정지 시간 제외' 한 말('실제 독서'였다)
+        if (pause) Text('일시정지 시간 제외', style: AppType.caption),
       ]),
     );
   }

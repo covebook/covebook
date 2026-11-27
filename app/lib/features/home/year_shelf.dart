@@ -10,6 +10,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../app/idle_bars.dart';
 import '../../domain/bookcase.dart';
 import '../../domain/book3.dart' show corners;
 import '../../domain/camera.dart';
@@ -19,11 +20,12 @@ import '../../scene_config/spine_look.dart';
 import '../../services/share_image.dart';
 import '../../store/library_model.dart';
 import '../../store/library_store.dart';
-import '../../ui/alert.dart';
 import '../../ui/bake.dart';
 import '../../ui/book_key.dart';
 import '../../ui/cover_photo.dart';
 import '../../ui/engraved_year.dart';
+import '../../ui/feedback.dart' show shareFailAlert;
+import '../../ui/kit.dart' show Pressable, metaSep;
 import '../../ui/metrics.dart';
 import '../../ui/plane_key.dart';
 import '../../ui/row_bake.dart';
@@ -70,13 +72,13 @@ class _YearShelfState extends State<YearShelf> {
   @override
   void initState() {
     super.initState();
-    spineLook.addListener(_loadPhotos);
+    spineLooks.addListener(_loadPhotos);
     _load();
   }
 
   @override
   void dispose() {
-    spineLook.removeListener(_loadPhotos);
+    spineLooks.removeListener(_loadPhotos);
     for (final i in _atlases) {
       i.dispose();
     }
@@ -89,8 +91,8 @@ class _YearShelfState extends State<YearShelf> {
     final shelves = placeShelves(lib, frozen: true);
     final c = BakeCase([for (var i = 0; i < shelves.length; i++) rowFromBooks(shelves[i], lib.books, rowSpace, top: i == 0, last: i == shelves.length - 1)]);
     await ShelfPainter.load();
-    _gridSlots ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/grid.frag'), gridUniformNames);
-    _bakeSlots ??= ShaderSlots(await ui.FragmentProgram.fromAsset('shaders/bake.frag'), bakeUniformNames);
+    _gridSlots ??= await ShaderSlots.load('shaders/grid.frag', gridUniformNames);
+    _bakeSlots ??= await ShaderSlots.load('shaders/bake.frag', bakeUniformNames);
     final images = <ui.Image>[], spots = <List<Spot>>[], spaces = <double>[], keys = <({PlaneKey wall, PlaneKey floor})>[], bookKeys = <Map<String, BookKey>>[];
     for (final r in c.rows) {
       // 지금 책장과 같은 줄이면 담아 둔 그림을 쓴다(row_bake)
@@ -119,12 +121,14 @@ class _YearShelfState extends State<YearShelf> {
     _loadPhotos();
   }
 
-  /// 표지 사진: 받는 대로 다시 그린다(그 전까지는 코드로 그린 장정). 책등 모양이 바뀌어도 다시
+  /// 표지 사진: 받는 대로 다시 그린다(그 전까지는 코드로 그린 장정). 책 옆면 모양이 바뀌어도 다시
   void _loadPhotos() {
     final lib = _lib;
     if (lib == null) return;
+    // '실물'을 고른 책의 표지는 책등 사진도 받는다
+    final spineFor = {for (final b in lib.books) if (b.coverArtUri case final u? when spineLooks.of(b.id) == SpineLook.photo) u};
     for (final uri in {for (final b in lib.books) ?b.coverArtUri}) {
-      loadCoverPhoto(uri).then((p) {
+      loadCoverPhoto(uri, withSpine: spineFor.contains(uri)).then((p) {
         if (p != null && mounted) setState(() => _photos = {..._photos, uri: p});
       });
     }
@@ -163,7 +167,7 @@ class _YearShelfState extends State<YearShelf> {
     final mine = view.books[best];
     if (mine == null) return;
     setState(() => _sel = best);
-    await showBookSheet(context, best, view: view, status: '${widget.bookcase.year}년 | ${statusLabel[mine.status]}', readOnly: true);
+    await showBookSheet(context, best, view: view, status: '${widget.bookcase.year}년$metaSep${statusLabel[mine.status]}', readOnly: true);
     if (mounted) setState(() => _sel = null);
   }
 
@@ -184,7 +188,8 @@ class _YearShelfState extends State<YearShelf> {
       if (mounted) setState(() => _shooting = false);
       await sharePng(png, name: 'bookcase_${widget.bookcase.year}', title: '${widget.bookcase.year}년 책장');
     } catch (e) {
-      if (mounted) appAlert(context, shareErrorTitle(e), '$e');
+      // 책 공유와 같은 창: 앱이 만든 안내는 그대로, 그 밖 예외는 사람 문장. 취소 · 다시 시도
+      if (mounted) shareFailAlert(context, e, _share);
     } finally {
       if (mounted) setState(() => _shooting = false);
     }
@@ -223,7 +228,9 @@ class _YearShelfState extends State<YearShelf> {
 
   @override
   Widget build(BuildContext context) {
-    final pad = MediaQuery.paddingOf(context);
+    // 아래 안전 여백은 시스템 아래 막대를 숨긴 동안에도 숨기기 전 값(책장 줄 자리가 바뀌지 않게, IdleBars)
+    final pad0 = MediaQuery.paddingOf(context);
+    final pad = pad0.copyWith(bottom: IdleBars.instance.stableBottom(pad0.bottom));
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final year = widget.bookcase.year;
     final lib = _lib;
@@ -247,9 +254,9 @@ class _YearShelfState extends State<YearShelf> {
                   label: '$year년 책장 공유',
                   onTap: _share,
                   excludeSemantics: true,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _shooting ? null : _share,
+                  // 눌리는 동안 옅어진다(홈 머리 아이콘과 같게, pressOpacity)
+                  child: Pressable(
+                    onPress: _shooting ? null : _share,
                     // 사용자가 준 입체 공유 아이콘(2026-11-17, tool/gen_header_art_icons.py)
                     child: const SizedBox(width: 48, height: 48, child: Center(child: Image(image: AssetImage('assets/header/share.png'), width: headerArtSize, height: headerArtSize))),
                   ),
@@ -263,7 +270,7 @@ class _YearShelfState extends State<YearShelf> {
     return RepaintBoundary(
       key: _shot,
       child: ColoredBox(
-        color: AppColors.bg,
+        color: shelfWallColor,
         child: ClipRect(
           clipper: _BelowTop(pad.top),
           child: LayoutBuilder(builder: (context, box) {

@@ -6,11 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('이용약관 시트: 제6조 외부 제공 정보와 기본 표지 대체 문구', (t) async {
+  testWidgets('이용약관 화면: 제6조 외부 제공 정보와 기본 표지 대체 문구', (t) async {
     t.view.physicalSize = const Size(1080, 2400);
     t.view.devicePixelRatio = 2.625;
     addTearDown(t.view.reset);
-    await t.pumpWidget(MaterialApp(home: Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => showTermsSheet(c), child: const Text('열기'))))));
+    await t.pumpWidget(MaterialApp(home: Builder(builder: (c) => Scaffold(body: TextButton(onPressed: () => openTermsPage(c), child: const Text('열기'))))));
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
     expect(find.text('이용약관'), findsOneWidget);

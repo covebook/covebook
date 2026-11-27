@@ -1,10 +1,9 @@
-// 서재를 읽고 쓴다(DB → 책·자리). app/src/store의 library-store·placement-store가 하던 일 가운데
+// 서재를 읽고 쓴다(DB → 책·자리). 옛 RN 앱(커밋 4f9e1d9) app/src/store의 library-store·placement-store가 하던 일 가운데
 // 책장을 그리는 데 필요한 읽기만 먼저 옮긴 것. 숨긴 책(hidden_at: 지웠지만 연도 책장에 남긴 책)은 화면용 서재에서 뺀다. 쓰기·동기화는 아직
 library;
 
-import '../db/library_write.dart' show LibKind, libTable, localDataChanged, nextRevisionIn, putPendingIn, writeLibraryItem;
-import '../domain/reference_home.dart' show referenceBooks, withoutSamples;
-import '../domain/library.dart' as dl show Library;
+import '../db/library_write.dart' show localDataChanged;
+import '../domain/sample_cleanup.dart';
 import '../db/local_db.dart';
 import '../domain/layout_json.dart';
 import '../domain/bookcase.dart';
@@ -104,20 +103,15 @@ Future<Library> loadLibrary() async {
 
   final shown = {for (final b in books) b.id};
   var all = await loadLayout();
-  // 내 책이 하나라도 생기면(숨긴 책 포함) 예시 책은 전부 치운다(2026-11-15 사용자 결정). 배치를 저장해 동기화도 된다
-  if (referenceBooks.isNotEmpty && (shown.isNotEmpty || (await db.rawQuery('SELECT 1 FROM my_books LIMIT 1')).isNotEmpty)) {
-    final cleaned = withoutSamples(all, (id) => referenceBooks.containsKey(id) && !shown.contains(id));
-    if (cleaned != null) {
-      await saveLayout(all, cleaned);
-      all = cleaned;
-    }
-  }
-  // 새 서재 예시 책(표시 전용, domain/reference_home): 서재에 없고 자리만 있는 것을 책장에 그린다(전체 책·통계·동기화 책 목록에는 없다)
-  for (final id in [...all.placements.map((p) => p.bookId), ...all.drawer]) {
-    final sample = shown.contains(id) ? null : referenceBooks[id];
-    if (sample == null) continue;
-    books.add(sample);
-    shown.add(id);
+  // 예전 앱이 빈 서재에 깔던 예시 책 자리(서재에 없는 표시 전용 책)가 남아 있으면 치운다(2026-11-25 예시 책장 삭제, domain/sample_cleanup).
+  // 손대지 않은 예시 배치였으면 그 시각을 그대로 둔다: 치운 것만으로 '방금 고친 배치'가 되어 서버의 진짜 책장을 덮지 않게
+  final cleaned = withoutSamples(all, (id) => isSampleBookId(id) && !shown.contains(id));
+  if (cleaned != null) {
+    final meta = await db.rawQuery('SELECT layout_at, layout_dirty FROM sync_meta WHERE id = 1');
+    final pristine = meta.isNotEmpty && meta.first['layout_at'] == exampleLayoutAt && meta.first['layout_dirty'] == 0;
+    await saveLayout(all, cleaned);
+    if (pristine) await db.rawUpdate('UPDATE sync_meta SET layout_dirty = 0, layout_at = ? WHERE id = 1', [exampleLayoutAt]);
+    all = cleaned;
   }
   return Library(books, ShelfLayout(all.shelves, [for (final p in all.placements) if (shown.contains(p.bookId)) p], [for (final id in all.drawer) if (shown.contains(id)) id]));
 }
@@ -316,47 +310,6 @@ Future<void> _storeLayoutIn(DatabaseExecutor t, String? json) async {
     }
   }
   await t.rawUpdate('UPDATE sync_meta SET layout = ?, layout_stored = ? WHERE id = 1', [layout == null ? json : null, layout == null ? 0 : 1]);
-}
-
-/// 서재·배치·연도 책장을 통째로 바꾼다(백업 복원). 이번 사용자 변경이라 모두 올릴 변경으로 표시하고, 없어진 항목은 삭제 표시를 남긴다
-Future<void> replaceAllLibrary(dl.Library lib, {required String? layoutJson, required String at, List<Bookcase>? bookcases}) async {
-  final db = await openLibrary();
-  await db.transaction((t) async {
-    await t.execute('PRAGMA defer_foreign_keys = ON');
-    final revision = await nextRevisionIn(t);
-    final tables = <LibKind, Map<String, Object>>{
-      LibKind.editions: lib.editions,
-      LibKind.books: lib.books,
-      LibKind.rounds: lib.rounds,
-      LibKind.sessions: lib.sessions,
-      LibKind.bookmarks: lib.bookmarks,
-      LibKind.bindings: lib.bindings,
-      // 긴 감상: 감상이 없는 예전 백업(지금 앱 백업 포함)이면 빈 표로 바뀐다(백업 내용 그대로)
-      LibKind.essays: lib.essays,
-    };
-    for (final e in tables.entries) {
-      final table = libTable[e.key]!;
-      for (final r in await t.rawQuery('SELECT id FROM $table')) {
-        final id = r['id']! as String;
-        if (!e.value.containsKey(id)) await putPendingIn(t, e.key, id, deleted: true, at: at, revision: revision);
-      }
-      if (e.key == LibKind.editions) await t.rawDelete('DELETE FROM edition_authors');
-      await t.rawDelete('DELETE FROM $table');
-      for (final item in e.value.entries) {
-        await writeLibraryItem(t, e.key, item.value);
-        await putPendingIn(t, e.key, item.key, deleted: false, at: at, revision: revision);
-      }
-    }
-    if (bookcases != null) {
-      await t.rawDelete('DELETE FROM bookcases');
-      for (final c in bookcases) {
-        await _writeBookcaseIn(t, c, false);
-      }
-    }
-    await _storeLayoutIn(t, layoutJson);
-    await t.rawUpdate('UPDATE sync_meta SET layout_at = ?, layout_dirty = 1, layout_revision = ? WHERE id = 1', [at, revision]);
-  });
-  localDataChanged.value++;
 }
 
 /// 배치를 마지막으로 고친 때(연도 책장 남길 해를 셀 때)

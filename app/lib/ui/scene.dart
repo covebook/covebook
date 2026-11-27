@@ -212,6 +212,9 @@ List<double> _wallCellToPx(Cam c, Affine px, BakeArea a) {
 /// 자르는 폭은 화소 한 칸(_edgeAa): 두 면 사이는 안쪽 모서리 곡면(셰이더 coveOf)이 두 면의 법선을 모서리 선에서 같게 이어 주므로 섞어 감출 것이 없다.
 /// 예전에는 면마다 다른 폭·둥글기로 비쳐 섞었는데(뒷벽 꼭지점 둥글기·번짐 3mm, 천장 곡면 폭, 판 윗면 절반 폭) 면마다 다른 빛이 섞여 세 면 꼭지점에 밝은 점·세로 선이 남았다(2026-11-18 사용자 '모서리 경계선 없애')
 const _edgeAa = 0.4;
+
+/// 뒷벽 꼭지점 둥글기(세 면이 만나는 뒤 꼭지점이 앞 구멍 모서리처럼 곡선)
+final _backCornerR = mm(look.cornerMm);
 final _roofSoft = (box: <double>[frameX0, frameX1, -far, far], r: <double>[0, _edgeAa]);
 final _plankSoft = (box: <double>[frameX0, frameX1, -far, shelfDepth * look.eyeY / look.dist], r: <double>[0, _edgeAa]);
 
@@ -265,6 +268,13 @@ List<int> bookPaintOrder(List<Book3> books, double eyeX) {
 
 /// 줄 하나를 그린다(지금 앱 ShelfScene 차례): 틀 안쪽 면 → 뒷벽 → 판 윗면·앞면 → 책.
 /// 틀 면은 뒷벽 아래에 깔려 뒷벽 둥근 꼭지점으로 깎인 자리와 양옆에만 보인다. 판은 이 줄 책 아래(책이 판 위에 선다)
+/// 책장 화면 바탕 색 = 지금 벽지 색. 셰이더가 평평한 벽을 이 색으로 맞춘다(에뮬 측정: 세이지 E3E8DD 그대로, 종이는 결 평균 F6F4EE).
+/// 2026-11-25 사용자 '벽지 색 바꾸려면 위에 끊기지 말고 책장 화면 흰색을 다 바꿔, 다른 곳은 그렇다고 바꾸지 말고':
+/// 상태 표시줄 · 머리줄 · 하단바 덮개 · 꾸미기 맨 위 줄 · 지난 책장 쪽 바탕. 시트 · 하단바 알약 · 다른 탭은 흰색 그대로
+ui.Color get shelfWallColor => ui.Color(0xFF000000 | skinWall.color);
+
+/// [wallAbove] · [wallBelow]: 맨 윗줄 벽을 위로, 맨 아랫줄 벽을 아래로 더 늘리는 길이(DU). 책장 화면 위 끝(머리줄 뒤) · 아래 끝(하단바 뒤)까지
+/// 같은 벽(종이 결까지)으로 잇는다(2026-11-25: 전에는 머리줄 뒤가 흰 바탕이라 벽지가 위에서 끊겼다)
 void drawRow(
   ui.Canvas canvas,
   ShaderSlots lit,
@@ -281,7 +291,16 @@ void drawRow(
   ShaderSlots? tab,
   Map<String, BookKey> bookKeys = const {},
   bool frosted = false,
+  double wallAbove = 0,
+  double wallBelow = 0,
+  bool wallOnly = false,
+  String? hideRibbon,
 }) {
+  // 구멍 밖 평평한 벽만(상태 표시줄 칸처럼 책장 밖 띠를 같은 벽으로 이을 때)
+  if (wallOnly) {
+    if (frameOn) _rowFlatWall(canvas, lit, c, px, row, space, wallAbove, wallBelow);
+    return;
+  }
   Spot? spotOf(String key) {
     final i = row.indexOf(key);
     return i >= 0 && i < spots.length ? spots[i] : null;
@@ -338,19 +357,15 @@ void drawRow(
           spot: wallSpot,
           cellToPx: _wallCellToPx(c, px, area),
           key: keys.wall,
-          // 뒷벽 가장자리 번짐은 좁게(3mm): 넓히면(곡면 절반 폭) 뒷벽 위 끝 밑에 깔린 면이 없어 흰 줄이 보였다(2026-11-18 시험)
-          soft: frameOn ? (box: <double>[frameX0, frameX1, -far, roofed ? space : far], r: <double>[0, _edgeAa]) : null,
+          // 뒷벽 네 꼭지점은 둥글게(반지름 look.cornerMm, 앞 구멍 테처럼 곡선으로 보이게: 2026-11-19 사용자 '뒷라인도 앞이랑 똑같이 곡선').
+          // 깎인 자리 밑에는 뒤로 늘려 그린 틀 면(옆 · 천장)이 깔린다. 가장자리 번짐은 화소 한 칸(넓히면 위 끝 밑이 비어 흰 줄이 보였다, 2026-11-18)
+          soft: frameOn ? (box: <double>[frameX0, frameX1, -far, roofed ? space : far], r: <double>[_backCornerR, _edgeAa]) : null,
         ),
     );
   }
 
   // 구멍 밖 평평한 벽(움푹 파인 책장): 줄 높이에서 구멍만 뺀 면. 구멍 가장자리 rimR 안은 둥근 테(셰이더가 법선을 안쪽 면 쪽으로 돌린다)
-  if (frameOn) {
-    final roofed = row.top;
-    final topY = row.top ? space + shelfThick + headDu : space + shelfThick / 2;
-    final bottomY = row.last ? -shelfThick - shelfCastExtent : -shelfThick;
-    _flatWall(canvas, lit, c, px, row, topY, bottomY, roofed ? space : null, row.last ? -shelfThick + holeBottomOver : null);
-  }
+  if (frameOn) _rowFlatWall(canvas, lit, c, px, row, space, wallAbove, wallBelow);
 
   // 판(윗면·앞면, 둥근 모서리는 셰이더가 법선을 돌린다). 두 면 껍질을 둥글린 윤곽 안에서만 칠한다(지금 앱 ShelfBoard)
   final faces = shelfFaces(project);
@@ -404,8 +419,8 @@ void drawRow(
     final look = row.looks.length > i ? row.looks[i] : null;
     final photo = look?.coverUri == null ? null : photos[look!.coverUri];
     drawBook(canvas, book, c, px, row.env.u, b, albedo, spots3, atlas, seedOf(b.id), look: look, glyphs: glyphs, photo: photo, key: bookKeys[b.id]);
-    // 갈피 탭(책 위에, 같은 차례)
-    if (tab != null && look != null) drawRibbons(canvas, tab, c, px, row, b, look, row.tabLoss[b.id]);
+    // 갈피 탭(책 위에, 같은 차례). hideRibbon: 그 책 탭은 위 겹이 올라오는 모습으로 따로 그린다(첫 갈피, home_screen 갈피 올리기)
+    if (tab != null && look != null && b.id != hideRibbon) drawRibbons(canvas, tab, c, px, row.env.u, b, look, row.tabLoss[b.id]);
   }
   if (frosted) canvas.restore();
 }
@@ -421,6 +436,13 @@ const holeBottomOver = 0.6;
 
 /// 평평한 벽: 높이 bottomY ~ topY의 띠에서 둥근 사각형 구멍을 뺀다(지금 앱 ShelfFlatWall).
 /// openTop·openBottom: 구멍의 위·아래 끝 높이(이 줄 밖까지 이어지면 null)
+/// 줄 하나의 구멍 밖 평평한 벽(맨 윗줄은 머리 위 headDu + wallAbove까지, 맨 아랫줄은 판 밑 그늘 + wallBelow까지)
+void _rowFlatWall(ui.Canvas canvas, ShaderSlots lit, Cam c, Affine px, RowCase row, double space, double wallAbove, double wallBelow) {
+  final topY = (row.top ? space + shelfThick + headDu : space + shelfThick / 2) + wallAbove;
+  final bottomY = (row.last ? -shelfThick - shelfCastExtent : -shelfThick) - wallBelow;
+  _flatWall(canvas, lit, c, px, row, topY, bottomY, row.top ? space : null, row.last ? -shelfThick + holeBottomOver : null);
+}
+
 void _flatWall(ui.Canvas canvas, ShaderSlots lit, Cam c, Affine px, RowCase row, double topY, double bottomY,
     double? openTop, double? openBottom) {
   double y(double v) => toPx(c, px, Vec3(0, v, -frameFront)).dy;

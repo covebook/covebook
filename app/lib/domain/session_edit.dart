@@ -6,6 +6,7 @@
 library;
 
 import 'library.dart';
+import 'reading.dart' show finishIfLastPage, syncPageAfterSessionChange;
 
 typedef SessionForm = ({String? bookId, String day, String time, String minutes, String startPage, String pages, String memo});
 
@@ -43,6 +44,29 @@ int? _positive(String v) {
   return v.trim().isNotEmpty && n != null && n.isFinite && n > 0 ? n.round() : null;
 }
 
+/// 직접 추가하는 기록의 독서 시간 최대(분): 그날 안에 들어야 한다
+const manualMaxMinutes = 24 * 60;
+
+/// 직접 추가하는 기록의 독서 시간(분 칸 값 → ms). 비었거나 0 이하 · 하루보다 길면 null
+int? manualDurationMs(String minutes) {
+  final m = num.tryParse(minutes.trim());
+  if (m == null || !m.isFinite || m <= 0 || m > manualMaxMinutes) return null;
+  return (m * 60000).round();
+}
+
+/// 직접 추가한 기록의 시작 · 끝(시작 시각은 묻지 않는다, 2026-11-23 사용자): 오늘이면 지금에서 독서 시간을 뺀 때 시작해 지금 끝나고,
+/// 지난 날이면 그날 21시에 시작한다. 어느 쪽이든 그날 안(0시~24시)에 들게 맞춘다(늦게 끝나면 앞으로 당기고, 0시 앞이면 0시부터)
+({String startedAt, String endedAt}) manualSessionTimes(String day, int durationMs, DateTime now) {
+  final d = day.split('-').map(int.parse).toList();
+  final dayStart = DateTime(d[0], d[1], d[2]).millisecondsSinceEpoch;
+  final dayEnd = DateTime(d[0], d[1], d[2] + 1).millisecondsSinceEpoch;
+  final isToday = today(now) == day;
+  var start = isToday ? now.millisecondsSinceEpoch - durationMs : DateTime(d[0], d[1], d[2], 21).millisecondsSinceEpoch;
+  if (start + durationMs > dayEnd) start = dayEnd - durationMs;
+  if (start < dayStart) start = dayStart;
+  return (startedAt: _iso(start), endedAt: _iso(start + durationMs));
+}
+
 /// 고친 칸만 수정에 넣는다. 고친 칸이 형식에 맞지 않으면 null(저장 막기)
 SessionPatch? sessionEditPatch(Session s, SessionForm initial, SessionForm form) {
   final patch = <String, Object?>{};
@@ -75,6 +99,7 @@ SessionPatch? sessionEditPatch(Session s, SessionForm initial, SessionForm form)
 }
 
 /// 독서 기록 수정: 준 필드만 바꾼다. myBookId 키가 있으면 연결을 바꾸거나(값) 끊는다(null) — 키가 없으면 그대로.
+/// 도달한 쪽 · 책이 바뀌면 읽기 상태 · 현재 쪽 규칙(reading.dart syncPageAfterSessionChange · finishIfLastPage)을 거친다.
 /// 연결이 바뀌면 회차도 새 책의 회차로(없으면 비움, 지난 기록 수정으로 회차를 새로 만들지 않는다). 다른 책의 회차는 남기지 않는다
 Library updateSessionIn(Library lib, String id, SessionPatch patch, String now) {
   final s = lib.sessions[id];
@@ -112,15 +137,22 @@ Library updateSessionIn(Library lib, String id, SessionPatch patch, String now) 
     pagesRead: v['pagesRead'] as num?,
     memo: v['memo'] as String?,
   );
-  return lib.copy(sessions: {...lib.sessions, id: next});
+  var out = lib.copy(sessions: {...lib.sessions, id: next});
+  // 읽기 상태 · 현재 쪽 규칙(reading.dart): 도달한 쪽이나 책을 바꿨으면 그 책의 현재 쪽을 맞추고, 고친 쪽이 마지막 쪽이면 완독(완독일은 그 기록 시작한 날)
+  if (changed.contains('pagesRead') || changed.contains('myBookId')) {
+    out = syncPageAfterSessionChange(out, s, now);
+    if (bookId != null) out = finishIfLastPage(out, bookId, next.pagesRead, today(DateTime.parse(next.startedAt)), now);
+  }
+  return out;
 }
 
-/// 기록을 지우면 그 기록에 연결된 갈피는 연결만 비운다(갈피 원문은 그대로)
+/// 기록을 지우면 그 기록에 연결된 갈피는 연결만 비운다(갈피 원문은 그대로). 책의 현재 쪽이 이 기록의 도달한 쪽이었으면 남은 기록으로 맞춘다(상태는 그대로)
 Library deleteSessionIn(Library lib, String id, String now) {
-  if (!lib.sessions.containsKey(id)) return lib;
+  final s = lib.sessions[id];
+  if (s == null) return lib;
   final marks = {...lib.bookmarks};
   for (final m in lib.bookmarks.values) {
     if (m.sessionId == id) marks[m.id] = m.withoutSession(now);
   }
-  return lib.copy(sessions: {...lib.sessions}..remove(id), bookmarks: marks);
+  return syncPageAfterSessionChange(lib.copy(sessions: {...lib.sessions}..remove(id), bookmarks: marks), s, now);
 }

@@ -1,4 +1,5 @@
-// 갈피 종이 결·테이프 경로·갈피 색·문장 크기·날짜·낱말 줄바꿈이 지금 앱과 같은지(tool/dump_bookmark.test.ts가 뽑은 값)
+// 갈피 종이 결·테이프 경로·갈피 색·문장 크기·날짜·낱말 줄바꿈이 옛 앱(RN)과 같은지(tool/dump_bookmark.test.ts가 뽑은 값)
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 import 'dart:convert';
 import 'dart:io';
 

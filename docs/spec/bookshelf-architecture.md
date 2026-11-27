@@ -1,5 +1,7 @@
 # 책장 상태와 계산의 경계
 
+> **기록 문서(React Native 앱 시절).** 아래 파일 이름(`*.ts`, hook, reducer)과 검증 명령(`npm`, Expo export)은 2026-11-18에 지운 옛 앱 것이다(커밋 `4f9e1d9`). 지금 Flutter 책장은 `app/lib/features/home/`(홈) · `app/lib/domain/`(배치 · 3D 계산) · `app/lib/ui/scene.dart`(그리기)이고, 검증은 `cd app && flutter test`. 아래 흐름과 원칙이 Flutter 홈에도 그대로인지는 이 문서에서 다시 확인하지 않았다.
+
 책장 조작은 **입력 → 미리보기 계산 → 확정 → 표시 전환** 순서로 흐른다. 확정 전 배치는 로컬 DB에 저장하지 않는다.
 
 | 책임 | 소유 모듈 | 변경 규칙 |

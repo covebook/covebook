@@ -12,6 +12,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 /// 우리 서버 주소(빌드 때 --dart-define=API_URL=…, 없으면 운영 서버. 지금 앱 EXPO_PUBLIC_API_URL과 같은 기본값)
 const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'https://covebook.kodeploy.com');
 const _googleKey = String.fromEnvironment('GOOGLE_BOOKS_KEY');
@@ -67,23 +69,44 @@ typedef SearchResult = ({bool ok, List<BookCandidate> items, String? provider, S
 SearchResult _ok(List<BookCandidate> items, [String? provider, String? diag]) => (ok: true, items: items, provider: provider, reason: null, message: null, diag: diag);
 SearchResult _fail(String reason, String message, String diag) => (ok: false, items: const [], provider: null, reason: reason, message: message, diag: diag);
 
-const _offline = '인터넷에 연결되지 않았어요. 직접 입력으로 추가할 수 있어요.';
+// 화면에 보이는 실패 문장(상태 번호 · 영어는 diag로만, docs/design/DESIGN.md 9장 '실패 알림'). 오프라인 문장은 errorText와 같다
+const _offline = '인터넷 연결을 확인하고 다시 시도해 주세요.';
+const _trouble = '검색에 잠시 문제가 있어요. 잠시 뒤 다시 시도해 주세요.';
+const _quota = '검색 사용량 한도가 찼어요. 잠시 뒤 다시 시도해 주세요.';
 const _providerName = {'yes24': 'YES24'};
 
 final _http = HttpClient()..connectionTimeout = const Duration(seconds: 12);
 
-/// GET → (상태, JSON). 끊기면 SocketException 등을 던진다
-Future<(int, Object?)> _getJson(String url) async {
-  final req = await _http.getUrl(Uri.parse(url));
-  final res = await req.close().timeout(const Duration(seconds: 15));
-  final body = await res.transform(utf8.decoder).join();
-  Object? json;
-  try {
-    json = body.isEmpty ? null : jsonDecode(body);
-  } catch (_) {
-    json = null;
+/// 요청 하나(연결 · 응답 머리 · 본문 다 받기까지)를 기다리는 한도. 넘으면 끊고 TimeoutException(인터넷 문제로 본다)
+const requestTimeout = Duration(seconds: 20);
+
+/// GET → (상태, JSON). 끊기면 SocketException 등을, [requestTimeout] 안에 본문까지 다 받지 못하면 요청을 끊고 TimeoutException을 던진다
+/// (2026-11-20 QA: 머리만 15초를 기다리고 본문 읽기는 한도가 없어, 응답이 멈추면 목록 가져오기 '그만 찾기'가 끝나지 않았다)
+Future<(int, Object?)> _getJson(String url) => getJsonWith(_http, url);
+
+@visibleForTesting
+Future<(int, Object?)> getJsonWith(HttpClient http, String url, {Duration timeout = requestTimeout}) async {
+  HttpClientRequest? req;
+  Future<(int, Object?)> run() async {
+    final r = req = await http.getUrl(Uri.parse(url));
+    final res = await r.close();
+    final body = await res.transform(utf8.decoder).join();
+    Object? json;
+    try {
+      json = body.isEmpty ? null : jsonDecode(body);
+    } catch (_) {
+      json = null;
+    }
+    return (res.statusCode, json);
   }
-  return (res.statusCode, json);
+
+  try {
+    return await run().timeout(timeout);
+  } on TimeoutException {
+    // 늦게 오는 응답은 버린다(소켓을 닫아 붙잡고 있지 않게)
+    req?.abort();
+    rethrow;
+  }
 }
 
 String? _s(Object? v) => v is String && v.isNotEmpty ? v : null;
@@ -135,7 +158,7 @@ Future<List<BookCandidate>> popularBooks() async {
 Future<SearchResult> _searchServer(String q) async {
   try {
     final (status, json) = await _getJson('$apiUrl/books/search?q=${Uri.encodeQueryComponent(q)}');
-    if (status != 200) return _fail(status == 429 ? 'quota' : 'unknown', '검색하지 못했어요($status).', 'server $status');
+    if (status != 200) return _fail(status == 429 ? 'quota' : 'unknown', status == 429 ? _quota : _trouble, 'server $status');
     final items = _serverItems(json);
     return _ok(items, items.isNotEmpty ? items.first.sourceName : '서버');
   } catch (e) {
@@ -194,9 +217,9 @@ Future<SearchResult> _searchGoogle(String q) async {
       final err = (json as Map?)?['error'] as Map?;
       final reason = (((err?['errors'] as List?)?.firstOrNull as Map?)?['reason'] ?? err?['status'] ?? '') as String;
       final diag = 'Google Books $status $reason';
-      if (status == 429 || RegExp('rateLimit|quota', caseSensitive: false).hasMatch(reason)) return _fail('quota', '검색 사용량 한도가 찼어요. 다른 검색으로 찾아볼게요.', diag);
-      if (status == 400 || status == 401 || status == 403) return _fail('auth', '검색 설정(키)에 문제가 있어요. 다른 검색으로 찾아볼게요.', diag);
-      return _fail('unknown', '검색하지 못했어요($status).', diag);
+      if (status == 429 || RegExp('rateLimit|quota', caseSensitive: false).hasMatch(reason)) return _fail('quota', _quota, diag);
+      if (status == 400 || status == 401 || status == 403) return _fail('auth', _trouble, diag);
+      return _fail('unknown', _trouble, diag);
     }
     return _ok([for (final v in ((json as Map?)?['items'] as List?)?.cast<Map<String, Object?>>() ?? const <Map<String, Object?>>[]) _fromGoogle(v)], 'Google Books');
   } catch (e) {
@@ -208,7 +231,7 @@ Future<SearchResult> _searchOpenLibrary(String q) async {
   try {
     const fields = 'key,title,author_name,editions,editions.key,editions.title,editions.publisher,editions.publish_date,editions.isbn,editions.cover_i';
     final (status, json) = await _getJson('https://openlibrary.org/search.json?q=${Uri.encodeQueryComponent(q)}&limit=20&fields=$fields');
-    if (status != 200) return _fail('unknown', '검색하지 못했어요($status).', 'Open Library $status');
+    if (status != 200) return _fail('unknown', _trouble, 'Open Library $status');
     return _ok([
       for (final d in ((json as Map?)?['docs'] as List?)?.cast<Map<String, Object?>>() ?? const <Map<String, Object?>>[])
         () {
@@ -270,4 +293,33 @@ Future<BookCandidate> candidateDetails(BookCandidate c) async {
   } catch (_) {
     return c;
   }
+}
+
+/// YES24 책 소개(2026-11-26 사용자 '책 정보에 yes24에서 책 내용 요약 있잖아 그거 넣어서'): 서버 GET /books/{isbn}의 description
+/// (YES24 itemDetail contentDetail.bookIntroduction, 키는 서버에만). 서버가 YES24로 찾은 책(source yes24)일 때만, 없으면 null.
+/// 받은 글은 기기에 저장하지 않고 앱이 켜져 있는 동안만 기억한다(YES24 답변: 일시 캐싱만). 서버에 닿지 않으면 예외(기억하지 않아 다시 시도된다)
+final Map<String, String?> _introCache = {};
+Future<String?> bookIntro(String isbn13) async {
+  if (_introCache.containsKey(isbn13)) return _introCache[isbn13];
+  final (status, json) = await _getJson('$apiUrl/books/${Uri.encodeComponent(isbn13)}');
+  if (status == 404 || status == 400) return _introCache[isbn13] = null;
+  if (status != 200 || json is! Map) throw HttpException('book $status');
+  final j = json.cast<String, Object?>();
+  final text = j['source'] == 'yes24' ? introText(_s(j['description']) ?? '') : '';
+  return _introCache[isbn13] = text.isEmpty ? null : text;
+}
+
+/// 책 소개 글을 보일 글자로: 글은 고치지 않고 줄바꿈 표시(<br> · </p>)만 줄로, 다른 꺾쇠 표시는 빼고, 글자 표시(&amp; 등)를 글자로 푼다.
+/// 빈 줄은 두지 않는다(접어 둔 다섯 줄 중 한 줄이 빈 줄로 비어 '더 보기' 위가 휑했다, 2026-11-26 에뮬 확인)
+String introText(String raw) {
+  var s = raw.replaceAll(RegExp(r'<br\s*/?>|</p>', caseSensitive: false), '\n').replaceAll(RegExp(r'<[^>]+>'), '');
+  const named = {'&nbsp;': ' ', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&middot;': '·', '&hellip;': '…', '&lsquo;': '‘', '&rsquo;': '’', '&ldquo;': '“', '&rdquo;': '”'};
+  named.forEach((k, v) => s = s.replaceAll(k, v));
+  s = s.replaceAllMapped(RegExp(r'&#(x?)([0-9a-fA-F]+);'), (m) {
+    final n = int.tryParse(m[2]!, radix: m[1]!.isEmpty ? 10 : 16);
+    return n == null || n <= 0 || n > 0x10FFFF ? m[0]! : String.fromCharCode(n);
+  });
+  s = s.replaceAll('&amp;', '&').replaceAll('\r', '');
+  s = s.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).join('\n');
+  return s.trim();
 }

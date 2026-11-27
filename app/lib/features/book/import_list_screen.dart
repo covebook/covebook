@@ -1,8 +1,9 @@
 // 책 목록 파일 가져오기(2026-11-15 사용자 'CSV·엑셀 가져오기 다 넣어', 페르소나 QA 장서가 F2 '엑셀·북적북적에서 옮겨 오기'):
 // 파일 고르기 → 줄마다 검색(ISBN이 있으면 그 판, 없으면 제목·저자) → 확인 목록(찾은 책·이미 있는 책·못 찾은 책) → 한 번에 추가.
-// 못 찾은 줄은 목록에 남겨 알려 주고, 누르면 그 검색어로 책 추가를 연다. 읽기 상태 열이 있으면 그대로 옮긴다
+// 못 찾은 줄은 목록에 남겨 알려 주고, 누르면 그 검색어로 책 추가를 연다(넣고 오면 '추가한 책'으로). 읽기 상태 열이 있으면 그대로 옮긴다
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -12,16 +13,19 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../domain/book_list_import.dart';
-import '../../domain/library.dart' show ReadStatus;
+import '../../domain/library.dart' show ReadStatus, authorLine;
 import '../../services/book_search.dart';
 import '../../store/library_model.dart';
 import '../../ui/alert.dart';
+import '../../ui/draft_guard.dart';
+import '../../ui/feedback.dart' show errorText;
+import '../../ui/josa.dart' show eulReul;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../bookmark/book_picker.dart' show statusLabel;
 import 'add_book_screen.dart' show openAddBook;
-import 'barcode_scan_screen.dart' show PickMark;
 import 'book_match.dart';
+import 'book_widgets.dart';
+import 'labels.dart' show statusLabel;
 import 'bulk_add.dart';
 
 Future<void> openImportList(BuildContext context) => Navigator.of(context, rootNavigator: true)
@@ -36,7 +40,10 @@ class _Line {
   final ImportRow row;
   BookCandidate? book;
   String? ownedId;
-  bool searched = false, offline = false, picked = false, added = false;
+  bool searched = false, picked = false, added = false;
+
+  /// 검색이 실패한 까닭: network(인터넷 없음) · error(검색 오류). '다시 찾기'로 다시 찾는다
+  String? fail;
 }
 
 class ImportListScreen extends StatefulWidget {
@@ -50,8 +57,11 @@ class _ImportListScreenState extends State<ImportListScreen> {
   String? _file, _error;
   ImportParse? _parse;
   List<_Line> _lines = const [];
-  bool _reading = false, _searching = false, _stop = false, _saving = false;
-  int _searched = 0;
+  bool _reading = false, _searching = false, _saving = false;
+  LineSearch<_Line, SearchResult>? _job;
+
+  /// 찾아 본 줄 수(다시 찾는 줄은 찾기 전으로 돌려 세므로 전체를 넘지 않는다)
+  int get _searched => _lines.where((l) => l.searched).length;
 
   Future<void> _pick() async {
     setState(() {
@@ -77,7 +87,6 @@ class _ImportListScreenState extends State<ImportListScreen> {
         _file = f.name;
         _parse = p;
         _lines = [for (final r in p.rows) _Line(r)];
-        _searched = 0;
       });
       await _searchAll();
     } catch (_) {
@@ -87,33 +96,45 @@ class _ImportListScreenState extends State<ImportListScreen> {
     }
   }
 
-  /// 줄마다 찾는다(한 번에 세 줄씩). '그만 찾기'면 남은 줄은 못 찾은 줄로 둔다
+  /// 줄마다 찾는다(한 번에 세 줄씩). 아직 안 찾은 줄과 검색이 실패한 줄을 찾는다. '그만 찾기'면 남은 줄은 찾지 않은 줄로 둔다
   Future<void> _searchAll() async {
+    final todo = [for (final l in _lines) if (!l.searched || l.fail != null) l];
+    _job?.stop();
+    final job = _job = LineSearch<_Line, SearchResult>(todo, (l) => searchBooks(l.row.query), (l, r) {
+      if (!mounted) return;
+      final c = r.ok ? matchCandidate(l.row, r.items) : null;
+      setState(() {
+        l.searched = true;
+        // 검색이 실패하면(인터넷 없음 · 서버 오류) 다시 찾을 줄로 둔다(2026-11-19 공통 규칙: 서버 오류는 그냥 '찾지 못한 책'이었다)
+        l.fail = r.ok ? null : (r.reason == 'network' ? 'network' : 'error');
+        l.book = c;
+        l.ownedId = c == null ? null : ownedBookId(LibraryModel.instance.lib, c);
+        l.picked = c != null && l.ownedId == null;
+      });
+    }, parallel: _parallel);
     setState(() {
       _searching = true;
-      _stop = false;
-    });
-    final todo = [for (final l in _lines) if (!l.searched || l.offline) l];
-    var next = 0;
-    Future<void> worker() async {
-      while (mounted && !_stop && next < todo.length) {
-        final l = todo[next++];
-        final r = await searchBooks(l.row.query);
-        if (!mounted) return;
-        final c = r.ok ? matchCandidate(l.row, r.items) : null;
-        setState(() {
-          l.searched = true;
-          l.offline = !r.ok && r.reason == 'network';
-          l.book = c;
-          l.ownedId = c == null ? null : ownedBookId(LibraryModel.instance.lib, c);
-          l.picked = c != null && l.ownedId == null;
-          _searched++;
-        });
+      // 다시 찾는 줄은 찾기 전으로(진행 수가 전체를 넘지 않게: 2026-11-19 '10권 중 12권'이 될 수 있었다)
+      for (final l in todo) {
+        l.searched = false;
+        l.fail = null;
       }
-    }
+    });
+    await job.run();
+    if (mounted && identical(_job, job)) setState(() => _searching = false);
+  }
 
-    await Future.wait([for (var i = 0; i < _parallel; i++) worker()]);
-    if (mounted) setState(() => _searching = false);
+  /// '그만 찾기': 기다리던 검색은 버리고 바로 끝낸다(그 줄은 찾지 않은 줄로 남아 '이어서 찾기'로 다시 찾는다).
+  /// 2026-11-20 QA: 응답이 멈춘 검색이 하나라도 있으면 그 검색이 끝날 때까지 단추가 '그만 찾기'에 멈춰 있었다
+  void _stopSearch() {
+    _job?.stop();
+    setState(() => _searching = false);
+  }
+
+  @override
+  void dispose() {
+    _job?.stop();
+    super.dispose();
   }
 
   Future<void> _addAll() async {
@@ -139,6 +160,21 @@ class _ImportListScreenState extends State<ImportListScreen> {
     if (mounted) goAfterBulk(context, next);
   }
 
+  /// 못 찾은 줄: 그 이름(없으면 ISBN)으로 책 추가를 열어 다시 찾거나 직접 등록한다. 넣었으면 '추가한 책'으로 옮긴다
+  /// (2026-11-19 공통 규칙: 넣고 돌아와도 '찾지 못한 책'에 남았고, 추가 결과에서 '책장에서 보기'를 누르면 목록이 묻지 않고 사라졌다)
+  Future<void> _addMissing(_Line l) async {
+    final r = l.row;
+    final id = await openAddBook(context, q: r.title.isNotEmpty ? [r.title, r.author].where((x) => x.isNotEmpty).join(' ') : r.query, fromList: true);
+    if (id == null || !mounted) return;
+    setState(() {
+      l.added = true;
+      l.fail = null;
+    });
+  }
+
+  /// 나갈 때 물을지: 넣을 수 있는 책이나 아직 찾을 줄이 남았으면
+  bool get _dirty => !_saving && _lines.any((l) => !l.added && (!l.searched || l.fail != null || (l.book != null && l.ownedId == null)));
+
   @override
   Widget build(BuildContext context) {
     final parse = _parse;
@@ -146,27 +182,38 @@ class _ImportListScreenState extends State<ImportListScreen> {
     final found = [for (final l in _lines) if (l.book != null && l.ownedId == null && !l.added) l];
     final owned = [for (final l in _lines) if (l.book != null && l.ownedId != null && !l.added) l];
     final added = [for (final l in _lines) if (l.added) l];
-    final missing = [for (final l in _lines) if (l.searched && l.book == null) l];
+    final missing = [for (final l in _lines) if (l.searched && l.book == null && !l.added) l];
     final waiting = _lines.where((l) => !l.searched).length;
     final n = found.where((l) => l.picked).length;
-    final offline = _lines.any((l) => l.offline);
-    return PopScope(
-      canPop: !_saving,
+    final failed = _lines.where((l) => l.fail != null && !l.added);
+    // 찾은 책이 있으면 나갈 때 묻는다(docs/design/DESIGN.md 12장, 2026-11-19 공통 규칙: 묻지 않고 버렸다)
+    return DraftGuard(
+      dirty: () => _dirty,
+      title: '가져오기를 그만할까요?',
+      body: '지금 나가면 찾은 책은 추가되지 않아요.',
       child: Screen(
         title: '책 목록 가져오기',
+        // 화면 아래 주요 단추 xlarge. 단추 글자는 하는 일 이름, 꺼진 이유는 단추 위 안내 글(DESIGN 5-2 · 9장)
         footer: _searching
-            ? Btn(label: '그만 찾기', kind: 'secondary', onPress: () => setState(() => _stop = true))
-            : Btn(label: n == 0 ? '추가할 책을 고르세요' : '$n권 추가', disabled: n == 0, busy: _saving, onPress: _addAll),
+            ? Btn(label: '그만 찾기', kind: 'secondary', size: 'xlarge', onPress: _stopSearch)
+            : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                if (n == 0)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.s),
+                    child: NoticeText(found.isEmpty ? '추가할 수 있는 책이 없어요.' : '추가할 책을 골라 주세요.', center: true),
+                  ),
+                Btn(label: n == 0 ? '추가' : '$n권 추가', size: 'xlarge', disabled: n == 0, busy: _saving, onPress: _addAll),
+              ]),
         children: [
           Text(_file ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text(
+            child: MetaText(
               [
                 '${_lines.length}권',
-                if (parse.columns.isNotEmpty) '열: ${parse.columns.values.join(' | ')}',
+                if (parse.columns.isNotEmpty) '열: ${parse.columns.values.join(metaSep)}',
                 if (parse.duplicates > 0) '같은 ISBN ${parse.duplicates}줄은 한 번만',
-              ].join(' | '),
+              ].join(metaSep),
               style: AppType.caption,
             ),
           ),
@@ -174,26 +221,28 @@ class _ImportListScreenState extends State<ImportListScreen> {
             Padding(
               padding: const EdgeInsets.only(top: Space.l),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(_searching ? '${_lines.length}권 중 $_searched권 찾았어요' : '$waiting권은 찾지 않았어요', style: AppType.sub),
+                // 진행 숫자는 폭 고정(여러 권 추가 진행 창과 같게)
+                Text(_searching ? '${_lines.length}권 중 $_searched권 찾았어요' : '$waiting권은 찾지 않았어요', style: AppType.sub.tnum),
                 const SizedBox(height: Space.s),
                 ProgressBar(value: _lines.isEmpty ? 0 : _searched / _lines.length),
-                if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 's', onPress: _searchAll)),
+                if (!_searching && waiting > 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '이어서 찾기', kind: 'secondary', size: 'medium', onPress: _searchAll)),
               ]),
             ),
-          if (offline && !_searching)
+          // 검색이 실패한 줄: 오류 글(화면 읽기가 바로 읽는다) + 다시 찾기. 찾지 않은 줄이 있으면 '이어서 찾기'가 함께 찾는다(단추 하나만)
+          if (failed.isNotEmpty && !_searching)
             Padding(
-              padding: const EdgeInsets.only(top: Space.l),
+              padding: const EdgeInsets.only(top: Space.s),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text('인터넷에 연결되지 않아 찾지 못한 책이 있어요.', style: AppType.sub.copyWith(color: AppColors.danger)),
-                const SizedBox(height: Space.s),
-                Btn(label: '다시 찾기', kind: 'secondary', size: 's', onPress: _searchAll),
+                NoticeText(failed.any((l) => l.fail == 'network') ? '인터넷에 연결되지 않아 찾지 못한 책이 있어요.' : '검색에 잠시 문제가 있어 찾지 못한 책이 있어요.', error: true),
+                if (waiting == 0) Padding(padding: const EdgeInsets.only(top: Space.s), child: Btn(label: '다시 찾기', kind: 'secondary', size: 'medium', onPress: _searchAll)),
               ]),
             ),
           if (found.isNotEmpty) ...[
-            _Head(
-              title: '찾은 책 ${found.length}권',
-              action: found.every((l) => l.picked) ? '모두 빼기' : '모두 고르기',
-              onAction: () => setState(() {
+            _Head(title: '찾은 책', count: '${found.length}권'),
+            // 전체 선택: 줄들과 같은 자리의 고르는 원(2026-11-20 사용자 '전체선택 버튼 넣어줘'. 구역 제목 오른쪽 '모두 고르기' 글자는 눈에 띄지 않았다)
+            _SelectAll(
+              on: found.every((l) => l.picked),
+              onTap: () => setState(() {
                 final all = found.every((l) => l.picked);
                 for (final l in found) {
                   l.picked = !all;
@@ -203,15 +252,15 @@ class _ImportListScreenState extends State<ImportListScreen> {
             for (final l in found) _LineRow(l: l, onTap: () => setState(() => l.picked = !l.picked)),
           ],
           if (owned.isNotEmpty) ...[
-            _Head(title: '이미 서재에 있는 책 ${owned.length}권', note: '중복으로 넣지 않아요'),
+            _Head(title: '이미 내 책에 있는 책', count: '${owned.length}권', note: '중복으로 넣지 않아요'),
             for (final l in owned) _LineRow(l: l),
           ],
           if (missing.isNotEmpty) ...[
-            _Head(title: '찾지 못한 책 ${missing.length}권', note: '누르면 그 이름으로 찾아요'),
-            for (final l in missing) _LineRow(l: l, onTap: l.offline ? null : () => openAddBook(context, q: l.row.title.isNotEmpty ? [l.row.title, l.row.author].where((x) => x.isNotEmpty).join(' ') : l.row.query)),
+            _Head(title: '찾지 못한 책', count: '${missing.length}권', note: '누르면 그 이름으로 찾아요'),
+            for (final l in missing) _LineRow(l: l, onTap: () => _addMissing(l)),
           ],
           if (added.isNotEmpty) ...[
-            _Head(title: '추가한 책 ${added.length}권'),
+            _Head(title: '추가한 책', count: '${added.length}권'),
             for (final l in added) _LineRow(l: l),
           ],
         ],
@@ -228,14 +277,15 @@ class _ImportListScreenState extends State<ImportListScreen> {
       final f = File('${dir.path}/$name');
       await f.writeAsString(csv);
       if (await _files.invokeMethod<bool>('canSaveDownload').catchError((_) => false) == true) {
-        await _files.invokeMethod<String>('saveDownload', {'path': f.path, 'name': name, 'mime': 'text/csv'});
+        final saved = await _files.invokeMethod<String>('saveDownload', {'path': f.path, 'name': name, 'mime': 'text/csv'});
         f.delete().ignore();
-        if (mounted) appAlert(context, '예시 파일을 저장했어요', '다운로드 › 책장한켠 폴더의 ‘$name’을 엑셀에서 열어 내 책으로 고친 뒤 여기서 골라 주세요.');
+        if (mounted) appAlert(context, '예시 파일을 저장했어요', sampleSavedText(saved, name));
       } else {
         await SharePlus.instance.share(ShareParams(files: [XFile(f.path, mimeType: 'text/csv')], title: name));
       }
-    } catch (_) {
-      if (mounted) appAlert(context, '예시 파일을 저장하지 못했어요', '저장 공간을 확인하고 다시 해 주세요.');
+    } catch (e) {
+      // 실패 본문은 errorText(DESIGN 9장 '실패 알림')
+      if (mounted) appAlert(context, '예시 파일을 저장하지 못했어요', errorText(e));
     }
   }
 
@@ -244,38 +294,16 @@ class _ImportListScreenState extends State<ImportListScreen> {
         title: '책 목록 가져오기',
         children: [
           const SizedBox(height: Space.s),
-          Semantics(header: true, child: Text('다른 곳의 책 목록을\n한 번에 가져오세요', style: AppType.title)),
+          // 밀어 넣은 화면 본문 맨 위 큰 안내 제목(DESIGN 2-2 introTitle, 탭 첫 화면 제목 역할을 빌려 쓰고 있었다)
+          Semantics(header: true, child: Text('다른 곳의 책 목록을\n한 번에 가져오세요', style: AppType.introTitle)),
           const SizedBox(height: Space.m),
-          Text('엑셀이나 CSV 파일을 선택해 주세요.', style: AppType.body.copyWith(color: AppColors.inkSoft)),
+          WordText('엑셀이나 CSV 파일을 선택해 주세요.', style: AppType.body.copyWith(color: AppColors.inkSoft)),
           const SizedBox(height: Space.xl),
           Btn(label: '파일 고르기', busy: _reading, onPress: _pick),
           const SizedBox(height: Space.s),
-          Center(
-            child: Semantics(
-              button: true,
-              label: '예시 파일 내려받기',
-              excludeSemantics: true,
-              onTap: _sample,
-              child: Pressable(
-                onPress: _sample,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: Space.hit),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: Space.s),
-                    child: Center(
-                      widthFactor: 1,
-                      child: Text('예시 파일 내려받기', style: AppType.sub.copyWith(decoration: TextDecoration.underline, decorationColor: AppColors.inkSoft)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.m),
-              child: Semantics(liveRegion: true, child: Text(_error!, style: AppType.sub.copyWith(color: AppColors.danger))),
-            ),
+          // 글자만 단추는 밑줄 없는 TextLink(2026-11-19 공통 규칙). 다른 곳으로 가는 보조라 회색
+          TextLink(label: '예시 파일 내려받기', soft: true, onPress: _sample),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: Space.xs), child: NoticeText(_error!, error: true)),
           const SizedBox(height: Space.xl),
           const _Fold(title: '지원하는 파일과 항목', lines: [
             '엑셀 파일(.xlsx)은 그대로, CSV는 ‘CSV UTF-8’로 저장한 파일을 골라 주세요.',
@@ -284,8 +312,8 @@ class _ImportListScreenState extends State<ImportListScreen> {
           ]),
           const _Fold(title: '가져오기 전 확인해 주세요', last: true, lines: [
             'ISBN이 있으면 그 판으로, 없으면 제목과 저자로 찾아요.',
-            '찾은 책은 넣기 전에 한 번 더 확인해요. 이미 서재에 있는 책은 중복으로 넣지 않아요.',
-            '읽기 상태가 없으면 ‘읽고 싶은’ 책으로 넣어요.',
+            '찾은 책은 넣기 전에 한 번 더 확인해요. 이미 내 책에 있는 책은 중복으로 넣지 않아요.',
+            '읽기 상태가 없으면 ‘읽기 전’으로 넣어요.',
           ]),
           const SizedBox(height: Space.m),
           Text('XLSX, CSV 파일 지원', style: AppType.caption),
@@ -293,7 +321,51 @@ class _ImportListScreenState extends State<ImportListScreen> {
       );
 }
 
-/// 누르면 펼쳐지는 줄(위아래 옅은 선, 오른쪽 ⌄)
+/// 예시 파일 저장 안내 글. 같은 이름 파일이 이미 있으면 기기가 'name (1).csv'처럼 이름을 바꿔 저장하므로 저장한 이름(saveDownload가 돌려준 것)을 쓴다.
+/// 돌려준 값이 이름이 아니면(예전 앱의 content:// 주소) 고른 이름. 조사는 이름 끝소리로(2026-11-20 QA: ‘책장한켠 예시.csv’을, 실제 파일은 ‘책장한켠 예시 (4).csv’)
+String sampleSavedText(String? saved, String name) {
+  final shown = saved != null && saved.trim().isNotEmpty && !saved.contains('://') && !saved.contains('/') ? saved.trim() : name;
+  return '다운로드 › 책장한켠 폴더의 ${eulReul('‘$shown’')} 엑셀에서 열어 내 책으로 고친 뒤 여기서 골라 주세요.';
+}
+
+/// 줄 찾기 한 번(파일을 고를 때 · 이어서 찾기 · 다시 찾기마다 새로): 한 번에 [parallel]줄씩 찾아 줄마다 [onResult].
+/// [stop]을 부르면 남은 줄은 찾지 않고, 기다리던 검색의 결과도 버리며, [run]이 그 검색을 기다리지 않고 바로 끝난다
+class LineSearch<T, R> {
+  LineSearch(this.todo, this.search, this.onResult, {this.parallel = 3});
+  final List<T> todo;
+  final Future<R> Function(T item) search;
+  final void Function(T item, R result) onResult;
+  final int parallel;
+  final _stopped = Completer<void>();
+
+  bool get stopped => _stopped.isCompleted;
+
+  void stop() {
+    if (!stopped) _stopped.complete();
+  }
+
+  Future<void> run() async {
+    var next = 0;
+    Future<void> worker() async {
+      while (!stopped && next < todo.length) {
+        final item = todo[next++];
+        final R r;
+        try {
+          r = await search(item);
+        } catch (_) {
+          // 검색 함수는 실패를 결과로 돌려준다. 그래도 던지면 이 줄은 찾지 않은 줄로 두고 다음 줄로
+          continue;
+        }
+        if (stopped) return;
+        onResult(item, r);
+      }
+    }
+
+    await Future.any([Future.wait([for (var i = 0; i < parallel; i++) worker()]), _stopped.future]);
+  }
+}
+
+/// 안내 접는 줄 하나(책 확인 '추가 정보'와 같은 FoldRow, 2026-11-19 공통 규칙). 펼치면 점 붙은 안내 글
 class _Fold extends StatefulWidget {
   const _Fold({required this.title, required this.lines, this.last = false});
   final String title;
@@ -308,29 +380,12 @@ class _FoldState extends State<_Fold> {
   bool _open = false;
 
   @override
-  Widget build(BuildContext context) {
-    final line = Container(height: 1, color: AppColors.sectionLine);
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      line,
-      Semantics(
-        button: true,
-        expanded: _open,
-        label: widget.title,
-        excludeSemantics: true,
-        onTap: () => setState(() => _open = !_open),
-        child: Pressable(
-          onPress: () => setState(() => _open = !_open),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 60),
-            child: Row(children: [
-              Expanded(child: Text(widget.title, style: AppType.rowStrong)),
-              AnimatedRotation(turns: _open ? 0.5 : 0, duration: const Duration(milliseconds: 160), child: const LucideIcon('ChevronDown', size: 22, color: AppColors.inkSoft)),
-            ]),
-          ),
-        ),
-      ),
-      if (_open)
-        Padding(
+  Widget build(BuildContext context) => FoldRow(
+        title: widget.title,
+        open: _open,
+        last: widget.last,
+        onToggle: () => setState(() => _open = !_open),
+        child: Padding(
           padding: const EdgeInsets.only(bottom: Space.l),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final t in widget.lines)
@@ -338,33 +393,57 @@ class _FoldState extends State<_Fold> {
                 padding: const EdgeInsets.only(bottom: Space.s),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Padding(padding: const EdgeInsets.only(top: 10, right: Space.s), child: Container(width: 4, height: 4, decoration: const BoxDecoration(color: AppColors.inkSoft, shape: BoxShape.circle))),
-                  Expanded(child: Text(t, style: AppType.sub)),
+                  Expanded(child: WordText(t, style: AppType.sub)),
                 ]),
               ),
           ]),
         ),
-      if (widget.last) line,
-    ]);
-  }
+      );
 }
 
+/// 결과 묶음 머리: 공용 구역 머리(제목 19 · 개수 · 아래 설명 · 오른쪽 글자 단추, 2026-11-19 공통 규칙: 설명이 오른쪽 caption이었다)
 class _Head extends StatelessWidget {
-  const _Head({required this.title, this.note, this.action, this.onAction});
+  const _Head({required this.title, this.count, this.note});
   final String title;
-  final String? note, action;
-  final VoidCallback? onAction;
+  final String? count, note;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: Space.xl, bottom: Space.xs),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-          Expanded(child: Semantics(header: true, child: Text(title, style: AppType.section))),
-          if (note != null) Text(note!, style: AppType.caption),
-          if (action != null && onAction != null) TextLink(label: action!, soft: true, onPress: onAction!),
-        ]),
+        child: SectionHead(title: title, count: count, note: note),
       );
 }
 
+/// 찾은 책 '전체 선택' 줄: 왼쪽 이름, 오른쪽 고르는 원(책 줄의 원과 같은 세로 줄). 화면 읽기는 체크 상자 하나
+class _SelectAll extends StatelessWidget {
+  const _SelectAll({required this.on, required this.onTap});
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        checked: on,
+        button: true,
+        label: '전체 선택',
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Pressable(
+          onPress: onTap,
+          dim: true,
+          bleed: Space.page,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.hit),
+            child: Row(children: [
+              Expanded(child: Text('전체 선택', style: AppType.row)),
+              RadioMark(on: on),
+            ]),
+          ),
+        ),
+      );
+}
+
+/// 가져온 한 줄(공용 책 줄 BookRow 작게, 바코드 찾은 책과 같은 모양): 오른쪽 고르는 원 · 이미 있음(흐린 원) · 추가함(체크) · 못 찾음(꺾쇠, 누르면 책 추가)
 class _LineRow extends StatelessWidget {
   const _LineRow({required this.l, this.onTap});
   final _Line l;
@@ -373,34 +452,35 @@ class _LineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = l.book;
+    final r = l.row;
+    // 못 찾은 줄은 파일의 제목 · 저자를 책 줄 제목 · 저자 자리에(2026-11-19 공통 규칙: '제목 | 저자'를 제목 한 줄로 그렸다)
+    final title = b?.title ?? (r.title.isNotEmpty ? r.title : (r.isbn != null ? 'ISBN ${r.isbn}' : '(제목 없음)'));
+    final meta = b != null ? (b.authors.isEmpty ? null : authorLine(b.authors)) : (r.author.isEmpty ? null : r.author);
     final sub = b == null
-        ? (l.offline ? '인터넷 연결 없음' : '${l.row.line}번째 줄${l.row.isbn != null ? ' | ISBN ${l.row.isbn}' : ''}')
-        : [?publisherLine(b), if (l.row.status != null) statusLabel[l.row.status]!].join(' | ');
+        ? (l.fail == 'network'
+            ? '인터넷에 연결되지 않았어요'
+            : l.fail != null
+                ? '검색하지 못했어요'
+                : ['${r.line}번째 줄', if (r.isbn != null && r.title.isNotEmpty) 'ISBN ${r.isbn}'].join(metaSep))
+        : [?publisherLine(b), if (r.status != null) statusLabel[r.status]!].join(metaSep);
     final selectable = b != null && l.ownedId == null && !l.added;
-    return Semantics(
-      button: onTap != null,
-      selected: selectable && l.picked,
-      label: [b?.title ?? l.row.label, if (sub.isNotEmpty) sub].join(', '),
-      excludeSemantics: true,
-      child: Pressable(
-        onPress: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.s),
-          child: Row(children: [
-            RealCover(uri: b?.coverUrl, title: b?.title ?? l.row.title, color: '#F2F4F6', width: 40, ratio: 0.72),
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(b?.title ?? (l.row.label.isEmpty ? '(제목 없음)' : l.row.label), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowStrong),
-                if (b != null && b.authors.isNotEmpty) Text(b.authors.join(', '), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.sub),
-                if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption),
-              ]),
-            ),
-            const SizedBox(width: Space.s),
-            if (selectable) PickMark(on: l.picked) else if (l.added) const LucideIcon('Check', size: 18, color: AppColors.accent) else if (b == null && !l.offline) const LucideIcon('ChevronRight', size: 18, color: AppColors.inkSoft),
-          ]),
-        ),
-      ),
+    return BookRow(
+      cover: RealCover(uri: b?.coverUrl, title: b?.title ?? r.title, width: BookRow.coverWidth(BookRowSize.small), ratio: 0.72),
+      title: title,
+      meta: meta,
+      third: sub,
+      trailing: selectable
+          ? RadioMark(on: l.picked)
+          : l.added
+              ? const AddedMark()
+              : b == null
+                  ? const Chevron()
+                  : const RadioMark(on: false, dim: true),
+      onPress: onTap,
+      // 여러 권 고르기 줄은 화면 읽기 '선택됨/선택 안 됨'(DESIGN 13장)
+      checked: selectable ? l.picked : null,
+      // 화면 읽기에는 세로줄 대신 쉼표(DESIGN 15장)
+      label: [title, ?meta, if (sub.isNotEmpty) sub.split(metaSep).join(', ')].join(', '),
     );
   }
 }

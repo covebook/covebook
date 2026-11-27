@@ -1,9 +1,11 @@
 #!/bin/bash
-# 빛 셰이더를 만든다: 옛 앱(React Native, app/)의 생성기에서 SkSL을 뽑아 → GLSL로 바꿔 shaders/*.frag 에 쓴다.
-# app/ 폴더는 2026-11-18에 저장소에서 지웠다. 생성기는 아직 그 코드에 있어서, 지우기 전 마지막 커밋(APP_REF)에서 꺼내 쓴다.
-# flutter build가 그 파일을 impellerc로 미리 컴파일한다(기기에서 처음 그릴 때 컴파일하지 않는다).
-# 셰이더 식·빛 값을 바꿀 일이 있으면 지금 앱 커밋 + tool/rn_light.patch 를 푼 사본에서 빛 파일을 고쳐 패치를 다시 만들고(지금 앱 폴더는 고치지 않는다) 이것을 다시 돌린다.
-# 관문(S23 측정)을 지나면 생성기를 Dart로 옮기고 node 의존을 없앤다.
+# 빛 셰이더를 만든다: 옛 앱(React Native)의 생성기에서 SkSL을 뽑아 → GLSL로 바꿔 shaders/*.frag 에 쓴다.
+# 옛 앱 코드는 2026-11-18에 저장소에서 지웠다(그때까지 app/ 자리, 지금 app/은 Flutter 앱). 생성기는 아직 그 코드에 있어서, 지우기 전 마지막 커밋(APP_REF)에서 꺼내 쓴다.
+# 같은 jest 실행에서 tool/dump_*.test.ts가 Flutter 시험의 견줌 자료(test/fixtures/*.json, assets/bake_case.json, lib/gen/)도 다시 뽑는다.
+# flutter build가 셰이더를 impellerc로 미리 컴파일한다(기기에서 처음 그릴 때 컴파일하지 않는다).
+# 빛 식·값을 바꿀 때: 옛 앱 커밋 + tool/rn_light.patch를 푼 사본에서 빛 파일을 고쳐 패치를 다시 만들고 이것을 다시 돌린다(자세히는 tool/README.md).
+# 대체 경로(남은 일): 생성기(scene-light-sksl.ts·light-model.ts)를 Dart로 옮기면 node · 옛 커밋 의존이 없어진다.
+# 필요한 것: git(옛 커밋), node 22(NODE_BIN), Flutter(FLUTTER_BIN). 옛 앱 node_modules를 따로 받아 둔 곳이 있으면 RN_NODE_MODULES=<폴더>
 set -e
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
@@ -16,24 +18,24 @@ if [ -z "$APP_SRC" ]; then
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
   git -C "$ROOT/.." archive "$APP_REF" app | tar -x -C "$TMP"
-  # node_modules: 작업 폴더에 남아 있으면 빌리고, 없으면 임시 폴더에 새로 깐다
-  if [ -d "$ROOT/../app/node_modules" ]; then
-    ln -s "$ROOT/../app/node_modules" "$TMP/app/node_modules"
+  # node_modules: 받아 둔 곳(RN_NODE_MODULES)이 있으면 빌리고, 없으면 임시 폴더에 새로 깐다(옛 앱 package-lock.json 그대로)
+  if [ -n "$RN_NODE_MODULES" ] && [ -d "$RN_NODE_MODULES" ]; then
+    ln -s "$RN_NODE_MODULES" "$TMP/app/node_modules"
   else
     (cd "$TMP/app" && PATH=$NODE_BIN:$PATH npm ci --silent)
   fi
   APP_SRC="$TMP/app"
   echo "== 옛 앱: 커밋 $(git -C "$ROOT/.." rev-parse --short "$APP_REF")"
-  # Flutter가 고친 빛(tool/rn_light.patch): 지금 앱 빛 파일(조명·스킨 모양·빛 모델·맞추기 값)에 덧대어 만든다. 지금 앱 폴더는 건드리지 않는다.
-  # 지금 앱 커밋에 같은 변경이 들어오면(이미 적용됨) 건너뛰고, 맞지 않으면 멈춘다(빛이 어긋난 채 만들지 않게)
+  # Flutter가 고친 빛(tool/rn_light.patch): 옛 앱 빛 파일(조명·스킨 모양·빛 모델·맞추기 값)에 덧대어 만든다.
+  # 옛 앱 커밋에 같은 변경이 이미 들어 있으면 건너뛰고, 맞지 않으면 멈춘다(빛이 어긋난 채 만들지 않게)
   if [ -s "$ROOT/tool/rn_light.patch" ] && [ -z "$NO_LIGHT_PATCH" ]; then
     if (cd "$TMP" && patch -p1 -s --dry-run < "$ROOT/tool/rn_light.patch" >/dev/null 2>&1); then
       (cd "$TMP" && patch -p1 -s < "$ROOT/tool/rn_light.patch")
       echo "== Flutter 빛 패치 적용(tool/rn_light.patch)"
     elif (cd "$TMP" && patch -p1 -s -R --dry-run < "$ROOT/tool/rn_light.patch" >/dev/null 2>&1); then
-      echo "== Flutter 빛 패치는 지금 앱 커밋에 이미 들어 있다"
+      echo "== Flutter 빛 패치는 옛 앱 커밋에 이미 들어 있다"
     else
-      echo "!! tool/rn_light.patch가 지금 앱 커밋과 맞지 않는다: 지금 앱 빛 파일이 바뀌었으면 패치를 다시 만든다" >&2
+      echo "!! tool/rn_light.patch가 옛 앱 커밋과 맞지 않는다: APP_REF를 바꿨으면 패치를 다시 만든다" >&2
       exit 1
     fi
   fi
@@ -42,7 +44,7 @@ fi
 echo "== SkSL·줄 구성 뽑기 (jest)"
 cd "$APP_SRC"
 PATH=$NODE_BIN:$PATH npx jest --silent=false \
-  --config "{\"preset\":\"jest-expo\",\"rootDir\":\".\",\"testEnvironment\":\"node\",\"modulePaths\":[\"<rootDir>/node_modules\"],\"roots\":[\"$ROOT/tool\"],\"testMatch\":[\"**/dump_sksl.test.ts\",\"**/dump_schema.test.ts\",\"**/dump_bookmark.test.ts\",\"**/dump_reading.test.ts\",\"**/dump_rebinding.test.ts\",\"**/dump_physics.test.ts\",\"**/dump_locked.test.ts\",\"**/dump_qa_seed.test.ts\",\"**/dump_edit.test.ts\",\"**/dump_reference.test.ts\"],\"moduleNameMapper\":{\"^@/(.*)$\":\"<rootDir>/src/\$1\"}}" \
+  --config "{\"preset\":\"jest-expo\",\"rootDir\":\".\",\"testEnvironment\":\"node\",\"modulePaths\":[\"<rootDir>/node_modules\"],\"roots\":[\"$ROOT/tool\"],\"testMatch\":[\"**/dump_sksl.test.ts\",\"**/dump_schema.test.ts\",\"**/dump_bookmark.test.ts\",\"**/dump_reading.test.ts\",\"**/dump_rebinding.test.ts\",\"**/dump_physics.test.ts\",\"**/dump_locked.test.ts\",\"**/dump_qa_seed.test.ts\",\"**/dump_edit.test.ts\"],\"moduleNameMapper\":{\"^@/(.*)$\":\"<rootDir>/src/\$1\"}}" \
   2>&1 | grep -E "^\s+(console.log|\[dump\])|✓|✕|Tests:|Error|Cannot" | sed 's/^ *//'
 
 echo "== GLSL 로 바꾸기"
@@ -57,3 +59,8 @@ cat > lib/gen/bake_shader_hash.g.dart <<DART
 const bakeShaderHash = '$H';
 DART
 echo "[bake] $H"
+
+echo "== 낱개 uniform 묶기(아이폰 Metal 버퍼 칸 31개 제한)"
+# 굽기 셰이더 지문은 묶기 전 GLSL로 낸다(위): 묶기는 값을 바꾸지 않아 이미 구운 그림을 그대로 쓴다
+PATH=$FLUTTER_BIN:$PATH dart run tool/pack_uniforms.dart lib/gen/packed_uniforms.g.dart \
+  shaders/lit.frag shaders/book.frag shaders/bake.frag shaders/grid.frag shaders/tab.frag

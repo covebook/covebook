@@ -83,7 +83,7 @@ Future<bool?> _askNoRoom(BuildContext context, List<String> ids, int free) {
               child: Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
                 for (final (i, id) in shown.indexed) ...[
                   if (i > 0) const SizedBox(width: Space.m),
-                  SizedBox(width: 68, child: BookVisual(lib: lib, id: id, width: 68)),
+                  SizedBox(width: CoverSize.place, child: BookVisual(lib: lib, id: id, width: CoverSize.place)),
                 ],
                 if (rest > 0) Padding(padding: const EdgeInsets.only(left: Space.m, bottom: Space.xs), child: Text('외 $rest권', style: AppType.sub)),
               ]),
@@ -101,7 +101,7 @@ Future<bool?> _askNoRoom(BuildContext context, List<String> ids, int free) {
           ]),
         ),
       ),
-      Btn(label: '선반 열고 진열하기', size: 'l', onPress: () => Navigator.pop(ctx, true)),
+      Btn(label: '선반 열고 진열하기', size: 'xlarge', onPress: () => Navigator.pop(ctx, true)),
       SubAction(label: '보관만 하기', onPress: () => Navigator.pop(ctx, false)),
     ]),
   );

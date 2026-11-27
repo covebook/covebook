@@ -1,11 +1,14 @@
 // 하단 탭 아이콘(지금 앱 ui/TabIcons.tsx와 같은 모양·크기를 SVG 그대로): 고르지 않은 탭은 속이 빈 회색 윤곽선, 고른 탭은 진한 색으로 속이 찬 모양.
-// 선 굵기 2.4, 끝·꺾임은 둥글게. 아이콘마다 키가 달라도 세로 가운데가 맞게 viewBox를 모양 가운데에 잡는다
+// 윤곽선 굵기는 TabBarStyle.iconStroke(2.0, 2026-11-25 전 2.4), 찬 모양 테두리는 iconFillStroke(2.4). 끝·꺾임은 둥글게. 아이콘마다 키가 달라도 세로 가운데가 맞게 viewBox를 모양 가운데에 잡는다
 library;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-const _w = 2.4;
+import 'theme.dart';
+
+const _w = TabBarStyle.iconStroke;
+const _fw = TabBarStyle.iconFillStroke;
 const _box = 28.0;
 const _round = 'stroke-linecap="round" stroke-linejoin="round"';
 
@@ -43,12 +46,12 @@ Widget shelfIcon(Color color, {double size = 26, bool filled = false}) {
 Widget myBooksTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
   final c = _hex(color), b = _hex(bg);
   // 표지(위 왼쪽 4 · 위 오른쪽 4 둥글기) → 오른쪽으로 내려와 말린 면 위 선 → 왼쪽 끝에서 반원으로 말려 → 아래 선 → 아래 오른쪽 작은 모서리 → 뒤표지 아래 끝 → 아래 왼쪽 큰 둥글기
-  // 윤곽선은 선이 굵어(2.4) 말린 면 틈을 크게 잡는다(틈이 좁으면 선끼리 붙어 아래가 두꺼운 막대로 보였다). 찬 모양은 그림처럼 가는 틈
+  // 윤곽선은 선이 굵어(그때 2.4) 말린 면 틈을 크게 잡는다(틈이 좁으면 선끼리 붙어 아래가 두꺼운 막대로 보였다). 찬 모양은 그림처럼 가는 틈
   const outline = 'M5.2 1.2 H14.8 A4 4 0 0 1 18.8 5.2 V15.2 H6.4 A2 2 0 0 0 6.4 19.2 H18.8 V21.6 A1.2 1.2 0 0 1 17.6 22.8 H5.2 A4 4 0 0 1 1.2 18.8 V5.2 A4 4 0 0 1 5.2 1.2 Z';
   const solid = 'M5.2 1.2 H14.8 A4 4 0 0 1 18.8 5.2 V21.6 A1.2 1.2 0 0 1 17.6 22.8 H5.2 A4 4 0 0 1 1.2 18.8 V5.2 A4 4 0 0 1 5.2 1.2 Z';
   return _svg(
     filled
-        ? '<path d="$solid" fill="$c" stroke="$c" stroke-width="$_w" $_round/><path d="M6.4 18.4 H20" fill="none" stroke="$b" stroke-width="1.6" stroke-linecap="round"/>'
+        ? '<path d="$solid" fill="$c" stroke="$c" stroke-width="$_fw" $_round/><path d="M6.4 18.4 H20" fill="none" stroke="$b" stroke-width="1.6" stroke-linecap="round"/>'
         : '<path d="$outline" fill="none" stroke="$c" stroke-width="$_w" $_round/>',
     _boxOf(size, 20, 12, 1.04),
   );
@@ -58,7 +61,7 @@ Widget myBooksTabIcon(Color color, Color bg, {double size = 26, bool filled = fa
 Widget bookmarkTabIcon(Color color, {double size = 26, bool filled = false}) {
   final c = _hex(color);
   return _svg(
-    '<path d="M5.1 1.2 H14.9 A3.9 3.9 0 0 1 18.8 5.1 V21.3 A0.95 0.95 0 0 1 17.25 22.05 L11.05 17 Q10 16.15 8.95 17 L2.75 22.05 A0.95 0.95 0 0 1 1.2 21.3 V5.1 A3.9 3.9 0 0 1 5.1 1.2 Z" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="$_w" $_round/>',
+    '<path d="M5.1 1.2 H14.9 A3.9 3.9 0 0 1 18.8 5.1 V21.3 A0.95 0.95 0 0 1 17.25 22.05 L11.05 17 Q10 16.15 8.95 17 L2.75 22.05 A0.95 0.95 0 0 1 1.2 21.3 V5.1 A3.9 3.9 0 0 1 5.1 1.2 Z" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="${filled ? _fw : _w}" $_round/>',
     _boxOf(size, 20, 11.7, 1.03),
   );
 }
@@ -67,7 +70,7 @@ Widget bookmarkTabIcon(Color color, {double size = 26, bool filled = false}) {
 Widget readTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
   final c = _hex(color);
   return _svg(
-    '<path d="M14.5 4.2 C12.7 2.2 10.3 1.2 7.3 1.2 H5.5 A4.3 4.3 0 0 0 1.2 5.5 V16 A4.3 4.3 0 0 0 5.5 20.3 H7.7 C10.3 20.3 12.5 21.1 14.5 22.8 C16.5 21.1 18.7 20.3 21.3 20.3 H23.5 A4.3 4.3 0 0 0 27.8 16 V5.5 A4.3 4.3 0 0 0 23.5 1.2 H21.7 C18.7 1.2 16.3 2.2 14.5 4.2 Z" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="$_w" $_round/>'
+    '<path d="M14.5 4.2 C12.7 2.2 10.3 1.2 7.3 1.2 H5.5 A4.3 4.3 0 0 0 1.2 5.5 V16 A4.3 4.3 0 0 0 5.5 20.3 H7.7 C10.3 20.3 12.5 21.1 14.5 22.8 C16.5 21.1 18.7 20.3 21.3 20.3 H23.5 A4.3 4.3 0 0 0 27.8 16 V5.5 A4.3 4.3 0 0 0 23.5 1.2 H21.7 C18.7 1.2 16.3 2.2 14.5 4.2 Z" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="${filled ? _fw : _w}" $_round/>'
     '<path d="M14.5 4.6 V22" fill="none" stroke="${filled ? _hex(bg) : c}" stroke-width="${filled ? 1.6 : _w}" $_round/>',
     _boxOf(size, 29, 11.95, 1.05),
   );
@@ -77,9 +80,9 @@ Widget readTabIcon(Color color, Color bg, {double size = 26, bool filled = false
 Widget recordTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
   final c = _hex(color);
   return _svg(
-    '<rect x="1.2" y="3.6" width="22.6" height="19.2" rx="4.2" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="$_w" $_round/>'
+    '<rect x="1.2" y="3.6" width="22.6" height="19.2" rx="4.2" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="${filled ? _fw : _w}" $_round/>'
     '<path d="M1.8 10.2 H23.2" fill="none" stroke="${filled ? _hex(bg) : c}" stroke-width="${filled ? 1.6 : _w}" $_round/>'
-    '<path d="M7.6 1.2 V5.6 M17.4 1.2 V5.6" fill="none" stroke="$c" stroke-width="$_w" $_round/>',
+    '<path d="M7.6 1.2 V5.6 M17.4 1.2 V5.6" fill="none" stroke="$c" stroke-width="${filled ? _fw : _w}" $_round/>',
     _boxOf(size, 25, 12, 1.08),
   );
 }
@@ -103,8 +106,8 @@ Widget profileTabIcon(Color color, {double size = 26, bool filled = false}) {
 Widget communityTabIcon(Color color, Color bg, {double size = 26, bool filled = false}) {
   final c = _hex(color), b = _hex(bg);
   return _svg(
-    '<path d="M9.4 7.6 V6.8 A2.6 2.6 0 0 1 12 4.2 H20.2 A2.6 2.6 0 0 1 22.8 6.8 V12.2 A2.6 2.6 0 0 1 20.2 14.8 H20 V17.4 L17.2 14.8" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="$_w" $_round/>'
-    '<path d="M5.8 8.6 H14.2 A2.6 2.6 0 0 1 16.8 11.2 V16.6 A2.6 2.6 0 0 1 14.2 19.2 H9.6 L6.2 21.9 V19.2 H5.8 A2.6 2.6 0 0 1 3.2 16.6 V11.2 A2.6 2.6 0 0 1 5.8 8.6 Z" fill="${filled ? c : b}" stroke="${filled ? b : c}" stroke-width="${filled ? 2.4 : _w}" $_round/>',
+    '<path d="M9.4 7.6 V6.8 A2.6 2.6 0 0 1 12 4.2 H20.2 A2.6 2.6 0 0 1 22.8 6.8 V12.2 A2.6 2.6 0 0 1 20.2 14.8 H20 V17.4 L17.2 14.8" fill="${filled ? c : 'none'}" stroke="$c" stroke-width="${filled ? _fw : _w}" $_round/>'
+    '<path d="M5.8 8.6 H14.2 A2.6 2.6 0 0 1 16.8 11.2 V16.6 A2.6 2.6 0 0 1 14.2 19.2 H9.6 L6.2 21.9 V19.2 H5.8 A2.6 2.6 0 0 1 3.2 16.6 V11.2 A2.6 2.6 0 0 1 5.8 8.6 Z" fill="${filled ? c : b}" stroke="${filled ? b : c}" stroke-width="${filled ? _fw : _w}" $_round/>',
     (width: size, height: size, viewBox: '0 -0.6 26 26'),
   );
 }

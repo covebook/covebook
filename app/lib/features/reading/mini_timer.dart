@@ -2,37 +2,64 @@
 // 원을 누르면 오른쪽 끝(시간 자리)은 그대로 두고 왼쪽으로 늘어나 '읽기 화면 바로가기'와 '재생/일시정지'가 나온다.
 // 시간을 다시 누르거나 바깥을 누르면 접힌다(타이머·환경음 상태는 그대로). 시간은 같은 누적 값을 1초마다 다시 그릴 뿐 따로 재지 않는다.
 // 읽기 화면·읽기 탭(책마다 흐르는 시간이 보인다)에서는 띄우지 않는다. 하단 탭·키보드·안전 영역과 겹치지 않게 둔다.
-// 꾹 누른 채 끌면 자리를 옮긴다(2026-11-17 사용자 '타이머를 꾹 누르고 옮길 수 있게'). 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다
+// 잡고 끌면 바로 자리를 옮긴다(2026-11-24 사용자 '꾹 누르면 움직이게 말고 그냥 잡고 움직이면 바로 움직이게'. 11-17에는 꾹 눌러야 옮겨졌다).
+// 움직이지 않고 떼면 누르기(펼치기 · 접기 · 단추)는 그대로. 옮긴 자리는 기기에 남고, 화면마다 하단 탭·고정 단추 위로는 내려가지 않는다.
+// 끄는 동안은 책 끌기처럼 화면 아래 가운데에 빼기 자리(RemoveZone)가 뜨고, 거기에 놓으면 독서를 일시정지하고 작은 타이머를 숨긴다
+// (2026-11-25 사용자 '타이머 드래그할 수 있잖아 지금 책처럼 가운데 아래로 끌면 없어지게 해줘 멈추고'). 시간은 그대로 남아 읽기 탭에서 이어 읽고,
+// 다시 재기 시작하면 다시 나타난다. 토스트 '되돌리기'로 바로 되살린다
 library;
 
 import 'dart:async';
+import '../../store/finish_reading.dart' show pauseReading, resumeReading;
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
+import '../../app/idle_bars.dart';
 import '../../db/kv_store.dart';
-
+import '../../domain/library.dart' show formatDurationPrecise;
 import '../../domain/reading.dart';
 import '../../store/mini_timer_store.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
+import '../../ui/alert.dart';
+import '../../ui/feedback.dart' show errorText;
 import '../../ui/kit.dart';
+import '../../ui/feedback.dart' show showToast;
 import '../../ui/theme.dart';
+import '../home/decorate_panel.dart' show RemoveZone;
+import 'play_icons.dart';
 import 'reading_screen.dart';
 
 const _actionsW = 112.0; // 펼친 왼쪽 부분(바로가기 + 재생/일시정지)
+
+/// 펼쳤을 때 시간 오른쪽 여백(왼쪽 바로가기 그림 옆 여백과 맞춘다)
+const _openPad = Space.l;
 const _gap = 12.0;
-// 하단 탭 화면(앱 틀 tabPaths에서 읽기 탭만 뺀 것: 읽기 탭에서는 타이머를 띄우지 않는다)
-const _tabs = ['/', '/books', '/records', '/stats'];
+// 하단 탭 화면(타이머가 탭 위에 뜨는 화면)
+const _tabs = ['/', '/books', '/read', '/records', '/stats'];
 
-bool miniTimerHidden(String path) => path == '/read' || path.startsWith('/reading');
+/// 읽기 장면 · 독서 끝에서는 숨는다. 읽기 탭은 재는 동안만 띄운다(2026-11-27 사용자 '뒤로가기 누르면 타이머 뜨고 우측하단에':
+/// 장면에서 ⌄ · 뒤로 나오면 어느 탭이든 오른쪽 아래. 멈춘 독서는 읽기 탭 카드의 '이어서 읽기'로 이어 가 띄우지 않는다)
+bool miniTimerHidden(String path, {bool running = false}) => (path == '/read' && !running) || path.startsWith('/reading');
 
-String _speak(num ms) {
-  final t = (ms / 1000).floor();
-  final h = t ~/ 3600, m = (t % 3600) ~/ 60, s = t % 60;
-  return '${h > 0 ? '$h시간 ' : ''}$m분 $s초';
+/// 시간 글자 양쪽 여백(캡슐일 때)
+const miniTimerPad = Space.m;
+
+/// 작은 타이머(접힌 시간 부분) 폭: 글자 폭 + 양쪽 [miniTimerPad], 원 지름보다 좁지 않고 [max]보다 넓지 않다.
+/// 숫자는 고정 폭(tnum)이라 같은 자릿수면 폭이 같다: 숫자를 0으로 바꿔 재서 1초마다 흔들리지 않게 한다
+double miniTimerWidth(String label, TextScaler scaler, double max) {
+  final p = TextPainter(text: TextSpan(text: label.replaceAll(RegExp(r'\d'), '0'), style: AppType.labelStrong.tnum), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)..layout();
+  final w = p.width;
+  p.dispose();
+  return (w + 2 * miniTimerPad).ceilToDouble().clamp(miniTimerSize, math.max(miniTimerSize, max)).toDouble();
 }
+
+/// 화면 읽기용 시간(초까지): 공용 formatDurationPrecise('20초' · '1분 20초' · '1시간 2분 3초', DESIGN 4장).
+/// 보이는 시계(clock)처럼 초 아래는 버린다(읽어 주는 값과 보이는 값이 1초 어긋나지 않게)
+String _speak(num ms) => formatDurationPrecise((ms / 1000).floor() * 1000);
 
 class MiniTimer extends StatefulWidget {
   const MiniTimer({super.key, required this.navigator});
@@ -46,46 +73,86 @@ class _MiniTimerState extends State<MiniTimer> {
   final _reading = ReadingStore.instance;
   final _place = MiniTimerPlace.instance;
   bool _open = false;
-  Timer? _tick;
   String _lastKey = '';
 
   /// 사용자가 옮긴 자리(화면 오른쪽·아래 끝에서 거리). 없으면 기본 자리
   ({double right, double bottom})? _moved;
   ({double right, double bottom})? _dragFrom;
+
+  /// 끌기 시작한 손가락 자리(누른 자리부터 잰다: 움직임 문턱만큼 튀지 않게)
+  Offset _dragStart = Offset.zero;
   static const _posKey = 'mini-timer-pos';
+
+  /// 끄는 손가락이 아래 빼기 자리 위인지
+  bool _over = false;
+
+  /// 끄는 동안 '가만히 있으면 내리기'를 붙잡았나
+  bool _holdingBars = false;
+
+  void _releaseBars() {
+    if (!_holdingBars) return;
+    _holdingBars = false;
+    IdleBars.instance.release();
+  }
+
+  /// 빼기 자리에 놓아 숨긴 독서(Active.id). 그 독서가 멈춰 있는 동안 숨기고, 다시 재기 시작하면 잊는다
+  String? _dismissed;
+  static const _dismissKey = 'mini-timer-dismissed';
 
   @override
   void initState() {
     super.initState();
     _reading.addListener(_changed);
     _place.addListener(_changed);
+    IdleBars.instance.addListener(_changed);
     KvStore.get(_posKey).then((v) {
       final p = v?.split(',').map(double.tryParse).toList();
       if (mounted && p != null && p.length == 2 && !p.contains(null)) setState(() => _moved = (right: p[0]!, bottom: p[1]!));
+    }).ignore();
+    KvStore.get(_dismissKey).then((v) {
+      if (mounted && v != null && v.isNotEmpty) setState(() => _dismissed = v);
     }).ignore();
   }
 
   @override
   void dispose() {
+    _releaseBars();
     _reading.removeListener(_changed);
     _place.removeListener(_changed);
-    _tick?.cancel();
+    IdleBars.instance.removeListener(_changed);
     super.dispose();
   }
 
   void _changed() {
+    // 다시 재기 시작했거나 다른 독서가 되면 숨긴 표시를 잊는다
+    if (_dismissed != null && (_reading.running || _reading.active?.id != _dismissed)) {
+      _dismissed = null;
+      KvStore.remove(_dismissKey).ignore();
+    }
     if (mounted) setState(() {});
   }
 
-  void _sync(bool tick) {
-    if (tick) {
-      _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
-    } else {
-      _tick?.cancel();
-      _tick = null;
-    }
+  /// 빼기 자리에 놓았다: 재는 중이면 일시정지하고 숨긴다(시간은 그대로). 자리는 끌기 전 자리로 둔다
+  void _dismiss(({double right, double bottom}) before) {
+    final id = _reading.active?.id;
+    if (id == null) return;
+    final wasRunning = _reading.running;
+    setState(() {
+      _dragFrom = null;
+      _over = false;
+      _moved = before;
+      _dismissed = id;
+    });
+    if (wasRunning) pauseReading();
+    KvStore.set(_dismissKey, id).ignore();
+    final ctx = widget.navigator.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    showToast(ctx, '타이머를 멈췄어요. 읽기 탭에서 이어서 읽을 수 있어요.', action: '되돌리기', onAction: () {
+      if (!mounted) return;
+      setState(() => _dismissed = null);
+      KvStore.remove(_dismissKey).ignore();
+      if (wasRunning) unawaited(_resume());
+    });
   }
 
   @override
@@ -93,162 +160,224 @@ class _MiniTimerState extends State<MiniTimer> {
     final mq = MediaQuery.of(context);
     final keyboard = mq.viewInsets.bottom > 0;
     final path = _place.path;
-    // hidden(책장 꾸미기 조작부)은 탭 화면이 맨 위일 때만: 꾸미기에서 연 선반·벽지 화면에서는 보인다(2026-11-16 QA 현우 F9)
-    final hidden = _reading.active == null || _reading.stale || miniTimerHidden(path) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
+    // hidden(책장 꾸미기 조작부)은 탭 화면이 맨 위일 때만: 그 위에 밀어 넣은 화면에서는 보인다(2026-11-16 QA 현우 F9)
+    final dismissed = _dismissed != null && _dismissed == _reading.active?.id && !_reading.running;
+    // 책장 탭에서 가만히 있어 아래를 비운 동안(IdleBars)도 숨긴다(책장만 보이게, 2026-11-25)
+    final idle = IdleBars.instance.down && _place.route == '/' && _place.tab == '/';
+    final hidden = _reading.active == null || _reading.stale || dismissed || idle || miniTimerHidden(path, running: _reading.running) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
     // 화면이 바뀌거나 숨으면 접어 둔다(다시 나타날 때 늘 원)
     final key = '$path|$hidden';
     if (key != _lastKey) {
       _lastKey = key;
       _open = false;
     }
-    final running = _reading.running;
-    _sync(!hidden && running);
     if (hidden) return const SizedBox.shrink();
-    final ms = _reading.elapsed;
+    // 재는 동안 1초마다 다시 그린다(읽기 장면 · 읽기 탭과 같은 타이머)
+    return ElapsedTicker(running: _reading.running, builder: (ms) => _timer(mq, ms));
+  }
+
+  Widget _timer(MediaQueryData mq, num ms) {
+    final path = _place.path;
+    final running = _reading.running;
     final label = clock(ms);
-    // 한 시간을 넘으면 숫자가 길어져 원 대신 같은 높이의 캡슐로 넓힌다
-    final timeW = label.length > 5 ? miniTimerSize + 24 : miniTimerSize;
+    // 폭은 시간 글자 폭 + 양쪽 여백, 원(56)보다 좁아지지 않는다: '03:27'은 원, '1:03:26' · '11:03:25' · '100:00:00'은 글자만큼 긴 캡슐
+    // (2026-11-21 사용자 '1:03:26 또는 11:03:25 되면 디자인 깨질텐데 동적으로 늘어나게'). 큰 글씨에서도 줄이지 않고 늘린다(화면 폭 절반까지)
+    // 펼치면 시간 오른쪽에 여백을 더한다: 동그라미 폭 그대로면 숫자가 캡슐 끝에 붙었다(2026-11-20 사용자 '펼쳤을 때 디자인 문제')
+    final timeW = miniTimerWidth(label, MediaQuery.textScalerOf(context), mq.size.width / 2) + (_open ? _openPad : 0);
     final s = SettingsStore.instance;
     final reduce = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && mq.disableAnimations);
     final onTabs = _place.route == '/' && _tabs.contains(path);
-    final minBottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? _place.footer ?? mq.padding.bottom) + _gap;
+    final restBottom = (onTabs ? TabBarStyle.navHeight + mq.padding.bottom : _place.bottom ?? _place.footer ?? mq.padding.bottom) + _gap;
+    // 끄는 동안은 하단 탭 위까지 내려가 아래 빼기 자리에 닿을 수 있다(놓으면 다시 탭 위로)
+    final minBottom = _dragFrom != null ? mq.padding.bottom + 8 : restBottom;
     // 옮긴 자리: 화면 안, 하단 탭·고정 단추 위, 상태 표시줄 아래로만
     final maxRight = mq.size.width - timeW - (_open ? _actionsW : 0) - 8;
     final maxBottom = mq.size.height - mq.padding.top - miniTimerSize - 8;
     final double right = (_moved?.right ?? 16.0).clamp(8.0, math.max(8.0, maxRight)).toDouble();
-    final double bottom = (_moved?.bottom ?? minBottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
+    final double bottom = (_moved?.bottom ?? restBottom).clamp(minBottom, math.max(minBottom, maxBottom)).toDouble();
     final dragging = _dragFrom != null;
-    final hair = 2 / mq.devicePixelRatio;
-    Widget divider() => Container(width: hair, height: 22, color: AppColors.line);
+    // 테두리는 화소 2개
+    final hair = 2 * Hairline.of(context);
+    final speed = reduce ? Duration.zero : const Duration(milliseconds: 180);
+    // 있다 없다 하는 겹(빼기 자리 · 접기 칸)에는 키를 단다: 없으면 끄는 도중 타이머 누르기 층이 새로 만들어져 끌기가 끊긴다
     return Stack(children: [
+      // 끄는 동안 화면 아래 가운데 빼기 자리(책 끌기와 같은 모양 · 자리)
+      if (dragging)
+        Positioned(
+          key: const ValueKey('remove'),
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: mq.padding.bottom + RemoveZone.lift * 2,
+          child: IgnorePointer(child: RemoveZone(active: _over, centerFromBottom: mq.padding.bottom + RemoveZone.lift)),
+        ),
       // 펼친 동안 바깥을 누르면 접는다(아래 화면은 눌리지 않는다)
-      if (_open) Positioned.fill(child: Semantics(label: '미니 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
+      if (_open) Positioned.fill(key: const ValueKey('close'), child: Semantics(button: true, label: '작은 타이머 접기', child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _open = false)))),
       Positioned(
+        key: const ValueKey('timer'),
         right: right,
         bottom: bottom,
         height: miniTimerSize,
         child: GestureDetector(
-          // 꾹 눌러 끌기: 손가락을 따라 옮기고, 놓으면 그 자리를 기억한다
-          onLongPressStart: (_) {
+          // 잡고 끌기: 손가락이 조금(누르기 문턱) 움직이면 바로 따라 옮기고, 놓으면 그 자리를 기억한다. 움직이지 않으면 누르기
+          dragStartBehavior: DragStartBehavior.down,
+          onPanStart: (d) {
             if (s.haptics) HapticFeedback.selectionClick();
+            // 끄는 동안은 책장 탭의 '가만히 있으면 내리기'를 붙잡는다(타이머가 손가락 아래에서 사라지지 않게)
+            if (!_holdingBars) {
+              _holdingBars = true;
+              IdleBars.instance.hold();
+            }
+            _dragStart = d.globalPosition;
             setState(() {
               _open = false;
               _dragFrom = (right: right, bottom: bottom);
             });
           },
-          onLongPressMoveUpdate: (d) {
+          onPanUpdate: (d) {
             final f = _dragFrom;
             if (f == null) return;
-            setState(() => _moved = (right: f.right - d.offsetFromOrigin.dx, bottom: f.bottom - d.offsetFromOrigin.dy));
+            final o = d.globalPosition - _dragStart;
+            final over = RemoveZone.isOver(mq, d.globalPosition);
+            if (over && !_over && s.haptics) HapticFeedback.selectionClick();
+            setState(() {
+              _moved = (right: f.right - o.dx, bottom: f.bottom - o.dy);
+              _over = over;
+            });
           },
-          onLongPressEnd: (_) {
+          onPanEnd: (_) {
+            _releaseBars();
+            final f = _dragFrom;
+            if (_over && f != null) {
+              _dismiss(f);
+              return;
+            }
+            // 마지막으로 끈 자리(다시 그리기 전에 손을 떼도 놓치지 않게)를 화면 안으로 맞춰 기억한다(하단 탭 · 고정 단추 위로)
+            final m = _moved;
+            final r = (m?.right ?? right).clamp(8.0, math.max(8.0, maxRight)).toDouble();
+            final b = (m?.bottom ?? bottom).clamp(restBottom, math.max(restBottom, maxBottom)).toDouble();
             setState(() {
               _dragFrom = null;
-              _moved = (right: right, bottom: bottom);
+              _over = false;
+              _moved = (right: r, bottom: b);
             });
-            KvStore.set(_posKey, '${right.round()},${bottom.round()}').ignore();
+            KvStore.set(_posKey, '${r.round()},${b.round()}').ignore();
+          },
+          onPanCancel: () {
+            _releaseBars();
+            if (_dragFrom != null) {
+              setState(() {
+                _dragFrom = null;
+                _over = false;
+              });
+            }
           },
           child: AnimatedScale(
             scale: dragging ? 1.08 : 1,
             duration: reduce ? Duration.zero : const Duration(milliseconds: 120),
             child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.bg,
-            borderRadius: BorderRadius.circular(miniTimerSize / 2),
-            border: Border.all(color: AppColors.line, width: hair),
-            boxShadow: const [Shape.floatShadow],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            AnimatedContainer(
-              duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
-              width: _open ? _actionsW : 0,
-              child: AnimatedOpacity(
-                duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
-                opacity: _open ? 1 : 0,
-                child: IgnorePointer(
-                  ignoring: !_open,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.centerRight,
-                      minWidth: _actionsW,
-                      maxWidth: _actionsW,
-                      child: Row(children: [
-                        Semantics(
-                          button: true,
-                          label: '읽기 화면으로 가기',
-                          child: Pressable(
-                            onPress: () {
-                              setState(() => _open = false);
-                              // 쌓아서 연다: 지금 화면은 그대로 남는다
-                              final nav = widget.navigator.currentContext;
-                              if (nav != null) openReadingScene(nav);
-                            },
-                            child: const SizedBox(width: 52, height: miniTimerSize, child: Center(child: LucideIcon('BookOpen'))),
-                          ),
-                        ),
-                        divider(),
-                        Semantics(
-                          button: true,
-                          label: running ? '독서 일시정지' : '독서 다시 시작',
-                          child: Pressable(
-                            onPress: () => running ? _reading.pause() : _reading.resume(),
-                            child: SizedBox(
-                              width: 52,
-                              height: miniTimerSize,
-                              child: Center(
-                                child: running
-                                    ? Row(mainAxisSize: MainAxisSize.min, children: [
-                                        for (final (i, _) in [0, 1].indexed) ...[
-                                          if (i > 0) const SizedBox(width: 5),
-                                          Container(width: 3.5, height: 16, decoration: BoxDecoration(color: AppColors.ink, borderRadius: BorderRadius.circular(1.5))),
-                                        ],
-                                      ])
-                                    : const Padding(padding: EdgeInsets.only(left: 2), child: LucideIcon('Play', size: 20, fill: AppColors.ink)),
-                              ),
-                            ),
-                          ),
-                        ),
-                        divider(),
-                      ]),
-                    ),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(miniTimerSize / 2),
+                border: Border.all(color: AppColors.line, width: hair),
+                boxShadow: const [Shape.floatShadow],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                AnimatedContainer(
+                  duration: speed,
+                  width: _open ? _actionsW : 0,
+                  child: AnimatedOpacity(
+                    duration: speed,
+                    opacity: _open ? 1 : 0,
+                    child: IgnorePointer(ignoring: !_open, child: _actions(running, hair)),
                   ),
                 ),
-              ),
+                _timeButton(label, ms, running, timeW, hair),
+              ]),
             ),
-            Semantics(
-              container: true,
-              button: true,
-              expanded: _open,
-              label: '독서 시간 ${_speak(ms)}${running ? '' : ', 일시정지'}. 눌러서 ${_open ? '접기' : '펼치기'}',
-              onTap: () => setState(() => _open = !_open),
-              excludeSemantics: true,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _open = !_open),
-                child: SizedBox(
-                  width: timeW - hair * 2,
-                  height: miniTimerSize - hair * 2,
-                  // 큰 글씨에서는 동그라미 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA 확인)
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(label,
-                            maxLines: 1,
-                            style: AppType.labelStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ]),
-        ),
           ),
         ),
       ),
     ]);
   }
+
+  /// 펼친 왼쪽: 읽기 화면 바로가기 | 재생·일시정지(그림은 읽기 장면과 같은 PlayIcon · PauseIcon)
+  Widget _actions(bool running, double hair) {
+    Widget divider() => Container(width: hair, height: 22, color: AppColors.line);
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.centerRight,
+        minWidth: _actionsW,
+        maxWidth: _actionsW,
+        child: Row(children: [
+          Semantics(
+            button: true,
+            label: '읽기 화면으로 가기',
+            child: Pressable(
+              onPress: () {
+                setState(() => _open = false);
+                // 쌓아서 연다: 지금 화면은 그대로 남는다
+                final nav = widget.navigator.currentContext;
+                if (nav != null) openReadingScene(nav);
+              },
+              // 바로가기 그림은 다른 선 아이콘과 같은 회색, 재생 · 일시정지는 먹색(주된 조작)
+              child: const SizedBox(width: 52, height: miniTimerSize, child: Center(child: LucideIcon('BookOpen', color: AppColors.inkSoft))),
+            ),
+          ),
+          divider(),
+          Semantics(
+            button: true,
+            // 다시 재기는 앱 공통 말 '이어서 읽기'(DESIGN 9장)
+            label: running ? '독서 일시정지' : '이어서 읽기',
+            child: Pressable(
+              onPress: () => running ? pauseReading() : unawaited(_resume()),
+              child: SizedBox(
+                width: 52,
+                height: miniTimerSize,
+                child: Center(
+                  child: running ? const PauseIcon(width: 3.5, height: 16, gap: 5, color: AppColors.ink) : const PlayIcon(size: 20, color: AppColors.ink),
+                ),
+              ),
+            ),
+          ),
+          divider(),
+        ]),
+      ),
+    );
+  }
+
+  /// 이어서 읽기. 지난 몫(어제 멈춘 독서)을 저장하지 못하면 확인창으로 알린다(2026-11-19 공통 규칙: 눌러도 아무 일 없었다)
+  Future<void> _resume() async {
+    final e = await resumeReading();
+    final ctx = widget.navigator.currentContext;
+    if (e == null || ctx == null || !ctx.mounted) return;
+    appAlert(ctx, '이어서 읽지 못했어요', '지난 독서 기록은 그대로 있어요. 다음에 읽기를 시작하면 그 기록부터 저장해요. ${errorText(e)}');
+  }
+
+  /// 오른쪽 시간(원): 누르면 펼치고 접는다
+  Widget _timeButton(String label, num ms, bool running, double timeW, double hair) => Semantics(
+        container: true,
+        button: true,
+        expanded: _open,
+        label: '독서 시간 ${_speak(ms)}${running ? '' : ', 일시정지'}. 눌러서 ${_open ? '접기' : '펼치기'}',
+        onTap: () => setState(() => _open = !_open),
+        excludeSemantics: true,
+        // 누르는 동안 옅어진다(펼친 단추와 같은 Pressable, 2026-11-19 공통 규칙: 눌림 표시가 없었다)
+        child: Pressable(
+          onPress: () => setState(() => _open = !_open),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: timeW - hair * 2,
+            height: miniTimerSize - hair * 2,
+            // 폭은 글자에 맞춰 늘어난다(miniTimerWidth). 화면 폭 절반을 넘는 아주 큰 글씨만 그 안에 들어가게 줄인다(1.5배에서 '03:3'으로 잘렸다, 2026-11-16 QA). 펼치면 오른쪽 여백을 더 둔다
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.only(left: 4, right: 4 + (_open ? _openPad : 0)),
+                child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: AppType.labelStrong.tnum)),
+              ),
+            ),
+          ),
+        ),
+      );
 }

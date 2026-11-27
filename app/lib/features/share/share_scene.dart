@@ -29,7 +29,18 @@ const _coverH = 616.0; // 표지 높이(시안 책)
 const _coverBottom = 840.0; // 표지 아래 끝(선반 윗면 위)
 const _bookCx = 468.5; // 책(표지+속지) 가운데
 const _coverMaxW = 520.0; // 아주 넓은 책은 이 폭에 맞춰 높이를 줄인다
-const _pageK = 0.57; // 속지 띠 폭 = 표지 높이 × 두께/높이 × 이 값
+// 속지 띠 폭 = 표지 높이 × 두께/높이 × 이 값. 시안 0.57에서 조금 얇게(2026-11-21 사용자 '책 측면 하얀색으로, 두께도 조금만 줄이고')
+const _pageK = 0.46;
+const _pageMin = 8.0, _pageMax = 32.0;
+
+/// 속지 띠 색: 시안 그림(누런 종이)의 밝기 · 그늘은 그대로 두고 색만 따뜻한 흰 종이(밝기 209 → 약 #F3F0EA)로 바꾼다.
+/// 왼쪽 끝 분홍 줄(시안 책 표지 끝이 비친 것)도 같이 무채색이 된다
+const _pageWhite = ColorFilter.matrix([
+  0.2477, 0.8332, 0.0841, 0, 0, //
+  0.2445, 0.8225, 0.0830, 0, 0,
+  0.2375, 0.7989, 0.0806, 0, 0,
+  0, 0, 0, 1, 0,
+]);
 const _shelfTop = 827.0; // 선반 윗면 뒤 끝
 // 벽 그림자 지도 자리(시안 화소)와 시안 책 왼쪽·오른쪽 끝(속지 띠 끝)
 const _shadeMap = (x: 200.0, y: 180.0, w: 680.0, h: 647.0);
@@ -137,7 +148,7 @@ ShareLayout layoutShareScene(ShareSceneInput input) {
     w = _coverMaxW;
     h = w / input.coverAspect;
   }
-  final pageW = math.max(10.0, math.min(40.0, h * (input.thicknessRatio ?? 0.07) * _pageK));
+  final pageW = math.max(_pageMin, math.min(_pageMax, h * (input.thicknessRatio ?? 0.07) * _pageK));
   final x = _bookCx - (w + pageW) / 2;
   final cover = Rect.fromLTWH(x, _coverBottom - h, w, h);
 
@@ -147,7 +158,8 @@ ShareLayout layoutShareScene(ShareSceneInput input) {
   final metaText = [if (input.rating != null && input.rating != 0) input.rating!.toStringAsFixed(1), ...input.extra].join('   ');
   final meta = metaText.isNotEmpty ? _para(metaText, shareFonts.ui, 36, _ink.meta) : null;
   final foot = _para('책장 한켠', shareFonts.ui, 33, _ink.foot);
-  final hasMeta = (input.rating != null && input.rating != 0) || meta != null;
+  // 별점이 있으면 meta에 이미 들어 있다(앞 조건이 겹쳤다)
+  final hasMeta = meta != null;
   // 세로 흐름(시안에서 잰 간격, 글자 문단 위 끝): 제목 1017 → 12 → 저자 → 47 → 감상 → 60 → 별점 줄 → '책장 한켠'(1551 고정).
   // 카드는 늘 9:16이라 '책장 한켠' 위로 넘치면 간격 → 감상 글자 크기 → 감상 줄 수 차례로 줄인다
   const yTitle = 1017.0;
@@ -264,7 +276,9 @@ void drawShareScene(Canvas canvas, double width, ShareLayout L, ShareSceneAssets
     ..isAntiAlias = true
     ..shader = cs);
   cs.dispose();
-  canvas.drawImageRect(A.pages, _all(A.pages), Rect.fromLTWH(right - 0.5, c.top - 2, pw + 3 * (pw / 27), c.height + 4), paint);
+  canvas.drawImageRect(A.pages, _all(A.pages), Rect.fromLTWH(right - 0.5, c.top - 2, pw + 3 * (pw / 27), c.height + 4), Paint()
+    ..filterQuality = paint.filterQuality
+    ..colorFilter = _pageWhite);
   // 4) 글자
   canvas.drawParagraph(L.title, Offset(_textX - 4, L.y.title));
   if (L.author != null) canvas.drawParagraph(L.author!, Offset(_textX, L.y.author));

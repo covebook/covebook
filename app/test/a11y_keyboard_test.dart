@@ -31,8 +31,9 @@ Rect caretOf(WidgetTester t) {
 
 void main() {
   group('키보드(영숙 F1·F13·F14, 현우 F11, 은서 F7)', () {
-    testWidgets('밀어 넣은 화면: 위 줄·아래 버튼도 내용과 함께 스크롤(고정 없음), 키보드가 열리면 커서 줄은 키보드 위, 버튼은 스크롤해서 닿는다', (t) async {
-      // 2026-11-19 사용자 '상단이랑 하단이 고정, 이런 고정들 다 없애버려': 위 줄과 아래 버튼이 키보드와 함께 쓸 자리를 먹었다
+    testWidgets('밀어 넣은 화면: 위 줄은 내용과 함께 스크롤, 아래 버튼은 화면 아래에 붙고 키보드가 열리면 키보드 바로 위(커서 줄은 버튼 위)', (t) async {
+      // 2026-11-19 사용자 '이런 고정들 다 없애버려'(위 줄 · 키보드와 함께 쓸 자리) → 11-20 '하단바 이런 거 그냥 고정해' →
+      // 11-25 '키보드 올라오는 거랑 버튼 0.1초씩 렉': 키보드가 열려도 버튼은 키보드 위에 붙어 함께 오른다(전에는 내용 끝으로 옮겨 한 번 튀었다)
       phone(t, safeBottom: 24);
       await t.pumpWidget(MaterialApp(
         home: Screen(
@@ -41,32 +42,79 @@ void main() {
           children: [const SizedBox(height: 400), Field(label: '문장', value: '', multiline: true, onChange: (_) {})],
         ),
       ));
-      // 버튼은 화면 아래가 아니라 내용 끝 바로 뒤
-      final gap = t.getRect(find.byType(Btn)).top - t.getRect(find.byType(TextField)).bottom;
-      expect(gap, inInclusiveRange(Space.xl, Space.xl + 40));
+      // 키보드가 닫혀 있으면 버튼은 화면 아래(아래 여백 = 안전 영역 24와 20 중 큰 것)
+      expect(t.getRect(find.byType(Btn)).bottom, closeTo(640 - 24, 1));
 
       await t.tap(find.byType(TextField));
       await t.pump();
       keyboard(t, 300);
       await t.pumpAndSettle();
+      // 버튼은 키보드 바로 위(아래 여백 20), 스크롤하지 않아도 보인다
+      final btn = t.getRect(find.byType(Btn));
+      expect(btn.bottom, closeTo(340 - Space.ctaBottom, 1));
       await t.enterText(find.byType(TextField), List.generate(16, (i) => '줄 $i 띄어쓰기까지 보며 옮긴다').join('\n'));
       await t.pumpAndSettle();
       final caret = caretOf(t);
-      expect(caret.bottom, lessThanOrEqualTo(340));
+      expect(caret.bottom, lessThanOrEqualTo(btn.top), reason: '커서 줄은 버튼 위');
       expect(caret.top, greaterThan(0));
       // 글을 쓰며 내려가면 위 줄(뒤로)도 같이 올라가 사라진다
       expect(find.bySemanticsLabel('뒤로').hitTestable(), findsNothing);
-      // 끝까지 밀면 버튼이 키보드 위에 보인다
-      await t.drag(find.byType(SingleChildScrollView), const Offset(0, -3000));
-      await t.pumpAndSettle();
-      expect(t.getRect(find.byType(Btn)).bottom, lessThanOrEqualTo(340));
       expect(t.takeException(), isNull);
+    });
+
+    testWidgets('키보드가 오르는 동안 버튼은 키보드를 따라 프레임마다 움직이고, 몸통은 멈춘 뒤 한 번만 다시 배치한다', (t) async {
+      phone(t, safeBottom: 24);
+      await t.pumpWidget(MaterialApp(
+        home: Screen(title: '갈피 남기기', footer: Btn(label: '갈피 저장', onPress: () {}), children: [Field(label: '문장', value: '', multiline: true, onChange: (_) {})]),
+      ));
+      await t.tap(find.byType(TextField));
+      await t.pump();
+      final view0 = t.getSize(find.byType(SingleChildScrollView)).height;
+      final btn0 = t.getRect(find.byType(Btn)).bottom;
+      // 키보드가 100 → 200 → 300으로 오르는 세 프레임
+      for (final k in [100.0, 200.0, 300.0]) {
+        keyboard(t, k);
+        await t.pump(const Duration(milliseconds: 16));
+        expect(t.getRect(find.byType(Btn)).bottom, closeTo(640 - k - Space.ctaBottom, 1), reason: '버튼은 키보드($k) 바로 위');
+        expect(t.getSize(find.byType(SingleChildScrollView)).height, view0, reason: '오르는 동안 몸통은 그대로');
+      }
+      expect(btn0, closeTo(640 - 24, 1));
+      // 멈추면 몸통을 키보드 위로 한 번 배치(버튼 자리는 그대로)
+      await t.pump(KeyboardSpace.settleAfter + const Duration(milliseconds: 20));
+      await t.pump();
+      expect(t.getSize(find.byType(SingleChildScrollView)).height, lessThan(view0));
+      expect(t.getRect(find.byType(Btn)).bottom, closeTo(340 - Space.ctaBottom, 1));
+      // 닫기 시작하면 몸통은 바로 펼치고 버튼은 키보드를 따라 내려간다
+      keyboard(t, 150);
+      await t.pump(const Duration(milliseconds: 16));
+      expect(t.getSize(find.byType(SingleChildScrollView)).height, view0);
+      expect(t.getRect(find.byType(Btn)).bottom, closeTo(640 - 150 - Space.ctaBottom, 1));
+      t.view.viewInsets = FakeViewPadding.zero;
+      t.view.padding = const FakeViewPadding(bottom: 24 * 3);
+      await t.pumpAndSettle();
+      expect(t.getRect(find.byType(Btn)).bottom, closeTo(640 - 24, 1));
+    });
+
+    testWidgets('아래 단추 줄이 있는 화면: 키보드가 열려도 입력칸 초점이 그대로(칸을 새로 만들지 않는다)', (t) async {
+      // 2026-11-21 촬영: 감상 쓰기 · 갈피 남기기에서 칸을 누르면 키보드가 뜨자마자 초점이 풀려 글을 쓸 수 없었다
+      phone(t, safeBottom: 24);
+      await t.pumpWidget(MaterialApp(
+        home: Screen(title: '감상 쓰기', footer: Btn(label: '감상 저장', onPress: () {}), children: [Field(label: '감상', value: '', multiline: true, onChange: (_) {})]),
+      ));
+      await t.tap(find.byType(TextField));
+      await t.pump();
+      final state = t.state<EditableTextState>(find.byType(EditableText));
+      expect(state.widget.focusNode.hasFocus, isTrue);
+      keyboard(t, 300);
+      await t.pumpAndSettle();
+      expect(t.state<EditableTextState>(find.byType(EditableText)), same(state), reason: '같은 칸(새로 만들지 않음)');
+      expect(state.widget.focusNode.hasFocus, isTrue);
     });
 
     testWidgets('탭 화면(Scaffold 안)은 Scaffold가 줄이므로 두 번 비키지 않는다', (t) async {
       phone(t);
       await t.pumpWidget(MaterialApp(
-        home: Scaffold(body: Screen(back: false, title: '내 책', footer: Btn(label: '확인', onPress: () {}), children: const [SizedBox(height: 100)])),
+        home: Scaffold(body: Screen(back: false, title: '내 책', pinFooter: false, footer: Btn(label: '확인', onPress: () {}), children: const [SizedBox(height: 100)])),
       ));
       keyboard(t, 300);
       await t.pumpAndSettle();
@@ -147,7 +195,7 @@ void main() {
             ListItem(label: '백업 및 복원', sub: '기록은 이 기기에 저장돼요', chevron: true, onPress: () {}),
             const ListItem(label: '앱 정보', value: '0.1.0'),
             TextLink(label: '고치기', onPress: () {}),
-            FilterButton(label: '모든 책', plain: true, onPress: () {}),
+            FilterButton(label: '모든 책', onPress: () {}),
             Choice(label: '직접 정하기', sub: '10분', selected: true, onPress: () {}),
             const Empty(title: '아직 쓴 감상이 없어요'),
             Btn(label: '감상 쓰기', onPress: () {}),

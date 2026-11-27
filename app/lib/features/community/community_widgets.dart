@@ -6,13 +6,14 @@ import 'package:flutter/material.dart';
 import '../../domain/library.dart' show formatDurationPrecise;
 import '../../services/community.dart';
 import '../../ui/alert.dart';
+import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
+import '../book/labels.dart' show dateShort;
 import '../settings/backup_screen.dart' show openBackup;
 import 'community_screens.dart' show openCommunityProfile;
 
 const _palette = ['#7F95A8', '#8E9A78', '#B98270', '#6E879E', '#A0906F', '#9A7F8F', '#6F8F86', '#A8826A'];
-Color _hex(String h) => Color(0xFF000000 | int.parse(h.substring(1), radix: 16));
 
 /// 공개 프로필 동그라미: 프로필 사진 기능이 없어서 닉네임 첫 글자를 차분한 색 동그라미에 쓴다(사진을 지어내지 않는다). 색은 사용자 번호로 고정
 class Avatar extends StatelessWidget {
@@ -29,7 +30,7 @@ class Avatar extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(color: _hex(_palette[id.abs() % _palette.length]), shape: BoxShape.circle),
+        decoration: BoxDecoration(color: hexColor(_palette[id.abs() % _palette.length]), shape: BoxShape.circle),
         alignment: Alignment.center,
         child: Text(initial, style: TextStyle(fontFamily: AppFonts.uiBold, fontSize: (size * 0.42).roundToDouble(), height: 1.2, color: AppColors.onAccent)),
       ),
@@ -47,8 +48,8 @@ String ago(String iso, [DateTime? now]) {
   if (h < 24) return '$h시간 전';
   final d = (h / 24).round();
   if (d < 7) return '$d일 전';
-  final l = t.toLocal();
-  return '${l.year}.${l.month}.${l.day}';
+  // 그보다 오래면 앱의 목록 날짜('11월 15일', 올해가 아니면 연도까지. 2026-11-19 공통 규칙: '2026.1.5'로 따로 조립했다)
+  return dateShort(t.toLocal().toIso8601String(), now: now);
 }
 
 /// 다음 쪽을 이어 붙일 때 같은 게시물이 두 번 오지 않게
@@ -67,7 +68,7 @@ String _coverColor(String title) {
 }
 
 String postFacts(num? durationMs, num? pagesRead) =>
-    [if (durationMs != null && durationMs > 0) '${formatDurationPrecise(durationMs)} 읽음', if (pagesRead != null && pagesRead > 0) '$pagesRead쪽'].join(' | ');
+    [if (durationMs != null && durationMs > 0) '${formatDurationPrecise(durationMs)} 읽음', if (pagesRead != null && pagesRead > 0) '$pagesRead쪽'].join(metaSep);
 
 /// 커뮤니티 독서 게시물 한 장(2026-11-01 사용자 '에타·토스증권·스레드처럼'): 사람이 주인공인 글 한 줄 묶음.
 /// [프로필 동그라미] 닉네임 · 시간 / 쓴 글 / 갈피 문장(왼쪽 세로줄) / 책(테두리만 있는 첨부 줄) / 좋아요·댓글.
@@ -82,7 +83,7 @@ class PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = post;
     final facts = postFacts(p.durationMs, p.pagesRead);
-    final bookMeta = [if (p.bookAuthor != null && p.bookAuthor!.isNotEmpty) p.bookAuthor!, if (facts.isNotEmpty) facts].join(' | ');
+    final bookMeta = [if (p.bookAuthor != null && p.bookAuthor!.isNotEmpty) p.bookAuthor!, if (facts.isNotEmpty) facts].join(metaSep);
     final meta = AppType.micro;
     return Semantics(
       button: onOpen != null,
@@ -133,15 +134,16 @@ class PostCard extends StatelessWidget {
                     ]),
                   ),
                 // 책 첨부: 회색으로 채우지 않고 얇은 테두리만
+                // 화면 읽기 이름에는 세로줄 대신 쉼표(docs/design/DESIGN.md 15장)
                 Semantics(
-                  label: '책 ${p.bookTitle}${bookMeta.isNotEmpty ? ', $bookMeta' : ''}',
+                  label: '책 ${p.bookTitle}${bookMeta.isNotEmpty ? ', ${bookMeta.split(metaSep).join(', ')}' : ''}',
                   excludeSemantics: true,
                   child: Container(
                     margin: const EdgeInsets.only(top: 12),
                     padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                     decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
                     child: Row(children: [
-                      RealCover(uri: p.coverUrl, title: p.bookTitle, color: _coverColor(p.bookTitle), width: 36, ratio: 0.7),
+                      RealCover(uri: p.coverUrl, title: p.bookTitle, color: _coverColor(p.bookTitle), width: CoverSize.post, ratio: 0.7),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -164,8 +166,9 @@ class PostCard extends StatelessWidget {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: onLike,
+                        // 누르는 자리 48(docs/design/DESIGN.md 15장, 32였다)
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 32, minWidth: 32),
+                          constraints: const BoxConstraints(minHeight: Space.hit, minWidth: Space.hit),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             LucideIcon('Heart', size: 20, color: p.liked ? AppColors.danger : AppColors.inkSoft, fill: p.liked ? AppColors.danger : null),
                             if (p.likes > 0) Padding(padding: const EdgeInsets.only(left: 4), child: Text('${p.likes}', style: AppType.micro.copyWith(color: p.liked ? AppColors.danger : AppColors.inkSoft))),
@@ -178,7 +181,7 @@ class PostCard extends StatelessWidget {
                       label: '댓글 ${p.comments}',
                       excludeSemantics: true,
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const LucideIcon('MessageCircle', size: 20, color: AppColors.inkSoft),
+                        const LucideIcon('MessageCircle', size: 20, color: AppColors.icon),
                         if (p.comments > 0) Padding(padding: const EdgeInsets.only(left: 4), child: Text('${p.comments}', style: AppType.micro)),
                       ]),
                     ),
@@ -216,16 +219,18 @@ const reportReasons = ['스팸, 광고', '욕설, 혐오', '개인정보 노출'
 Future<void> showReportSheet(BuildContext context, {required String kind, required Object id, required String label}) => showSheet<void>(
       context,
       title: '$label 신고',
+      // 시트 설명은 공용 자리(description, 2026-11-19 공통 규칙: 시트 안에 따로 쓴 글이었다)
+      description: '신고 사유를 골라 주세요.',
       builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('신고 사유를 골라 주세요.', style: AppType.sub)),
         ListGroup(children: [
           for (final r in reportReasons)
             ListItem(
               label: r,
               onPress: () {
                 Navigator.pop(ctx);
+                // 접수 결과는 토스트(성공을 확인창으로 알리지 않는다, docs/design/DESIGN.md 14장)
                 Community.report(kind, id, r).then((_) {
-                  if (context.mounted) appAlert(context, '신고를 접수했어요', '운영자가 확인한 뒤 처리해요.');
+                  if (context.mounted) showToast(context, '신고를 접수했어요. 운영자가 확인한 뒤 처리해요.');
                 }, onError: (Object e) {
                   if (context.mounted) explainWriteError(context, e, '신고하지 못했어요');
                 });
@@ -269,7 +274,7 @@ class MoreDots extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onPress,
-          child: const Padding(padding: EdgeInsets.fromLTRB(16, 2, 0, 2), child: LucideIcon('MoreHorizontal', size: 18, color: AppColors.inkSoft)),
+          child: const Padding(padding: EdgeInsets.fromLTRB(16, 2, 0, 2), child: LucideIcon('MoreHorizontal', size: 18, color: AppColors.icon)),
         ),
       );
 }

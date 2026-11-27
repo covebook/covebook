@@ -9,29 +9,33 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../features/book/my_books_tab.dart' show MyBooksTab;
-import '../features/record/record_tab.dart' show RecordTab;
-import '../features/community/community_screens.dart' show watchCommunityOpen;
 import '../domain/library.dart';
-import 'app_nav.dart';
+import '../domain/reading.dart' show FinishDraft, withJosa;
+import '../features/book/my_books_tab.dart' show MyBooksTab;
+import '../features/community/community_screens.dart' show watchCommunityOpen;
 import '../features/home/home_screen.dart';
-import '../domain/reading.dart' show askGapMs, withJosa;
-import '../features/reading/finish_screen.dart';
-import '../features/reading/reading_screen.dart';
-import '../services/warmup.dart';
+import '../features/reading/read_list.dart';
+import '../features/record/record_tab.dart' show RecordTab;
+import '../features/stats/stats_screen.dart';
+import '../features/stats/stats_widgets.dart' show bookTitle;
 import '../services/ambient.dart';
 import '../services/cover_colors.dart';
+import '../services/error_text.dart';
 import '../services/sync.dart';
+import '../services/warmup.dart';
+import '../store/finish_reading.dart' show resumeReading, saveDraftAsIs, settleLeftoverReading;
 import '../store/bookcase_store.dart';
 import '../store/library_model.dart';
 import '../store/mini_timer_store.dart';
 import '../store/reading_store.dart';
 import '../store/settings_store.dart';
 import '../ui/alert.dart';
-import '../features/reading/read_list.dart';
-import '../features/stats/stats_screen.dart';
+import '../ui/feedback.dart' show showToast;
 import '../ui/tab_icons.dart';
+import '../ui/kit.dart' show Pressable;
 import '../ui/theme.dart';
+import 'app_nav.dart';
+import 'idle_bars.dart';
 import 'startup.dart';
 
 const _app = MethodChannel('app.covebook/app');
@@ -75,27 +79,42 @@ const _qaSeedYear = int.fromEnvironment('QA_SEED_YEAR');
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
+  /// 탭마다 첫 화면 스크롤(탭을 다시 누르면 맨 위로, docs/design/DESIGN.md 10장)
+  final _tabScroll = [for (var i = 0; i < 5; i++) ScrollController()];
+
+  void _toTop(int i) {
+    final c = _tabScroll[i];
+    if (!c.hasClients) return;
+    final s = SettingsStore.instance;
+    final still = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && MediaQuery.disableAnimationsOf(context));
+    if (still) {
+      c.jumpTo(0);
+    } else {
+      c.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+    }
+  }
+
   /// 한 번 연 탭은 살려 둔다(책장 그림·굽기를 다시 하지 않게)
   final _opened = <int>{0};
 
   /// 시작 덮개(지난 책장 사진이 없을 때 첫 책장이 다 그려질 때까지)
   bool _cover = !startedWithSnapshot;
   Timer? _coverTimer;
-  bool _spanAsking = false;
 
   @override
   void initState() {
     super.initState();
     // 목표·소리 크기·장면 설정은 앱을 켤 때 읽는다(읽기 탭을 열기 전에 복구 창에서 이어 읽으면 기본값으로 보였다, 2026-11-15 QA 수아 F2)
     SettingsStore.instance.load();
-    ReadingStore.instance.addListener(_readingChanged);
+    ReadingStore.instance.onInterrupted = _callCut;
     ReadingStore.instance.watchInterruptions();
+    Ambient.instance.onExternal = _soundToggledOutside;
     if (_cover && shelfReady.value) _cover = false;
     if (_cover) {
       shelfReady.addListener(_shelfChanged);
       _coverTimer = Timer(_coverLimit, _dropCover);
     }
-    // 지난 독서가 중간에 멈췄거나 끝낸 기록을 저장하지 않았으면 다시 켰을 때 묻는다(지금 앱 RecoveryDialog)
+    // 지난 독서가 중간에 멈췄거나 멈춰 뒀거나 끝낸 기록을 저장하지 않았으면 다시 켰을 때 묻지 않고 거기까지 기록한다(2026-11-26)
     AppNav.instance.addListener(_nav);
     final reading = ReadingStore.instance;
     // 서재는 첫 화면이 뜬 뒤 미리 읽어 둔다(복구 창·다른 탭이 책을 바로 찾게)
@@ -124,7 +143,7 @@ class _AppShellState extends State<AppShell> {
       });
     });
     reading.load().then((_) {
-      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => _askRecovery());
+      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_settleLeftover()));
     }, onError: (_) {});
   }
 
@@ -136,11 +155,15 @@ class _AppShellState extends State<AppShell> {
     _select(t);
   }
 
-  void _select(int i) => setState(() {
-        _index = i;
-        _opened.add(i);
-        MiniTimerPlace.instance.setTab(tabPaths[i]);
-      });
+  void _select(int i) {
+    setState(() {
+      _index = i;
+      _opened.add(i);
+      MiniTimerPlace.instance.setTab(tabPaths[i]);
+    });
+    // 가만히 있으면 아래를 비우는 건 책장 탭만(다른 탭으로 가면 올리고 재지 않는다)
+    i == AppTab.shelf ? IdleBars.instance.poke() : IdleBars.instance.stop();
+  }
 
   void _shelfChanged() {
     if (shelfReady.value) _dropCover();
@@ -149,20 +172,29 @@ class _AppShellState extends State<AppShell> {
   void _dropCover() {
     _coverTimer?.cancel();
     shelfReady.removeListener(_shelfChanged);
-    startStep.value = 3;
+    startStep.value = 4;
     if (mounted && _cover) setState(() => _cover = false);
   }
 
-  // 통화 등으로 소리가 끊긴 동안을 넣을지(사용자 결정 2026-11-15 '물어보기'). 타이머는 그동안에도 흘렀다
-  void _readingChanged() {
-    final g = ReadingStore.instance.spanGap;
-    if (g == null || _spanAsking || !mounted) return;
-    _spanAsking = true;
-    final span = formatDuration(g.end - g.start);
-    appAlert(context, '소리가 멈췄던 동안도 넣을까요?', '통화 등으로 소리가 $span 동안 멈췄어요. 그동안도 읽은 시간에 넣을까요?', [
-      AlertButton('빼기', onPress: () => ReadingStore.instance.answerSpan(include: false)),
-      AlertButton('넣기', onPress: () => ReadingStore.instance.answerSpan(include: true)),
-    ], false).whenComplete(() => _spanAsking = false);
+  /// 통화 등으로 소리가 끊기면 묻지 않고 그 자리에서 독서를 끝내 그 책에 거기까지 기록한다(2026-11-26 사용자 '중간에 멈췄어요 이딴 거 넣지말고
+  /// 그냥 바로 끊으라고 전화오면 없애고 그냥 해당 책에 끊긴거까지 기록해 자꾸 쳐묻지말고'. 전에는 끝난 뒤 '소리가 멈췄던 동안도 넣을까요?'를 물었다).
+  /// 밖에서 소리가 먼저 멈춰 막 같이 멈춘 독서도 끊는다(멈춘 때까지). 읽기 장면은 닫아 시작한 화면으로, 토스트는 앱으로 돌아왔을 때 보인다
+  /// (앱이 뒤에 있는 동안은 토스트 시간이 흐르지 않는다). 소리를 켜지 않고 읽으면 통화를 알 수 없어 그대로 잰다
+  void _callCut(num at, {required bool running}) {
+    final rs = ReadingStore.instance;
+    final a = rs.active;
+    if (a == null || !(running || _soundPaused == a.id)) return;
+    _soundPaused = null;
+    final d = rs.finish(running ? at : a.lastBeat);
+    Ambient.instance.stop();
+    if (d == null || !mounted) return;
+    Navigator.of(context).popUntil((r) => r.isFirst || r.settings.name != '/reading/session');
+    final title = bookTitle(LibraryModel.instance.lib, d.myBookId);
+    saveDraftAsIs(d).then((saved) {
+      if (saved && mounted) showToast(context, '전화 등으로 끊겨서 ${title == null ? '' : '‘$title’ '}${withJosa(formatDurationPrecise(d.durationMs), '을', '를')} 기록했어요.');
+    }, onError: (Object e) {
+      if (mounted) appAlert(context, '독서 기록을 저장하지 못했어요', '기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
+    });
   }
 
   // 맨 아래 화면에서 뒤로 키: 다른 탭이면 책장 탭으로, 책장 탭이면 앱을 끝내지 않고 뒤로 보낸다
@@ -180,105 +212,62 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
+    IdleBars.instance.stop();
     AppNav.instance.removeListener(_nav);
-    ReadingStore.instance.removeListener(_readingChanged);
+    ReadingStore.instance.onInterrupted = null;
     shelfReady.removeListener(_shelfChanged);
     _coverTimer?.cancel();
+    for (final c in _tabScroll) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _askRecovery() {
-    final reading = ReadingStore.instance;
-    final it = reading.interrupted;
-    final pending = reading.pending;
-    if (it == null && pending != null && reading.pendingRestored) {
-      appAlert(context, '저장하지 않은 독서 기록이 있어요', '지난번에 끝낸 ${formatDuration(pending.durationMs)} 기록을 아직 저장하거나 버리지 않았어요.', [
-        AlertButton('기록 확인하기', onPress: () {
-          reading.ackPendingRestored();
-          Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
-        }),
-        AlertButton('나중에', style: AlertStyle.cancel, onPress: reading.ackPendingRestored),
-      ], true, true);
+  /// 다시 켰을 때 남아 있던 독서는 묻지 않고 거기까지 기록하고 토스트로 알린다(2026-11-26 사용자 '멈춰 둔 독서가 있어요 이런 거 그냥 기록해'):
+  /// 멈춰 둔 독서는 멈춘 때까지, 앱이 꺼져 멈춘 독서는 마지막으로 확인된 때까지, 끝내고 저장하지 않은 기록은 적어 둔 그대로(finish_reading settleLeftoverReading).
+  /// 전에는 창 셋(저장하지 않은 독서 기록이 있어요 · 멈춰 둔 독서가 있어요 · 지난 독서가 중간에 멈췄어요)이 물었다.
+  /// 저장하지 못하면 확인창(실패는 늘 알린다, DESIGN 11장). 그 기록은 읽기 탭 '저장하지 않은 독서 기록'에 남는다
+  Future<void> _settleLeftover() async {
+    final List<FinishDraft> saved;
+    try {
+      saved = await settleLeftoverReading();
+    } catch (e) {
+      if (mounted) appAlert(context, '지난 독서 기록을 저장하지 못했어요', '기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
       return;
     }
-    if (it == null && reading.stale && reading.active != null) {
-      final a = reading.active!;
-      final title = a.myBookId == null ? null : LibraryModel.instance.lib.editions[LibraryModel.instance.lib.books[a.myBookId]?.editionId]?.title;
-      final days = ((DateTime.now().millisecondsSinceEpoch - a.lastBeat) / 86400000).floor();
-      final when = days >= 1 ? '$days일 전' : '오늘';
-      appAlert(
-        context,
-        '멈춰 둔 독서가 있어요',
-        '$when ${title == null ? '' : '${withJosa('「$title」', '을', '를')} '}${formatDuration(a.accumulatedMs)} 읽다가 멈춰 뒀어요.',
-        [
-          AlertButton('이어 읽기', onPress: () {
-            reading.clearStale();
-            reading.resume();
-            openReadingScene(context);
-          }),
-          AlertButton('여기서 끝내고 기록하기', onPress: () {
-            reading.clearStale();
-            reading.finish();
-            Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
-          }),
-          AlertButton('기록 버리기', style: AlertStyle.destructive, onPress: () => reading.discardActive()),
-        ],
-        true,
-        true,
-      );
-      return;
-    }
-    if (it == null) return;
-    final at = DateTime.fromMillisecondsSinceEpoch(it.lastBeat.toInt());
-    final hm = '${at.hour}:${at.minute.toString().padLeft(2, '0')}';
-    // 1분 미만 꺼졌던 것은 묻지 않고 넣는다(읽던 중일 가능성이 크다)
-    if (it.gapMs < askGapMs) {
-      _askContinue(true, '지난 독서가 중간에 멈췄어요', '앱이 잠깐(1분 미만) 꺼져 있었어요. 그 시간도 읽은 시간에 넣었어요.');
-      return;
-    }
-    // 꺼져 있던 시간을 넣을지 먼저 묻는다(사용자 결정 2026-11-15 '물어보기'). 넣거나 빼도 안내창이 떠 있던 동안은 읽은 시간에 들어간다
-    appAlert(
+    if (!mounted || saved.isEmpty) return;
+    final d = saved.last;
+    final title = bookTitle(LibraryModel.instance.lib, d.myBookId);
+    showToast(
       context,
-      '지난 독서가 중간에 멈췄어요',
-      '마지막으로 확인된 $hm까지 ${withJosa(formatDuration(it.countedMs), '을', '를')} 읽었어요. 앱이 꺼져 있던 ${formatDuration(it.gapMs)}도 읽은 시간에 넣을까요?',
-      [
-        AlertButton('넣기', onPress: () => _askContinue(true)),
-        AlertButton('빼기', onPress: () => _askContinue(false)),
-        AlertButton('나중에 정하기(일시정지로 둠)', style: AlertStyle.cancel, onPress: reading.dismissInterrupted),
-      ],
-      true,
-      true,
+      saved.length > 1
+          ? '지난 독서 기록 ${saved.length}개를 저장했어요.'
+          : '지난 독서${title == null ? '' : ' ‘$title’'} ${withJosa(formatDurationPrecise(d.durationMs), '을', '를')} 기록했어요.',
     );
   }
 
-  /// 꺼져 있던 시간을 정한 뒤: 이어 읽기 · 여기서 끝내기 · 나중에
-  void _askContinue(bool includeGap, [String? title, String? message]) {
-    final reading = ReadingStore.instance;
-    final it = reading.interrupted;
-    if (it == null || !mounted) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final total = it.countedMs + (includeGap ? now - it.lastBeat : now - it.reopenAt);
-    appAlert(
-      context,
-      title ?? '이어 읽을까요?',
-      message ?? '지금까지 ${withJosa(formatDuration(total), '을', '를')} 읽었어요.',
-      [
-        AlertButton('이어 읽기', onPress: () {
-          reading.resumeInterrupted(includeGap: includeGap);
-          // 소리를 켜 둔 채 꺼졌으면 다시 켠다(이어 읽기 뒤 빗소리가 꺼져 있었다, 2026-11-15 QA 수아 F2)
-          Ambient.instance.resumeIfWanted();
-          openReadingScene(context);
-        }),
-        AlertButton('여기서 끝내고 기록하기', onPress: () {
-          reading.finishInterrupted(includeGap: includeGap);
-          Navigator.of(context).push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/reading/finish'), builder: (_) => const FinishScreen()));
-        }),
-        AlertButton('나중에 정하기(일시정지로 둠)', style: AlertStyle.cancel, onPress: reading.dismissInterrupted),
-      ],
-      true,
-      true,
-    );
+  /// 알림 · 잠금 화면 · 이어폰 단추로 소리를 멈추거나 켜면 독서 타이머도 같이(앱 안에서는 타이머 일시정지가 소리도 멈춘다: pauseReading).
+  /// 통화로 끊긴 소리는 _callCut이 독서를 끝낸다. 끊김 알림이 소리 멈춤보다 늦게 올 수 있어 잠깐 기다려 본다(그 사이 끊기면 여기서는 할 일이 없다)
+  /// 밖에서 소리를 켜면 타이머는 밖에서 소리를 멈춰 멈춘 그 독서일 때만 이어 간다. 앱 안에서 멈춘 독서는 소리만 난다
+  /// (2026-11-26 사용자 '읽은 적도 없는데 1:37이 떠 있어': 블루투스 · 이어폰 연결로 시스템이 소리를 다시 켜면 멈춰 둔 타이머가 저절로 돌았다)
+  void _soundToggledOutside(bool playing) {
+    final rs = ReadingStore.instance;
+    if (playing) {
+      final id = _soundPaused;
+      _soundPaused = null;
+      if (rs.active != null && rs.active!.id == id && !rs.running && !rs.stale) unawaited(resumeReading());
+      return;
+    }
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      if (rs.running && !Ambient.instance.playing) {
+        _soundPaused = rs.active?.id;
+        rs.pause();
+      }
+    });
   }
+
+  /// 밖에서 소리를 멈춰 같이 멈춘 독서(그 독서만 밖에서 소리를 켜면 이어 간다)
+  String? _soundPaused;
 
   @override
   Widget build(BuildContext context) {
@@ -286,7 +275,10 @@ class _AppShellState extends State<AppShell> {
     // 키보드가 열려 있으면 탭 바를 숨긴다: 탭 화면은 Scaffold가 키보드 위로 줄이므로 탭 바가 키보드 바로 위에 떠서 입력하는 내용을 가렸다(2026-11-16 QA 키보드 F1 묶음)
     final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
     void tap(int i) {
-      if (!AppNav.instance.tabsBlocked) _select(i);
+      if (AppNav.instance.tabsBlocked) return;
+      // 보고 있는 탭을 다시 누르면 그 탭 첫 화면 맨 위로(2026-11-19 규칙: 아무 일도 없었다)
+      if (i == _index) return _toTop(i);
+      _select(i);
     }
 
     // 키보드가 오르내리는 동안 숨은 탭(특히 책장)이 매 프레임 다시 배치되지 않게(2026-11-18 측정: 키보드 프레임마다 책장 배치 43ms).
@@ -307,49 +299,48 @@ class _AppShellState extends State<AppShell> {
               for (var i = 0; i < _tabs.length; i++)
                 MediaQuery(
                   data: i == _index && front ? mq : noKeyboard,
-                  child: _opened.contains(i) ? _tabs[i].build(context) : const SizedBox.shrink(),
+                  child: _opened.contains(i) ? PrimaryScrollController(controller: _tabScroll[i], child: _tabs[i].build(context)) : const SizedBox.shrink(),
                 ),
             ],
           ),
-          ValueListenableBuilder<bool>(
-            valueListenable: tabBarHidden,
-            builder: (context, hidden, _) => hidden || keyboard ? const SizedBox.shrink() : Positioned(
-            left: TabBarStyle.side,
-            right: TabBarStyle.side,
-            bottom: bottom + TabBarStyle.gap,
-            height: TabBarStyle.height,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(TabBarStyle.height / 2),
-                boxShadow: const [TabBarStyle.shadow],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: TabBarStyle.paddingX),
-                child: Row(
-                  children: [
-                    // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 탭 아래 글자는 두지 않는다(메뉴 개편: 아이콘 중심)
-                    for (var i = 0; i < _tabs.length; i++)
-                      Expanded(
-                        child: Semantics(
-                          container: true,
-                          button: true,
-                          selected: i == _index,
-                          label: _tabs[i].label,
-                          onTap: () => tap(i),
-                          excludeSemantics: true,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => tap(i),
-                            child: Center(child: _tabs[i].icon(i == _index ? AppColors.tabInk : AppColors.tabInkSoft, i == _index)),
-                          ),
+          // 책장 탭에서 가만히 있으면(IdleBars) 아래로 미끄러져 내려간다. 내려간 동안은 누르기 · 화면 읽기에서 빠진다
+          ListenableBuilder(
+            listenable: Listenable.merge([tabBarHidden, IdleBars.instance]),
+            builder: (context, _) => tabBarHidden.value || keyboard
+                ? const SizedBox.shrink()
+                : AnimatedPositioned(
+                    duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    left: TabBarStyle.side,
+                    right: TabBarStyle.side,
+                    bottom: IdleBars.instance.down ? -(TabBarStyle.height + TabBarStyle.gap * 4) : bottom + TabBarStyle.gap,
+                    height: TabBarStyle.height,
+                    child: IgnorePointer(
+                    ignoring: IdleBars.instance.down,
+                    child: ExcludeSemantics(
+                    excluding: IdleBars.instance.down,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: BorderRadius.circular(TabBarStyle.height / 2),
+                        boxShadow: const [TabBarStyle.shadow],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: TabBarStyle.paddingX),
+                        child: Row(
+                          children: [
+                            // 화면 읽기: 탭마다 이름 하나·버튼·고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 아래 글자는 같은 이름이라 읽지 않는다.
+                            // 아이콘 아래 이름(2026-11-24 사용자 6단계): 글자 11, 색은 아이콘과 같게(고른 탭은 진하게). 큰 글씨는 1.3배까지.
+                            // 크기는 토스증권 하단바 사진에 맞춤(같은 날): 알약 56 · 좌우 12 · 아이콘 22 · 아이콘과 이름 사이 4
+                            for (var i = 0; i < _tabs.length; i++)
+                              Expanded(child: TabBarItem(label: _tabs[i].label, icon: _tabs[i].icon, selected: i == _index, onTap: () => tap(i))),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+                    ),
+                    ),
+                    ),
+                  ),
           ),
           // 시작 덮개: 지난 책장 사진이 없으면 첫 책장이 다 그려질 때까지 시작 그림(앱 준비 때와 같은 그림)을 덮어 둔다
           if (_cover) const Positioned.fill(child: StartCover()),
@@ -357,5 +348,43 @@ class _AppShellState extends State<AppShell> {
       ),
     );
     return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) => didPop ? null : _back(), child: shell);
+  }
+}
+
+/// 하단 탭 하나: 아이콘과 그 아래 이름(2026-11-24 사용자 6단계: 글자 11, 색은 아이콘과 같게, 고른 탭은 진하게).
+/// 알약 56 · 아이콘 22 · 사이 4(토스증권 하단바 사진 참고, 같은 날), 이름 글자 배율은 1.3배까지(큰 글씨에서도 알약을 넘지 않게).
+/// 화면 읽기: 탭마다 이름 하나 · 버튼 · 고른 상태만(아이콘 그림이 섞여 '이미지'로 읽혔다, 2026-11-16 QA 영숙 F9·F11). 아래 글자는 같은 이름이라 따로 읽지 않는다
+class TabBarItem extends StatelessWidget {
+  const TabBarItem({super.key, required this.label, required this.icon, required this.selected, required this.onTap});
+  final String label;
+  final Widget Function(Color color, bool filled) icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.tabInk : AppColors.tabInkSoft;
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      // 누르는 동안 옅어짐(다른 아이콘 단추와 같은 Pressable, 2026-11-19 규칙: 탭만 표시가 없었다)
+      child: Pressable(
+        onPress: onTap,
+        child: SizedBox.expand(
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            icon(color, selected),
+            const SizedBox(height: TabBarStyle.labelGap),
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: TabBarStyle.labelScaleMax,
+              child: Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.visible, style: AppType.tabLabel.copyWith(color: color)),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 }

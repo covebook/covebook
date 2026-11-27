@@ -1,4 +1,5 @@
-// Dart로 만든 줄 굽기 입력이 지금 앱(React Native)의 줄 함수로 뽑아 둔 것과 같은지 본다.
+// Dart로 만든 줄 굽기 입력이 옛 앱(React Native, 커밋 4f9e1d9)의 줄 함수로 뽑아 둔 것과 같은지 본다.
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 // assets/bake_case.json 은 tool/gen_shaders.sh 가 커밋된 지금 앱의 ShelfPlank·SceneLight 함수를 그대로 불러 뽑는다
 // (벽·틀 안쪽 면·판 윗면·앞면·책의 보이는 면, 같은 책·같은 줄 높이·맨 윗줄 여부).
 // 여기서 어긋나면 빛 계산이 달라진다 — 이식이 맞는지 보는 가장 싼 시험이다.

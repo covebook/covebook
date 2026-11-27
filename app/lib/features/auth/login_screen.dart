@@ -4,15 +4,14 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/sync.dart';
 import '../../ui/alert.dart';
 import '../../ui/brand_button.dart';
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
-import '../settings/settings_screen.dart' show privacyUrl;
-import '../settings/terms.dart' show showTermsSheet;
+import '../settings/settings_screen.dart' show openPrivacyPage;
+import '../settings/terms.dart' show openTermsPage;
 
 /// 로그인 화면 맨 위 책장 그림(우리 앱이 그린 책장 사진, tool/make_login_shelf.py). 이 파일만 바꾸면 그림이 바뀐다
 const loginShelfAsset = 'assets/login/shelf.webp';
@@ -82,10 +81,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// 아래 묶음: 받는 중이면 돌아가는 원, 못 받았으면 안내 + 다시 시도, 받았으면 로그인 단추들
+  Widget _bottom(bool off) {
     final p = _sync.providers;
-    final off = _busy != null;
     final buttons = <Widget>[
       // 카카오 · Apple · Google 순(2026-11-18 사용자 시안)
       if (p.kakao)
@@ -95,23 +93,15 @@ class _LoginScreenState extends State<LoginScreen> {
       if (p.google)
         BrandButton.google(onPress: off ? null : () => _login('google')),
     ];
-    Widget bottom;
     if (_ready == null) {
-      bottom = const SizedBox(
+      // 앱 공통 작은 원(화면 읽기 이름 '로그인 방법을 불러오는 중', 2026-11-19 규칙)
+      return const SizedBox(
         height: 54,
-        child: Center(
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.accent,
-            ),
-          ),
-        ),
+        child: Center(child: Spinner(color: AppColors.accent, label: '로그인 방법을 불러오는 중')),
       );
-    } else if (_ready == false || buttons.isEmpty) {
-      bottom = Column(
+    }
+    if (_ready == false || buttons.isEmpty) {
+      return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -126,19 +116,36 @@ class _LoginScreenState extends State<LoginScreen> {
           Btn(label: '다시 시도', kind: 'secondary', onPress: _load),
         ],
       );
-    } else {
-      bottom = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final (i, b) in buttons.indexed)
-            Padding(
-              padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s),
-              child: b,
-            ),
-        ],
-      );
     }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, b) in buttons.indexed)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : Space.s),
+            child: b,
+          ),
+      ],
+    );
+  }
+
+  /// 바닥 글자 단추(이용약관 · 개인정보 처리방침, 2026-11-18 약관 추가): 둘이 같은 모양
+  Widget _footLink(String label, VoidCallback onPressed) => TextButton(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.inkSoft,
+          minimumSize: const Size(Space.hit, Space.hit),
+        ),
+        onPressed: onPressed,
+        child: Text(
+          label,
+          style: AppType.loginLink,
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final off = _busy != null;
     return Scaffold(
       backgroundColor: AppColors.bg,
       // 2026-11-18 사용자 시안: 맨 위에 책장 그림을 화면 폭 가득, 아래 큰 '책장 한켠'과 두 줄 소개, 카카오 · Apple · Google 단추, 바닥 글자 단추.
@@ -224,42 +231,16 @@ class _LoginScreenState extends State<LoginScreen> {
                               style: AppType.caption,
                             ),
                           ),
-                        bottom,
+                        _bottom(off),
                         const SizedBox(height: Space.l),
                         // 이용약관 · 개인정보 처리방침 두 글자 단추(2026-11-18 약관 추가)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.inkSoft,
-                                minimumSize: const Size(Space.hit, Space.hit),
-                              ),
-                              onPressed: () => showTermsSheet(context),
-                              child: Text(
-                                '이용약관',
-                                style: AppType.caption.copyWith(
-                                  fontFamily: AppFonts.uiMedium,
-                                ),
-                              ),
-                            ),
+                            _footLink('이용약관', () => openTermsPage(context)),
                             const MetaBar(),
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.inkSoft,
-                                minimumSize: const Size(Space.hit, Space.hit),
-                              ),
-                              onPressed: () => launchUrl(
-                                Uri.parse(privacyUrl),
-                                mode: LaunchMode.externalApplication,
-                              ),
-                              child: Text(
-                                '개인정보 처리방침',
-                                style: AppType.caption.copyWith(
-                                  fontFamily: AppFonts.uiMedium,
-                                ),
-                              ),
-                            ),
+                            // 내 정보와 같은 앱 안 안내 시트(전문은 시트 안 단추로 웹, DESIGN 9장 같은 일 같은 동작)
+                            _footLink('개인정보 처리방침', () => openPrivacyPage(context)),
                           ],
                         ),
                         const SizedBox(height: Space.s),

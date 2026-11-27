@@ -1,33 +1,57 @@
-/* 책장 한켠 디자인 토큰 - flutter/design-system/tokens.json에서 생성(tool/gen_design_css.py). 손으로 고치지 않는다 */
+/* 책장 한켠 디자인 토큰 - app/test/design_tokens_test.dart가 Flutter 원본에서 만든다. 손으로 고치지 않는다 */
+/* 다시 만들기: cd app && DESIGN_TOKENS_UPDATE=1 flutter test test/design_tokens_test.dart */
+@import url('fonts.css');
 
 :root {
-  /* 색(라이트 하나, 다크 테마 없음) */
+  /* 색(AppColors) */
   --ck-bg: #FFFFFF; /* 화면 바탕 */
-  --ck-white: #FFFFFF; /* 카드·칩 위 흰색 */
+  --ck-white: #FFFFFF; /* 카드 위 흰색 · 전환 칸 고른 칸 */
   --ck-input: #F2F4F6; /* 입력칸 바탕 */
-  --ck-surface: #F2F4F6; /* 옅은 회색 면(칩·전환 칸·표지 자리) */
-  --ck-section-line: #EFF1F3; /* 묶음 사이 1dp 띠 */
-  --ck-line: #E5E8EB; /* 구분선·테두리 */
-  --ck-track: #D1D6DB; /* 막대·손잡이 자리, 시트 손잡이 */
-  --ck-ink: #191F28; /* 본문·제목 */
-  --ck-ink-soft: #646F7E; /* 보조 글자 */
-  --ck-ink-faint: #B0B8C1; /* 흐린 글자·꺾쇠 */
-  --ck-accent: #6C534A; /* 주요 버튼·선택(갈색) */
-  --ck-accent-pressed: #5A443C; /* 주요 버튼 눌림 */
-  --ck-chip-on: #6C534A; /* 고른 칩(=accent) */
+  --ck-surface: #F2F4F6; /* 옅은 회색 면(전환 칸 · 표지 자리) */
+  --ck-login-floor: #E4E7EB; /* 로그인 화면 아래쪽 */
+  --ck-section-line: #EFF1F3; /* 묶음 사이 띠 */
+  --ck-ink: #191F28; /* 본문(grey900) */
+  --ck-title: #333D4B; /* 제목(grey800): 탭 · 머리줄 · 시트 · 확인창 · 구역 제목 */
+  --ck-ink-sub: #4E5968; /* 부제 · 오른쪽 값(grey700) */
+  --ck-ink-soft: #6B7684; /* 설명 · 보조 글자(grey600) */
+  --ck-icon: #8B95A1; /* 선 아이콘: 머리줄 · 검색칸 · 카드 · 줄 안(grey500) */
+  --ck-ink-faint: #B0B8C1; /* 흐린 글자 · 빈 칸 안내 · 줄 끝 화살표(grey400) */
+  --ck-line: #E5E8EB; /* 구분선 · 테두리 */
+  --ck-divider: #EBECEE; /* 밑줄 탭 아래 화면 폭 옅은 선 */
+  --ck-track: #D1D6DB; /* 막대 · 손잡이 자리 */
+  --ck-meta-bar: #C9CED4; /* 정보 사이 세로줄(|) */
+  --ck-accent: #6C534A; /* 주요 단추 · 고른 것(갈색) */
+  --ck-accent-pressed: #5A443C; /* 주요 단추 눌림 */
   --ck-on-accent: #FFFFFF; /* 갈색 위 글자 */
-  --ck-danger: #A5483A; /* 삭제·오류 */
+  --ck-danger: #A5483A; /* 삭제 · 오류 */
+  --ck-accent-weak: #6C534A1A; /* 갈색 weak 단추 바탕(10%) */
+  --ck-danger-weak: #A5483A1A; /* 주의색 weak 단추 바탕(10%) */
+  --ck-press-dim: #0000002E; /* 바탕 있는 단추 눌림 덧칠(검정 18%) */
+  --ck-grey-opacity100: #191F280D; /* 회색 weak 단추 바탕 · 목록 줄 · 아이콘 단추 눌림 바탕(grey900 5%) */
+  --ck-grey-background: #F2F4F6; /* 구간을 나누는 띠(Border height16) */
   --ck-star: #A8865F; /* 별점 */
-  --ck-scrim: #191F285C; /* 시트·확인창 뒤 막(ink 36%) */
-  --ck-icon-soft: #858585; /* 옅은 아이콘 */
+  --ck-scrim: #191F285C; /* 시트 · 확인창 뒤 막 */
+  --ck-coach-scrim: #191F2873; /* 첫 책 안내 덮개(grey900 45%, 표지 자리만 비움) */
   --ck-tab-ink: #000000; /* 하단 탭 고른 아이콘 */
   --ck-tab-ink-soft: #787676; /* 하단 탭 안 고른 아이콘 */
-  /* 어두운 읽기 장면 위 글자·조작부 */
-  --ck-night-ink: #F6EFE6;
-  --ck-night-ink-soft: #F6EFE6C7;
-  --ck-night-line: #F6EFE638;
-  --ck-night-shade: #100D0B47;
-  --ck-night-fade: #100D0B;
+  --ck-toast: #2B323C; /* 토스트(짧은 알림) 바탕 */
+  --ck-on-toast: #FFFFFF; /* 토스트 글자 */
+  --ck-grey50: #F9FAFB; /* TDS 회색 단계 */
+  --ck-grey100: #F2F4F6; /* TDS 회색 단계 */
+  --ck-grey200: #E5E8EB; /* TDS 회색 단계 */
+  --ck-grey300: #D1D6DB; /* TDS 회색 단계 */
+  --ck-grey400: #B0B8C1; /* TDS 회색 단계 */
+  --ck-grey500: #8B95A1; /* TDS 회색 단계 */
+  --ck-grey600: #6B7684; /* TDS 회색 단계 */
+  --ck-grey700: #4E5968; /* TDS 회색 단계 */
+  --ck-grey800: #333D4B; /* TDS 회색 단계 */
+  --ck-grey900: #191F28; /* TDS 회색 단계 */
+  /* 어두운 장면 위(NightColors) */
+  --ck-night-ink: #F6EFE6; /* 장면 위 글자 */
+  --ck-night-ink-soft: #F6EFE6C7; /* 장면 위 보조 글자(ink 78%) */
+  --ck-night-line: #F6EFE638; /* 장면 위 선(ink 22%) */
+  --ck-night-shade: #100D0B47; /* 장면 위 글자 그림자(28%) */
+  --ck-night-fade: #100D0B; /* 장면 아래 어둠 */
 
   /* 글꼴 */
   --ck-font-ui: 'Pretendard', sans-serif;
@@ -35,23 +59,66 @@
   --ck-font-spine: 'Hahmlet', 'Noto Serif KR', serif;
   --ck-font-share: 'MaruBuri', 'Noto Serif KR', serif;
 
-  /* 글자 위계: --ck-type-<이름> = font 단축(굵기 크기/줄높이 글꼴), 색은 따로(--ck-ink, sub·caption은 --ck-ink-soft) */
-  --ck-type-title: 700 26px/34px var(--ck-font-ui);
-  --ck-type-nav-title: 600 18px/25px var(--ck-font-ui);
-  --ck-type-heading: 600 21px/29px var(--ck-font-ui);
-  --ck-type-section: 600 19px/27px var(--ck-font-ui);
-  --ck-type-row: 400 18px/26px var(--ck-font-ui);
-  --ck-type-row-strong: 600 18px/26px var(--ck-font-ui);
-  --ck-type-body: 400 17px/27px var(--ck-font-ui);
-  --ck-type-sub: 400 16px/23px var(--ck-font-ui);
-  --ck-type-caption: 400 15px/21px var(--ck-font-ui);
-  --ck-type-button: 600 17px/24px var(--ck-font-ui);
-  --ck-type-label: 500 16px/22px var(--ck-font-ui);
+  /* 글자 역할(TypeSpecs): 굵기 크기/줄높이 글꼴. 색 · 숫자 폭은 아래 .ck-type-* class */
+  --ck-type-display: 700 48px/58px var(--ck-font-ui);
+  --ck-type-display-unit: 500 22px/31px var(--ck-font-ui);
+  --ck-type-timer: 400 64px/72px var(--ck-font-ui);
+  --ck-type-clock: 400 36px/44px var(--ck-font-ui);
+  --ck-type-score: 700 36px/44px var(--ck-font-ui);
+  --ck-type-figure: 700 24px/33px var(--ck-font-ui);
+  --ck-type-hero: 700 30px/40px var(--ck-font-ui);
+  --ck-type-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-page-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-nav-title: 600 18px/27px var(--ck-font-ui);
+  --ck-type-heading: 700 20px/29px var(--ck-font-ui);
+  --ck-type-empty-title: 600 17px/25.5px var(--ck-font-ui);
+  --ck-type-section: 700 17px/25.5px var(--ck-font-ui);
+  --ck-type-list-header: 700 17px/25.5px var(--ck-font-ui);
+  --ck-type-row: 400 17px/25.5px var(--ck-font-ui);
+  --ck-type-row-strong: 600 17px/25.5px var(--ck-font-ui);
+  --ck-type-body: 400 17px/25.5px var(--ck-font-ui);
+  --ck-type-sub: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-sub-link: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-secondary: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-dialog-body: 500 15px/22.5px var(--ck-font-ui);
+  --ck-type-caption: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-button: 600 17px/25.5px var(--ck-font-ui);
+  --ck-type-count: 500 15px/22.5px var(--ck-font-ui);
+  --ck-type-wheel: 400 20px/29px var(--ck-font-ui);
+  --ck-type-login-link: 500 13px/19.5px var(--ck-font-ui);
+  --ck-type-toast: 400 16px/24px var(--ck-font-ui);
+  --ck-type-toast-action: 600 16px/24px var(--ck-font-ui);
+  --ck-type-link: 600 17px/25.5px var(--ck-font-ui);
+  --ck-type-button-small: 600 16px/24px var(--ck-font-ui);
+  --ck-type-label: 500 16px/24px var(--ck-font-ui);
+  --ck-type-label-strong: 600 16px/24px var(--ck-font-ui);
+  --ck-type-body-small: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-micro: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-tab-label: 500 11px/14px var(--ck-font-ui);
+  --ck-type-essay-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-intro-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-profile-name: 700 20px/29px var(--ck-font-ui);
+  --ck-type-legal-heading: 600 16px/24px var(--ck-font-ui);
+  --ck-type-quote: 400 16px/27px var(--ck-font-reading);
+  --ck-type-reading: 400 17px/30px var(--ck-font-reading);
+  --ck-type-book-head-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-book-feature-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-book-saved-title: 700 20px/29px var(--ck-font-ui);
+  --ck-type-book-title: 600 17px/25.5px var(--ck-font-ui);
+  --ck-type-book-grid-title: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-book-author: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-book-head-author: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-book-grid-author: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-book-note: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-review: 400 17px/25.5px var(--ck-font-ui);
+  --ck-type-record-day: 400 15px/22.5px var(--ck-font-ui);
+  --ck-type-record-range: 400 13px/19.5px var(--ck-font-ui);
+  --ck-type-record-duration: 400 15px/22.5px var(--ck-font-ui);
   --ck-type-input: 400 16px/normal var(--ck-font-ui);
 
-  /* 간격 */
+  /* 간격(Space) */
   --ck-space-page: 24px;
-  --ck-space-section: 40px;
+  --ck-space-section: 24px;
   --ck-space-group: 28px;
   --ck-space-item: 12px;
   --ck-space-tight: 8px;
@@ -61,57 +128,165 @@
   --ck-space-l: 16px;
   --ck-space-xl: 28px;
   --ck-space-xxl: 40px;
-  --ck-space-row: 56px;
   --ck-space-touch: 44px;
+  --ck-space-block: 24px;
+  --ck-space-dense: 32px;
   --ck-space-hit: 48px;
+  --ck-space-row-s: 8px;
+  --ck-space-row-m: 12px;
+  --ck-space-row-l: 16px;
+  --ck-space-row-x-l: 24px;
+  --ck-space-cta-bottom: 20px;
+  --ck-space-band: 8px;
+  --ck-space-band-pad: 24px;
   --ck-space-content-max: 640px;
   --ck-space-sheet-max: 560px;
-  --ck-tab-header-padding-top: 16px;
-  --ck-tab-header-padding-bottom: 12px;
+  --ck-tab-header-padding-top: 4px;
+  --ck-tab-header-padding-bottom: 4px;
   --ck-tab-header-padding-h: 24px;
-  --ck-tab-header-min-height: 64px;
+  --ck-tab-header-min-height: 44px;
 
-  /* 모서리 */
+  /* 모서리(Shape) */
   --ck-radius-button: 10px;
   --ck-radius-input: 10px;
   --ck-radius-sheet: 20px;
   --ck-radius-dialog: 18px;
   --ck-radius-tag: 6px;
+  --ck-radius-card: 12px;
   --ck-radius-choice: 14px;
-  --ck-radius-segmented: 14px;
-  --ck-radius-chip: 999px;
-  --ck-radius-tab-bar: 999px;
-  --ck-radius-bookmark-card: 8px;
-  --ck-radius-bookmark-back-sheet: 7px;
-  --ck-radius-cover-image: 3px;
+  --ck-radius-segmented: 12px;
+  --ck-radius-segment: 9px;
+  --ck-radius-segmented-compact: 8px;
+  --ck-radius-segment-compact: 6px;
+  --ck-radius-pill: 999px;
+  --ck-radius-cover: 3px;
 
-  /* 그림자(CSS 흐림 반경 그대로) */
-  --ck-shadow-float: 0px 4px 10px #191F281F;
-  --ck-shadow-tab-bar: 0px 3px 14px #191F2821;
-  --ck-shadow-bookmark-card: 0px 1px 2px rgba(60,50,45,0.06), 0px 3px 10px rgba(60,50,45,0.05);
-  --ck-shadow-segmented-thumb: 0 1px 3px #191F2814;
+  /* 그림자(CSS 흐림 반경으로 바꾼 값) */
+  --ck-shadow-float: 0px 4px 12.55px 0px #191F281F;
+  --ck-shadow-tab-bar: 0px 3px 17.17px 0px #191F2821;
+  --ck-shadow-segmented-thumb: 0px 2px 7.93px 0px #191F2814;
+  --ck-shadow-bookmark-card: 0px 1px 2px 0px #3C322D0F, 0px 3px 10px 0px #3C322D0D;
 
-  /* 크기 */
-  --ck-btn-l: 60px;
-  --ck-btn-m: 54px;
-  --ck-btn-s: 44px;
-  --ck-touch: 48px;
-  --ck-icon: 22px;
-  --ck-icon-stroke: 1.6px;
+  /* 크기(ControlSize · IconSize · CoverSize · TabBarStyle) */
+  --ck-btn-l: 52px;
+  --ck-btn-m: 48px;
+  --ck-btn-s: 40px;
+  --ck-field: 48px;
+  --ck-field-multiline: 110px;
+  --ck-search: 48px;
+  --ck-choice: 56px;
+  --ck-segment: 38px;
+  --ck-segment-pad: 7px;
+  --ck-segment-inset: 4px;
+  --ck-segment-compact: 30px;
+  --ck-segment-compact-pad: 9px;
+  --ck-segment-compact-inset: 6px;
   --ck-toggle-width: 50px;
   --ck-toggle-height: 30px;
   --ck-toggle-knob: 24px;
-  --ck-radio: 22px;
-  --ck-tabbar-height: 58px;
-  --ck-tabbar-nav-height: 66px;
-  --ck-tabbar-side: 15px;
+  --ck-radio: 24px;
+  --ck-choice-badge: 24px;
+  --ck-spinner: 20px;
+  --ck-spinner-stroke: 2px;
+  --ck-icon-box: 40px;
+  --ck-segmented-height: 44px; /* 전환 칸 회색 칸 */
+  --ck-touch: 48px;
+  --ck-icon: 22px;
+  --ck-icon-chevron: 24px;
+  --ck-icon-stroke: 1.6px;
+  --ck-icon-tab-bar: 22px;
+  --ck-icon-back: 28px;
+  --ck-icon-mark: 20px;
+  --ck-nav-bar: 60px;
+  --ck-cover-row: 40px;
+  --ck-cover-result: 64px;
+  --ck-cover-list: 64px;
+  --ck-cover-head: 120px;
+  --ck-cover-feature: 92px;
+  --ck-cover-confirm: 120px;
+  --ck-cover-edit: 127.84px;
+  --ck-cover-edit-height: 188px;
+  --ck-cover-added: 88px;
+  --ck-cover-saved: 72px;
+  --ck-cover-place: 68px;
+  --ck-cover-sheet: 56px;
+  --ck-cover-post: 36px;
+  --ck-cover-swatch: 22px;
+  --ck-cover-ratio: 0.68;
+  --ck-tabbar-height: 56px;
+  --ck-tabbar-nav-height: 64px;
+  --ck-tabbar-content-pad: 104px;
+  --ck-tabbar-side: 12px;
   --ck-tabbar-gap: 4px;
   --ck-tabbar-padding-x: 9px;
-  --ck-tabbar-content-pad: 106px;
   --ck-tabbar-fade: 72px;
-  --ck-segmented-height: 44px;
+  --ck-tabbar-icon-stroke: 2px;
+  --ck-tabbar-icon-fill-stroke: 2.4px;
   --ck-press-opacity: 0.55;
+  --ck-disabled-opacity: 0.4;
+
+  /* 옛 이름(이미 만든 시안이 깨지지 않게) */
+  --ck-radius-chip: var(--ck-radius-pill);
+  --ck-radius-tab-bar: var(--ck-radius-pill);
+  --ck-radius-cover-image: var(--ck-radius-cover);
 }
 
-/* 바탕: 앱 화면과 같은 글꼴·글자색·흰 바탕, 자간 0 */
+/* 글자 역할 class: 앱과 같은 글자 · 색 · 숫자 폭 */
+.ck-type-display { font: var(--ck-type-display); color: var(--ck-ink); font-variant-numeric: tabular-nums; }
+.ck-type-display-unit { font: var(--ck-type-display-unit); color: var(--ck-ink); }
+.ck-type-timer { font: var(--ck-type-timer); color: var(--ck-ink); font-variant-numeric: tabular-nums; }
+.ck-type-clock { font: var(--ck-type-clock); color: var(--ck-ink); font-variant-numeric: tabular-nums; }
+.ck-type-score { font: var(--ck-type-score); color: var(--ck-ink); font-variant-numeric: tabular-nums; }
+.ck-type-figure { font: var(--ck-type-figure); color: var(--ck-ink); font-variant-numeric: tabular-nums; }
+.ck-type-hero { font: var(--ck-type-hero); color: var(--ck-title); }
+.ck-type-title { font: var(--ck-type-title); color: var(--ck-title); }
+.ck-type-page-title { font: var(--ck-type-page-title); color: var(--ck-title); }
+.ck-type-nav-title { font: var(--ck-type-nav-title); color: var(--ck-ink); }
+.ck-type-heading { font: var(--ck-type-heading); color: var(--ck-title); }
+.ck-type-empty-title { font: var(--ck-type-empty-title); color: var(--ck-ink-soft); }
+.ck-type-section { font: var(--ck-type-section); color: var(--ck-title); }
+.ck-type-list-header { font: var(--ck-type-list-header); color: var(--ck-title); }
+.ck-type-row { font: var(--ck-type-row); color: var(--ck-ink); }
+.ck-type-row-strong { font: var(--ck-type-row-strong); color: var(--ck-ink); }
+.ck-type-body { font: var(--ck-type-body); color: var(--ck-ink); }
+.ck-type-sub { font: var(--ck-type-sub); color: var(--ck-ink-soft); }
+.ck-type-sub-link { font: var(--ck-type-sub-link); color: var(--ck-ink-soft); }
+.ck-type-secondary { font: var(--ck-type-secondary); color: var(--ck-ink-sub); }
+.ck-type-dialog-body { font: var(--ck-type-dialog-body); color: var(--ck-ink-soft); }
+.ck-type-caption { font: var(--ck-type-caption); color: var(--ck-ink-soft); }
+.ck-type-button { font: var(--ck-type-button); color: var(--ck-ink); }
+.ck-type-count { font: var(--ck-type-count); color: var(--ck-ink-soft); }
+.ck-type-wheel { font: var(--ck-type-wheel); color: var(--ck-ink-soft); font-variant-numeric: tabular-nums; }
+.ck-type-login-link { font: var(--ck-type-login-link); color: var(--ck-ink-soft); }
+.ck-type-toast { font: var(--ck-type-toast); color: var(--ck-bg); }
+.ck-type-toast-action { font: var(--ck-type-toast-action); color: var(--ck-bg); }
+.ck-type-link { font: var(--ck-type-link); color: var(--ck-accent); }
+.ck-type-button-small { font: var(--ck-type-button-small); color: var(--ck-ink); }
+.ck-type-label { font: var(--ck-type-label); color: var(--ck-ink); }
+.ck-type-label-strong { font: var(--ck-type-label-strong); color: var(--ck-ink); }
+.ck-type-body-small { font: var(--ck-type-body-small); color: var(--ck-ink); }
+.ck-type-micro { font: var(--ck-type-micro); color: var(--ck-ink-soft); font-variant-numeric: tabular-nums; }
+.ck-type-tab-label { font: var(--ck-type-tab-label); color: var(--ck-tab-ink-soft); }
+.ck-type-essay-title { font: var(--ck-type-essay-title); color: var(--ck-title); }
+.ck-type-intro-title { font: var(--ck-type-intro-title); color: var(--ck-title); }
+.ck-type-profile-name { font: var(--ck-type-profile-name); color: var(--ck-title); }
+.ck-type-legal-heading { font: var(--ck-type-legal-heading); color: var(--ck-ink); }
+.ck-type-quote { font: var(--ck-type-quote); color: var(--ck-ink); }
+.ck-type-reading { font: var(--ck-type-reading); color: var(--ck-ink); }
+.ck-type-book-head-title { font: var(--ck-type-book-head-title); color: var(--ck-title); }
+.ck-type-book-feature-title { font: var(--ck-type-book-feature-title); color: var(--ck-title); }
+.ck-type-book-saved-title { font: var(--ck-type-book-saved-title); color: var(--ck-title); }
+.ck-type-book-title { font: var(--ck-type-book-title); color: var(--ck-ink); }
+.ck-type-book-grid-title { font: var(--ck-type-book-grid-title); color: var(--ck-ink); }
+.ck-type-book-author { font: var(--ck-type-book-author); color: var(--ck-ink-sub); }
+.ck-type-book-head-author { font: var(--ck-type-book-head-author); color: var(--ck-ink-soft); }
+.ck-type-book-grid-author { font: var(--ck-type-book-grid-author); color: var(--ck-ink-soft); font-variant-numeric: tabular-nums; }
+.ck-type-book-note { font: var(--ck-type-book-note); color: var(--ck-ink-soft); }
+.ck-type-review { font: var(--ck-type-review); color: var(--ck-ink); }
+.ck-type-record-day { font: var(--ck-type-record-day); color: var(--ck-ink); }
+.ck-type-record-range { font: var(--ck-type-record-range); color: var(--ck-ink-soft); }
+.ck-type-record-duration { font: var(--ck-type-record-duration); color: var(--ck-ink); font-variant-numeric: tabular-nums; }
+.ck-type-input { font: var(--ck-type-input); color: var(--ck-ink); }
+
+/* 바탕: 앱 화면과 같은 글꼴 · 글자색 · 흰 바탕, 자간 0 */
 html, body { background: var(--ck-bg); color: var(--ck-ink); font: var(--ck-type-body); letter-spacing: 0; -webkit-font-smoothing: antialiased; }

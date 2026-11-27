@@ -34,8 +34,8 @@ void main() {
     expect(t.getRect(find.text('수정')).left, greaterThanOrEqualTo(t.getRect(find.text('한줄평')).right));
     await t.tap(find.text('내 기록'));
     await t.pumpAndSettle(const Duration(milliseconds: 100));
-    await t.scrollUntilVisible(find.text('남긴 갈피  0개'), 300, scrollable: find.byType(Scrollable).first);
-    final r = t.getRect(find.text('남긴 갈피  0개'));
+    await t.scrollUntilVisible(find.text('남긴 갈피'), 300, scrollable: find.byType(Scrollable).first);
+    final r = t.getRect(find.text('남긴 갈피'));
     expect(r.height, lessThan(40));
     expect(t.takeException(), isNull);
   });

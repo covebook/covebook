@@ -3,10 +3,8 @@ import 'dart:convert';
 
 import 'package:chaekjang/db/library_write.dart';
 import 'package:chaekjang/domain/library.dart';
-import 'package:chaekjang/domain/library_json.dart';
 import 'package:chaekjang/domain/sync.dart';
 import 'package:chaekjang/features/record/record_tab.dart' show MarkKind, essayShown, markConditions, markShown;
-import 'package:chaekjang/store/backup.dart' show countsOf, validateBackup;
 import 'package:chaekjang/store/library_read.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,18 +22,6 @@ Library lib({Map<String, Essay>? essays}) => Library(
       bookmarks: {'m1': Bookmark(id: 'm1', myBookId: 'bk1', text: '새는 알에서 나오려고 투쟁한다', memo: '갈피 메모', createdAt: t1, updatedAt: t1)},
       essays: essays ?? {'es1': essay(title: '알을 깨는 일', body: '길게 쓴 감상\n\n둘째 문단')},
     );
-
-Map<String, Object?> backupOf(Library l) => {
-      'app': 'chaekjang',
-      'format': 1,
-      'exportedAt': t1,
-      'library': jsonDecode(jsonEncode(libraryToJson(l))),
-      'layout': '{"version":2,"shelves":[],"placements":[],"drawer":[]}',
-      'view': null,
-      'settings': {},
-      'images': {},
-      'bookcases': [],
-    };
 
 void main() {
   group('모델', () {
@@ -85,41 +71,6 @@ void main() {
       };
       expect(libraryFromRows(rows).essays['es1']?.body, '본문');
       expect(libraryFromRows(const {}).essays, isEmpty);
-    });
-  });
-
-  group('백업 호환', () {
-    test('감상이 있는 서재 JSON 왕복: 별점·한 줄 감상·갈피 메모·세션 메모와 따로', () {
-      final j = jsonDecode(jsonEncode(libraryToJson(lib()))) as Map<String, Object?>;
-      final back = libraryFromJson(j);
-      expect(back.essays['es1']!.title, '알을 깨는 일');
-      expect(back.essays['es1']!.body, '길게 쓴 감상\n\n둘째 문단');
-      expect([back.books['bk1']!.rating, back.books['bk1']!.note, back.bookmarks['m1']!.memo, back.sessions['s1']!.memo], [4.5, '한 줄 감상', '갈피 메모', '세션 메모']);
-      expect(jsonEncode(libraryToJson(back)), jsonEncode(libraryToJson(lib())));
-    });
-
-    test('감상이 없는 예전 백업도 그대로 읽고 검사를 통과한다', () {
-      final old = backupOf(lib(essays: const {}));
-      expect((old['library']! as Map).containsKey('essays'), isFalse, reason: '감상이 없으면 예전 모양 그대로 쓴다');
-      expect(validateBackup(old), isNull);
-      expect(libraryFromJson((old['library']! as Map).cast<String, Object?>()).essays, isEmpty);
-      expect(countsOf(old).essays, 0);
-      expect(countsOf(old).bookmarks, 1);
-    });
-
-    test('감상이 든 백업: 검사 통과·개수, 틀린 감상은 이유를 알린다', () {
-      final b = backupOf(lib(essays: {'es1': essay(), 'es2': essay(id: 'es2', title: '두 번째')}));
-      expect(validateBackup(b), isNull);
-      expect(countsOf(b).essays, 2);
-      final orphan = jsonDecode(jsonEncode(b)) as Map<String, Object?>;
-      ((orphan['library']! as Map)['essays'] as Map)['es1']['myBookId'] = 'nope';
-      expect(validateBackup(orphan), '감상 정보가 올바르지 않아요.');
-      final noBody = jsonDecode(jsonEncode(b)) as Map<String, Object?>;
-      ((noBody['library']! as Map)['essays'] as Map)['es2'].remove('body');
-      expect(validateBackup(noBody), '감상 정보가 올바르지 않아요.');
-      final badId = jsonDecode(jsonEncode(b)) as Map<String, Object?>;
-      ((badId['library']! as Map)['essays'] as Map)['es2']['id'] = 'other';
-      expect(validateBackup(badId), isNotNull);
     });
   });
 

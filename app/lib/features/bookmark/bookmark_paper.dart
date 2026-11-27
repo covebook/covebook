@@ -31,7 +31,25 @@ Path svgPath(String d) {
 
 enum PaperKind { plain, colored, tape }
 
-Color _c(int rgb, double a) => Color(0xFF000000 | rgb).withValues(alpha: a);
+// 종이·테이프 캔버스 도우미(bookmark_tape도 이것을 쓴다: 같은 것이 두 파일에 따로 있었다, 2026-11-19)
+/// 0xRRGGBB + 투명도
+Color paperRgba(int rgb, double a) => Color(0xFF000000 | rgb).withValues(alpha: a);
+
+/// 선 그리기 붓
+Paint paperStroke(int rgb, double width, double alpha, {StrokeCap cap = StrokeCap.butt, StrokeJoin join = StrokeJoin.miter}) => Paint()
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = width
+  ..strokeCap = cap
+  ..strokeJoin = join
+  ..color = paperRgba(rgb, alpha);
+
+/// 조금 옮겨 그리기
+void paperShifted(Canvas c, double dx, double dy, void Function() draw) {
+  c.save();
+  c.translate(dx, dy);
+  draw();
+  c.restore();
+}
 
 /// 반복 채움 한 칸(정수 화소에 맞춘 배율과 함께)
 class _Tile {
@@ -64,21 +82,7 @@ _Tile _bake(double size, double dpr, void Function(Canvas) draw) {
   return _Tile(img, k);
 }
 
-Paint _stroke(int rgb, double width, double alpha, {StrokeCap cap = StrokeCap.butt}) => Paint()
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = width
-  ..strokeCap = cap
-  ..isAntiAlias = true
-  ..color = _c(rgb, alpha);
-
-Paint _fill(int rgb, double alpha) => Paint()..color = _c(rgb, alpha);
-
-void _shifted(Canvas c, double dx, double dy, void Function() draw) {
-  c.save();
-  c.translate(dx, dy);
-  draw();
-  c.restore();
-}
+Paint _fill(int rgb, double alpha) => Paint()..color = paperRgba(rgb, alpha);
 
 _Tiles _tilesOf(String seed, PaperKind kind, double dpr) {
   final key = '$seed|${kind.name}|${dpr.toStringAsFixed(2)}';
@@ -89,18 +93,18 @@ _Tiles _tilesOf(String seed, PaperKind kind, double dpr) {
   final fine = svgPath(g.fine), broad = svgPath(g.broad), pulp = svgPath(g.pulp), cloud = svgPath(g.cloud);
   final t = _Tiles(
     _bake(64, dpr, (c) {
-      c.drawPath(fine, _stroke(colored ? 0x52616A : 0x827772, tape ? 0.55 : 0.35, tape ? 0.115 : colored ? 0.20 : 0.12));
-      _shifted(c, .2, .3, () => c.drawPath(fine, _stroke(0xFFFFFF, tape ? 0.65 : 0.45, tape ? 0.19 : colored ? 0.25 : 0.17)));
+      c.drawPath(fine, paperStroke(colored ? 0x52616A : 0x827772, tape ? 0.55 : 0.35, tape ? 0.115 : colored ? 0.20 : 0.12));
+      paperShifted(c, .2, .3, () => c.drawPath(fine, paperStroke(0xFFFFFF, tape ? 0.65 : 0.45, tape ? 0.19 : colored ? 0.25 : 0.17)));
     }),
     _bake(91, dpr, (c) {
-      c.drawPath(broad, _stroke(colored ? 0x526570 : 0x897E78, tape ? 1.4 : 0.8, tape ? 0.036 : colored ? 0.06 : 0.04, cap: StrokeCap.round));
-      _shifted(c, .15, .35, () => c.drawPath(broad, _stroke(0xFFFFFF, 0.65, colored ? 0.075 : 0.045, cap: StrokeCap.round)));
+      c.drawPath(broad, paperStroke(colored ? 0x526570 : 0x897E78, tape ? 1.4 : 0.8, tape ? 0.036 : colored ? 0.06 : 0.04, cap: StrokeCap.round));
+      paperShifted(c, .15, .35, () => c.drawPath(broad, paperStroke(0xFFFFFF, 0.65, colored ? 0.075 : 0.045, cap: StrokeCap.round)));
     }),
     _bake(137, dpr, (c) {
       c.drawPath(cloud, _fill(colored ? 0x526570 : 0x958B85, colored ? 0.028 : 0.014));
-      _shifted(c, 23, 51, () => c.drawPath(cloud, _fill(0xFFFFFF, colored ? 0.05 : 0.035)));
+      paperShifted(c, 23, 51, () => c.drawPath(cloud, _fill(0xFFFFFF, colored ? 0.05 : 0.035)));
       c.drawPath(pulp, _fill(colored ? 0x53616B : 0x897E78, colored ? 0.035 : 0.025));
-      _shifted(c, 37, 19, () => c.drawPath(pulp, _fill(0xFFFFFF, colored ? 0.085 : 0.055)));
+      paperShifted(c, 37, 19, () => c.drawPath(pulp, _fill(0xFFFFFF, colored ? 0.085 : 0.055)));
     }),
   );
   _tiles[key] = t;
@@ -148,7 +152,7 @@ class _PaperPainter extends CustomPainter {
         ..shader = ui.Gradient.linear(
           Offset.zero,
           const Offset(0.75, 1),
-          [_c(0xFFFFFF, colored ? 0.10 : 0.20), _c(0xFFFFFF, 0), _c(colored ? 0x536575 : 0x9C928C, colored ? 0.045 : 0.022)],
+          [paperRgba(0xFFFFFF, colored ? 0.10 : 0.20), paperRgba(0xFFFFFF, 0), paperRgba(colored ? 0x536575 : 0x9C928C, colored ? 0.045 : 0.022)],
           [0, 0.42, 1],
           TileMode.clamp,
           (Matrix4.identity()..scaleByDouble(size.width, size.height, 1, 1)).storage,

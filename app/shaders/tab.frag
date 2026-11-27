@@ -1,29 +1,32 @@
 #version 460 core
-// 이 파일은 tool/gen_shaders.sh 가 만든다. 손으로 고치지 말 것(출처: ../app/src/ui/scene-light-sksl.ts)
+// 이 파일은 tool/gen_shaders.sh 가 만든다. 손으로 고치지 말 것(출처: 옛 RN 앱 커밋 4f9e1d9의 app/src/ui/scene-light-sksl.ts + tool/rn_light.patch, tool/README.md)
 #include <flutter/runtime_effect.glsl>
 
 precision highp float;
 layout(location = 0) out vec4 fragColor;
 
 
-  uniform vec3 pxa;       // 캔버스 배율 (s, 0, 0)
-  uniform vec3 root;      // 뿌리(줄 공간)
-  uniform vec3 axR;       // 탭 가로(책 두께 방향)·위(책 높이 방향)·법선
-  uniform vec3 axU;
-  uniform vec3 nrm;
-  uniform vec3 loss;
-  uniform vec4 cam4;
-  uniform float keyOn;
-  uniform vec3 albedo;
-  uniform vec3 eref;
-  uniform vec3 sref;
-  uniform vec2 mR;
-  uniform vec4 mB;
-  uniform vec4 mG;
-  uniform vec2 mS;
-  uniform vec2 mSeed;
+  // 낱개 uniform을 묶은 것(tool/pack_uniforms.dart): 아이폰 Metal은 버퍼 칸이 31개까지라 낱개로는 셰이더가 만들어지지 않는다.
+  // 아래 같은 이름의 전역 변수들은 main() 맨 앞에서 채운다
+  uniform vec4 uP[19];
+  vec3 pxa; // 캔버스 배율 (s, 0, 0) uP@0
+  vec3 root; // 뿌리(줄 공간) uP@3
+  vec3 axR; // 탭 가로(책 두께 방향)·위(책 높이 방향)·법선 uP@6
+  vec3 axU; // uP@9
+  vec3 nrm; // uP@12
+  vec3 loss; // uP@15
+  vec4 cam4; // uP@18
+  float keyOn; // uP@22
+  vec3 albedo; // uP@23
+  vec3 eref; // uP@26
+  vec3 sref; // uP@29
+  vec2 mR; // uP@32
+  vec4 mB; // uP@34
+  vec4 mG; // uP@38
+  vec2 mS; // uP@42
+  vec2 mSeed; // uP@44
 
-  uniform vec3 env;
+  vec3 env; // uP@46
 
   const float PI = 3.14159265;
   const float AMB = 0.620000000;
@@ -34,7 +37,7 @@ layout(location = 0) out vec4 fragColor;
   const vec3 LU = vec3(-0.102940441, 0.173648178, -0.979412873);
   // 맞추기 값(스킨마다 다르다: 스토어에서 색을 고르면 셰이더를 다시 만들지 않고 값만 바꾼다, light-model lightSet().u)
   // 카메라 기준 빛(벽 대표 자리 빛 / 노출 기준 CAM.gain, 반사광을 장면 밝기로)
-  uniform vec3 ECAM;
+  vec3 ECAM; // uP@49
   const float LELEV = 0.175474740;
   const float LRAD = 0.104719755;
   const float LAZ = -0.104719755;
@@ -51,13 +54,13 @@ layout(location = 0) out vec4 fragColor;
   const int ENV_COLS = 18;
   const float FARV = 10000.0000;
   // 둘레 면 밝기(선형 RGB: 반사율 × 받는 빛)와 속지 반사율(되비침): 맞추기 값. 속지 색(그림이 칠하는 색)은 스킨과 상관없다
-  uniform vec3 RADF;
-  uniform vec3 RADU;
-  uniform vec3 RADW;
-  uniform vec3 RADE;
-  uniform vec3 RADSL;
-  uniform vec3 RADSR;
-  uniform vec3 PAPER;
+  vec3 RADF; // uP@52
+  vec3 RADU; // uP@55
+  vec3 RADW; // uP@58
+  vec3 RADE; // uP@61
+  vec3 RADSL; // uP@64
+  vec3 RADSR; // uP@67
+  vec3 PAPER; // uP@70
   const vec3 PAPER_COLOR = vec3(0.883179738, 0.859173570, 0.796916543);
   const float EDGER = 3.05000000;
   const float SEAMR = 5.33750000;
@@ -341,8 +344,8 @@ layout(location = 0) out vec4 fragColor;
   }
 
 
-  uniform float DODGE;      // 겹: 0 곱하기 · 1 닷지 · 2 한 번에(단색 재질) · 3 반사광 더하기
-  uniform float SPLIT;      // 1이면 곱하기·닷지가 확산 몫만(반사광은 겹 3)
+  float DODGE; // 겹: 0 곱하기 · 1 닷지 · 2 한 번에(단색 재질) · 3 반사광 더하기 uP@73
+  float SPLIT; // 1이면 곱하기·닷지가 확산 몫만(반사광은 겹 3) uP@74
   float plankKey(vec3 p) { return keyOn < 0.5 ? 0.0 : plankKeyOf(p); }
   // 카메라: 노출과 필름형 톤 곡선(light-model tone·toneInv)
   const float EXPO = 1.00000000;
@@ -450,6 +453,33 @@ layout(location = 0) out vec4 fragColor;
 
   
 void main() {
+  pxa = uP[0].xyz;
+  root = vec3(uP[0].w, uP[1].xy);
+  axR = vec3(uP[1].zw, uP[2].x);
+  axU = uP[2].yzw;
+  nrm = uP[3].xyz;
+  loss = vec3(uP[3].w, uP[4].xy);
+  cam4 = vec4(uP[4].zw, uP[5].xy);
+  keyOn = uP[5].z;
+  albedo = vec3(uP[5].w, uP[6].xy);
+  eref = vec3(uP[6].zw, uP[7].x);
+  sref = uP[7].yzw;
+  mR = uP[8].xy;
+  mB = vec4(uP[8].zw, uP[9].xy);
+  mG = vec4(uP[9].zw, uP[10].xy);
+  mS = uP[10].zw;
+  mSeed = uP[11].xy;
+  env = vec3(uP[11].zw, uP[12].x);
+  ECAM = uP[12].yzw;
+  RADF = uP[13].xyz;
+  RADU = vec3(uP[13].w, uP[14].xy);
+  RADW = vec3(uP[14].zw, uP[15].x);
+  RADE = uP[15].yzw;
+  RADSL = uP[16].xyz;
+  RADSR = vec3(uP[16].w, uP[17].xy);
+  PAPER = vec3(uP[17].zw, uP[18].x);
+  DODGE = uP[18].y;
+  SPLIT = uP[18].z;
   vec2 p = FlutterFragCoord().xy;
 
     // 탭 좌표(DU): 가로 x, 아래로 y(그림 좌표 그대로: 셰이더는 그리는 Group의 좌표를 받는다)

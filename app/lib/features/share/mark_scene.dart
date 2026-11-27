@@ -2,6 +2,8 @@
 //  page: 펼친 책 한 쪽(왼쪽 제본 그늘·왼쪽 위 창빛, 종이에 찍힌 문장, 아래 '책장 한켠'과 쪽수)
 //  note: 벽에 테이프로 붙인 찢은 종이(문장 왼쪽 정렬, 아래 책 제목·저자·쪽수, 벽 아래 '책장 한켠')
 // 시안에서 글자를 지운 바탕(assets/share/bookmark-*.png) 위에 같은 자리·글꼴·색으로 글자만 얹는다. 좌표는 시안 화소(941×1672)
+// 책 페이지 바탕은 글자를 지운 자리가 결 없는 네모로 티가 났다(2026-11-25 사용자 '네모나게 티가 나, 그런 거 없애고 그 위에 바로 글씨'):
+// 그 자리를 위아래 빛을 세로로 잇고 깨끗한 종이 결을 떠 와 다시 채웠다(scratchpad heal.py, 문장 · 책 이름 · '책장 한켠' · 쪽수 자리)
 // 긴 글(2026-11-16 QA 은서 F3: 600자 넘는 글이 카드 밖으로 넘치고 제목·'책장 한켠'과 겹쳤다): 글 자리 높이 안에 들 때까지 글자를 줄이고
 // (읽을 수 있는 크기까지), 그래도 넘치면 들어가는 줄까지만 두고 끝에 '…'(cut). 공유 시트는 cut이면 앞부분만 들어간다고 알린다.
 // 책 제목·지은이는 한두 줄에서 말줄임해 쪽수·바닥 글과 겹치지 않는다
@@ -179,6 +181,10 @@ _QuoteFit _quoteOf(MarkStyle style, String text) {
   return (top: spec.center - h / 2, bottom: spec.center + h / 2, size: q.size, cut: q.cut);
 }
 
+/// '책장 한켠' 양옆 줄 길이(시안 화소). 시안 54 · 67에서 2/3로(2026-11-25 사용자 '책장 한켠 좌우 - 길이 좀 줄이고')
+const _footLine = 36.0;
+const _noteFootLine = 45.0;
+
 final _plates = <MarkStyle, Future<ui.Image>>{};
 
 Future<ui.Image> markPlate(MarkStyle style) => _plates[style] ??= assetImage('assets/share/bookmark-${style.name}.png');
@@ -200,12 +206,12 @@ void drawMarkScene(Canvas canvas, double width, MarkStyle style, ui.Image plate,
     final attr = [input.title, ?input.author].where((s) => s.isNotEmpty).join(' | ');
     final a = _para(attr, family: _fonts.ui, size: 36, color: const Color(0xFF423E3B), width: 640, emboss: true, maxLines: 2);
     canvas.drawParagraph(a, Offset(192, math.min(bottom + 62, 1420)));
-    // 맨 아래 '책장 한켠'(넓은 자간) + 양옆 줄, 오른쪽 쪽수
+    // 맨 아래 '책장 한켠'(넓은 자간) + 양옆 줄, 오른쪽 쪽수. 줄은 글자 쪽 끝은 그대로 두고 길이 54 → 36(2026-11-25 사용자 '좌우 - 길이 좀 줄이고')
     final f = _para('책장 한켠', family: _fonts.ui, size: 22.5, color: const Color(0xFF423F3C), spacing: 2.2);
     canvas.drawParagraph(f, Offset(471 - f.longestLine / 2 + 1, 1537));
     final lp = Paint()..color = const Color(0xFFABA8A6);
-    canvas.drawRect(const Rect.fromLTWH(351, 1553.5, 54, 1.4), lp);
-    canvas.drawRect(const Rect.fromLTWH(538, 1553.5, 53, 1.4), lp);
+    canvas.drawRect(const Rect.fromLTWH(405 - _footLine, 1553.5, _footLine, 1.4), lp);
+    canvas.drawRect(const Rect.fromLTWH(538, 1553.5, _footLine, 1.4), lp);
     if (input.page != null && input.page != 0) {
       final pg = _para('p. ${input.page}', family: _fonts.serif, size: 31, color: const Color(0xFF3B3937), spacing: -1, emboss: true);
       canvas.drawParagraph(pg, Offset(851 - pg.longestLine, 1525));
@@ -222,9 +228,10 @@ void drawMarkScene(Canvas canvas, double width, MarkStyle style, ui.Image plate,
     if (pg != null) canvas.drawParagraph(pg, Offset(786 - pg.longestLine, 1252));
     final f = _para('책장 한켠', family: _fonts.ui, size: 31, color: const Color(0xFF484443), spacing: 2);
     canvas.drawParagraph(f, Offset(470 - f.longestLine / 2, 1545));
+    // 양옆 줄: 책 페이지와 같이 2/3로(67 → 45, 2026-11-25)
     final lp = Paint()..color = const Color(0xFFA8A3A2);
-    canvas.drawRect(const Rect.fromLTWH(317, 1565.6, 67, 1.6), lp);
-    canvas.drawRect(const Rect.fromLTWH(557, 1565.6, 67, 1.6), lp);
+    canvas.drawRect(const Rect.fromLTWH(384 - _noteFootLine, 1565.6, _noteFootLine, 1.6), lp);
+    canvas.drawRect(const Rect.fromLTWH(557, 1565.6, _noteFootLine, 1.6), lp);
   }
   canvas.restore();
 }

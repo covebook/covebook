@@ -1,4 +1,4 @@
-/* 책장 한켠 글꼴(flutter/assets/fonts, 모두 OFL) - tool/gen_design_css.py가 만든다 */
+/* 책장 한켠 글꼴(app/assets/fonts, 모두 OFL) - app/test/design_tokens_test.dart가 만든다 */
 @font-face { font-family: 'Pretendard'; font-weight: 400; font-style: normal; font-display: swap; src: url('../../assets/fonts/Pretendard-Regular.otf') format('opentype'); }
 @font-face { font-family: 'Pretendard'; font-weight: 500; font-style: normal; font-display: swap; src: url('../../assets/fonts/Pretendard-Medium.otf') format('opentype'); }
 @font-face { font-family: 'Pretendard'; font-weight: 600; font-style: normal; font-display: swap; src: url('../../assets/fonts/Pretendard-SemiBold.otf') format('opentype'); }

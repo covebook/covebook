@@ -1,4 +1,4 @@
-// 책장의 3D 구조(카메라와 상관없다). app/src/domain/geometry.ts에서 빛 계산에 쓰는 값만 먼저 옮긴 것.
+// 책장의 3D 구조(카메라와 상관없다). 옛 RN 앱(커밋 4f9e1d9) app/src/domain/geometry.ts에서 빛 계산에 쓰는 값만 먼저 옮긴 것.
 // 모든 값은 설계 단위(DU, 기준 폭 390)이며 화면에서는 배율(scale)을 곱한다.
 // 깊이(줄 기준): 판 앞 끝 z = −shelfFront, 책 기준선 z = 0, 뒷벽 z = shelfDepth
 library;

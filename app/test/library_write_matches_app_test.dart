@@ -1,4 +1,5 @@
-// 서재 쓰기 행 값이 지금 앱이 저장한 행과 같은지: 앱이 저장한 행 → 읽기 → valuesOf가 같은 행을 다시 만든다(tool/dump_schema.test.ts가 뽑은 행)
+// 서재 쓰기 행 값이 옛 앱(RN)이 저장한 행과 같은지: 앱이 저장한 행 → 읽기 → valuesOf가 같은 행을 다시 만든다(tool/dump_schema.test.ts가 뽑은 행)
+// (옛 앱 값을 뽑아 고정한 기준값이다. 계산이 바뀌면 이 시험이 알린다. 뜻을 바꾸려면 test/fixtures 기준값을 함께 바꾼다 — app/tool/README.md)
 import 'dart:convert';
 import 'dart:io';
 

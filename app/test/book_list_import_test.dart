@@ -124,10 +124,66 @@ void main() {
       expect(ownedBookId(lib, _c('데미안', authors: ['헤르만 헤세'])), isNull); // 숨긴 책
     });
 
+    test('ISBN 없이 넣은 책은 ISBN이 있는 검색 결과와도 제목 · 첫 저자로 견준다(2026-11-20 QA: 예시 CSV 세 권이 또 들어갔다)', () {
+      final lib = Library();
+      const t = '2026-11-15T00:00:00Z';
+      lib.editions['e1'] = Edition(id: 'e1', title: '소년이 온다', authors: const ['한강'], source: 'photo', createdAt: t, updatedAt: t);
+      lib.books['b1'] = MyBook(id: 'b1', editionId: 'e1', status: ReadStatus.read, createdAt: t, updatedAt: t);
+      lib.editions['e2'] = Edition(id: 'e2', title: '데미안', authors: const ['헤르만 헤세'], source: 'manual', createdAt: t, updatedAt: t);
+      lib.books['b2'] = MyBook(id: 'b2', editionId: 'e2', status: ReadStatus.reading, createdAt: t, updatedAt: t);
+      lib.editions['e3'] = Edition(id: 'e3', title: '모순', authors: const ['양귀자'], source: 'manual', createdAt: t, updatedAt: t);
+      lib.books['b3'] = MyBook(id: 'b3', editionId: 'e3', status: ReadStatus.want, createdAt: t, updatedAt: t);
+      // 검색 결과(서버 YES24)는 ISBN · 부제 괄호가 붙어 온다
+      expect(ownedBookId(lib, _c('소년이 온다', authors: ['한강'], isbn: '9788936434120')), 'b1');
+      expect(ownedBookId(lib, _c('데미안 (세계문학전집 44)', authors: ['헤르만 헤세', '전영애'], isbn: '9788937460449')), 'b2');
+      expect(ownedBookId(lib, _c('모순', authors: ['양귀자'], isbn: '9788998441012')), 'b3');
+      // 제목은 같아도 저자가 다르면 다른 책
+      expect(ownedBookId(lib, _c('모순', authors: ['다른 작가'], isbn: '9788998441012')), isNull);
+    });
+
+    test('둘 다 ISBN이 있으면 ISBN만 본다: 다른 판은 다른 책, 같은 ISBN 책이 제목만 같은 책보다 먼저', () {
+      final lib = Library();
+      const t = '2026-11-15T00:00:00Z';
+      lib.editions['e1'] = Edition(id: 'e1', title: '소년이 온다', authors: const ['한강'], source: 'photo', createdAt: t, updatedAt: t);
+      lib.books['b1'] = MyBook(id: 'b1', editionId: 'e1', status: ReadStatus.want, createdAt: t, updatedAt: t);
+      lib.editions['e2'] = Edition(id: 'e2', title: '소년이 온다', authors: const ['한강'], source: 'search', createdAt: t, updatedAt: t, isbn13: '9788936434120');
+      lib.books['b2'] = MyBook(id: 'b2', editionId: 'e2', status: ReadStatus.want, createdAt: t, updatedAt: t);
+      expect(ownedBookId(lib, _c('소년이 온다', authors: ['한강'], isbn: '9788936434120')), 'b2');
+      // 다른 ISBN: ISBN이 있는 b2와는 다른 판이지만 ISBN 없이 넣은 b1과는 같은 책으로 본다
+      expect(ownedBookId(lib, _c('소년이 온다', authors: ['한강'], isbn: '9788954651134')), 'b1');
+      lib.books.remove('b1');
+      expect(ownedBookId(lib, _c('소년이 온다', authors: ['한강'], isbn: '9788954651134')), isNull);
+    });
+
     test('결과 줄 출판사 · 연도', () {
       expect(publisherLine(_c('a', publisher: '창비', publishedAt: '2014-05-19')), '창비 | 2014');
       expect(publisherLine(_c('a', publishedAt: '2014')), '2014');
       expect(publisherLine(_c('a')), isNull);
+    });
+  });
+
+  group('읽기 상태 글자(2026-11-19: 예시 파일 첫 줄 \'읽은 책\'이 읽기 전으로 들어갔다)', () {
+    test('읽은 책 · 읽은책 · 읽음은 완독', () {
+      expect(statusOf('읽은 책'), ReadStatus.read);
+      expect(statusOf('읽은책'), ReadStatus.read);
+      expect(statusOf('읽음'), ReadStatus.read);
+      expect(statusOf('완독'), ReadStatus.read);
+    });
+    test('안 읽은 책 · 아직 안 읽음 · unread는 읽기 전', () {
+      expect(statusOf('안 읽은 책'), ReadStatus.want);
+      expect(statusOf('아직 안 읽음'), ReadStatus.want);
+      expect(statusOf('unread'), ReadStatus.want);
+      expect(statusOf('읽고 싶은'), ReadStatus.want);
+      expect(statusOf('읽는 중'), ReadStatus.reading);
+    });
+    test('예시 CSV 세 줄은 완독 · 읽는 중 · 읽기 전', () {
+      final rows = parseTable([
+        ['제목', '저자', 'ISBN', '읽기 상태'],
+        ['소년이 온다', '한강', '9788936434120', '읽은 책'],
+        ['데미안', '헤르만 헤세', '', '읽는 중'],
+        ['모순', '양귀자', '', '읽고 싶은'],
+      ]).rows;
+      expect([for (final r in rows) r.status], [ReadStatus.read, ReadStatus.reading, ReadStatus.want]);
     });
   });
 }
