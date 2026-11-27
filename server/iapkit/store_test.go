@@ -589,10 +589,10 @@ func TestIAPShelfReservation(t *testing.T) {
 	if r, _ := reserve(user, 2026, 2, 0); r.ID == "" {
 		t.Fatal("예약 1칸을 풀었으니 1+2 ≤ 3")
 	}
-	// 결제 의도는 예약보다 오래 남는다(기본 4일)
+	// 결제 의도는 예약보다 오래 남는다(기본 8일)
 	var secs float64
 	if err := db.QueryRow(ctx, "SELECT extract(epoch FROM keep_until - expires_at)::float8 FROM iap_reservations WHERE id=$1::uuid", b.ID).Scan(&secs); err != nil ||
-		time.Duration(secs*float64(time.Second)) < 95*time.Hour || time.Duration(secs*float64(time.Second)) > 96*time.Hour {
+		time.Duration(secs*float64(time.Second)) < 191*time.Hour || time.Duration(secs*float64(time.Second)) > 192*time.Hour {
 		keep := time.Duration(secs * float64(time.Second))
 		t.Fatalf("의도 보관 시간 - 예약 시간 %v %v", keep, err)
 	}

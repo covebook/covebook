@@ -222,7 +222,7 @@ func (s *Kit) iapStatus(ctx context.Context, user int64) (map[string]any, error)
 // 계정 연결 값은 계정마다 하나다(D7, GET /iap/me의 accountToken과 같다). 어느 대상의 구매인지는 값에 싣지 않고
 // 서버가 결제 의도로 찾는다(iapIntentTarget). 애플·구글 모두 이 칸을 계정 식별자로 쓰라고 하기 때문이다(2026-11-27 개정).
 //
-// 결제 의도는 Rules.Keep(기본 4일) 동안 남아, 결제가 늦게 끝나 스토어 알림이 먼저 와도 대상을 찾는다.
+// 결제 의도는 Rules.Keep(기본 8일, 스토어가 알림을 다시 보내는 기간보다 길게) 동안 남아, 결제가 늦게 끝나 스토어 알림이 먼저 와도 대상을 찾는다.
 // 상한이 있으면(Rules.Cap) Rules.Hold 동안 그 수량을 잡아 두 기기가 동시에 사서 상한을 넘지 않게 막는다.
 // 결제가 끝나면(구매 제출, 알림) 서버가 지우고, 취소하면 앱이 POST /iap/intent/release로 지운다.
 //
