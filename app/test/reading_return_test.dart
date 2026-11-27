@@ -159,7 +159,10 @@ void main() {
     expect(s.pagesRead, isNull, reason: '전체 쪽수보다 큰 쪽은 뺀다');
     expect(s.memo, '좋았다');
     expect(r.pending, isNull);
-    expect(plain('‘소년이 온다’ 3분을 기록했어요.'), findsOneWidget, reason: '돌아온 화면에서 토스트');
+    // 2026-11-27: 알림은 그날 읽은 시간을 모두 더한 '오늘 N분 읽었어요' + 아래 줄 '달력에서 보기'
+    final total = todayRead(LibraryModel.instance.lib, today()).total;
+    expect(plain('오늘 ${formatDurationShort(total)} 읽었어요'), findsOneWidget, reason: '돌아온 화면에서 토스트');
+    expect(plain('달력에서 보기'), findsOneWidget);
     await t.pump(const Duration(seconds: 4));
   });
 }

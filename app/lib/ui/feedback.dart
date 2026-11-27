@@ -28,12 +28,13 @@ _ToastHandle? _current;
 
 /// 짧은 알림 한 줄(되돌리기 하나까지). 어느 화면(밀어 넣은 화면 · 시트 위)에서도 맨 위 겹에 떠서 보인다.
 /// 하단 탭 바 위에 띄워 탭을 막지 않고, 새 알림이 오면 앞 것을 바로 걷는다. 화면 읽기에는 글을 읽어 준다
-void showToast(BuildContext context, String text, {String? action, VoidCallback? onAction}) {
+/// below: 단추를 글 아래 줄에(결과 한 줄 + 그 결과를 보러 가기, 2026-11-27 독서를 끝내면 '오늘 N분 읽었어요' 아래 '달력에서 보기')
+void showToast(BuildContext context, String text, {String? action, VoidCallback? onAction, bool below = false}) {
   final overlay = Navigator.maybeOf(context, rootNavigator: true)?.overlay ?? Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
   _current?.remove();
   final handle = _ToastHandle();
-  final entry = OverlayEntry(builder: (_) => _Toast(text: text, action: action, onAction: onAction, handle: handle));
+  final entry = OverlayEntry(builder: (_) => _Toast(text: text, action: action, onAction: onAction, below: below && action != null, handle: handle));
   handle.entry = entry;
   _current = handle;
   overlay.insert(entry);
@@ -51,9 +52,10 @@ class _ToastHandle {
 }
 
 class _Toast extends StatefulWidget {
-  const _Toast({required this.text, required this.action, required this.onAction, required this.handle});
+  const _Toast({required this.text, required this.action, required this.onAction, required this.handle, this.below = false});
   final String text;
   final String? action;
+  final bool below;
   final VoidCallback? onAction;
   final _ToastHandle handle;
 
@@ -107,6 +109,23 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
     final s = SettingsStore.instance;
     final still = s.reduceMotion == 'on' || (s.reduceMotion == 'system' && mq.disableAnimations);
     final ms = still ? 0 : 180;
+    Widget actionButton() => Pressable(
+      onPress: () {
+        widget.onAction?.call();
+        _clock.stop();
+        _hide();
+      },
+      child: Semantics(
+        button: true,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: Space.hit, minWidth: Space.hit),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: Center(widthFactor: 1, child: Text(widget.action!, style: AppType.toastAction)),
+          ),
+        ),
+      ),
+    );
     return Positioned(
       left: TabBarStyle.side,
       right: TabBarStyle.side,
@@ -135,27 +154,20 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
                     padding: EdgeInsets.only(left: Space.l, right: widget.action == null ? Space.l : Space.xs, top: Space.xs, bottom: Space.xs),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: ControlSize.buttonM - Space.xs * 2),
-                      child: Row(children: [
-                        Expanded(child: Padding(padding: const EdgeInsets.symmetric(vertical: Space.s), child: WordText(widget.text, style: AppType.toast))),
-                        if (widget.action != null)
-                          Pressable(
-                            onPress: () {
-                              widget.onAction?.call();
-                              _clock.stop();
-                              _hide();
-                            },
-                            child: Semantics(
-                              button: true,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(minHeight: Space.hit, minWidth: Space.hit),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: Space.m),
-                                  child: Center(widthFactor: 1, child: Text(widget.action!, style: AppType.toastAction)),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ]),
+                      child: widget.below
+                          // 단추는 글 아래 줄 왼쪽(글과 같은 들여쓰기: 단추 안쪽 여백만큼 왼쪽으로 당긴다)
+                          // 폭은 다른 토스트처럼 가득(글이 짧아도 가운데 작은 상자가 되지 않게)
+                          ? SizedBox(
+                              width: double.infinity,
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                                Padding(padding: const EdgeInsets.only(top: Space.s, right: Space.m), child: WordText(widget.text, style: AppType.toast)),
+                                Transform.translate(offset: const Offset(-Space.m, 0), child: actionButton()),
+                              ]),
+                            )
+                          : Row(children: [
+                              Expanded(child: Padding(padding: const EdgeInsets.symmetric(vertical: Space.s), child: WordText(widget.text, style: AppType.toast))),
+                              if (widget.action != null) actionButton(),
+                            ]),
                     ),
                   ),
                 ),

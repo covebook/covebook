@@ -11,6 +11,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../app/app_nav.dart' show AppNav;
 import '../../domain/library.dart';
 import '../../services/qa_probe.dart';
 import '../../store/library_model.dart';
@@ -66,12 +67,32 @@ class _StatsScreenState extends State<StatsScreen> {
     _book = widget.initialBook;
     _model.addListener(_changed);
     _model.load();
+    if (widget.tab) {
+      AppNav.instance.addListener(_navDay);
+      _navDay();
+    }
   }
 
   @override
   void dispose() {
     _model.removeListener(_changed);
+    if (widget.tab) AppNav.instance.removeListener(_navDay);
     super.dispose();
+  }
+
+  /// 독서를 끝낸 알림의 '달력에서 보기'(app_nav goCalendar): 캘린더 · 모든 책 · 그달 · 그날
+  void _navDay() {
+    final day = AppNav.instance.calendarDay;
+    if (day == null || !mounted) return;
+    AppNav.instance.calendarDay = null;
+    final p = day.split('-');
+    setState(() {
+      _view = 'calendar';
+      _book = null;
+      _y = int.parse(p[0]);
+      _m = int.parse(p[1]);
+      _picked = day;
+    });
   }
 
   void _changed() {

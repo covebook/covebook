@@ -20,7 +20,7 @@ import '../../domain/reading.dart';
 import '../../services/ambient.dart';
 import '../../store/finish_reading.dart' show saveDraftAsIs;
 import '../../ui/alert.dart' show appAlert;
-import '../../ui/feedback.dart' show errorText, showToast;
+import '../../ui/feedback.dart' show errorText;
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
@@ -189,11 +189,10 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     final d = _reading.finish();
     _audio.stop();
     final nav = Navigator.of(context);
-    final title = d == null ? null : bookTitle(lib, d.myBookId);
     _leave();
     if (d == null) return;
     saveDraftAsIs(d).then((saved) {
-      if (saved && nav.mounted) showToast(nav.context, '${title == null ? '' : '‘$title’ '}${withJosa(formatDurationPrecise(d.durationMs), '을', '를')} 기록했어요.');
+      if (saved && nav.mounted) showReadSaved(nav, d);
     }, onError: (Object e) {
       if (nav.mounted) appAlert(nav.context, '독서 기록을 저장하지 못했어요', '기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
     });

@@ -86,6 +86,9 @@ import '../../store/onboarding_store.dart';
 import '../../store/reading_store.dart' show ReadingStore;
 import '../../store/mini_timer_store.dart' show miniTimerSpace;
 import 'first_book_coach.dart';
+import 'first_mark_sheet.dart';
+import '../../ui/book_cover.dart' show bookTitle;
+import '../bookmark/new_bookmark_screen.dart' show openNewBookmark;
 
 /// 앱이 깨어난 때(main이 채운다). 켜고 책장이 다 될 때까지를 잰다
 DateTime bootAt = DateTime.now();
@@ -536,12 +539,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     final ob = Onboarding.instance, l = PlacementStore.instance.layout;
     if (l == null) return;
     if (!ob.loaded) {
-      ob.load(anyBooks: lib.books.isNotEmpty || l.placements.isNotEmpty).ignore();
+      // 첫 갈피 차례에서 앱을 껐으면 책장이 보이고 잠깐 뒤 다시 띄운다
+      ob.load(anyBooks: lib.books.isNotEmpty || l.placements.isNotEmpty).then((_) {
+        if (mounted && ob.markBook != null) _offerMarkSoon();
+      }).ignore();
       return;
     }
     if (ob.active && l.placements.isNotEmpty) {
+      // 다른 길(책 추가의 '책장에 진열' · 동기화)로 책이 생겼다: 한 권이면 그 책으로 첫 갈피 차례, 여러 권이면 끝
       ob.finish(l.placements.length == 1 ? l.placements.first.bookId : null);
       _stopCoach();
+      if (ob.markBook != null) _offerMarkSoon();
     }
   }
 
@@ -574,7 +582,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     _coachTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _measureCoach());
   }
 
-  /// 첫 책이 책장에 놓였다: 안내를 끝내 적어 두고(다시 띄우지 않는다) 시트를 내리고 그 책을 보여 준다(그 줄로 넘기고 잠깐 윤곽 빛)
+  /// 첫 책이 책장에 놓였다: 첫 책 차례를 끝내 적어 두고(다시 띄우지 않는다) 시트를 내리고 그 책을 보여 준다(그 줄로 넘기고 잠깐 윤곽 빛).
+  /// 놓은 선반을 잠깐 그대로 보여 준 뒤 첫 갈피 차례(2026-11-27 사용자 '꽂은 뒤에는 선반이 잠깐 그대로 보여야 내가 놓은 느낌이 살아')
   void _firstPlaced(String id) {
     Onboarding.instance.finish(id);
     _stopCoach();
@@ -582,7 +591,82 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     if (!mounted) return;
     _pendingFocus = id;
     _tryFocus();
+    _markShown = DateTime.now();
+    _offerMarkSoon(_markPause);
   }
+
+  // ---------- 첫 갈피(첫 안내 마지막 차례, 2026-11-27 사용자) ----------
+  /// 첫 책을 꽂은 뒤 선반을 그대로 보여 주는 시간(윤곽 빛 2.5초 안)
+  static const _markPause = Duration(milliseconds: 1800);
+  Timer? _markTimer;
+  bool _markOpen = false;
+
+  /// 책장이 (다른 탭 · 화면 · 시트 없이) 보이기 시작한 때: 그로부터 [_markPause] 뒤에 띄운다
+  DateTime? _markShown;
+
+  void _offerMarkSoon([Duration d = const Duration(milliseconds: 800)]) {
+    _markTimer?.cancel();
+    _markTimer = Timer(d, _offerMark);
+  }
+
+  /// 첫 갈피 시트: 책장 탭이 앞에 있고 위에 다른 화면 · 시트가 없고 책장을 다 그렸을 때만(아니면 조금 있다 다시 본다).
+  /// 그 책이 없어졌거나 책장에서 뺐거나 이미 갈피가 있으면 이 차례는 끝낸다
+  Future<void> _offerMark() async {
+    final ob = Onboarding.instance, id = ob.markBook, model = LibraryModel.instance;
+    if (id == null || !mounted || _markOpen) return;
+    if (!model.loaded) return _offerMarkSoon();
+    final lib = model.lib, l = PlacementStore.instance.layout;
+    final b = lib.books[id];
+    if (b == null || b.hiddenAt != null || (l != null && placementOf(l, id) == null) || lib.bookmarks.values.any((m) => m.myBookId == id)) {
+      ob.finishMark();
+      return;
+    }
+    final visible = l != null && MiniTimerPlace.instance.tab == '/' && ModalRoute.of(context)?.isCurrent != false && !_placeOpen && !_decorating && _drag == null;
+    if (!visible) {
+      _markShown = null;
+      return _offerMarkSoon();
+    }
+    final wait = _markPause - DateTime.now().difference(_markShown ??= DateTime.now());
+    if (wait > Duration.zero) return _offerMarkSoon(wait);
+    // 굽는 중이면 다 그린 뒤에(올라오는 갈피가 새 그림 위에 보이게)
+    if (_busy || _case == null) return _offerMarkSoon(const Duration(milliseconds: 300));
+    _markOpen = true;
+    final pick = await showFirstMarkSheet(context, title: bookTitle(lib, id) ?? '이 책');
+    _markOpen = false;
+    ob.finishMark();
+    if (!mounted || pick == null) return;
+    if (pick.write) {
+      await openNewBookmark(context, book: id);
+      return;
+    }
+    final line = pick.line;
+    if (line == null) return;
+    _riseWant = (id: id, at: DateTime.now());
+    _pendingFocus = id;
+    _tryFocus();
+    try {
+      await model.addBookmark(myBookId: id, text: line);
+      if (mounted) showToast(context, '첫 갈피를 꽂았어요.', action: '보기', onAction: () => AppNav.instance.goBookmarks(id));
+    } catch (e) {
+      _riseWant = null;
+      if (mounted) appAlert(context, '갈피를 꽂지 못했어요', errorText(e));
+    }
+  }
+
+  /// 갈피 올리기: 갈피를 꽂은 책. 새로 구운 줄에 그 책 갈피가 들어오면(_run) 바탕 그림에서 그 탭만 빼고(_riseId) 위 겹이 책 속에서 올린다
+  ({String id, DateTime at})? _riseWant;
+  String? _riseId;
+  late final AnimationController _rise = AnimationController(vsync: this, duration: const Duration(milliseconds: 650))
+    ..addStatusListener((s) {
+      if (s == AnimationStatus.completed && mounted) setState(() => _riseId = null);
+    });
+  late final Animation<double> _riseCurve = CurvedAnimation(parent: _rise, curve: Curves.easeOutCubic);
+
+  /// 새 줄 목록에 그 책의 갈피(빛 값까지)가 있다
+  bool _hasRibbon(List<RowCase> rows, String id) => rows.any((r) {
+        final k = r.books.indexWhere((b) => b.id == id);
+        return k >= 0 && k < r.looks.length && r.looks[k].ribbons > 0 && r.tabLoss[id] != null;
+      });
 
   /// 선반 판 띠(화면 y): 안내 글이 가리지 않게 피한다. 판 앞면과 바로 아래 그늘까지
   List<({double top, double bottom})> _plankBands() {
@@ -1631,7 +1715,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         _rowSigs.length != p.rows.length) {
       return null;
     }
-    final changed = [for (var i = 0; i < _rowSigs.length; i++) if (_rowSigs[i] != _frozenSigs[i]) i];
+    // 갈피 올리기로 뺐던(또는 뺄) 탭이 있는 줄도 다시 그린다
+    bool hid(RowCase r) => f.hideRibbon != p.hideRibbon && r.books.any((b) => b.id == f.hideRibbon || b.id == p.hideRibbon);
+    final changed = [for (var i = 0; i < _rowSigs.length; i++) if (_rowSigs[i] != _frozenSigs[i] || hid(p.rows[i])) i];
     return changed.length * 2 > _rowSigs.length ? null : changed;
   }
 
@@ -1735,6 +1821,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       painter.bottomInset,
       painter.viewport,
       painter.frostedFrom,
+      painter.hideRibbon,
       w,
       h,
     );
@@ -2002,7 +2089,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       _libBooks = lib.books;
       _state = '${_runs.length}번째';
       _busy = false;
+      // 갈피 올리기: 꽂은 갈피가 이번 줄에 들어왔으면 바탕에서 그 탭만 빼고 위 겹이 올린다(동작 줄이기면 그냥 제자리에 보인다)
+      final want = _riseWant;
+      if (want != null && DateTime.now().difference(want.at) < const Duration(seconds: 15) && _hasRibbon(c.rows, want.id)) {
+        _riseWant = null;
+        if (!_reduceMotion) {
+          _riseId = want.id;
+          _rise.value = 0;
+        }
+      }
     });
+    // 새 바탕 그림이 한 번 그려지고(그 프레임은 무겁다) 윤곽 빛 넘기기가 끝난 뒤 올린다
+    if (_riseId != null && !_rise.isAnimating) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => Timer(const Duration(milliseconds: 350), () {
+            if (mounted && _riseId != null && !_rise.isAnimating) _rise.forward(from: 0);
+          }));
+    }
     // 새 그림이 나왔으니 미리 보기는 걷는다(미리 보는 줄은 지난 그림의 자리를 쓰고 있었다). 끄는 중이면 다음 손가락 움직임에 다시 만든다
     _dragTarget = null;
     _dropCache.clear();
@@ -2109,6 +2211,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     LibraryModel.instance.removeListener(_libraryChanged);
     Onboarding.instance.removeListener(_onbChanged);
     _coachTimer?.cancel();
+    _markTimer?.cancel();
+    _rise.dispose();
     _coachCover.dispose();
     _coachSheet.dispose();
     BookcaseStore.instance.removeListener(_bookcasesChanged);
@@ -2181,6 +2285,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                       only: const {0},
                       wallOnly: true,
                     );
+                    final shelf = ShelfPainter(
+                      rows: _moving(_shown?.rows ?? _case!.rows),
+                      atlases: _shown?.atlases ?? _atlases,
+                      rowSpots: _shown?.spots ?? _rowSpots,
+                      spaces: _spaces,
+                      photos: _photos,
+                      bookKeys: _shown?.bookKeys ?? _bookKeys,
+                      keys: _shown?.keys ?? _keys,
+                      contentTop: contentTop,
+                      bottomInset: bottomInset,
+                      viewport: box.maxHeight,
+                      frostedFrom: lockedFrom,
+                      look: '${skinChoice.key}|${spineLooks.key}',
+                      hideRibbon: _riseId,
+                    );
                     return Stack(children: [
                     ClipRect(
                     clipper: _BelowTop(pad.top),
@@ -2203,25 +2322,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                               Positioned.fill(
                                 child: RepaintBoundary(
                                   child: _shelfLayer(
-                                    ShelfPainter(
-                                      rows: _moving(_shown?.rows ?? _case!.rows),
-                                      atlases: _shown?.atlases ?? _atlases,
-                                      rowSpots: _shown?.spots ?? _rowSpots,
-                                      spaces: _spaces,
-                                      photos: _photos,
-                                      bookKeys: _shown?.bookKeys ?? _bookKeys,
-                                      keys: _shown?.keys ?? _keys,
-                                      contentTop: contentTop,
-                                      bottomInset: bottomInset,
-                                      viewport: box.maxHeight,
-                                      frostedFrom: lockedFrom,
-                                      look: '${skinChoice.key}|${spineLooks.key}',
-                                    ),
+                                    shelf,
                                     Size(box.maxWidth, height),
                                     MediaQuery.devicePixelRatioOf(context),
                                   ),
                                 ),
                               ),
+                              // 첫 갈피가 책 속에서 올라온다(바탕 그림은 그 탭을 빼고 그렸다). 다 올라오면 바탕에 다시 넣는다
+                              if (_riseId case final rid?)
+                                Positioned.fill(
+                                  key: const ValueKey('rise'),
+                                  child: IgnorePointer(child: RepaintBoundary(child: CustomPaint(painter: _RisePainter(shelf, rid, _riseCurve)))),
+                                ),
                               // 고른 책 윤곽 빛(지금 앱 SelectGlow): 바깥으로 흰 얇은 선과 좁은 그림자 번짐, 책 면은 덮지 않고 바닥 면 아래로 새지 않는다
                               // 겹쳐 그리는 것은 있다 없다 하므로 키를 단다(없으면 아래 누르기 층이 새로 만들어져 끌던 손가락이 끊긴다)
                               if (_drag == null ? _outlineOf(_decorating ? _editId : _popId) : null case final path?)
@@ -2584,6 +2696,20 @@ class _BelowTop extends CustomClipper<Rect> {
   Rect getClip(Size size) => Rect.fromLTRB(0, top, size.width, size.height);
   @override
   bool shouldReclip(_BelowTop old) => old.top != top;
+}
+
+/// 첫 갈피 올리기 겹: 책장 그림과 같은 자리에 그 책 갈피 탭만 그린다(ShelfPainter.paintRibbon)
+class _RisePainter extends CustomPainter {
+  _RisePainter(this.shelf, this.id, this.rise) : super(repaint: rise);
+  final ShelfPainter shelf;
+  final String id;
+  final Animation<double> rise;
+
+  @override
+  void paint(Canvas canvas, Size size) => shelf.paintRibbon(canvas, size, id, rise.value);
+
+  @override
+  bool shouldRepaint(_RisePainter old) => !identical(old.shelf.rows, shelf.rows) || old.id != id;
 }
 
 class GlowPainter extends CustomPainter {
@@ -3061,7 +3187,11 @@ class ShelfPainter extends CustomPainter {
     this.look = '',
     this.only,
     this.wallOnly = false,
+    this.hideRibbon,
   });
+
+  /// 이 책의 갈피 탭은 그리지 않는다(첫 갈피가 책 위로 올라오는 동안 위 겹이 따로 그린다, paintRibbon)
+  final String? hideRibbon;
 
   /// 이 차례 줄만 그린다(null이면 모두). 끄는 동안 굳힌 그림 위에 바뀐 줄만 덧그릴 때
   final Set<int>? only;
@@ -3099,6 +3229,7 @@ class ShelfPainter extends CustomPainter {
         frostedFrom: frostedFrom,
         look: look,
         only: only,
+        hideRibbon: hideRibbon,
       );
 
   /// base 값으로 그린 바탕 그림과 이 값으로 그린 그림이 다른 곳(그리는 면 px 네모들, rows 줄만 본다).
@@ -3181,6 +3312,7 @@ class ShelfPainter extends CustomPainter {
         frostedFrom: frostedFrom,
         look: look,
         only: rows,
+        hideRibbon: hideRibbon,
       );
 
   /// 스킨·책 옆면(그릴 때 셰이더 값으로 읽는다): 바뀌면 굽기를 기다리지 않고 지난 그림 위에 새 색으로 바로 다시 그린다
@@ -3281,9 +3413,36 @@ class ShelfPainter extends CustomPainter {
         wallAbove: i == 0 ? (contentY + r.top) / m.scale * 1.2 + headDu : 0,
         wallBelow: i == rows.length - 1 ? (y1 - r.top - r.height) / m.scale * 1.2 + headDu : 0,
         wallOnly: wallOnly,
+        hideRibbon: hideRibbon,
       );
       canvas.restore();
       if (contentY + y0 > size.height) break;
+    }
+  }
+
+  /// 갈피 올리기(첫 갈피, 2026-11-27): 그 책의 갈피 탭만 rise(0 → 1)만큼 책 속에서 올려 그린다. 줄 그리기와 같은 자리 · 같은 잘림(윗선반 판 뒤로)
+  void paintRibbon(Canvas canvas, Size size, String id, double rise) {
+    final tab = _tab;
+    if (tab == null) return;
+    final m = makeMetrics(size.width);
+    final cam = Cam(viewPitchMin);
+    final contentY = contentTop;
+    final geo = computeRows(rows.length, m.scale, viewportHeight: (viewport ?? size.height) - contentY, bottomInset: bottomInset, real: math.min(rows.length, frostedFrom));
+    Affine pxOf(RowGeom r) => Affine(m.scale, m.originX + sideMargin * m.scale, contentY + r.baseline);
+    for (var i = 0; i < rows.length && i < geo.length && i < frostedFrom; i++) {
+      final row = rows[i];
+      final k = row.books.indexWhere((b) => b.id == id);
+      if (k < 0) continue;
+      if (k >= row.looks.length) return;
+      final r = geo[i];
+      final (y0, y1) = _band(i, r, m.scale, size.height);
+      canvas.save();
+      final area = Path()..addRect(Rect.fromLTRB(0, contentY + y0, size.width, contentY + y1));
+      final up = i > 0 ? plankOutlinePath((v) => toPx(cam, pxOf(geo[i - 1]), v), m.scale) : null;
+      canvas.clipPath(up == null ? area : Path.combine(PathOperation.difference, area, up));
+      drawRibbons(canvas, tab, cam, pxOf(r), row.env.u, row.books[k], row.looks[k], row.tabLoss[id], rise: rise);
+      canvas.restore();
+      return;
     }
   }
 
@@ -3300,5 +3459,6 @@ class ShelfPainter extends CustomPainter {
       old.frostedFrom != frostedFrom ||
       old.look != look ||
       old.wallOnly != wallOnly ||
+      old.hideRibbon != hideRibbon ||
       !setEquals(old.only, only);
 }

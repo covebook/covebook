@@ -23,7 +23,7 @@ import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../bookmark/book_picker.dart';
 import '../stats/chart_data.dart' show hasPause, timeRange;
-import '../stats/stats_widgets.dart' show LinkedCover, bookAuthor, bookTitle;
+import '../stats/stats_widgets.dart' show LinkedCover, bookAuthor;
 
 /// 일시정지가 있었는지: 통계 기록 줄과 같은 판정(hasPause, 시작~끝이 독서 시간보다 1분 넘게 길면)
 bool _paused(FinishDraft d) => hasPause(Session(id: d.id, startedAt: d.startedAt, endedAt: d.endedAt, durationMs: d.durationMs, createdAt: d.endedAt, updatedAt: d.endedAt));
@@ -130,10 +130,9 @@ class _FinishScreenState extends State<FinishScreen> {
     _savedDraft = draft;
     Ambient.instance.stop();
     final nav = Navigator.of(context);
-    final title = bookTitle(_lib.lib, draft.myBookId);
     _toStart();
     saveDraftAsIs(draft).then((saved) {
-      if (saved && nav.mounted) showToast(nav.context, '${title == null ? '' : '‘$title’ '}${withJosa(formatDurationPrecise(draft.durationMs), '을', '를')} 기록했어요.');
+      if (saved && nav.mounted) showReadSaved(nav, draft);
     }, onError: (Object e) {
       if (nav.mounted) appAlert(nav.context, '저장하지 못했어요', '독서 기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
     });
@@ -431,4 +430,18 @@ Future<void> showSavedDialog(BuildContext context, {required String? bookId, req
       return Opacity(opacity: t, child: Transform.scale(scale: 0.96 + 0.04 * t, child: child));
     },
   );
+}
+
+/// 독서를 끝내고 기록한 뒤 알림(2026-11-27 사용자 '타이머를 끝내면 오늘 12분 읽었어요 아래에 달력에서 보기'): 그날 읽은 시간을 모두 더해 알리고,
+/// 아래 줄 '달력에서 보기'는 통계 탭 캘린더의 그날로(위에 밀어 넣은 화면은 닫는다). 달력은 방금 읽은 시간이 남은 곳이라 사용법 안내가 따로 없다.
+/// 자정을 넘겨 끝냈으면 시작한 날(세션은 시작한 날 칸에 칠해진다)
+void showReadSaved(NavigatorState nav, FinishDraft d) {
+  final day = today(DateTime.parse(d.startedAt).toLocal());
+  final total = LibraryModel.instance.loaded ? todayRead(LibraryModel.instance.lib, day).total : d.durationMs;
+  final when = day == today() ? '오늘' : '${int.parse(day.substring(5, 7))}월 ${int.parse(day.substring(8, 10))}일에';
+  final root = Navigator.of(nav.context, rootNavigator: true);
+  showToast(nav.context, '$when ${formatDurationShort(total)} 읽었어요', action: '달력에서 보기', below: true, onAction: () {
+    root.popUntil((r) => r.isFirst);
+    AppNav.instance.goCalendar(day);
+  });
 }

@@ -1,6 +1,9 @@
-// 첫 책 꽂기 안내(온보딩, 2026-11-27 사용자): 빈 책장에서 '첫 책 꽂기'로 책 한 권을 골라 책장에 꽂으면 끝난다.
+// 첫 안내(온보딩, 2026-11-27 사용자): 직접 해 보는 것은 두 가지뿐이다.
+// 1) 첫 책 꽂기: 빈 책장에서 '첫 책 꽂기'로 책 한 권을 골라 책장에 꽂는다.
+// 2) 첫 갈피: 꽂은 뒤 선반을 잠깐 그대로 보여 주고, 그 책에 꽂을 예시 한 줄을 누르면 책 위로 갈피가 나온다(직접 쓰기 · 건너뛰기 가능). 여기서 끝.
+// 읽기 기록 · 달력은 안내하지 않는다(첫 독서를 마치면 '오늘 N분 읽었어요 · 달력에서 보기'로 이어진다, reading_screen).
 // 끝나면 기기에 적어 두고 다시 띄우지 않는다(책을 전부 빼거나 앱을 다시 켜도). 이미 책이 있는 서재(기존 사용자 · 동기화로 받은 서재)는 처음부터 끝낸 것으로 친다.
-// 꽂은 첫 책은 읽기 탭 첫 안내('방금 꽂은 책으로 읽기 시작')에 쓴다. 읽기 탭 안내도 한 번 보면 다시 띄우지 않는다
+// 갈피 차례에서 앱을 껐으면 다음에 책장을 열 때 그 차례를 한 번 더 보인다(닫거나 건너뛰면 끝)
 library;
 
 import 'package:flutter/foundation.dart';
@@ -11,22 +14,21 @@ class Onboarding extends ChangeNotifier {
   Onboarding._();
   static final instance = Onboarding._();
 
-  /// 'active'(안내 중) · 'done'(끝). 없으면 아직 정하지 않았다(처음 켬 · 이 안내가 생기기 전 사용자)
+  /// 'active'(첫 책 꽂기) · 'mark'(첫 갈피) · 'done'(끝). 없으면 아직 정하지 않았다(처음 켬 · 이 안내가 생기기 전 사용자)
   static const _key = 'onboarding:first-book';
   static const _bookKey = 'onboarding:first-book-id';
-  static const _readKey = 'onboarding:read-guide';
 
   bool loaded = false;
-  bool _active = false;
+  String _stage = 'done';
 
-  /// 안내로 꽂은 첫 책(읽기 탭 첫 안내가 권한다)
+  /// 안내로 꽂은 첫 책(첫 갈피를 꽂을 책)
   String? firstBookId;
 
-  /// 읽기 탭 첫 안내를 보았다
-  bool readGuideSeen = false;
-
   /// 빈 책장 첫 책 안내 중('첫 책 꽂기' 단추 · 표지 강조)
-  bool get active => loaded && _active;
+  bool get active => loaded && _stage == 'active';
+
+  /// 첫 갈피 차례면 그 책
+  String? get markBook => loaded && _stage == 'mark' ? firstBookId : null;
 
   Future<void>? _loading;
 
@@ -34,42 +36,40 @@ class Onboarding extends ChangeNotifier {
   Future<void> load({required bool anyBooks}) => _loading ??= () async {
         final v = await KvStore.get(_key);
         firstBookId = await KvStore.get(_bookKey);
-        readGuideSeen = await KvStore.get(_readKey) == 'seen';
         if (v == null) {
-          _active = !anyBooks;
-          await KvStore.set(_key, _active ? 'active' : 'done');
+          _stage = anyBooks ? 'done' : 'active';
+          await KvStore.set(_key, _stage);
         } else {
-          _active = v == 'active';
+          _stage = v == 'mark' && firstBookId == null ? 'done' : v;
         }
         loaded = true;
         notifyListeners();
       }();
 
-  /// 책장에 첫 책이 놓였다: 안내를 끝내고 적어 둔다. [bookId]는 안내로 꽂은 책(읽기 탭 첫 안내가 권한다, 없으면 읽기 탭 안내도 없다)
+  /// 책장에 첫 책이 놓였다: 첫 책 차례를 끝낸다. [bookId]는 안내로 꽂은 책(첫 갈피 차례로 넘어간다, 없으면 다른 길로 책이 생긴 것이라 안내를 끝낸다)
   void finish([String? bookId]) {
     if (!active) return;
-    _active = false;
+    _stage = bookId == null ? 'done' : 'mark';
     firstBookId = bookId;
-    KvStore.set(_key, 'done').ignore();
+    KvStore.set(_key, _stage).ignore();
     if (bookId != null) KvStore.set(_bookKey, bookId).ignore();
     notifyListeners();
   }
 
-  /// 읽기 탭 첫 안내를 보고 다른 탭으로 갔다(또는 읽기를 시작했다)
-  void markReadGuideSeen() {
-    if (readGuideSeen) return;
-    readGuideSeen = true;
-    KvStore.set(_readKey, 'seen').ignore();
+  /// 첫 갈피 차례가 끝났다(꽂았거나 · 직접 쓰러 갔거나 · 건너뛰었거나 · 그 책이 없어졌다): 안내 끝
+  void finishMark() {
+    if (_stage != 'mark') return;
+    _stage = 'done';
+    KvStore.set(_key, 'done').ignore();
     notifyListeners();
   }
 
   /// 시험: 정해 둔 상태에서 시작한다(기기에는 쓰지 않는다)
   @visibleForTesting
-  void reset({bool loaded = true, bool active = false, String? firstBookId, bool readGuideSeen = false}) {
+  void reset({bool loaded = true, bool active = false, String? firstBookId, bool mark = false}) {
     this.loaded = loaded;
-    _active = active;
+    _stage = active ? 'active' : mark ? 'mark' : 'done';
     this.firstBookId = firstBookId;
-    this.readGuideSeen = readGuideSeen;
     _loading = loaded ? Future.value() : null;
     notifyListeners();
   }

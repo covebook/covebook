@@ -3,9 +3,7 @@
 // 다른 날이면 그날 독서 기록 줄(통계 캘린더 그날 기록과 같은 줄). 줄을 누르면 그 책으로 타이머가 시작되고 분위기 장면으로 넘어간다.
 // 줄을 길게 누르면 메뉴(책 정보 · 독서 기록 · 목록에서 빼기). 장면에서 뒤로 나오면 이 목록이다(타이머는 계속 돈다).
 // 다른 책을 재는 중에 다른 책을 누르면 묻는다(앞 책 시간이 설명 없이 새 책으로 옮겨 가지 않게).
-// 아래 '+ 책 추가'는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다.
-// 첫 책 꽂기 안내로 책을 꽂고 이 탭을 처음 열면(아직 읽은 기록 · 읽기 목록이 없을 때) 그 책을 큰 카드로 두고 '방금 꽂은 책으로 읽기를 시작해 보세요' 한 줄(2026-11-27 사용자).
-// 한 번 보고 다른 탭으로 가면 다시 띄우지 않는다
+// 아래 '+ 책 추가'는 여러 권을 골라 목록에 더하기만 한다(시작은 줄을 눌러서). 추가해 둔 책은 기기에 남고 메뉴에서 뺀다
 library;
 
 import 'dart:math' as math;
@@ -18,7 +16,6 @@ import '../../domain/reading.dart';
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../store/mini_timer_store.dart' show MiniTimerPlace;
-import '../../store/onboarding_store.dart';
 import '../../store/settings_store.dart';
 import '../../ui/feedback.dart';
 import '../../ui/kit.dart';
@@ -69,7 +66,7 @@ class _ReadListState extends State<ReadList> {
   @override
   void initState() {
     super.initState();
-    for (final n in [_lib, _reading, _settings, Onboarding.instance]) {
+    for (final n in [_lib, _reading, _settings]) {
       n.addListener(_changed);
     }
     AppNav.instance.addListener(_navHandoff);
@@ -81,7 +78,7 @@ class _ReadListState extends State<ReadList> {
 
   @override
   void dispose() {
-    for (final n in [_lib, _reading, _settings, Onboarding.instance]) {
+    for (final n in [_lib, _reading, _settings]) {
       n.removeListener(_changed);
     }
     AppNav.instance.removeListener(_navHandoff);
@@ -94,22 +91,8 @@ class _ReadListState extends State<ReadList> {
   void _tabChanged() {
     final tab = MiniTimerPlace.instance.tab;
     if (tab == _lastTab) return;
-    final leaving = _lastTab == '/read';
     _lastTab = tab;
-    // 첫 안내를 이 탭에서 보았으면 다른 탭으로 갈 때 본 것으로 적는다
-    if (leaving && _lib.loaded && _guideBook(_lib.lib, _ids(), _reading.active) != null) Onboarding.instance.markReadGuideSeen();
     if (tab != '/read' && _day != null && mounted) setState(() => _day = null);
-  }
-
-  /// 오늘 읽기 목록(화면과 같은 규칙)
-  List<String> _ids() => readListIds(_lib.lib, day: today(), activeId: _reading.active?.myBookId, focusId: _focusId, added: _settings.readList);
-
-  /// 읽기 탭 첫 안내로 권할 책: 첫 책 꽂기로 꽂은 책. 아직 안 보았고, 읽은 기록 · 재는 독서 · 읽기 목록이 없을 때만
-  String? _guideBook(Library lib, List<String> ids, Active? active) {
-    final ob = Onboarding.instance, id = ob.firstBookId;
-    if (!ob.loaded || ob.readGuideSeen || id == null || active != null || ids.isNotEmpty || lib.sessions.isNotEmpty) return null;
-    final b = lib.books[id];
-    return b == null || b.hiddenAt != null ? null : id;
   }
 
   void _changed() {
@@ -364,14 +347,10 @@ class _ReadListState extends State<ReadList> {
       if (picked.isNotEmpty) _addToList(picked);
     }
 
-    // 최근 읽던 책: 재는 책 → 오늘·최근에 읽은 책 → 목록 첫 책. 첫 안내면 방금 꽂은 책
-    final guide = _guideBook(lib, ids, active);
+    // 최근 읽던 책: 재는 책 → 오늘·최근에 읽은 책 → 목록 첫 책
     String? featured;
     var hasFeatured = false;
-    if (guide != null) {
-      featured = guide;
-      hasFeatured = true;
-    } else if (active != null) {
+    if (active != null) {
       featured = active.myBookId;
       hasFeatured = true;
     } else {
@@ -419,8 +398,6 @@ class _ReadListState extends State<ReadList> {
               onPress: () => openFinish(context, root: true),
             ),
           ),
-        // 첫 안내 한 줄(카드 위): 카드 단추가 '읽기 시작'
-        if (guide != null) Padding(padding: const EdgeInsets.only(top: Space.l), child: WordText('방금 꽂은 책으로 읽기를 시작해 보세요', style: AppType.secondary)),
         if (hasFeatured) ..._featured(lib, t, featured),
         // 내 읽기 목록. 더하기는 목록 아래 '+ 책 추가' 줄 하나(읽을 책·다 읽은 책이나 책 없이 읽기를 여러 개 골라 더한다).
         // 제목 오른쪽 +는 2026-11-25 뺐다 되살렸다가 2026-11-26 사용자 '내 읽기 목록 옆에 있는 + 지워줘'로 다시 뺐다
@@ -438,8 +415,7 @@ class _ReadListState extends State<ReadList> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final id in rest) _row(lib, t, id), if (restNoBook) _row(lib, t, null)]),
           ),
         // 첫 사용(목록이 빔)에는 두지 않는다: 아래 안내 단추와 같은 일이라 헷갈렸다(2026-11-20 사용자 '+랑 책 추가랑 무슨 차이야')
-        // 첫 안내 카드가 있으면 빈 목록 안내 단추 대신 '+ 책 추가'(주요 단추가 둘이 되지 않게)
-        if (hasRows || guide != null)
+        if (hasRows)
           _addRow(openPicker)
         else
           // 첫 사용(2026-11-17 시안: 안내 한 줄 + 단추). 단추 이름은 하는 일대로: 읽기 목록에 고르기는 '읽기 목록에 추가'
