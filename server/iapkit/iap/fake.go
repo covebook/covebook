@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,9 @@ type Fake struct {
 	RestUntil  time.Time           // 이 시각 전에는 모든 스토어 호출이 한도 초과(RateLimitError)로 실패한다(429 흉내)
 	Calls      int                 // 스토어 API를 부른 횟수(쉬는 중에 부르지 않는지 보는 시험용)
 	Delay      time.Duration       // 조회·확인이 이만큼 걸린다(느린 스토어 흉내). ctx가 먼저 끝나면 그 오류로 실패한다
+	Limit429   time.Duration       // 값이 있으면 다음 호출이 429를 맞고 그때부터 이만큼 쉰다(처리 도중 한도에 걸리는 경우 흉내)
+
+	mu sync.Mutex // 위 한도 흉내 칸(RestUntil, Calls, Limit429)을 동시 요청에서 지킨다. 시험 코드는 스토어를 부르지 않는 동안에만 직접 읽고 쓴다
 }
 
 // slow는 Delay만큼 기다린다. 진짜 클라이언트처럼 ctx의 마감을 지킨다.
@@ -38,12 +42,23 @@ func (f *Fake) slow(ctx context.Context) error {
 }
 
 // RestingUntil은 한도 초과 흉내가 언제까지인지 준다(Rester).
-func (f *Fake) RestingUntil() time.Time { return f.RestUntil }
+func (f *Fake) RestingUntil() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.RestUntil
+}
 
 // limited는 한도 초과 흉내 중이면 오류를 준다. 아니면 호출 횟수를 센다.
 func (f *Fake) limited() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if time.Now().Before(f.RestUntil) {
 		return &RateLimitError{Route: f.R, Until: f.RestUntil}
+	}
+	if f.Limit429 > 0 {
+		f.Calls++
+		f.RestUntil, f.Limit429 = time.Now().Add(f.Limit429), 0
+		return &RateLimitError{Route: f.R, Until: f.RestUntil, Err: fmt.Errorf("fake: 429")}
 	}
 	f.Calls++
 	return nil

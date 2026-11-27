@@ -751,6 +751,11 @@ func (s *Kit) iapRefundOverCap(ctx context.Context, store iap.Store, key, orderI
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
 	err := rf.Refund(refundCtx, orderID)
+	if iap.IsRateLimit(err) {
+		// 한도에 걸린 것은 이 거래의 실패가 아니다. 시도 횟수와 대기 간격을 쓰지 않고 쉬는 시간이 끝나면 다시 한다
+		log.Printf("iap over cap refund deferred (store rate limited): route=%s", route)
+		return false
+	}
 	if err != nil {
 		log.Printf("iap over cap refund failed (will retry): route=%s err=%v", route, err)
 	}
@@ -837,6 +842,10 @@ func (s *Kit) iapRefundPurchase(ctx context.Context, store iap.Store, key, order
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
 	err := rf.Refund(refundCtx, orderID)
+	if iap.IsRateLimit(err) {
+		log.Printf("iap refund deferred (store rate limited): route=%s", route)
+		return false
+	}
 	if err != nil {
 		log.Printf("iap refund failed (will retry): route=%s err=%v", route, err)
 	}

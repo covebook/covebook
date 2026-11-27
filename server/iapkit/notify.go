@@ -275,9 +275,9 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 					consume = p.Consume
 				}
 			}
-			storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
-			e := store.Confirm(storeCtx, ref, u.ProductID, consume)
-			cancel()
+			// 시작한 확인은 단계 마감과 상관없이 끝까지 한다(iapConfirmAfter). 구글에는 적용됐는데 응답 전에 끊기면
+			// 원장에는 미확인으로 남아 이미 소비한 구매에 다시 소비를 요청하게 된다
+			e := iapConfirmAfter(ctx, store, ref, u.ProductID, consume)
 			if e != nil {
 				log.Printf("iap confirm retry failed: route=%s product=%s err=%v", u.Route, u.ProductID, e)
 				return
@@ -318,6 +318,10 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 			res.Cut++
 			break
 		}
+		if result == "failed" && resting(n.Route) {
+			// 처리 도중 스토어가 한도에 걸렸다. 이 알림의 실패가 아니니 시도 횟수를 쓰지 않는다
+			continue
+		}
 		if result == "failed" {
 			res.NoticesFailed++
 			log.Printf("iap notification failed (will retry): route=%s id=%s err=%s", n.Route, n.ID, note)
@@ -349,6 +353,9 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 		if over(ctx) {
 			break
 		}
+		if resting(o.Route) {
+			continue // 앞 건에서 한도에 걸렸다. 남은 건은 시도 횟수를 쓰지 않고 다음에 한다
+		}
 		iapSafely("over cap refund", func() {
 			store := s.IAP[o.Route]
 			if _, ok := store.(iap.Refunder); !ok {
@@ -360,6 +367,9 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 			cancel()
 			if e != nil {
 				log.Printf("iap over cap refund retry: lookup failed route=%s err=%v", o.Route, e)
+				if iap.IsRateLimit(e) || ctx.Err() != nil {
+					return // 한도·단계 마감은 이 거래의 실패가 아니다
+				}
 				keep(iapNoteRefundAttempt(ctx, s.DB, o.Route, o.Key, false))
 				return
 			}
@@ -373,6 +383,9 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 	for _, o := range ungranted {
 		if over(ctx) {
 			break
+		}
+		if resting(o.Route) {
+			continue
 		}
 		iapSafely("ungranted refund", func() {
 			store := s.IAP[o.Route]

@@ -75,11 +75,17 @@ func (l *limiter) note(route Route, err error) error {
 	return &RateLimitError{Route: route, Until: at, Err: err}
 }
 
-// isRateLimit은 note가 한도 초과로 감쌌는지 본다.
-func isRateLimit(err error) bool {
+// IsRateLimit은 스토어가 한도에 걸렸거나 쉬는 중이라 실패한 것인지 본다.
+// 이런 실패는 그 건의 잘못이 아니라서, 부르는 쪽은 시도 횟수를 쓰지 않는다.
+func IsRateLimit(err error) bool {
 	var rl *RateLimitError
 	return errors.As(err, &rl)
 }
+
+func isRateLimit(err error) bool { return IsRateLimit(err) }
+
+// googleLimitReasons는 구글 API가 403으로 주는 한도 초과 사유다(일부 API는 429 대신 403을 쓴다)
+var googleLimitReasons = map[string]bool{"rateLimitExceeded": true, "userRateLimitExceeded": true, "quotaExceeded": true}
 
 func (l *limiter) restingUntil() time.Time {
 	l.mu.Lock()
@@ -89,7 +95,7 @@ func (l *limiter) restingUntil() time.Time {
 
 // rateLimitedUntil은 오류가 한도 초과인지 보고, 그렇다면 다시 부를 시각을 준다.
 //   - 애플: 오류 코드 4290000. 본문이 없는 429도 있다(라이브러리의 StatusCode)
-//   - 구글: HTTP 429. Retry-After 헤더(초)가 있으면 쓴다
+//   - 구글: HTTP 429. Retry-After 헤더(초)가 있으면 쓴다. 403에 한도 사유(rateLimitExceeded 등)가 붙은 것도 같다
 func rateLimitedUntil(err error, now time.Time) (time.Time, bool) {
 	var ae *api.Error
 	if errors.As(err, &ae) && ae.ErrorCode() == 4290000 {
@@ -99,6 +105,13 @@ func rateLimitedUntil(err error, now time.Time) (time.Time, bool) {
 	if errors.As(err, &ge) && ge.Code == http.StatusTooManyRequests {
 		v, _ := strconv.ParseInt(ge.Header.Get("Retry-After"), 10, 64)
 		return retryAt(v, now), true
+	}
+	if ge != nil && ge.Code == http.StatusForbidden {
+		for _, item := range ge.Errors {
+			if googleLimitReasons[item.Reason] {
+				return retryAt(0, now), true
+			}
+		}
 	}
 	var withStatus interface{ StatusCode() int }
 	if errors.As(err, &withStatus) && withStatus.StatusCode() == http.StatusTooManyRequests {

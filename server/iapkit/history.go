@@ -183,6 +183,7 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 				inserted, err := iapRecordNotification(ctx, s.DB, p.Notice, p.Payload)
 				if err != nil {
 					log.Printf("iap notification history save failed: route=%s err=%v", route, err)
+					s.iapCatchUpFailed(route, now) // 받은 목록을 다 넣지 못했다. 6시간을 기다리지 않고 곧 다시
 					break
 				}
 				if !inserted {
@@ -210,6 +211,12 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 					}
 				})
 			}
+		}
+		if ctx.Err() != nil {
+			// 단계 마감에 끊겼다. 받은 목록을 다 반영했는지 모르니 이번 차례를 쓰지 않은 것으로 하고 곧 다시 한다
+			s.iapCatchUpFailed(route, now)
+			res.Cut++
+			break
 		}
 	}
 	if res.Backfilled > 0 || res.Voided > 0 {

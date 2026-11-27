@@ -49,6 +49,8 @@ func TestRateLimitedUntil(t *testing.T) {
 		{"구글 429 + Retry-After", &googleapi.Error{Code: 429, Header: h}, true, 45 * time.Second},
 		{"구글 429만", &googleapi.Error{Code: 429}, true, time.Minute},
 		{"구글 503", &googleapi.Error{Code: 503}, false, 0},
+		{"구글 403 한도 사유", &googleapi.Error{Code: 403, Errors: []googleapi.ErrorItem{{Reason: "quotaExceeded"}}}, true, time.Minute},
+		{"구글 403 권한", &googleapi.Error{Code: 403, Errors: []googleapi.ErrorItem{{Reason: "forbidden"}}}, false, 0},
 		{"애플 다른 오류", api.TransactionIdNotFoundError, false, 0},
 		{"통신 오류", errors.New("timeout"), false, 0},
 	}
