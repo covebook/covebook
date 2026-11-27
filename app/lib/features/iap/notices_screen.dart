@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../services/iap.dart' show IapNotice, IapNoticesUnavailable, fetchIapNotices, markIapNoticesRead;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'notice.dart';
@@ -36,7 +37,12 @@ class _NoticesScreenState extends State<NoticesScreen> {
 
   Future<void> _load() async {
     setState(() => _failed = false);
-    final list = await fetchIapNotices();
+    List<IapNotice>? list;
+    try {
+      list = await fetchIapNotices();
+    } on IapNoticesUnavailable {
+      list = null; // 통신 오류: 다시 시도를 보인다
+    }
     if (!mounted) return;
     setState(() {
       _items = list;

@@ -1,7 +1,7 @@
 // 연 구독 갱신 전 기기 알림(ADR-0003 L9, 고지 문구 T4).
 // 서버도 같은 때 알림함에 '갱신 예정' 고지를 쌓는다(renewal_upcoming). 이쪽은 앱을 열지 않아도 닿게 하는 보조다(L8: 기준은 알림함).
 // - 대상: 연 구독, 이용 중, 자동 갱신 켜짐, 결제 실패 유예가 아님. 월 구독은 보내지 않는다(L9)
-// - 때: 다음 결제일 14일 전(L12 한국 기본값, 서버 IAP_RENEWAL_NOTICE_DAYS 기본값과 같다) 그날 오전 10시(기기 시각)
+// - 때: 다음 결제일 14일 전(L12 한국 기본값, 서버 IAP_RENEWAL_NOTICE_DAYS 기본값과 같다) 그날 오전 10시(기기 시각). 시각 계산은 결제 키트 renewalReminderAt
 // - 앱이 상태를 받을 때마다 다시 건다. 조건이 깨지면(해지, 만료, 월로 바꿈) 지운다. 같은 번호라 겹치지 않는다
 // - 권한은 연 구독 결제를 마친 뒤 한 번만 묻는다. 거절해도 알림함에는 남는다
 library;
@@ -12,23 +12,12 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../db/kv_store.dart';
 import '../store/entitlement_store.dart';
+import 'iap.dart' show renewalReminderAt;
 
-/// 갱신 며칠 전에 알리나
-const renewalNoticeDays = 14;
+export 'iap.dart' show renewalReminderAt;
+
 const _id = 41001;
 const _askedKey = 'renewal-perm-asked:v1';
-
-/// 알림을 걸 시각. 걸지 않아야 하면 null(대상이 아니거나 이미 지났다)
-DateTime? renewalReminderAt(IapSubscription? sub, DateTime now) {
-  if (sub == null || !sub.active || !sub.autoRenew || sub.period != 'year') return null;
-  final grace = sub.graceUntil;
-  if (grace != null && grace.isAfter(sub.expiresAt)) return null;
-  final day = sub.expiresAt.toLocal().subtract(const Duration(days: renewalNoticeDays));
-  final at = DateTime(day.year, day.month, day.day, 10);
-  // 결제일까지 하루도 안 남았으면 알려도 해지할 틈이 없다
-  if (!at.isAfter(now) || sub.expiresAt.difference(at) < const Duration(days: 1)) return null;
-  return at;
-}
 
 /// 알림 글(T4). price는 스토어가 준 현지 가격, 모르면 금액 줄을 뺀다
 (String, String) renewalReminderText(IapSubscription sub, {String? price}) {

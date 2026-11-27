@@ -7,10 +7,13 @@ import 'package:iap_kit/iap_kit.dart';
 
 import '../db/kv_store.dart';
 import '../store/entitlement_store.dart';
-import 'sync.dart' show ApiError, api, syncTokenKey;
+import 'sync.dart' show ApiError, api, syncBase, syncTokenKey;
 
 // 결제 흐름 쪽 이름을 내보낸다. 결제 상태(EntitlementStore 등)는 store/entitlement_store.dart가 내보낸다
-export 'package:iap_kit/iap_kit.dart' show IapKit, IapPlan, IapResult, IapService, iapPeriodOf, iapPlanOf, iapRoute, iapShouldFinish;
+export 'package:iap_kit/iap_kit.dart'
+    show IapKit, IapPlan, IapResult, IapService, iapPeriodOf, iapPlanOf, iapRoute, iapShouldFinish,
+        // 고지·구매 내역·갱신 알림 시각(글과 화면은 features/iap)
+        IapHistoryItem, IapNotice, IapNoticesUnavailable, fetchIapNotices, fetchIapPurchases, iapNoticeToShow, iapRenewalNoticeDays, markIapNoticesRead, renewalReminderAt;
 
 /// 책장 한켠이 바꾼 키트 문구(나머지는 키트 기본 문구). 서버가 문구를 주는 오류는 서버 규칙(covebookIAPRules.Messages)에 있다
 const covebookIapMessages = <String, String>{
@@ -23,7 +26,8 @@ void configureIap() {
     enabled: iapOn,
     api: (method, path, [body]) async {
       final token = await KvStore.get(syncTokenKey);
-      if (token == null) throw StateError('로그인하지 않았어요');
+      // 서버가 없는 빌드도 로그인하지 않은 것으로 친다(알림함은 기기 기준으로 알린다)
+      if (token == null || syncBase.isEmpty) throw const IapSignedOut();
       try {
         return await api(method, path, token, body);
       } on ApiError catch (e) {
