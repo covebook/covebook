@@ -15,7 +15,8 @@ type Rules struct {
 	ValidTarget func(string) bool
 	// Cap은 대상 하나에서 돈을 내고 살 수 있는 수량의 최대다. 0이면 상한이 없다(예약·넘김 환불을 하지 않는다)
 	Cap int
-	// Hold는 결제 중 예약이 상한을 잡고 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다
+	// Hold는 결제 중 예약이 상한을 잡고 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다. 0이면 5분이다
+	// (0을 그대로 쓰면 예약이 만들어지자마자 끝나 두 기기가 동시에 사는 것을 막지 못한다)
 	Hold time.Duration
 	// Keep은 결제 의도(어느 대상에 얼마를 사려 했는지)를 기억하는 시간이다. 0이면 8일이다.
 	// 알림만으로 대상을 찾으려면 스토어가 알림을 다시 보내는 기간보다 길어야 한다
@@ -25,6 +26,17 @@ type Rules struct {
 	Keep time.Duration
 	// Messages는 오류 코드별 사용자 문구다. 없는 코드는 DefaultMessages를 쓴다(앱 언어·말투에 맞춰 바꾼다)
 	Messages map[string]string
+}
+
+// iapHoldDefault는 Rules.Hold가 0일 때 쓰는 예약 시간이다.
+const iapHoldDefault = 5 * time.Minute
+
+// hold는 결제 중 예약 시간이다.
+func (r Rules) hold() time.Duration {
+	if r.Hold <= 0 {
+		return iapHoldDefault
+	}
+	return r.Hold
 }
 
 // iapTargetMax는 대상 값의 최대 길이다(DB CHECK와 같다).
@@ -50,8 +62,8 @@ func (r Rules) keep() time.Duration {
 	if k <= 0 {
 		k = iapKeepDefault
 	}
-	if k < r.Hold {
-		k = r.Hold
+	if h := r.hold(); k < h {
+		k = h
 	}
 	return k
 }

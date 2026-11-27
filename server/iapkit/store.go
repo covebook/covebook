@@ -248,7 +248,8 @@ func iapTransactionKey(kind iap.Kind, p iap.Purchase) string {
 
 // iapRevokePurchase는 환불·취소를 원장에 남긴다. 줄을 지우지 않는다. 바뀐 줄이 있으면 true다.
 // 같은 SQL 문에서 환불 고지(T9)도 쓴다: 상태만 바뀌고 고지가 빠지는 일이 없게 한다(주인이 있는 줄만).
-// 한 번 사는 상품은 거래마다, 구독은 구독 1건마다 한 번 알린다. 상한을 넘게 산 거래(over_cap)는 알리지 않는다.
+// 한 번 사는 상품도 구독도 환불된 거래마다 한 번 알린다(구독은 3월분, 5월분이 따로 환불될 수 있다).
+// 구독 상태 쪽(iapNoteSubscriptionChange)이 하루 안에 같은 구독의 환불을 이미 알렸으면 쓰지 않는다. 상한을 넘게 산 거래(over_cap)는 알리지 않는다.
 // 대상을 몰라 주지 않은 거래는 opened=false를 붙인다. 주인 없는 줄(결제한 계정이 탈퇴)은 받을 사람이 없어 알리지 않는다.
 func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transactionID string, at time.Time) (bool, error) {
 	var changed int
@@ -268,10 +269,13 @@ func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transaction
 					'revokedAt', to_char(r.revoked_at AT TIME ZONE 'UTC', `+iapStampSQL+`))),
 				r.env,
 				CASE WHEN r.kind='product' THEN 'product_refunded:' || $1::text || ':' || r.transaction_id
-					ELSE 'subscription_refunded:' || $1::text || ':' || r.original_id END
+					ELSE 'subscription_refunded:' || $1::text || ':' || r.original_id || ':' || r.transaction_id END
 			FROM r LEFT JOIN iap_products p ON p.route=$1 AND p.product_id=r.product_id
 			-- 상한을 넘게 사서 주지 않은 거래는 환불돼도 알리지 않는다(넘김 고지로 이미 알렸고 거둘 것이 없다)
 			WHERE r.user_id IS NOT NULL AND NOT (r.kind='product' AND r.over_cap)
+				AND NOT (r.kind='subscription' AND EXISTS(SELECT 1 FROM iap_notices x WHERE x.user_id=r.user_id
+					AND starts_with(x.dedupe_key, 'subscription_refunded:' || $1::text || ':' || r.original_id || ':')
+					AND x.created_at > now() - interval '1 day'))
 			ON CONFLICT (user_id, dedupe_key) DO NOTHING
 		) SELECT count(*)::int FROM r`, string(route), transactionID, at).Scan(&changed)
 	return changed == 1, err

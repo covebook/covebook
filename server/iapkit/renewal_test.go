@@ -136,6 +136,10 @@ func TestIAPRenewalNotice(t *testing.T) {
 			t.Fatalf("%s: period %v, 기대 %q", cases[i].name, got["period"], want)
 		}
 	}
+	// 주기를 모르는 요금제는 고지가 조용히 빠지므로 운영 통계에 보인다
+	if b, err := iapBacklogNow(ctx, db); err != nil || b.NoPlan < 1 {
+		t.Fatalf("noPlan=%d err=%v", b.NoPlan, err)
+	}
 }
 
 func TestIAPRenewalSchedule(t *testing.T) {
