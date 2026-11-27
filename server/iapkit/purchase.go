@@ -153,7 +153,7 @@ func (s *Kit) iapMe(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (s *Kit) iapIntent(w http.ResponseWriter, r *http.Request) error {
 		return iapTooMany
 	}
 	ctx := r.Context()
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return err
 	}
@@ -477,7 +477,7 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// 4. 짧은 트랜잭션: 주인 확인 → 원장 → 커밋.
-	tx, err := s.DB.Begin(ctx)
+	tx, err := iapBegin(ctx, s.DB)
 	if err != nil {
 		return err
 	}
@@ -745,9 +745,17 @@ func (s *Kit) iapRefundOverCap(ctx context.Context, store iap.Store, key, orderI
 		}
 		return false
 	}
+	// 여기부터는 부른 쪽의 마감(요청 끊김, 대조 단계 마감)과 상관없이 끝까지 한다. 스토어는 환불했는데
+	// 기록이 끊기면 다음 바퀴가 같은 주문을 또 환불하려 한다. 스토어 호출은 아래에서 따로 15초를 둔다
+	ctx = context.WithoutCancel(ctx)
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
 	err := rf.Refund(refundCtx, orderID)
+	if iap.IsRateLimit(err) {
+		// 한도에 걸린 것은 이 거래의 실패가 아니다. 시도 횟수와 대기 간격을 쓰지 않고 쉬는 시간이 끝나면 다시 한다
+		log.Printf("iap over cap refund deferred (store rate limited): route=%s", route)
+		return false
+	}
 	if err != nil {
 		log.Printf("iap over cap refund failed (will retry): route=%s err=%v", route, err)
 	}
@@ -828,9 +836,16 @@ func (s *Kit) iapRefundPurchase(ctx context.Context, store iap.Store, key, order
 		}
 		return false
 	}
+	// 여기부터는 부른 쪽의 마감(요청 끊김, 대조 단계 마감)과 상관없이 끝까지 한다. 스토어는 환불했는데
+	// 기록이 끊기면 다음 바퀴가 같은 주문을 또 환불하려 한다. 스토어 호출은 아래에서 따로 15초를 둔다
+	ctx = context.WithoutCancel(ctx)
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
 	err := rf.Refund(refundCtx, orderID)
+	if iap.IsRateLimit(err) {
+		log.Printf("iap refund deferred (store rate limited): route=%s", route)
+		return false
+	}
 	if err != nil {
 		log.Printf("iap refund failed (will retry): route=%s err=%v", route, err)
 	}

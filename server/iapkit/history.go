@@ -123,6 +123,25 @@ func (s *Kit) iapCatchUpDue(route iap.Route, now time.Time) bool {
 	return true
 }
 
+// iapCatchUpWouldRun은 차례를 쓰지 않고 이번에 메울 차례인지만 본다.
+func (s *Kit) iapCatchUpWouldRun(route iap.Route, now time.Time) bool {
+	s.iapMu.Lock()
+	defer s.iapMu.Unlock()
+	last, ok := s.iapCatchUpAt[route]
+	return !ok || now.Sub(last) >= iapCatchUpEvery
+}
+
+// iapListResting은 목록 조회가 한도에 걸려 쉬는 중인지 본다. 목록 한도를 따로 세지 않는 스토어는 전체 쉬기를 본다
+func iapListResting(store iap.Store, now time.Time) bool {
+	if r, ok := store.(iap.ListRester); ok {
+		return now.Before(r.ListRestingUntil())
+	}
+	if r, ok := store.(iap.Rester); ok {
+		return now.Before(r.RestingUntil())
+	}
+	return false
+}
+
 // iapCatchUpFailed는 이번 메우기가 실패했다고 적는다. iapCatchUpRetry 뒤에 다시 차례가 온다
 func (s *Kit) iapCatchUpFailed(route iap.Route, now time.Time) {
 	s.iapMu.Lock()
@@ -158,7 +177,15 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 	for route, store := range s.IAP {
 		history, hasHistory := store.(iap.NoticeHistory)
 		voided, hasVoided := store.(iap.VoidedLister)
-		if (!hasHistory && !hasVoided) || !s.iapCatchUpDue(route, now) {
+		if (!hasHistory && !hasVoided) || !s.iapCatchUpWouldRun(route, now) {
+			continue
+		}
+		if iapListResting(store, now) {
+			// 목록 조회가 한도에 걸려 쉬는 중. 차례를 쓰지 않았으니 쉬기가 끝난 다음 바퀴에 바로 돈다
+			res.Resting++
+			continue
+		}
+		if !s.iapCatchUpDue(route, now) {
 			continue
 		}
 		since := iapCatchUpSince(ctx, s.DB, route, now)
@@ -178,6 +205,7 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 				inserted, err := iapRecordNotification(ctx, s.DB, p.Notice, p.Payload)
 				if err != nil {
 					log.Printf("iap notification history save failed: route=%s err=%v", route, err)
+					s.iapCatchUpFailed(route, now) // 받은 목록을 다 넣지 못했다. 6시간을 기다리지 않고 곧 다시
 					break
 				}
 				if !inserted {
@@ -205,6 +233,12 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 					}
 				})
 			}
+		}
+		if ctx.Err() != nil {
+			// 단계 마감에 끊겼다. 받은 목록을 다 반영했는지 모르니 이번 차례를 쓰지 않은 것으로 하고 곧 다시 한다
+			s.iapCatchUpFailed(route, now)
+			res.Cut++
+			break
 		}
 	}
 	if res.Backfilled > 0 || res.Voided > 0 {
@@ -303,8 +337,8 @@ func (s *Kit) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	if skip {
 		return
 	}
-	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds over_cap=%d over_cap_apple=%d no_target=%d no_plan=%d",
-		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals, res.Refunds,
+	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d resting=%d cut=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds over_cap=%d over_cap_apple=%d no_target=%d no_plan=%d",
+		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals, res.Refunds, res.Resting, res.Cut,
 		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestUnconfirmedSecs, b.OldestPendingSecs, b.OverCap, b.OverCapApple, b.NoTarget, b.NoPlan)
 }
 

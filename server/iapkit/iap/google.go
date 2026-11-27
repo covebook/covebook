@@ -38,6 +38,22 @@ const googleOrderTimeout = 3 * time.Second
 type Google struct {
 	api         googleAPI
 	packageName string
+	lim         limiter // 한도(429)에 걸리면 Retry-After까지 부르지 않는다. 구매 조회·확인·환불용
+	listLim     limiter // 무효 구매 목록용. 따로 센다(ListRester)
+}
+
+// RestingUntil은 한도에 걸려 언제까지 쉬는지 준다(Rester).
+func (g *Google) RestingUntil() time.Time { return g.lim.restingUntil() }
+
+// ListRestingUntil은 무효 구매 목록 조회가 언제까지 쉬는지 준다(ListRester).
+func (g *Google) ListRestingUntil() time.Time { return g.listLim.restingUntil() }
+
+// fail은 스토어 오류를 한도 초과면 RateLimitError로, 아니면 googleErr로 바꾼다.
+func (g *Google) fail(err error) error {
+	if rl := g.lim.note(RouteGoogle, err); isRateLimit(rl) {
+		return rl
+	}
+	return googleErr(err)
 }
 
 // NewGoogle은 서비스 계정 키(JSON)로 클라이언트를 만든다.
@@ -84,7 +100,13 @@ func (g *Google) Refund(ctx context.Context, orderID string) error {
 	if orderID == "" {
 		return errors.New("google: 주문 ID가 없는 구매는 환불할 수 없다")
 	}
+	if err := g.lim.check(RouteGoogle); err != nil {
+		return err
+	}
 	if err := g.api.Refund(ctx, g.packageName, orderID); err != nil {
+		if rl := g.lim.note(RouteGoogle, err); isRateLimit(rl) {
+			return rl
+		}
 		return fmt.Errorf("google 환불 %s: %w", orderID, err)
 	}
 	return nil
@@ -102,11 +124,14 @@ func (g *Google) Verify(kind Kind, proof string) (Ref, error) {
 
 // Lookup은 구매 토큰으로 묻는다. 구독과 한 번 사는 상품은 조회 주소가 달라 ref.Kind로 가른다.
 func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
+	if err := g.lim.check(RouteGoogle); err != nil {
+		return Purchase{}, err
+	}
 	switch ref.Kind {
 	case KindSubscription:
 		s, err := g.api.VerifySubscriptionV2(ctx, g.packageName, ref.ID)
 		if err != nil {
-			return Purchase{}, googleErr(err)
+			return Purchase{}, g.fail(err)
 		}
 		p, err := g.fromSubscription(ref.ID, s)
 		if err == nil {
@@ -116,7 +141,7 @@ func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
 	case KindProduct:
 		r, err := g.api.VerifyProductV2(ctx, g.packageName, ref.ID)
 		if err != nil {
-			return Purchase{}, googleErr(err)
+			return Purchase{}, g.fail(err)
 		}
 		p, err := g.fromProduct(ref.ID, r)
 		if err == nil {
@@ -139,6 +164,7 @@ func (g *Google) fillPrice(ctx context.Context, p *Purchase) {
 	defer cancel()
 	o, err := g.api.GetOrder(ctx, g.packageName, p.TransactionID)
 	if err != nil {
+		// 한도(429)여도 쉬기를 적지 않는다. 금액은 없어도 되는 값이고, 주문 API의 한도로 구매 확인까지 멈추면 안 된다
 		log.Printf("google order price unavailable: product=%s err=%v", p.ProductID, err)
 		return
 	}
@@ -304,6 +330,9 @@ func (g *Google) Subscription(ctx context.Context, originalID string) (Purchase,
 // Confirm은 구글에 지급을 마쳤다고 알린다. 3일 안에 하지 않으면 구글이 자동으로 환불한다.
 // 이미 확인한 구매에 다시 불러도 되도록 부르는 쪽이 재시도한다. 결제 대기 구매에는 부르지 않는다.
 func (g *Google) Confirm(ctx context.Context, ref Ref, productID string, consume bool) error {
+	if err := g.lim.check(RouteGoogle); err != nil {
+		return err
+	}
 	var err error
 	switch {
 	case ref.Kind == KindSubscription && !consume:
@@ -316,6 +345,9 @@ func (g *Google) Confirm(ctx context.Context, ref Ref, productID string, consume
 		return fmt.Errorf("google 확인: 종류 %q, 소비 %v는 맞지 않는 조합", ref.Kind, consume)
 	}
 	if err != nil {
+		if rl := g.lim.note(RouteGoogle, err); isRateLimit(rl) {
+			return rl
+		}
 		return fmt.Errorf("google 확인 %s: %w", productID, scrubURL(err))
 	}
 	return nil

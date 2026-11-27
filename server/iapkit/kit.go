@@ -121,6 +121,10 @@ func fail(w http.ResponseWriter, err error) {
 			ae = bad
 		case errors.Is(err, pgx.ErrNoRows):
 			ae = notFound
+		case iapDBBusy(err):
+			// 잠금을 기다리다 끊김(iapBegin의 제한 시간). 5xx라 앱은 거래를 끝내지 않고 다시 낸다
+			log.Printf("iap request busy: %v", err)
+			ae = apiError{503, "iap_busy", "잠시 뒤 다시 시도해 주세요"}
 		default:
 			log.Printf("iap request failed: %v", err)
 			ae = apiError{500, "internal_error", "서버 오류가 발생했어요"}
