@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // notify는 스토어 알림을 보낸다. 가짜 스토어는 본문을 iap.Notice의 JSON으로 읽는다.
@@ -119,7 +119,7 @@ func TestIAPNotifyReceive(t *testing.T) {
 		t.Fatalf("맞는 인증 %d", code)
 	}
 	// 인증 설정이 없는 서버는 구글 알림 경로를 열지 않는다
-	srv := New(e.db)
+	srv := iapTestKit(e.db)
 	srv.IAP = map[iap.Route]iap.Store{iap.RouteGoogle: e.google}
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/iap/notifications/google", bytes.NewReader([]byte("{}"))))
@@ -135,7 +135,7 @@ func TestIAPNotifyRenewalAndOrder(t *testing.T) {
 	orig, txn1 := iapTestID(t, "orig"), iapTestID(t, "txn1")
 	first := time.Now().Add(time.Hour)
 	e.apple.Purchases[txn1] = e.subscription(orig, txn1, account, first)
-	if code, body := e.submit(token, "apple", e.plus, txn1, false); code != 200 || body["plus"] != true {
+	if code, body := e.submit(token, "apple", e.plus, txn1, false); code != 200 || !plusIn(body) {
 		t.Fatalf("구독 제출: %d %v", code, body)
 	}
 	// 스토어에서 갱신됨: 새 거래와 새 만료일
@@ -193,8 +193,8 @@ func TestIAPNotifyKeepsOwnerAfterTransfer(t *testing.T) {
 	}
 	e.notify("apple", subNotice(iapTestID(t, "n"), txn, orig), "")
 	e.sweep()
-	if e.me(a)["plus"] != false || e.me(b)["plus"] != true {
-		t.Fatalf("알림 뒤 주인이 바뀜: a=%v b=%v", e.me(a)["plus"], e.me(b)["plus"])
+	if plusIn(e.me(a)) || !plusIn(e.me(b)) {
+		t.Fatalf("알림 뒤 주인이 바뀜: a=%v b=%v", plusIn(e.me(a)), plusIn(e.me(b)))
 	}
 }
 
@@ -222,10 +222,10 @@ func TestIAPNotifyBeforeSubmit(t *testing.T) {
 	e.notify("google", iap.Notice{ID: orphanNote, Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: orphan}}, "Bearer pubsub")
 	e.sweep()
 	body := e.me(token)
-	if body["plus"] != true || shelvesIn(body, 2026) != 2 {
+	if !plusIn(body) || shelvesIn(body, 2026) != 2 {
 		t.Fatalf("알림만으로 지급: %v", body)
 	}
-	if _, note, _ := e.noticeResult("google", shelfNote); !strings.Contains(note, "2026년") {
+	if _, note, _ := e.noticeResult("google", shelfNote); !strings.Contains(note, `대상 "2026"`) {
 		t.Fatalf("선반 알림 처리 기록에 연도가 없음: %q", note)
 	}
 	confirmed := map[string]bool{}
@@ -267,17 +267,17 @@ func TestIAPNotifyRefund(t *testing.T) {
 	e.notify("google", iap.Notice{ID: iapTestID(t, "r1"), Type: "voided/2", Voided: true, OrderID: "GPA.x", Target: &iap.Ref{Kind: iap.KindProduct, ID: tok}}, "Bearer pubsub")
 	e.sweep()
 	if shelvesIn(e.me(token), 2026) != 0 || state("google", tok) != "revoked" {
-		t.Fatalf("구글 환불 뒤 선반 %v, 원장 %s", e.me(token)["shelvesByYear"], state("google", tok))
+		t.Fatalf("구글 환불 뒤 선반 %v, 원장 %s", e.me(token)["unitsByTarget"], state("google", tok))
 	}
 	// 그 뒤 같은 구매의 다른 알림이 와도(조회는 계속 "결제됨") 환불 표시가 되살아나지 않는다
 	e.notify("google", iap.Notice{ID: iapTestID(t, "r1b"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: tok}}, "Bearer pubsub")
 	e.sweep()
 	if shelvesIn(e.me(token), 2026) != 0 || state("google", tok) != "revoked" {
-		t.Fatalf("환불 표시가 되살아남: 선반 %v, 원장 %s", e.me(token)["shelvesByYear"], state("google", tok))
+		t.Fatalf("환불 표시가 되살아남: 선반 %v, 원장 %s", e.me(token)["unitsByTarget"], state("google", tok))
 	}
 	// 스토어가 그 토큰을 더는 모른다고 답해도 환불은 반영된다
 	gone := iapTestID(t, "gone")
-	e.google.Purchases[gone] = e.shelfPurchase(gone, shelfAccount)
+	e.google.Purchases[gone] = e.shelfPurchase(gone, e.shelfToken(token, 2026))
 	e.submit(token, "google", e.shelf, gone, false)
 	delete(e.google.Purchases, gone)
 	e.notify("google", iap.Notice{ID: iapTestID(t, "r1c"), Type: "voided/2", Voided: true, Target: &iap.Ref{Kind: iap.KindProduct, ID: gone}}, "Bearer pubsub")
@@ -303,12 +303,12 @@ func TestIAPNotifyRefund(t *testing.T) {
 	}
 	e.sweep()
 	if res, _, _ := e.noticeResult("google", earlyID); res != "processed" || state("google", early) != "revoked" || shelvesIn(e.me(token), 2027) != 0 {
-		t.Fatalf("제출 뒤 재시도에서 회수되지 않음: %s, 원장 %s, 선반 %v", res, state("google", early), e.me(token)["shelvesByYear"])
+		t.Fatalf("제출 뒤 재시도에서 회수되지 않음: %s, 원장 %s, 선반 %v", res, state("google", early), e.me(token)["unitsByTarget"])
 	}
 
 	// 애플 선반 환불과 환불 되돌림: 애플은 거래마다 환불 여부를 알려 준다
 	txn := iapTestID(t, "atxn")
-	a := e.shelfPurchase(txn, shelfAccount)
+	a := e.shelfPurchase(txn, e.shelfToken(token, 2026))
 	a.Route, a.TransactionID, a.Acknowledged = iap.RouteApple, txn, true
 	e.apple.Purchases[txn] = a
 	e.submit(token, "apple", e.shelf, txn, false)
@@ -317,14 +317,14 @@ func TestIAPNotifyRefund(t *testing.T) {
 	e.notify("apple", iap.Notice{ID: iapTestID(t, "r2"), Type: "REFUND", Target: &iap.Ref{Kind: iap.KindProduct, ID: txn}}, "")
 	e.sweep()
 	if shelvesIn(e.me(token), 2026) != 0 || state("apple", txn) != "revoked" {
-		t.Fatalf("애플 환불 뒤 선반 %v", e.me(token)["shelvesByYear"])
+		t.Fatalf("애플 환불 뒤 선반 %v", e.me(token)["unitsByTarget"])
 	}
 	a.State = iap.StatePaid
 	e.apple.Purchases[txn] = a
 	e.notify("apple", iap.Notice{ID: iapTestID(t, "r3"), Type: "REFUND_REVERSED", Target: &iap.Ref{Kind: iap.KindProduct, ID: txn}}, "")
 	e.sweep()
 	if shelvesIn(e.me(token), 2026) != 2 || state("apple", txn) != "paid" {
-		t.Fatalf("애플 환불 되돌림 뒤 선반 %v", e.me(token)["shelvesByYear"])
+		t.Fatalf("애플 환불 되돌림 뒤 선반 %v", e.me(token)["unitsByTarget"])
 	}
 
 	// 구독 환불: 구독 상태가 환불로 바뀌어 권한이 없어진다
@@ -336,7 +336,7 @@ func TestIAPNotifyRefund(t *testing.T) {
 	e.apple.Purchases[stxn] = sp
 	e.notify("apple", iap.Notice{ID: iapTestID(t, "r4"), Type: "REFUND", Target: &iap.Ref{Kind: iap.KindSubscription, ID: stxn}, OriginalID: orig}, "")
 	e.sweep()
-	if e.me(token)["plus"] != false {
+	if plusIn(e.me(token)) {
 		t.Fatal("환불된 구독에 권한이 남음")
 	}
 	// 구글 구독 갱신 거래의 환불은 주문 ID로 원장 줄을 찾는다. 그 뒤 다른 알림이 와도 표시가 남는다
@@ -381,7 +381,7 @@ func TestIAPNotifyRetry(t *testing.T) {
 	if result, _, attempts := e.noticeResult("apple", id); result != "processed" || attempts != 2 {
 		t.Fatalf("다시 시도 뒤: %s %d", result, attempts)
 	}
-	if e.me(token)["plus"] != true {
+	if !plusIn(e.me(token)) {
 		t.Fatal("다시 시도로 지급되지 않음")
 	}
 }
@@ -425,10 +425,10 @@ func TestIAPSweepConfirmAndRefresh(t *testing.T) {
 		}
 	}
 	old()
-	if plus := e.me(token)["plus"]; plus != false {
+	if plus := plusIn(e.me(token)); plus {
 		t.Fatalf("만료됐는데 권한: %v", plus)
 	}
-	if e.sweep(); e.me(token)["plus"] != true {
+	if e.sweep(); !plusIn(e.me(token)) {
 		t.Fatal("만료 뒤 재확인으로 갱신이 반영되지 않음")
 	}
 	// 방금 확인한 구독은 다시 묻지 않는다: 스토어 값을 바꿔도 다음 대조에서 그대로다
@@ -479,7 +479,7 @@ func TestIAPGoogleLinkedToken(t *testing.T) {
 	if oldState != "inactive" || newState != "paid" || owners != 1 {
 		t.Fatalf("옛 줄기 %s, 새 줄기 %s, 주인 수 %d", oldState, newState, owners)
 	}
-	if e.me(token)["plus"] != true {
+	if !plusIn(e.me(token)) {
 		t.Fatal("요금제 변경 뒤 권한이 없음")
 	}
 }
@@ -556,7 +556,7 @@ func TestIAPSubmitAndNoticeRace(t *testing.T) {
 		}()
 		code, body := e.submit(b, "apple", e.plus, txn, true)
 		<-done
-		if code != 200 || body["plus"] != true {
+		if code != 200 || !plusIn(body) {
 			t.Fatalf("%d번째: 복원 제출 %d %v", round, code, body)
 		}
 		var owner int64
@@ -579,7 +579,7 @@ func TestIAPSubmitAndNoticeRace(t *testing.T) {
 func TestIAPNotifyOverCap(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
-	_, res := e.call("POST", "/iap/shelf-token", token, map[string]any{"year": 2026, "shelves": 2})
+	_, res := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2026), "units": 2})
 	y := res["token"].(string)
 
 	first, second := iapTestID(t, "t1"), iapTestID(t, "t2")
@@ -588,17 +588,18 @@ func TestIAPNotifyOverCap(t *testing.T) {
 	e.notify("google", iap.Notice{ID: iapTestID(t, "n1"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: first}}, "Bearer pubsub")
 	e.sweep()
 	var held int
-	if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_shelf_reservations WHERE user_id=$1", user).Scan(&held); err != nil || held != 0 {
+	if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_reservations WHERE user_id=$1", user).Scan(&held); err != nil || held != 0 {
 		t.Fatalf("알림으로 지급하면 예약이 풀려야 함: %d %v", held, err)
 	}
-	// 두 번째(예약을 지나친 구매)는 환불 요청이 실패한다
+	// 두 번째(예약이 끝난 뒤 다시 남긴 의도로 산 구매)는 환불 요청이 실패한다
+	e.shelfToken(token, 2026)
 	e.google.RefundErr = errors.New("구글 장애")
 	n2 := iapTestID(t, "n2")
 	e.notify("google", iap.Notice{ID: n2, Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: second}}, "Bearer pubsub")
 	if r := e.sweep(); r.Refunds != 0 {
 		t.Fatalf("장애 중 환불: %+v", r)
 	}
-	if _, note, _ := e.noticeResult("google", n2); !strings.Contains(note, "3칸 넘음") {
+	if _, note, _ := e.noticeResult("google", n2); !strings.Contains(note, "상한 넘음") {
 		t.Fatalf("처리 기록: %q", note)
 	}
 	if body := e.me(token); shelvesIn(body, 2026) != 2 {
@@ -645,7 +646,7 @@ func TestIAPSweepSkipsShelfWithoutYear(t *testing.T) {
 	tok := iapTestID(t, "tok")
 	// 연도별 값이 아닌 계정 연결 값으로 결제했고 예약도 없다: 서버는 어느 해 책장인지 모른다
 	e.google.Purchases[tok] = e.shelfPurchase(tok, e.accountToken(token))
-	if code, body := e.submit(token, "google", e.shelf, tok, false); code != 422 || errCode(body) != "iap_shelf_year_missing" {
+	if code, body := e.submit(token, "google", e.shelf, tok, false); code != 422 || errCode(body) != "iap_target_missing" {
 		t.Fatalf("연도 모르는 선반 제출: %d %v", code, body)
 	}
 	if _, err := e.db.Exec(e.ctx, "UPDATE iap_purchases SET created_at=now()-interval '5 minutes' WHERE transaction_id=$1", tok); err != nil {
@@ -727,6 +728,20 @@ func TestIAPSweepRefundsShelfWithoutYear(t *testing.T) {
 	e.sweep()
 	if len(e.google.Refunded) != before {
 		t.Fatalf("환불을 두 번 요청함: %v", e.google.Refunded)
+	}
+	// 구글이 환불을 처리하면(voided) 환불 고지(T9)가 남는다. 칸을 연 적이 없으니 opened=false
+	if _, err := iapRevokePurchase(e.ctx, e.db, iap.RouteGoogle, old.OriginalTransactionID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, n := range e.notices(token) {
+		params, _ := n["params"].(map[string]any)
+		if n["kind"] == "product_refunded" && params["opened"] == false {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("칸을 열지 않은 선반의 환불 고지에 opened=false가 없음: %v", e.notices(token))
 	}
 }
 
@@ -812,5 +827,34 @@ func TestIAPRefundNoOrderIDGivesUp(t *testing.T) {
 	}
 	if att != iapRefundMaxAttempts || len(rows) != 0 {
 		t.Fatalf("주문 ID 없는 넘은 거래: 시도 %d, 다음 바퀴에 다시 뽑힘 %d건", att, len(rows))
+	}
+}
+
+// 두 기기에서 다른 해를 동시에 사려는 중에 한쪽 알림이 먼저 오면, 서버는 어느 해인지 추측하지 않는다.
+// 넣지도 소비하지도 않고 기다렸다가, 앱이 의도 번호를 붙여 내면 그 해에 넣는다(알림이 정한 대상은 뒤에 바꿀 수 없어서)
+func TestIAPNotifyAmbiguousIntentWaitsForApp(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	_, tablet := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2026)})
+	_, phone := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2027)})
+	if tablet["reservation"] == nil || phone["reservation"] == nil {
+		t.Fatalf("의도: %v %v", tablet, phone)
+	}
+	id := iapTestID(t, "tablet")
+	e.google.Purchases[id] = e.shelfPurchase(id, tablet["token"].(string))
+	e.notify("google", iap.Notice{ID: iapTestID(t, "n"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: id}}, "Bearer pubsub")
+	e.sweep()
+	body := e.me(token)
+	if shelvesIn(body, 2026) != 0 || shelvesIn(body, 2027) != 0 {
+		t.Fatalf("알림만으로 추측해 넣음: %v", body)
+	}
+	for _, c := range e.google.Confirmed {
+		if c == id {
+			t.Fatal("대상을 모르는데 소비함")
+		}
+	}
+	code, out := e.call("POST", "/iap/purchases", token, map[string]any{"route": "google", "productId": e.shelf, "proof": id, "reservation": tablet["reservation"]})
+	if code != 200 || shelvesIn(out, 2026) != 2 || shelvesIn(out, 2027) != 0 {
+		t.Fatalf("번호를 붙여 내면 2026년: %d %v", code, out)
 	}
 }
