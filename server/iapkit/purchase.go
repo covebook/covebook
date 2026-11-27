@@ -105,12 +105,12 @@ func (s *Kit) routeIAP(m *http.ServeMux) {
 	}
 	m.HandleFunc("GET /iap/me", wrap(s.iapMe))
 	m.HandleFunc("POST /iap/purchases", wrap(s.iapSubmit))
-	m.HandleFunc("POST /iap/target-token", wrap(s.iapTargetTokenFor))
+	m.HandleFunc("POST /iap/intent", wrap(s.iapIntent))
 	m.HandleFunc("GET /iap/purchases", wrap(s.iapPurchases))
 	m.HandleFunc("GET /iap/notices", wrap(s.iapNotices))
 	m.HandleFunc("POST /iap/notices/read", wrap(s.iapNoticesRead))
 	m.HandleFunc("GET /admin/iap/stats", wrap(s.iapAdminStats))
-	m.HandleFunc("POST /iap/target-token/release", wrap(s.iapRelease))
+	m.HandleFunc("POST /iap/intent/release", wrap(s.iapRelease))
 }
 
 var (
@@ -216,21 +216,24 @@ func (s *Kit) iapStatus(ctx context.Context, user int64) (map[string]any, error)
 	return map[string]any{"entitlements": entitlements, "unitsByTarget": units, "capPerTarget": s.IAPRules.Cap, "subscription": sub}, nil
 }
 
-// iapTargetTokenFor는 한 번 사는 상품을 살 때 스토어에 넘길 계정 연결 값을 준다(D1).
-// 앱은 결제를 시작하기 직전에 이것을 부르고, 받은 값을 애플 appAccountToken·구글 obfuscatedAccountId로 넘긴다.
-// 서버는 거래에 돌아온 이 값으로 어느 대상의 구매인지 찾는다(책장 한켠: 어느 해 책장의 선반인지).
+// iapIntent는 한 번 사는 상품의 결제를 시작하기 직전에 부른다(D1). 결제 의도를 남기고, 스토어에 넘길 계정 연결 값을 준다.
+// 앱은 받은 token을 애플 appAccountToken·구글 obfuscatedAccountId로 넘기고, reservation을 구매 제출에 붙인다.
 //
-// 상한이 있으면(Rules.Cap) 값을 주면서 그 대상에 "결제 중" 예약을 잡는다(Rules.Hold). 두 기기가 동시에 사서 상한을 넘지 않게 막는다.
-// 결제가 끝나면(구매 제출) 서버가 풀고, 취소하면 앱이 POST /iap/target-token/release로 푼다. 앱이 꺼지면 시간이 지나 풀린다.
+// 계정 연결 값은 계정마다 하나다(D7, GET /iap/me의 accountToken과 같다). 어느 대상의 구매인지는 값에 싣지 않고
+// 서버가 결제 의도로 찾는다(iapIntentTarget). 애플·구글 모두 이 칸을 계정 식별자로 쓰라고 하기 때문이다(2026-11-27 개정).
+//
+// 결제 의도는 Rules.Keep(기본 8일, 스토어가 알림을 다시 보내는 기간보다 길게) 동안 남아, 결제가 늦게 끝나 스토어 알림이 먼저 와도 대상을 찾는다.
+// 상한이 있으면(Rules.Cap) Rules.Hold 동안 그 수량을 잡아 두 기기가 동시에 사서 상한을 넘지 않게 막는다.
+// 결제가 끝나면(구매 제출, 알림) 서버가 지우고, 취소하면 앱이 POST /iap/intent/release로 지운다.
 //
 // 요청: {"target":"2026", "units":1}  target은 대상(대상이 없는 앱은 비운다), units는 살 상품의 수량(1칸, 3칸 묶음). 없으면 1
 // 응답 200: {"token":"uuid", "target":"2026", "units":n, "reservation":"uuid", "expiresAt":"..."}  units는 그 대상에서 이미 산 수량.
 //
-//	상한이 없으면 reservation·expiresAt이 없다
+//	대상도 상한도 없는 앱은 reservation·expiresAt이 없다(찾을 것도 잡을 것도 없다). expiresAt은 상한을 잡는 시각이다
 //
 // 응답 409 iap_cap_full: 그 대상의 상한을 다 샀거나 남은 수량보다 많다. 결제를 시작하지 않는다
 // 응답 409 iap_target_busy: 다른 기기가 그 대상을 결제하는 중이다. "retryAfter"(초) 뒤 다시 시도한다
-func (s *Kit) iapTargetTokenFor(w http.ResponseWriter, r *http.Request) error {
+func (s *Kit) iapIntent(w http.ResponseWriter, r *http.Request) error {
 	user, err := s.user(w, r)
 	if err != nil {
 		return err
@@ -269,14 +272,14 @@ func (s *Kit) iapTargetTokenFor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	out := map[string]any{"target": target, "units": paid}
-	if rules.Cap > 0 {
-		if paid >= rules.Cap {
-			return s.iapCapFull()
-		}
-		if paid+body.Units > rules.Cap {
-			return s.iapCapTooMany()
-		}
-		res, wait, err := iapReserve(ctx, tx, user, target, body.Units, paid, rules.Cap, rules.hold())
+	if rules.Cap > 0 && paid >= rules.Cap {
+		return s.iapCapFull()
+	}
+	if rules.Cap > 0 && paid+body.Units > rules.Cap {
+		return s.iapCapTooMany()
+	}
+	if rules.Cap > 0 || target != "" {
+		res, wait, err := iapReserve(ctx, tx, user, target, body.Units, paid, rules.Cap, rules.hold(), rules.keep())
 		if err != nil {
 			return err
 		}
@@ -291,7 +294,7 @@ func (s *Kit) iapTargetTokenFor(w http.ResponseWriter, r *http.Request) error {
 		}
 		out["reservation"], out["expiresAt"] = res.ID, res.ExpiresAt.UTC().Format(time.RFC3339)
 	}
-	if out["token"], err = iapTargetToken(ctx, tx, user, target); err != nil {
+	if out["token"], err = iapAccountToken(ctx, tx, user); err != nil {
 		return err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -301,8 +304,9 @@ func (s *Kit) iapTargetTokenFor(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// iapRelease는 결제 중 예약을 푼다. 앱이 결제를 취소했거나 실패했을 때 부른다.
-// 요청: {"reservation":"uuid"}. 없거나 남의 예약이어도 204다(다시 불러도 같다).
+// iapRelease는 결제 의도를 지운다(예약도 풀린다). 앱이 결제를 취소했거나 실패했을 때 부른다.
+// 결제 대기(구글 현금 결제, 애플 보호자 승인)에는 부르지 않는다. 나중에 끝날 결제의 대상을 찾는 데 쓴다.
+// 요청: {"reservation":"uuid"}. 없거나 남의 것이어도 204다(다시 불러도 같다).
 func (s *Kit) iapRelease(w http.ResponseWriter, r *http.Request) error {
 	user, err := s.user(w, r)
 	if err != nil {
@@ -325,15 +329,14 @@ func (s *Kit) iapRelease(w http.ResponseWriter, r *http.Request) error {
 //
 // 요청: {"route":"apple|google", "productId":"...", "proof":"애플: 스토어가 서명한 거래(JWS). 구글: 구매 토큰", "restore":false, "target":"2026", "reservation":"uuid"}
 //
-// reservation은 POST /iap/target-token이 준 결제 중 예약이다. 처리한 뒤 푼다. 없으면 그 대상의 가장 오래된 예약 하나를 푼다.
+// reservation은 POST /iap/intent가 준 결제 의도 번호다. 처리한 뒤 지운다.
 //
-// target은 대상이 있는 한 번 사는 상품에만 쓴다(Rules.TargetRequired). 어느 대상의 구매인지는 이 순서로 정한다
-// (POST /iap/target-token이 값과 예약을 함께 준다).
-//  1. reservation: 새로 넣은 거래이고 이 유저의 예약이면 그 대상
-//  2. 거래에 돌아온 계정 연결 값의 대상
+// target은 대상이 있는 한 번 사는 상품에만 쓴다(Rules.TargetRequired). 어느 대상의 구매인지는 이 순서로 정한다(iapIntentTarget).
+//  1. reservation: 이 유저의 결제 의도이고 결제보다 먼저 남긴 것이면 그 대상
+//  2. 결제 전 72시간 안의 결제 의도가 한 대상으로 모이면 그 대상(번호를 잃었거나 다른 계정이 결제한 경우). 갈리면 모름
 //  3. target: 위 둘이 대상을 모를 때(앱 밖에서 산 구매 등)
 //
-// 셋 다 없으면 거래는 기록하고 422 iap_target_missing이다.
+// 이미 대상이 정해진 거래(알림으로 먼저 들어온 것)는 바꾸지 않는다. 셋 다 없으면 거래는 기록하고 422 iap_target_missing이다.
 //
 // proof는 "내가 이 구매를 한 기기"라는 증거다. 애플 거래 ID(숫자)는 받지 않는다. 추측할 수 있어서
 // 남의 구매를 내거나 restore로 남의 구독을 가져갈 수 있기 때문이다. 서명된 거래는 구매한 기기만 가진다.
@@ -367,7 +370,7 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		Proof     string `json:"proof"`
 		Restore   bool   `json:"restore"`
 		Target    string `json:"target"`
-		// 결제 중 예약(POST /iap/target-token). 처리한 뒤 푼다
+		// 결제 의도 번호(POST /iap/intent). 처리한 뒤 지운다
 		Reservation string `json:"reservation"`
 	}
 	if err = decode(r, &body); err != nil {
@@ -619,32 +622,18 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 			}
 			status = "already"
 		}
-		// 어느 대상의 구매인지(D1). 넣을 때 계정 연결 값으로 이미 적었다(대상이 없는 앱은 '').
-		// 앱이 결제 전에 받은 예약이 있으면 그 대상을 먼저 쓴다. 애플이 새 계정 연결 값 대신 처음 값을 돌려준다는 보고가 있어서다
-		// (docs/spec/erd.md 3.7). 예약은 서버가 이 유저에게 준 것이고 상한은 아래 iapSettleCap이 그대로 본다.
-		// 새로 넣은 거래만 바꾼다. 알림으로 먼저 들어와 이미 셈한 거래의 대상은 건드리지 않는다
-		// 예약은 이 결제를 위해 받은 것만 쓴다: 낸 사람의 것, 예약보다 뒤에 끝난 결제.
-		// 앱은 그때 들고 있는 예약 번호를 붙여 내므로, 전에 끝내지 못한 옛 거래가 지금 결제의 예약을 가져가지 않게 한다
-		resTarget, resKnown := "", false
-		if grantee == user && body.Reservation != "" {
-			if resTarget, resKnown, e = iapReservationTarget(ctx, tx, user, body.Reservation, submitted.PurchasedAt); e != nil {
-				return e
-			}
-		}
-		// 예약과 앱이 보낸 대상은 낸 사람의 것이다. 다른 계정(결제한 계정)에 넣는 거래에는 쓰지 않는다(그 계정의 대상은 계정 연결 값으로만 안다)
-		if inserted && resKnown && grantee == user {
-			prev, changed, e := iapPreferTarget(ctx, tx, route, key, resTarget)
-			if e != nil {
-				return e
-			}
-			if changed && prev != "" {
-				log.Printf("iap target from reservation: route=%s user=%d token_target=%s reservation_target=%s", route, user, prev, resTarget)
-			}
-		}
-		// 값도 예약도 대상을 몰랐으면 앱이 보낸 대상으로 채운다
-		askedTarget := body.Target
+		// 어느 대상의 구매인지(D1). 결제 의도에서 찾고, 없으면 앱이 보낸 대상을 쓴다.
+		// 의도 번호와 앱이 보낸 대상은 낸 사람의 것이다. 다른 계정(결제한 계정)에 넣는 거래는 그 계정의 의도만 본다
+		reservation, askedTarget := body.Reservation, body.Target
 		if grantee != user {
-			askedTarget = ""
+			reservation, askedTarget = "", ""
+		}
+		intentID, intentTarget, intentKnown, e := iapIntentTarget(ctx, tx, grantee, reservation, bought.Units, submitted.PurchasedAt)
+		if e != nil {
+			return e
+		}
+		if intentKnown {
+			askedTarget = intentTarget
 		}
 		filled := false
 		if target, known, filled, e = iapSetTarget(ctx, tx, route, key, askedTarget); e != nil {
@@ -666,14 +655,15 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 		}
-		// 결제 중 예약을 푼다. 번호를 모르면 새로 넣은 거래일 때만 그 대상의 가장 오래된 것 하나를 푼다
-		if resKnown {
-			e = iapReleaseReservation(ctx, tx, user, body.Reservation)
-		} else if body.Reservation == "" && inserted && known && grantee == user {
-			e = iapReleaseOldestReservation(ctx, tx, user, target)
-		}
-		if e != nil {
-			return e
+		// 쓴 결제 의도를 지운다
+		//   - 앱이 붙인 번호와 맞은 의도: 이 결제의 것이라 늘 지운다(이미 대상이 정해졌어도)
+		//   - 수량으로 찾은 의도: 이번에 넣었거나 대상을 채운 거래일 때만. 다시 낸 옛 거래가 다른 결제의 의도를 지우지 않게
+		// 앱이 붙인 번호가 맞지 않았으면(결제보다 뒤에 남긴 번호) 지금 진행 중인 다른 결제의 것이라 둔다
+		byNumber := intentKnown && reservation != "" && strings.EqualFold(intentID, reservation)
+		if intentKnown && (byNumber || inserted || filled) {
+			if e = iapReleaseReservation(ctx, tx, grantee, intentID); e != nil {
+				return e
+			}
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {

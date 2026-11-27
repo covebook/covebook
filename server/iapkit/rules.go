@@ -15,9 +15,15 @@ type Rules struct {
 	ValidTarget func(string) bool
 	// Cap은 대상 하나에서 돈을 내고 살 수 있는 수량의 최대다. 0이면 상한이 없다(예약·넘김 환불을 하지 않는다)
 	Cap int
-	// Hold는 결제 중 예약이 살아 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다. 0이면 5분이다
+	// Hold는 결제 중 예약이 상한을 잡고 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다. 0이면 5분이다
 	// (0을 그대로 쓰면 예약이 만들어지자마자 끝나 두 기기가 동시에 사는 것을 막지 못한다)
 	Hold time.Duration
+	// Keep은 결제 의도(어느 대상에 얼마를 사려 했는지)를 기억하는 시간이다. 0이면 8일이다.
+	// 알림만으로 대상을 찾으려면 스토어가 알림을 다시 보내는 기간보다 길어야 한다
+	//   - 애플 v2 알림: 운영 환경에서 1·12·24·48·72시간 간격으로 다섯 번 다시 보낸다(첫 시도부터 약 6.5일)
+	//   - 구글 Pub/Sub 푸시: 받지 못한 메시지를 기본 7일 보관하며 다시 보낸다
+	//   - 결제가 늦게 끝나는 경우: 애플 보호자 승인 24시간, 구글 현금 결제 대기는 최대 48시간이라는 안내
+	Keep time.Duration
 	// Messages는 오류 코드별 사용자 문구다. 없는 코드는 DefaultMessages를 쓴다(앱 언어·말투에 맞춰 바꾼다)
 	Messages map[string]string
 }
@@ -45,6 +51,21 @@ func (r Rules) target(raw string) (string, bool) {
 		return "", false
 	}
 	return raw, true
+}
+
+// iapKeepDefault는 Rules.Keep이 0일 때의 결제 의도 보관 시간이다.
+const iapKeepDefault = 8 * 24 * time.Hour
+
+// keep은 결제 의도를 기억하는 시간이다. 예약(Hold)보다 짧으면 Hold를 쓴다.
+func (r Rules) keep() time.Duration {
+	k := r.Keep
+	if k <= 0 {
+		k = iapKeepDefault
+	}
+	if h := r.hold(); k < h {
+		k = h
+	}
+	return k
 }
 
 // message는 오류 코드의 사용자 문구다.

@@ -277,7 +277,7 @@ func TestIAPNotifyRefund(t *testing.T) {
 	}
 	// 스토어가 그 토큰을 더는 모른다고 답해도 환불은 반영된다
 	gone := iapTestID(t, "gone")
-	e.google.Purchases[gone] = e.shelfPurchase(gone, shelfAccount)
+	e.google.Purchases[gone] = e.shelfPurchase(gone, e.shelfToken(token, 2026))
 	e.submit(token, "google", e.shelf, gone, false)
 	delete(e.google.Purchases, gone)
 	e.notify("google", iap.Notice{ID: iapTestID(t, "r1c"), Type: "voided/2", Voided: true, Target: &iap.Ref{Kind: iap.KindProduct, ID: gone}}, "Bearer pubsub")
@@ -308,7 +308,7 @@ func TestIAPNotifyRefund(t *testing.T) {
 
 	// 애플 선반 환불과 환불 되돌림: 애플은 거래마다 환불 여부를 알려 준다
 	txn := iapTestID(t, "atxn")
-	a := e.shelfPurchase(txn, shelfAccount)
+	a := e.shelfPurchase(txn, e.shelfToken(token, 2026))
 	a.Route, a.TransactionID, a.Acknowledged = iap.RouteApple, txn, true
 	e.apple.Purchases[txn] = a
 	e.submit(token, "apple", e.shelf, txn, false)
@@ -579,7 +579,7 @@ func TestIAPSubmitAndNoticeRace(t *testing.T) {
 func TestIAPNotifyOverCap(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
-	_, res := e.call("POST", "/iap/target-token", token, map[string]any{"target": iapY(2026), "units": 2})
+	_, res := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2026), "units": 2})
 	y := res["token"].(string)
 
 	first, second := iapTestID(t, "t1"), iapTestID(t, "t2")
@@ -591,7 +591,8 @@ func TestIAPNotifyOverCap(t *testing.T) {
 	if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_reservations WHERE user_id=$1", user).Scan(&held); err != nil || held != 0 {
 		t.Fatalf("알림으로 지급하면 예약이 풀려야 함: %d %v", held, err)
 	}
-	// 두 번째(예약을 지나친 구매)는 환불 요청이 실패한다
+	// 두 번째(예약이 끝난 뒤 다시 남긴 의도로 산 구매)는 환불 요청이 실패한다
+	e.shelfToken(token, 2026)
 	e.google.RefundErr = errors.New("구글 장애")
 	n2 := iapTestID(t, "n2")
 	e.notify("google", iap.Notice{ID: n2, Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: second}}, "Bearer pubsub")
@@ -826,5 +827,34 @@ func TestIAPRefundNoOrderIDGivesUp(t *testing.T) {
 	}
 	if att != iapRefundMaxAttempts || len(rows) != 0 {
 		t.Fatalf("주문 ID 없는 넘은 거래: 시도 %d, 다음 바퀴에 다시 뽑힘 %d건", att, len(rows))
+	}
+}
+
+// 두 기기에서 다른 해를 동시에 사려는 중에 한쪽 알림이 먼저 오면, 서버는 어느 해인지 추측하지 않는다.
+// 넣지도 소비하지도 않고 기다렸다가, 앱이 의도 번호를 붙여 내면 그 해에 넣는다(알림이 정한 대상은 뒤에 바꿀 수 없어서)
+func TestIAPNotifyAmbiguousIntentWaitsForApp(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	_, tablet := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2026)})
+	_, phone := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2027)})
+	if tablet["reservation"] == nil || phone["reservation"] == nil {
+		t.Fatalf("의도: %v %v", tablet, phone)
+	}
+	id := iapTestID(t, "tablet")
+	e.google.Purchases[id] = e.shelfPurchase(id, tablet["token"].(string))
+	e.notify("google", iap.Notice{ID: iapTestID(t, "n"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: id}}, "Bearer pubsub")
+	e.sweep()
+	body := e.me(token)
+	if shelvesIn(body, 2026) != 0 || shelvesIn(body, 2027) != 0 {
+		t.Fatalf("알림만으로 추측해 넣음: %v", body)
+	}
+	for _, c := range e.google.Confirmed {
+		if c == id {
+			t.Fatal("대상을 모르는데 소비함")
+		}
+	}
+	code, out := e.call("POST", "/iap/purchases", token, map[string]any{"route": "google", "productId": e.shelf, "proof": id, "reservation": tablet["reservation"]})
+	if code != 200 || shelvesIn(out, 2026) != 2 || shelvesIn(out, 2027) != 0 {
+		t.Fatalf("번호를 붙여 내면 2026년: %d %v", code, out)
 	}
 }

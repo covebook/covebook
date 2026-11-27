@@ -27,49 +27,24 @@ type dbtx interface {
 //   - 결제 전: 결제 중 예약(iap_reservations)으로 두 기기가 동시에 상한을 넘게 사지 못하게 막는다
 //   - 결제 뒤: 그래도 넘은 거래는 over_cap으로 표시해 주지 않고 환불한다. 수량을 셀 때도 상한에서 한 번 더 자른다
 
-// iapAccountToken은 유저의 구독용 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
-// 여러 개면 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
-// 대상이 있는 한 번 사는 상품에는 이 값을 쓰지 않는다. 대상마다 따로 받는다(iapTargetToken).
+// iapAccountToken은 유저의 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
+// 구독이든 한 번 사는 상품이든 같은 값을 쓴다. 대상은 여기에 싣지 않고 결제 의도(iap_reservations)로 찾는다(D1).
+// 여러 개면(대상마다 따로 주던 2026-11-27 전의 값) 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
 func iapAccountToken(ctx context.Context, tx pgx.Tx, user int64) (string, error) {
 	var locked int64
 	if err := tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
 		return "", err
 	}
 	var token string
-	err := tx.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 AND target IS NULL ORDER BY created_at, token LIMIT 1", user).Scan(&token)
+	err := tx.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 ORDER BY created_at, token LIMIT 1", user).Scan(&token)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, "INSERT INTO iap_account_tokens(token, user_id) VALUES($1,$2) RETURNING token::text", uuid.NewString(), user).Scan(&token)
 	}
 	return token, err
 }
 
-// iapTargetToken은 그 대상의 상품을 살 때 스토어에 넘길 계정 연결 값을 돌려준다. 없으면 만든다(D1).
-// 대상 하나에 값 하나다. 두 요청이 동시에 와도 유일 색인 때문에 같은 값을 받는다.
-func iapTargetToken(ctx context.Context, q dbtx, user int64, target string) (string, error) {
-	if _, err := q.Exec(ctx, `INSERT INTO iap_account_tokens(token, user_id, target) VALUES($1,$2,$3)
-		ON CONFLICT (user_id, target) WHERE target IS NOT NULL DO NOTHING`, uuid.NewString(), user, target); err != nil {
-		return "", err
-	}
-	var token string
-	err := q.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 AND target=$2", user, target).Scan(&token)
-	return token, err
-}
-
-// iapTokenTarget은 계정 연결 값이 어느 대상의 것인지 알려 준다. 구독용 값이거나, 없거나, UUID 모양이 아니면 known=false다.
-func iapTokenTarget(ctx context.Context, q dbtx, token string) (target string, known bool, err error) {
-	if !iapIsUUID(token) {
-		return "", false, nil
-	}
-	var got *string
-	err = q.QueryRow(ctx, "SELECT target FROM iap_account_tokens WHERE token=$1::uuid", token).Scan(&got)
-	if errors.Is(err, pgx.ErrNoRows) || got == nil {
-		return "", false, nil
-	}
-	return *got, err == nil, err
-}
-
 // iapSetTarget은 한 번 사는 상품 거래의 대상을 정하고 그 대상을 돌려준다(D1).
-// 넣을 때 계정 연결 값으로 적은 대상이 있으면 그대로 둔다. 없을 때만 asked(앱이 보낸 대상, 빈 값이면 보내지 않음)로 채운다.
+// 이미 정한 대상이 있으면 그대로 둔다. 없을 때만 asked(결제 의도나 앱이 보낸 대상, 빈 값이면 모름)로 채운다.
 // known=false면 끝내 모른다. filled는 이번에 대상을 채웠는지다(그때 결제 완료를 알린다).
 func iapSetTarget(ctx context.Context, q dbtx, route iap.Route, transactionKey, asked string) (got string, known, filled bool, err error) {
 	var now *string
@@ -84,33 +59,6 @@ func iapSetTarget(ctx context.Context, q dbtx, route iap.Route, transactionKey, 
 		return "", false, false, nil
 	}
 	return *now, err == nil, filled, err
-}
-
-// iapReservationTarget은 이 유저의 결제 중 예약이 어느 대상의 것인지 알려 준다.
-// 시간이 지난 예약도 아직 지워지지 않았으면 대상을 준다(결제창에서 오래 머문 경우). 없거나 남의 예약이거나 UUID 모양이 아니면 known=false다.
-func iapReservationTarget(ctx context.Context, q dbtx, user int64, id string, purchasedAt time.Time) (target string, known bool, err error) {
-	// 예약보다 먼저 끝난 결제는 이 예약의 결제가 아니다. 스토어와 우리 시계의 차이를 1분 봐준다
-	err = q.QueryRow(ctx, `SELECT target FROM iap_reservations WHERE user_id=$1 AND id::text=lower($2)
-		AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz + interval '1 minute')`,
-		user, id, iapNullTime(purchasedAt)).Scan(&target)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
-	}
-	return target, err == nil, err
-}
-
-// iapPreferTarget은 거래의 대상을 target으로 바꾼다(결제 중 예약의 대상을 계정 연결 값의 대상보다 먼저 쓸 때).
-// 바뀌었으면 원래 대상(몰랐으면 빈 값)과 true를 돌려준다. 같으면 아무것도 하지 않는다.
-func iapPreferTarget(ctx context.Context, q dbtx, route iap.Route, transactionKey, target string) (prev string, changed bool, err error) {
-	err = q.QueryRow(ctx, `WITH cur AS (
-			SELECT id, target FROM iap_purchases WHERE route=$1 AND transaction_id=$2 AND kind='product')
-		UPDATE iap_purchases b SET target=$3, updated_at=now() FROM cur
-		WHERE b.id=cur.id AND cur.target IS DISTINCT FROM $3 RETURNING coalesce(cur.target,'')`,
-		string(route), transactionKey, target).Scan(&prev)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
-	}
-	return prev, err == nil, err
 }
 
 // iapTargetPaid는 그 대상에서 환불되지 않은 거래가 준 수량의 합이다. 상한을 넘게 산 거래(over_cap)는 세지 않는다.
@@ -246,8 +194,8 @@ func iapFindProduct(ctx context.Context, q dbtx, route iap.Route, productID stri
 // iapRecordPurchase는 거래를 원장에 넣는다. 처음 들어갔으면 true, 이미 있던 거래면 false다.
 // "먼저 조회하고 없으면 넣기"를 하지 않는다. 유일 키에 맡기고 들어간 줄 수로 판단한다(D6).
 // 결제가 끝난 거래만 받는다. user가 0이면 주인 없이(user_id NULL) 넣는다(결제한 계정이 탈퇴한 거래).
-// 한 번 사는 상품은 대상을 함께 적는다
-//   - targeted(앱이 대상을 요구, Rules.TargetRequired): 계정 연결 값으로 대상을 찾는다. 대상용 값이 아니면 NULL(모름)이고 아무 대상에도 주지 않는다
+// 한 번 사는 상품의 대상
+//   - targeted(앱이 대상을 요구, Rules.TargetRequired): NULL(모름). 부르는 쪽이 결제 의도로 찾아 iapSetTarget으로 채운다
 //   - 아니면: 대상 없음(”)
 //   - user가 0이면(주인 없음) 주지 않은 거래라 NULL
 func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, targeted bool) (bool, error) {
@@ -262,8 +210,7 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country,confirmed_at,target)
 		VALUES($1,$2,$3,nullif($4::bigint,0),nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''),CASE WHEN $13 THEN now() END,
 			-- 주인 없이 넣는 거래(결제한 계정이 탈퇴)는 주지 않은 거래라 대상을 비운다(NULL)
-			CASE WHEN $7='product' AND $4::bigint = 0 THEN NULL
-			     WHEN $7='product' AND $14 THEN (SELECT target FROM iap_account_tokens WHERE token=nullif($5,'')::uuid)
+			CASE WHEN $7='product' AND ($4::bigint = 0 OR $14) THEN NULL
 			     WHEN $7='product' THEN '' END)
 		ON CONFLICT (route,transaction_id) DO NOTHING`,
 		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, account, p.ProductID, string(kind), string(p.Env),
@@ -814,14 +761,30 @@ type iapReservation struct {
 	ExpiresAt time.Time
 }
 
-// iapReserve는 그 대상에 units만큼 결제 중 예약을 잡는다. paid는 그 대상에서 이미 산 수량이다.
-// 산 수량 + 살아 있는 예약 수량 + 이번 수량이 cap을 넘으면 잡지 않고, 가장 먼저 끝나는 예약까지 남은 시간(wait)을 준다.
-// 부르는 쪽이 유저 줄을 잠근 트랜잭션 안에서 부른다(두 기기가 동시에 잡지 못하게). 시각은 DB 시계다(D23). cap은 0보다 커야 한다
-func iapReserve(ctx context.Context, tx pgx.Tx, user int64, target string, units, paid, cap int, hold time.Duration) (r iapReservation, wait time.Duration, err error) {
-	// 끝난 예약은 지운다. 남아 있어도 세지 않지만 테이블이 쌓이지 않게
-	if _, err = tx.Exec(ctx, "DELETE FROM iap_reservations WHERE user_id=$1 AND expires_at <= now()", user); err != nil {
+// iapReserve는 결제 의도를 남긴다: 이 유저가 그 대상에 units만큼 사려 한다. paid는 그 대상에서 이미 산 수량이다.
+//   - 결제 의도는 keep 동안 남는다. 결제가 늦게 끝나도 거래와 맞춰 대상을 찾는다(iapIntentTarget)
+//   - cap이 0보다 크면 hold 동안 그 수량을 잡는다(결제 중 예약). 산 수량 + 잡힌 수량 + 이번 수량이 cap을 넘으면
+//     남기지 않고, 가장 먼저 끝나는 예약까지 남은 시간(wait)을 준다
+//
+// 부르는 쪽이 유저 줄을 잠근 트랜잭션 안에서 부른다(두 기기가 동시에 잡지 못하게). 시각은 DB 시계다(D23)
+func iapReserve(ctx context.Context, tx pgx.Tx, user int64, target string, units, paid, cap int, hold, keep time.Duration) (r iapReservation, wait time.Duration, err error) {
+	// 보관 시간이 지난 의도는 지운다. 남아 있어도 쓰지 않지만 테이블이 쌓이지 않게
+	if _, err = tx.Exec(ctx, "DELETE FROM iap_reservations WHERE user_id=$1 AND keep_until <= now()", user); err != nil {
 		return
 	}
+	if cap <= 0 {
+		hold = 0 // 상한이 없으면 잡을 것이 없다. 의도만 남긴다
+	} else if wait, err = iapCheckHold(ctx, tx, user, target, units, paid, cap); err != nil || wait > 0 {
+		return
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO iap_reservations(id, user_id, target, units, expires_at, keep_until)
+		VALUES($1,$2,$3,$4, now() + make_interval(secs => $5), now() + make_interval(secs => $6)) RETURNING id::text, expires_at`,
+		uuid.NewString(), user, target, units, hold.Seconds(), keep.Seconds()).Scan(&r.ID, &r.ExpiresAt)
+	return
+}
+
+// iapCheckHold는 그 대상의 산 수량 + 살아 있는 예약 수량 + units가 cap을 넘는지 본다. 넘으면 가장 먼저 끝나는 예약까지 남은 시간을 준다(1초 이상)
+func iapCheckHold(ctx context.Context, tx pgx.Tx, user int64, target string, units, paid, cap int) (wait time.Duration, err error) {
 	var held int
 	var waitSecs float64
 	if err = tx.QueryRow(ctx, `SELECT coalesce(sum(units),0)::int, coalesce(extract(epoch FROM min(expires_at) - now()),0)::float8
@@ -833,30 +796,84 @@ func iapReserve(ctx context.Context, tx pgx.Tx, user int64, target string, units
 		if wait < time.Second {
 			wait = time.Second
 		}
-		return
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO iap_reservations(id, user_id, target, units, expires_at)
-		VALUES($1,$2,$3,$4, now() + make_interval(secs => $5)) RETURNING id::text, expires_at`,
-		uuid.NewString(), user, target, units, hold.Seconds()).Scan(&r.ID, &r.ExpiresAt)
 	return
 }
 
-// iapReleaseReservation은 이 유저의 예약 하나를 푼다. 없거나 남의 예약이거나 UUID 모양이 아니면 아무 일도 하지 않는다.
+// iapReleaseReservation은 이 유저의 결제 의도 하나를 지운다(예약도 함께 풀린다). 없거나 남의 것이거나 UUID 모양이 아니면 아무 일도 하지 않는다.
 func iapReleaseReservation(ctx context.Context, q dbtx, user int64, id string) error {
 	_, err := q.Exec(ctx, "DELETE FROM iap_reservations WHERE user_id=$1 AND id::text=lower($2)", user, id)
 	return err
 }
 
-// iapReleaseOldestReservation은 그 대상의 살아 있는 예약 중 가장 먼저 잡은 것 하나를 푼다.
-// 어느 예약의 결제인지 모를 때 쓴다(스토어 알림으로 지급될 때, 앱이 예약 번호를 보내지 않았을 때).
-func iapReleaseOldestReservation(ctx context.Context, q dbtx, user int64, target string) error {
-	_, err := q.Exec(ctx, `DELETE FROM iap_reservations WHERE id = (
-		SELECT id FROM iap_reservations WHERE user_id=$1 AND target=$2 AND expires_at > now()
-		ORDER BY created_at, id LIMIT 1)`, user, target)
-	return err
+// iapIntentLead는 결제 의도를 남긴 뒤 결제가 끝나기까지 봐주는 시간이다. 애플 보호자 승인(24시간), 구글 현금 결제(최대 48시간 안내)를 덮는다.
+// 이보다 먼저 남긴 의도는 번호 없이는 쓰지 않는다(앱이 꺼져 지우지 못하고 남은 며칠 전 의도가 지금 결제를 가져가지 않게)
+const iapIntentLead = 72 * time.Hour
+
+// iapIntentTarget은 이 거래를 위해 남긴 결제 의도를 찾는다(D1). 찾으면 그 의도의 번호와 대상, true를 준다.
+//  1. reservation: 앱이 결제 직전에 받아 제출에 붙인 번호. 이 유저의 것이고 결제보다 먼저 남긴 것만 쓴다
+//     (앱이 끝내지 못한 옛 거래를 지금 번호와 함께 내도, 옛 거래가 지금 결제의 의도를 가져가지 않게)
+//  2. 번호가 없거나 맞지 않으면(스토어 알림이 먼저 온 경우, 앱이 꺼져 번호를 잃은 경우, 늦게 끝난 결제):
+//     결제 전 iapIntentLead 안에 남긴 의도를 본다. 수량이 같은 것들, 없으면 전부를 한 묶음으로 보고
+//     - 묶음의 대상이 모두 같으면 가장 새것(같은 해에 여러 번 결제를 시작했어도 대상은 하나다)
+//     - 대상이 다른 의도가 섞여 있으면 모른다. 알림이 정한 대상은 뒤에 바꾸지 않으므로(iapSetTarget) 추측하지 않고,
+//     앱이 번호나 대상을 붙여 낼 때까지 둔다(두 기기에서 다른 해를 동시에 사는 경우)
+//     - 수량이 달라도 쓰는 까닭: 모른다고 두면 환불로 간다. 상한을 넘으면 iapSettleCap이 주지 않고 환불한다
+//
+// 스토어와 우리 시계의 차이를 1분 봐준다. purchasedAt이 0이면 시각을 보지 않는다. 지우지는 않는다(쓴 쪽이 iapReleaseReservation으로 지운다)
+func iapIntentTarget(ctx context.Context, q dbtx, user int64, reservation string, units int, purchasedAt time.Time) (id, target string, known bool, err error) {
+	at := iapNullTime(purchasedAt)
+	if reservation != "" {
+		err = q.QueryRow(ctx, `SELECT id::text, target FROM iap_reservations WHERE user_id=$1 AND id::text=lower($2)
+			AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz + interval '1 minute')`,
+			user, reservation, at).Scan(&id, &target)
+		if err == nil {
+			return id, target, true, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", false, err
+		}
+	}
+	rows, err := q.Query(ctx, `SELECT id::text, target, units = $2 FROM iap_reservations
+		WHERE user_id=$1 AND keep_until > now()
+			AND ($3::timestamptz IS NULL OR created_at BETWEEN $3::timestamptz - make_interval(secs => $4) AND $3::timestamptz + interval '1 minute')
+		ORDER BY units = $2 DESC, created_at DESC, id DESC LIMIT 20`, user, units, at, iapIntentLead.Seconds())
+	if err != nil {
+		return "", "", false, err
+	}
+	type cand struct {
+		id, target string
+		same       bool
+	}
+	var found []cand
+	for rows.Next() {
+		var c cand
+		if err = rows.Scan(&c.id, &c.target, &c.same); err != nil {
+			rows.Close()
+			return "", "", false, err
+		}
+		found = append(found, c)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return "", "", false, err
+	}
+	if len(found) == 0 {
+		return "", "", false, nil
+	}
+	// 같은 수량이 있으면 그 묶음만(앞에 모여 있다), 없으면 전부. 묶음 안의 대상이 하나여야 쓴다
+	for _, c := range found {
+		if c.same != found[0].same {
+			break
+		}
+		if c.target != found[0].target {
+			return "", "", false, nil
+		}
+	}
+	return found[0].id, found[0].target, true, nil
 }
 
-// iapTokenOwner는 계정 연결 값(구독용이든 대상용이든)을 발급받은 유저다. 모르는 값이면 0이다
+// iapTokenOwner는 계정 연결 값을 발급받은 유저다. 모르는 값이면 0이다
 func iapTokenOwner(ctx context.Context, q dbtx, token string) (int64, error) {
 	if _, err := uuid.Parse(token); err != nil {
 		return 0, nil

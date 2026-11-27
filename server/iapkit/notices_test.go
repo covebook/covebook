@@ -440,10 +440,9 @@ func TestIAPNoticeOverCapRefund(t *testing.T) {
 	token, _ := e.user()
 	overCap := func(route string, year int) map[string]any {
 		t.Helper()
-		y := e.shelfToken(token, year)
 		for range 2 {
 			id := iapTestID(t, route)
-			p := e.shelfPurchase(id, y)
+			p := e.shelfPurchase(id, e.shelfToken(token, year))
 			if route == "apple" {
 				p.Route, p.TransactionID, p.Acknowledged = iap.RouteApple, id, true
 				e.apple.Purchases[id] = p

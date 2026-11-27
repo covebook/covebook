@@ -14,10 +14,10 @@ func TestIAPRulesWithoutTarget(t *testing.T) {
 	token, _ := e.user()
 
 	// 대상을 보내면 받지 않는다(이 앱에는 대상이 없다)
-	if code, _ := e.call("POST", "/iap/target-token", token, map[string]any{"target": "2026"}); code != 400 {
+	if code, _ := e.call("POST", "/iap/intent", token, map[string]any{"target": "2026"}); code != 400 {
 		t.Fatalf("대상 없는 앱에 대상: %d", code)
 	}
-	code, body := e.call("POST", "/iap/target-token", token, map[string]any{})
+	code, body := e.call("POST", "/iap/intent", token, map[string]any{})
 	if code != 200 || body["token"] == nil || body["target"] != "" || body["reservation"] != nil {
 		t.Fatalf("상한 없는 값 받기: %d %v", code, body)
 	}
@@ -38,17 +38,17 @@ func TestIAPRulesWithoutTarget(t *testing.T) {
 	if code, _ = buy("2026"); code != 400 {
 		t.Fatalf("제출에 대상: %d", code)
 	}
-	// 구독용 값(대상 없음)으로 산 거래도 대상 없는 상품으로 받는다(대상을 모르는 거래가 생기지 않는다)
+	// 결제 의도 없이 산 거래도 대상 없는 상품으로 받는다(대상을 모르는 거래가 생기지 않는다)
 	id := iapTestID(t, "plain")
 	e.google.Purchases[id] = e.shelfPurchase(id, e.accountToken(token))
 	if code, body = e.submit(token, "google", e.shelf, id, false); code != 200 || body["target"] != "" {
-		t.Fatalf("구독용 값으로 산 거래: %d %v", code, body)
+		t.Fatalf("결제 의도 없이 산 거래: %d %v", code, body)
 	}
 
 	// 상한 3: 2 + 2는 넘는다. 계정 하나가 대상 하나('')다
 	e.srv.IAPRules = Rules{Cap: 3, Hold: covebookIAPRules.Hold}
 	other, _ := e.user()
-	code, body = e.call("POST", "/iap/target-token", other, map[string]any{"units": 2})
+	code, body = e.call("POST", "/iap/intent", other, map[string]any{"units": 2})
 	if code != 200 || body["reservation"] == nil {
 		t.Fatalf("상한 있는 값 받기: %d %v", code, body)
 	}
@@ -58,7 +58,7 @@ func TestIAPRulesWithoutTarget(t *testing.T) {
 	if code, body = buy(""); code != 200 || body["overCap"] != nil {
 		t.Fatalf("상한 안: %d %v", code, body)
 	}
-	if code, body = e.call("POST", "/iap/target-token", other, map[string]any{"units": 2}); code != 409 || errCode(body) != "iap_cap_full" ||
+	if code, body = e.call("POST", "/iap/intent", other, map[string]any{"units": 2}); code != 409 || errCode(body) != "iap_cap_full" ||
 		body["error"].(map[string]any)["message"] != DefaultMessages["iap_cap_too_many"] {
 		t.Fatalf("남은 수량보다 많음(기본 문구): %d %v", code, body)
 	}
