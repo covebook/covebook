@@ -1,7 +1,9 @@
 // 홈 화면(책장 탭): 서재를 읽어 줄마다 굽고(담아 둔 그림이 있으면 그대로) 실제 책장을 그린다. 지금 앱 features/home/HomeScreen을 옮기는 중.
 // 머리줄·하단바 덮개·책장 그림까지. 측정: 켤 때마다 logcat에 [flbake] 줄마다·[fltotal] 합, 제목을 길게 누르면 다시 굽는다
 // 2026-11-24 사용자 시안: 머리 '+'는 책장에 꽂기 시트(place_sheet.dart, 표지를 끌어 원하는 자리에 꽂는다. 책 추가 화면은 시트의 '새 책 찾기'),
-// 책을 끄는 동안 아래 흰 X(빼기 자리, RemoveZone)에 놓으면 책장에서 뺀다
+// 책을 끄는 동안 아래 흰 X(빼기 자리, RemoveZone)에 놓으면 책장에서 뺀다.
+// 2026-11-27 사용자 첫 책 꽂기 안내: 빈 책장이면 하단 탭 위에 '첫 책 꽂기'(책 고르기 · 검색 → 책을 들고 돌아와 꽂기 시트, 그 표지만 밝게 first_book_coach.dart).
+// 첫 책이 놓이면 안내를 끝내고 적어 둔다(store/onboarding_store.dart)
 library;
 
 import 'dart:async';
@@ -20,7 +22,7 @@ import '../../services/qa_probe.dart';
 import '../../services/cover_colors.dart';
 import '../../ui/alert.dart' show appAlert;
 import '../../ui/feedback.dart' show errorText, showToast;
-import '../../ui/kit.dart' show Btn, Pressable, Shape, Space, showSheet;
+import '../../ui/kit.dart' show Btn, Pressable, Shape, Space, contentMax, showSheet;
 import 'locked_rows.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
@@ -31,7 +33,7 @@ import '../../domain/bookcase.dart' show Bookcase;
 import '../../store/bookcase_store.dart';
 import '../../app/app_shell.dart' show tabBarHidden;
 import '../../app/app_nav.dart' show AppNav, AppTab;
-import '../../app/startup.dart' show shelfReady;
+import '../../app/startup.dart' show shelfReady, startStep;
 import '../../domain/geometry.dart' show maxFrontSpin, maxSpin;
 import '../../domain/layout.dart' show ShelfLayout, placementOf, shelfItems, sortedShelves;
 import '../../domain/book3_physics.dart' show fromPlaced;
@@ -78,6 +80,12 @@ import '../../ui/theme.dart';
 import '../../ui/a11y_text.dart';
 import '../book/add_book_screen.dart' show openAddBook;
 import '../book/binding_screen.dart' show openBindingEditor;
+import '../book/place_books.dart' show keptTitle, placeWithChoice;
+import '../bookmark/book_picker.dart' show pickBook;
+import '../../store/onboarding_store.dart';
+import '../../store/reading_store.dart' show ReadingStore;
+import '../../store/mini_timer_store.dart' show miniTimerSpace;
+import 'first_book_coach.dart';
 
 /// 앱이 깨어난 때(main이 채운다). 켜고 책장이 다 될 때까지를 잰다
 DateTime bootAt = DateTime.now();
@@ -371,6 +379,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     return _atlases.isNotEmpty &&
         !_decorating &&
         !_placeOpen &&
+        // 첫 책 꽂기 단추가 하단 탭 바로 위에 있는 동안은 내리지 않는다
+        !(Onboarding.instance.active && _shelfEmpty) &&
         _drag == null &&
         _grab == null &&
         !_pinching &&
@@ -419,6 +429,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void _closePlace() {
     if (!_placeOpen) return;
     if (_sheetDrag) _cancelDrag();
+    // 시트를 닫으면(손잡이 · 아래로 밀기 · 뒤로) 첫 책 안내도 걷는다. 책장이 아직 비었으면 '첫 책 꽂기'로 다시 한다
+    _stopCoach();
     setState(() => _placeOpen = false);
     if (!_decorating) {
       tabBarHidden.value = false;
@@ -427,11 +439,157 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     }
   }
 
-  /// 시트에 보일 책: 책장에 놓을 수 있는 내 책(숨긴 책 · 예시 책 빼고)
+  /// 시트에 보일 책: 책장에 놓을 수 있는 내 책(숨긴 책 · 예시 책 빼고). 첫 책 안내로 들고 온 책이 맨 앞
   List<PlaceItem> _placeItems() {
     final s = PlacementStore.instance, l = s.layout, lib = LibraryModel.instance.lib;
     final ids = [for (final id in s.books.keys) if (lib.books[id] case final b? when b.hiddenAt == null) id];
-    return placeItems(lib, ids, (id) => l != null && placementOf(l, id) != null, placedNow: _placedNow);
+    return placeItems(lib, ids, (id) => l != null && placementOf(l, id) != null, placedNow: _placedNow, lead: _coachId);
+  }
+
+  /// 시트 표지를 한 번 눌렀다: 자동 자리에 꽂는다(책 추가의 '책장에 진열'과 같은 규칙, 자리가 모자라면 선반 열기 · 보관을 묻는다)
+  bool _placing = false;
+  Future<void> _tapPlace(String id) async {
+    if (_placing || _drag != null) return;
+    _placing = true;
+    final onb = Onboarding.instance.active;
+    try {
+      final r = await placeWithChoice(context, [id]);
+      if (!mounted) return;
+      if (r.placed == 0) {
+        // 무료 칸이 다 차 보관했다(고른 것이 아니라 알린다). '보관만 하기'를 골랐으면 그대로 시트에 남는다
+        if (r.full) showToast(context, '${keptTitle(full: true)}.');
+        return;
+      }
+      // 놓은 책은 바로 보이게(끌어 놓을 때와 같다): 새로 굽기가 끝날 때까지 확정 배치로 미리 그린다
+      final l = PlacementStore.instance.layout;
+      final to = l == null ? null : placementOf(l, id)?.shelfId;
+      if (l != null && to != null) _showPreview(l, {to}, key: 'placed:${DateTime.now().microsecondsSinceEpoch}', bake: false);
+      if (onb) {
+        _firstPlaced(id);
+      } else {
+        setState(() => _placedNow
+          ..remove(id)
+          ..add(id));
+      }
+    } catch (e) {
+      if (mounted) appAlert(context, '책장에 꽂지 못했어요', '책은 내 책에 그대로 있어요. ${errorText(e)}');
+    } finally {
+      _placing = false;
+    }
+  }
+
+  // ---------- 첫 책 꽂기 안내(2026-11-27 사용자) ----------
+  /// 고르고 돌아온 책: 책장에 꽂기 시트에서 이 표지만 밝게 비우고 글 · 화살표로 가리킨다
+  String? _coachId;
+
+  /// 그 표지와 시트의 화면 자리: 화면을 그린 뒤 열쇠로 재고, 안내 중에는 잠깐마다 다시 잰다(시트가 자리 잡거나 옆으로 넘겨도 따라간다).
+  /// 그릴 때 알리는 방식은 시트가 처음 자리 잡기 전 자리에 머물러 구멍이 표지 왼쪽으로 비켜 있었다(2026-11-27 에뮬)
+  final _coachCover = ValueNotifier<Rect?>(null);
+  final _coachSheet = ValueNotifier<Rect?>(null);
+  final _coachCoverKey = GlobalKey(debugLabel: 'coach-cover');
+  final _coachSheetKey = GlobalKey(debugLabel: 'coach-sheet');
+  Timer? _coachTimer;
+
+  Rect? _rectOf(GlobalKey k) {
+    final o = k.currentContext?.findRenderObject();
+    return o is RenderBox && o.attached && o.hasSize ? o.localToGlobal(Offset.zero) & o.size : null;
+  }
+
+  void _measureCoach() {
+    if (!mounted || _coachId == null) {
+      _coachTimer?.cancel();
+      _coachTimer = null;
+      return;
+    }
+    _coachCover.value = _rectOf(_coachCoverKey);
+    _coachSheet.value = _rectOf(_coachSheetKey);
+  }
+
+  /// 첫 책 안내 겹을 걷는다(시트를 닫거나 · 꽂거나 · 꾸미기로 갈 때)
+  void _stopCoach() {
+    _coachId = null;
+    _coachTimer?.cancel();
+    _coachTimer = null;
+  }
+
+  /// 지금 책장에 꽂힌 책이 하나도 없다
+  bool get _shelfEmpty {
+    final l = PlacementStore.instance.layout;
+    return l != null && l.placements.isEmpty;
+  }
+
+  /// 안내 겹을 보이나: 들고 온 책이 아직 책장에 없고 시트가 열려 있고 끄는 중이 아닐 때(끌기를 시작하면 바로 걷는다)
+  bool get _coachOn {
+    final id = _coachId, l = PlacementStore.instance.layout;
+    return id != null && Onboarding.instance.active && _placeOpen && !_decorating && _drag == null && l != null && placementOf(l, id) == null;
+  }
+
+  void _onbChanged() {
+    if (!mounted) return;
+    setState(() {});
+    // 안내를 막 시작했으면 내려가 있던 하단 탭을 올린다('첫 책 꽂기'는 탭 바로 위, 안내 중에는 내리지 않는다)
+    if (Onboarding.instance.active) IdleBars.instance.poke();
+  }
+
+  /// 책장을 새로 읽을 때마다: 처음이면 안내를 할지 정하고(책이 이미 있으면 안 한다), 안내 중 책장에 책이 생기면(다른 화면 · 동기화) 끝낸다
+  void _syncOnboarding(Library lib) {
+    final ob = Onboarding.instance, l = PlacementStore.instance.layout;
+    if (l == null) return;
+    if (!ob.loaded) {
+      ob.load(anyBooks: lib.books.isNotEmpty || l.placements.isNotEmpty).ignore();
+      return;
+    }
+    if (ob.active && l.placements.isNotEmpty) {
+      ob.finish(l.placements.length == 1 ? l.placements.first.bookId : null);
+      _stopCoach();
+    }
+  }
+
+  /// '첫 책 꽂기': 내 책이 비었으면 책 검색으로, 있으면 책 고르기(+ 새 책 등록)로. 고른 책을 들고 돌아와 책장에 꽂기 시트를 연다.
+  /// 고르기를 닫으면 그대로(단추가 남아 다시 한다)
+  Future<void> _firstBook() async {
+    await LibraryModel.instance.load();
+    if (!mounted) return;
+    final lib = LibraryModel.instance.lib;
+    String? id;
+    if (!lib.books.values.any((b) => b.hiddenAt == null)) {
+      id = await openAddBook(context, hold: true);
+    } else {
+      final r = await pickBook(context, lib, addNew: true, holdNew: true);
+      id = r.picked ? r.id : null;
+    }
+    if (id == null || !mounted || !Onboarding.instance.active) return;
+    // 책장 쪽 책 목록에 없으면(다른 화면에서 막 넣은 책) 다시 읽는다
+    if (!PlacementStore.instance.books.containsKey(id)) await PlacementStore.instance.reload();
+    if (!mounted) return;
+    final l = PlacementStore.instance.layout;
+    if (l != null && placementOf(l, id) != null) return;
+    _coachCover.value = null;
+    _coachSheet.value = null;
+    _coachId = id;
+    await _openPlace();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureCoach());
+    _coachTimer?.cancel();
+    _coachTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _measureCoach());
+  }
+
+  /// 첫 책이 책장에 놓였다: 안내를 끝내 적어 두고(다시 띄우지 않는다) 시트를 내리고 그 책을 보여 준다(그 줄로 넘기고 잠깐 윤곽 빛)
+  void _firstPlaced(String id) {
+    Onboarding.instance.finish(id);
+    _stopCoach();
+    _closePlace();
+    if (!mounted) return;
+    _pendingFocus = id;
+    _tryFocus();
+  }
+
+  /// 선반 판 띠(화면 y): 안내 글이 가리지 않게 피한다. 판 앞면과 바로 아래 그늘까지
+  List<({double top, double bottom})> _plankBands() {
+    final g = _geom;
+    if (g == null) return const [];
+    final off = _scroll.hasClients ? _scroll.offset : 0.0;
+    return [for (final r in g.geo) (top: g.contentTop + r.baseline - off - Space.xs, bottom: g.contentTop + r.top + r.height - off + Space.s)];
   }
 
   /// 화면 좌표 → 책장 그림 좌표(스크롤 몫 포함, 끌기 좌표)
@@ -486,6 +644,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void _startDecorate() {
     if (_decorating) return;
     _placeOpen = false;
+    _stopCoach();
     _decorating = true;
     _decoTab = DecorateTab.books;
     _decoUndo.clear();
@@ -872,6 +1031,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
 
   Future<void> _endDrag() async {
     final d = _drag;
+    // 첫 책 안내 중이었는지는 놓기 전에 본다(저장하면 책장을 다시 읽으며 안내가 먼저 끝날 수 있다)
+    final onb = Onboarding.instance.active;
     final remove = d != null && d.shelfId.isNotEmpty && (_overRemove || _isOverRemove(_dragGlobal));
     _stopAutoScroll();
     if (d == null) return;
@@ -901,6 +1062,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         ..add(d.id);
     }
     if (mounted && l != null && to != null) _showPreview(l, {d.shelfId, to}, key: 'dropped:${DateTime.now().microsecondsSinceEpoch}', bake: false);
+    // 첫 책 안내 중 시트에서 끌어 꽂았다: 안내 끝(시트를 내리고 그 책을 보인다)
+    if (mounted && d.shelfId.isEmpty && to != null && onb) _firstPlaced(d.id);
   }
 
   /// 빼기 자리에 놓았다: 책장에서 뺀다(책은 내 책에 남는다. 책 시트 '책장에서 빼기'와 같다). 토스트로 되돌린다
@@ -1659,6 +1822,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     spineLooks.addListener(_spineLookChanged);
     focusBookOnShelf.addListener(_focusBook);
     LibraryModel.instance.addListener(_libraryChanged);
+    Onboarding.instance.addListener(_onbChanged);
     BookcaseStore.instance.addListener(_bookcasesChanged);
     if (!BookcaseStore.instance.loaded) BookcaseStore.instance.load();
     _loadSnap();
@@ -1737,6 +1901,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     await prepareFirstShelf();
     final lib = await loadLibrary();
     PlacementStore.instance.adopt(lib);
+    _syncOnboarding(lib);
+    // 로딩 화면 글: 서재를 다 읽고 책장을 그리기 시작한다('책을 진열하는 중' → '책장을 정리하는 중')
+    if (startStep.value == 2) startStep.value = 3;
     _loadCovers([for (final b in lib.books) ?b.coverArtUri]);
     // 못 받은 표지는 잠시 뒤 다시(앞서 걸어 둔 다시 받기가 있으면 그대로)
     _coverRetry ??= Timer(const Duration(seconds: 30), _retryCovers);
@@ -1940,6 +2107,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     spineLooks.removeListener(_spineLookChanged);
     focusBookOnShelf.removeListener(_focusBook);
     LibraryModel.instance.removeListener(_libraryChanged);
+    Onboarding.instance.removeListener(_onbChanged);
+    _coachTimer?.cancel();
+    _coachCover.dispose();
+    _coachSheet.dispose();
     BookcaseStore.instance.removeListener(_bookcasesChanged);
     if (_decorating) MiniTimerPlace.instance.setHidden(false);
     for (final i in _atlases) {
@@ -2329,21 +2500,63 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                 child: _decoBottom(),
               ),
           ],
+          // 첫 책 꽂기(2026-11-27 사용자): 빈 책장이면 선반 아래 · 하단 탭 바로 위에 갈색 단추. 책장은 평소처럼 밝고 다른 탭도 그대로 누른다.
+          // 작은 타이머가 떠 있으면 그 위로
+          if (Onboarding.instance.active && ready && _shelfEmpty && !_decorating && !_placeOpen && _drag == null)
+            ListenableBuilder(
+              listenable: ReadingStore.instance,
+              builder: (context, _) => Positioned(
+                key: const ValueKey('first-book'),
+                left: Space.page,
+                right: Space.page,
+                bottom: pad0.bottom + TabBarStyle.gap + TabBarStyle.height + Space.l + (ReadingStore.instance.active != null ? miniTimerSpace : 0),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: contentMax),
+                    // 폭 가득(화면 아래 주요 단추, DESIGN 5-2)
+                    child: SizedBox(width: double.infinity, child: Btn(label: '첫 책 꽂기', size: 'xlarge', onPress: _firstBook)),
+                  ),
+                ),
+              ),
+            ),
           if (_placeOpen && !_decorating)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              child: PlaceSheet(
-                lib: LibraryModel.instance.lib,
-                items: _placeItems(),
-                hidden: _sheetDrag,
-                onDragStart: _sheetDragStart,
-                onDragMove: _sheetDragMove,
-                onDragEnd: _endDrag,
-                onDragCancel: _cancelDrag,
-                onList: () => openAddBook(context),
-                onClose: _closePlace,
+              child: KeyedSubtree(
+                key: _coachSheetKey,
+                child: PlaceSheet(
+                  lib: LibraryModel.instance.lib,
+                  items: _placeItems(),
+                  hidden: _sheetDrag,
+                  onDragStart: _sheetDragStart,
+                  onDragMove: _sheetDragMove,
+                  onDragEnd: _endDrag,
+                  onDragCancel: _cancelDrag,
+                  onList: () => openAddBook(context),
+                  onClose: _closePlace,
+                  onPlace: _tapPlace,
+                  spot: _coachId == null ? null : (id: _coachId!, key: _coachCoverKey),
+                ),
+              ),
+            ),
+          // 첫 책 안내 겹(맨 위, 누르기는 아래로 지나간다): 화면 전체 반투명 차콜 + 들고 온 책 표지만 원래 밝기, 흰 글 · 화살표
+          if (_coachOn)
+            Positioned.fill(
+              key: const ValueKey('first-book-coach'),
+              child: ListenableBuilder(
+                listenable: Listenable.merge([_coachCover, _coachSheet]),
+                builder: (context, _) {
+                  final t = _coachCover.value, sheet = _coachSheet.value;
+                  if (t == null || sheet == null) return const SizedBox.shrink();
+                  return TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: _reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
+                    builder: (context, a, child) => Opacity(opacity: a, child: child),
+                    child: FirstBookCoach(target: t, top: pad.top + homeHeaderHeight, floor: sheet.top - Space.s, blocked: _plankBands()),
+                  );
+                },
               ),
             ),
           if (_drag != null && _drag!.shelfId.isNotEmpty)

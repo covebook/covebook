@@ -31,6 +31,7 @@
   --ck-grey-background: #F2F4F6; /* 구간을 나누는 띠(Border height16) */
   --ck-star: #A8865F; /* 별점 */
   --ck-scrim: #191F285C; /* 시트 · 확인창 뒤 막 */
+  --ck-coach-scrim: #191F2873; /* 첫 책 안내 덮개(grey900 45%, 표지 자리만 비움) */
   --ck-tab-ink: #000000; /* 하단 탭 고른 아이콘 */
   --ck-tab-ink-soft: #787676; /* 하단 탭 안 고른 아이콘 */
   --ck-toast: #2B323C; /* 토스트(짧은 알림) 바탕 */

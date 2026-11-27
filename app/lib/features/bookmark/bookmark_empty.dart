@@ -50,14 +50,11 @@ class BookmarkEmpty extends StatelessWidget {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: Space.xs),
-              child: Semantics(header: true, child: WordText('첫 갈피를 남겨 보세요', textAlign: TextAlign.center, style: AppType.heading)),
-            ),
-            // 공통 규칙: 빈 화면 안내 글은 Empty와 같은 sub · 위 8(2026-11-19. caption · 위 10이었다)
+            // 안내 한 줄(2026-11-27 사용자 '갈피가 비어 있으면 책에서 간직하고 싶은 문장을 남겨보세요 한 줄'. 전에는 제목 '첫 갈피를 남겨 보세요' + 두 줄 설명).
+            // 360 폭에서 한 줄에 들어가는 구역 제목 글자(17)
             Padding(
               padding: const EdgeInsets.only(top: Space.s),
-              child: WordText('문장이나 사진으로\n간직하고 싶은 순간을 모아요.', textAlign: TextAlign.center, style: AppType.sub),
+              child: Semantics(header: true, child: WordText('책에서 간직하고 싶은 문장을 남겨 보세요', textAlign: TextAlign.center, style: AppType.section)),
             ),
             Padding(
               padding: const EdgeInsets.only(top: Space.xl),

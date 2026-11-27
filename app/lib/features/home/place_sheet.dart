@@ -1,5 +1,7 @@
 // 책장에 꽂기 시트(2026-11-24 사용자 시안: 홈 머리 '+'를 누르면 아래에서 올라온다).
 // 내 책 표지를 옆으로 넘겨 보고, 표지를 위로 끌어 책장 원하는 자리에 꽂는다(놓을 자리 계산 · 미리 보기는 책장 끌기와 같다).
+// 표지를 한 번 누르면 자동 자리(책 추가의 '책장에 진열'과 같은 규칙)에 꽂는다(2026-11-27 사용자 첫 책 안내 '표지를 한 번 누르면 기존 자동 배치 방식으로').
+// 누르기와 끌기는 한 손가락에서 하나만 된다(움직이면 끌기, 꾹 누르면 들기, 그대로 떼면 누르기).
 // 책장에 없는 책이 앞, 이미 책장에 있는 책은 맨 끝(오른쪽)이고 표지 오른쪽 아래에 책장 표시(하단 '책장' 탭 그림). 책장에 있는 책은 끌지 않는다.
 // 오른쪽 위 '새 책 찾기'는 예전 '+'가 열던 책 추가 화면(2026-11-26 사용자 '목록 보기 그거 새 책 찾기 이걸로 바꿔줘'). 끄는 동안 시트는 숨어 책장이 다 보인다(끄는 손가락은 계속 이 시트가 받는다).
 // 닫기: 손잡이를 누르거나 아래로 밀기, 기기 뒤로
@@ -21,12 +23,13 @@ import '../../ui/theme.dart';
 typedef PlaceItem = ({String id, bool onShelf});
 
 /// 책장에 없는 책이 앞, 책장에 있는 책은 끝(각각 최근에 넣은 책부터). [placedNow]는 이 시트를 연 동안 꽂은 책(꽂은 차례):
-/// 책장에 있으면 맨 오른쪽 끝으로 간다(2026-11-24 사용자 '넣은 책은 맨 우측으로 가서 우측 하단에 책장 표시')
-List<PlaceItem> placeItems(Library lib, Iterable<String> ids, bool Function(String id) onShelf, {List<String> placedNow = const []}) {
+/// 책장에 있으면 맨 오른쪽 끝으로 간다(2026-11-24 사용자 '넣은 책은 맨 우측으로 가서 우측 하단에 책장 표시').
+/// [lead]는 고르고 돌아온 책(첫 책 안내): 책장에 없으면 맨 앞
+List<PlaceItem> placeItems(Library lib, Iterable<String> ids, bool Function(String id) onShelf, {List<String> placedNow = const [], String? lead}) {
   int newer(String a, String b) => (lib.books[b]?.createdAt ?? '').compareTo(lib.books[a]?.createdAt ?? '');
   final all = ids.toSet();
   final just = [for (final id in placedNow) if (all.contains(id) && onShelf(id)) id];
-  final off = [for (final id in all) if (!onShelf(id)) id]..sort(newer);
+  final off = [for (final id in all) if (!onShelf(id)) id]..sort((a, b) => a == lead ? -1 : b == lead ? 1 : newer(a, b));
   final on = [for (final id in all) if (onShelf(id) && !just.contains(id)) id]..sort(newer);
   return [for (final id in off) (id: id, onShelf: false), for (final id in [...on, ...just]) (id: id, onShelf: true)];
 }
@@ -43,9 +46,17 @@ class PlaceSheet extends StatefulWidget {
     required this.onDragCancel,
     required this.onList,
     required this.onClose,
+    this.onPlace,
+    this.spot,
   });
   final Library lib;
   final List<PlaceItem> items;
+
+  /// 표지를 한 번 눌렀다: 그 책을 자동 자리에 꽂는다
+  final ValueChanged<String>? onPlace;
+
+  /// 이 책 표지에 다는 열쇠(첫 책 안내가 그 표지 자리를 재어 그 자리만 밝게 비운다)
+  final ({String id, GlobalKey key})? spot;
 
   /// 끄는 동안 숨는다(손가락은 계속 받는다)
   final bool hidden;
@@ -101,10 +112,12 @@ class _PlaceSheetState extends State<PlaceSheet> {
       // 모두 같은 크기 틀(가장 큰 책에 맞춰 아래로 정렬하면 작은 책 위가 크게 비었다)
       RepaintBoundary(key: key, child: BookVisual(lib: lib, id: it.id, width: CoverSize.place, uniform: true)),
     ]);
+    final spot = widget.spot;
+    final shown = spot != null && spot.id == it.id ? KeyedSubtree(key: spot.key, child: cover) : cover;
     final body = SizedBox(
       width: CoverSize.place,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        cover,
+        shown,
         SizedBox(height: Space.s + shelfPlankBelow(rect)),
         Text(keepAll(title), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: AppType.bookGridTitle),
       ]),
@@ -112,12 +125,20 @@ class _PlaceSheetState extends State<PlaceSheet> {
     if (it.onShelf) {
       return Semantics(container: true, label: '$title, 책장에 있어요', excludeSemantics: true, child: body);
     }
-    // 위아래로 끌거나 꾹 눌러 들면 책장으로(옆으로 밀면 목록이 넘어간다)
+    // 위아래로 끌거나 꾹 눌러 들면 책장으로(옆으로 밀면 목록이 넘어간다). 그대로 떼면 자동 자리에 꽂는다(끌기 · 들기가 이기면 누르기는 오지 않는다)
+    final place = widget.onPlace;
+    void tap() {
+      if (!_lifted) place?.call(it.id);
+    }
+
     return Semantics(
       container: true,
-      label: '$title, 위로 끌어 책장에 꽂기',
+      button: place != null,
+      label: place != null ? '$title, 눌러서 꽂거나 위로 끌어 책장에 꽂기' : '$title, 위로 끌어 책장에 꽂기',
       excludeSemantics: true,
+      onTap: place == null ? null : tap,
       child: GestureDetector(
+        onTap: place == null ? null : tap,
         onVerticalDragStart: (d) => _start(it.id, d.globalPosition),
         onVerticalDragUpdate: (d) => _move(d.globalPosition),
         onVerticalDragEnd: (_) => _end(),
