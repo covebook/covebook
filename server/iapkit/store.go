@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 결제 테이블(V21)을 읽고 쓰는 함수들. 지급 판단은 여기서 하지 않는다. 부르는 쪽이 스토어 조회와 iap.Check를 끝낸 뒤 부른다.
@@ -23,137 +23,81 @@ type dbtx interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// iapPaidShelfMax는 연도 책장 하나에서 돈을 내고 여는 칸의 최대 수다. 책장 6칸 중 3칸은 무료다(D1).
-// 두 겹으로 지킨다
-//   - 결제 전: 결제 중 예약(iap_shelf_reservations)으로 두 기기가 동시에 3칸을 넘게 사지 못하게 막는다
-//   - 결제 뒤: 그래도 넘은 거래는 over_cap으로 표시해 칸을 주지 않고 환불한다. 칸 수를 셀 때도 3에서 한 번 더 자른다
-const iapPaidShelfMax = 3
+// 대상마다의 상한(Rules.Cap)은 두 겹으로 지킨다(D1)
+//   - 결제 전: 결제 중 예약(iap_reservations)으로 두 기기가 동시에 상한을 넘게 사지 못하게 막는다
+//   - 결제 뒤: 그래도 넘은 거래는 over_cap으로 표시해 주지 않고 환불한다. 수량을 셀 때도 상한에서 한 번 더 자른다
 
-// iapShelfHold는 선반 결제 중 예약이 살아 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다.
-// 앱이 결제 중에 꺼지면 이 시간이 지나야 다른 기기가 그 해 선반을 살 수 있다.
-const iapShelfHold = 5 * time.Minute
-
-// iapAccountToken은 유저의 구독용 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
-// 여러 개면 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
-// 추가 선반에는 이 값을 쓰지 않는다. 연도 책장마다 따로 받는다(iapShelfToken).
+// iapAccountToken은 유저의 계정 연결 값을 돌려준다. 없으면 만든다. 앱이 스토어에 넘길 값이다(D7).
+// 구독이든 한 번 사는 상품이든 같은 값을 쓴다. 대상은 여기에 싣지 않고 결제 의도(iap_reservations)로 찾는다(D1).
+// 여러 개면(대상마다 따로 주던 2026-11-27 전의 값) 가장 먼저 만든 것을 준다. 유저 줄을 잠가서 동시에 두 개가 생기지 않게 한다.
 func iapAccountToken(ctx context.Context, tx pgx.Tx, user int64) (string, error) {
 	var locked int64
 	if err := tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
 		return "", err
 	}
 	var token string
-	err := tx.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 AND year IS NULL ORDER BY created_at, token LIMIT 1", user).Scan(&token)
+	err := tx.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 ORDER BY created_at, token LIMIT 1", user).Scan(&token)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, "INSERT INTO iap_account_tokens(token, user_id) VALUES($1,$2) RETURNING token::text", uuid.NewString(), user).Scan(&token)
 	}
 	return token, err
 }
 
-// iapShelfToken은 그 연도 책장의 추가 선반을 살 때 스토어에 넘길 계정 연결 값을 돌려준다. 없으면 만든다(D1).
-// 연도 하나에 값 하나다. 두 요청이 동시에 와도 유일 색인 때문에 같은 값을 받는다.
-func iapShelfToken(ctx context.Context, q dbtx, user int64, year int) (string, error) {
-	if _, err := q.Exec(ctx, `INSERT INTO iap_account_tokens(token, user_id, year) VALUES($1,$2,$3)
-		ON CONFLICT (user_id, year) WHERE year IS NOT NULL DO NOTHING`, uuid.NewString(), user, year); err != nil {
-		return "", err
-	}
-	var token string
-	err := q.QueryRow(ctx, "SELECT token::text FROM iap_account_tokens WHERE user_id=$1 AND year=$2", user, year).Scan(&token)
-	return token, err
-}
-
-// iapTokenYear는 계정 연결 값이 어느 연도 책장의 것인지 알려 준다. 구독용 값이거나, 없거나, UUID 모양이 아니면 0이다.
-func iapTokenYear(ctx context.Context, q dbtx, token string) (int, error) {
-	if !iapIsUUID(token) {
-		return 0, nil
-	}
-	var year *int
-	err := q.QueryRow(ctx, "SELECT year FROM iap_account_tokens WHERE token=$1::uuid", token).Scan(&year)
-	if errors.Is(err, pgx.ErrNoRows) || year == nil {
-		return 0, nil
-	}
-	return *year, err
-}
-
-// iapSetShelfYear는 선반 거래가 어느 해 책장의 것인지 정하고 그 연도를 돌려준다(D1).
-// 넣을 때 계정 연결 값으로 적은 연도가 있으면 그대로 둔다. 없을 때만 year(앱이 보낸 연도)로 채운다. 끝내 모르면 0이다.
-// filled는 이번에 연도를 채웠는지다(그때 결제 완료를 알린다).
-func iapSetShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKey string, year int) (got int, filled bool, err error) {
-	var now *int
+// iapSetTarget은 한 번 사는 상품 거래의 대상을 정하고 그 대상을 돌려준다(D1).
+// 이미 정한 대상이 있으면 그대로 둔다. 없을 때만 asked(결제 의도나 앱이 보낸 대상, 빈 값이면 모름)로 채운다.
+// known=false면 끝내 모른다. filled는 이번에 대상을 채웠는지다(그때 결제 완료를 알린다).
+func iapSetTarget(ctx context.Context, q dbtx, route iap.Route, transactionKey, asked string) (got string, known, filled bool, err error) {
+	var now *string
 	err = q.QueryRow(ctx, `WITH old AS (
-			SELECT id, shelf_year FROM iap_purchases WHERE route=$1 AND transaction_id=$2 AND kind='product' FOR UPDATE
+			SELECT id, target FROM iap_purchases WHERE route=$1 AND transaction_id=$2 AND kind='product' FOR UPDATE
 		)
-		UPDATE iap_purchases b SET shelf_year=coalesce(old.shelf_year, nullif($3,0)),
-			updated_at=CASE WHEN old.shelf_year IS NULL AND $3<>0 THEN now() ELSE b.updated_at END
+		UPDATE iap_purchases b SET target=coalesce(old.target, nullif($3,'')),
+			updated_at=CASE WHEN old.target IS NULL AND $3<>'' THEN now() ELSE b.updated_at END
 		FROM old WHERE b.id=old.id
-		RETURNING b.shelf_year, old.shelf_year IS NULL AND $3<>0`, string(route), transactionKey, year).Scan(&now, &filled)
+		RETURNING b.target, old.target IS NULL AND $3<>''`, string(route), transactionKey, asked).Scan(&now, &filled)
 	if errors.Is(err, pgx.ErrNoRows) || now == nil {
-		return 0, false, nil
+		return "", false, false, nil
 	}
-	return *now, filled, err
+	return *now, err == nil, filled, err
 }
 
-// iapReservationYear는 이 유저의 결제 중 예약이 어느 해 책장의 것인지 알려 준다.
-// 5분이 지난 예약도 아직 지워지지 않았으면 연도를 준다(결제창에서 오래 머문 경우). 없거나 남의 예약이거나 UUID 모양이 아니면 0이다.
-func iapReservationYear(ctx context.Context, q dbtx, user int64, id string, purchasedAt time.Time) (int, error) {
-	// 예약보다 먼저 끝난 결제는 이 예약의 결제가 아니다. 스토어와 우리 시계의 차이를 1분 봐준다
-	var year int
-	err := q.QueryRow(ctx, `SELECT year FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=lower($2)
-		AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz + interval '1 minute')`,
-		user, id, iapNullTime(purchasedAt)).Scan(&year)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, nil
-	}
-	return year, err
-}
-
-// iapPreferShelfYear는 선반 거래의 연도를 year로 바꾼다(결제 중 예약의 연도를 계정 연결 값의 연도보다 먼저 쓸 때).
-// 바뀌었으면 원래 연도(몰랐으면 0)와 true를 돌려준다. 같으면 아무것도 하지 않는다.
-func iapPreferShelfYear(ctx context.Context, q dbtx, route iap.Route, transactionKey string, year int) (prev int, changed bool, err error) {
-	err = q.QueryRow(ctx, `WITH cur AS (
-			SELECT id, shelf_year FROM iap_purchases WHERE route=$1 AND transaction_id=$2 AND kind='product')
-		UPDATE iap_purchases b SET shelf_year=$3, updated_at=now() FROM cur
-		WHERE b.id=cur.id AND cur.shelf_year IS DISTINCT FROM $3 RETURNING coalesce(cur.shelf_year,0)`,
-		string(route), transactionKey, year).Scan(&prev)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, false, nil
-	}
-	return prev, err == nil, err
-}
-
-// iapShelfPaid는 그 해 책장에서 환불되지 않은 선반 거래가 준 칸 수의 합이다. 3칸을 넘게 산 거래(over_cap)는 세지 않는다.
-func iapShelfPaid(ctx context.Context, q dbtx, user int64, year int, allowSandbox bool) (int, error) {
+// iapTargetPaid는 그 대상에서 환불되지 않은 거래가 준 수량의 합이다. 상한을 넘게 산 거래(over_cap)는 세지 않는다.
+func iapTargetPaid(ctx context.Context, q dbtx, user int64, target string, allowSandbox bool) (int, error) {
 	var n int
-	err := q.QueryRow(ctx, `SELECT coalesce(sum(p.shelves),0)::int
+	err := q.QueryRow(ctx, `SELECT coalesce(sum(p.units),0)::int
 		FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND b.shelf_year=$2 AND NOT b.over_cap
-			AND ($3 OR b.env='production')`, user, year, allowSandbox).Scan(&n)
+		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND b.target=$2 AND NOT b.over_cap
+			AND ($3 OR b.env='production')`, user, target, allowSandbox).Scan(&n)
 	return n, err
 }
 
-// iapSettleShelf는 연도가 정해진 선반 거래가 그 해 유료 칸(3칸)을 넘는지 정하고 over_cap을 돌려준다(D1).
-// 다른 거래(넘지 않은 것)의 칸 합 + 이 거래의 칸이 3을 넘으면 over_cap=true로 바꾼다. 거래를 통째로 넘은 것으로 본다
-// (3칸 묶음의 일부만 인정하지 않는다. 넘은 거래는 통째로 환불하므로).
-// 한 번 true가 되면 false로 돌리지 않는다. 앞선 거래가 나중에 환불돼도 이미 환불을 요청한 거래에 칸을 주지 않게.
+// iapSettleCap은 대상이 정해진 거래가 그 대상의 상한(cap)을 넘는지 정하고 over_cap을 돌려준다(D1). cap이 0이면 상한이 없어 늘 false다.
+// 다른 거래(넘지 않은 것)의 수량 합 + 이 거래의 수량이 cap을 넘으면 over_cap=true로 바꾼다. 거래를 통째로 넘은 것으로 본다
+// (묶음 상품의 일부만 인정하지 않는다. 넘은 거래는 통째로 환불하므로).
+// 한 번 true가 되면 false로 돌리지 않는다. 앞선 거래가 나중에 환불돼도 이미 환불을 요청한 거래에 주지 않게.
 // 유저 줄을 잠그고 센다. 같은 유저의 두 거래가 동시에 정해지면 나중 것이 앞의 것을 보고 정한다.
-func iapSettleShelf(ctx context.Context, tx pgx.Tx, user int64, route iap.Route, transactionKey string, allowSandbox bool) (overCap bool, err error) {
+func iapSettleCap(ctx context.Context, tx pgx.Tx, user int64, route iap.Route, transactionKey string, allowSandbox bool, cap int) (overCap bool, err error) {
+	if cap <= 0 {
+		return false, nil
+	}
 	var locked int64
 	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
 		return
 	}
 	err = tx.QueryRow(ctx, `WITH me AS (
-			SELECT b.id, b.shelf_year, b.over_cap, p.shelves FROM iap_purchases b
+			SELECT b.id, b.target, b.over_cap, p.units FROM iap_purchases b
 			JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-			WHERE b.route=$1 AND b.transaction_id=$2 AND b.kind='product' AND b.shelf_year IS NOT NULL AND b.user_id=$3
+			WHERE b.route=$1 AND b.transaction_id=$2 AND b.kind='product' AND b.target IS NOT NULL AND b.user_id=$3
 		), others AS (
-			SELECT coalesce(sum(p.shelves),0) AS n FROM iap_purchases b
+			SELECT coalesce(sum(p.units),0) AS n FROM iap_purchases b
 			JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id, me
-			WHERE b.user_id=$3 AND b.kind='product' AND b.state='paid' AND b.shelf_year=me.shelf_year AND NOT b.over_cap
+			WHERE b.user_id=$3 AND b.kind='product' AND b.state='paid' AND b.target=me.target AND NOT b.over_cap
 				AND b.id<>me.id AND ($4 OR b.env='production')
 		)
-		UPDATE iap_purchases b SET over_cap = me.over_cap OR others.n + me.shelves > $5,
-			updated_at = CASE WHEN NOT me.over_cap AND others.n + me.shelves > $5 THEN now() ELSE b.updated_at END
+		UPDATE iap_purchases b SET over_cap = me.over_cap OR others.n + me.units > $5,
+			updated_at = CASE WHEN NOT me.over_cap AND others.n + me.units > $5 THEN now() ELSE b.updated_at END
 		FROM me, others WHERE b.id=me.id RETURNING b.over_cap`,
-		string(route), transactionKey, user, allowSandbox, iapPaidShelfMax).Scan(&overCap)
+		string(route), transactionKey, user, allowSandbox, cap).Scan(&overCap)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -170,10 +114,10 @@ type iapOverCapRow struct {
 	Key   string // 원장의 transaction_id(구글 한 번 사는 상품은 구매 토큰)
 }
 
-// iapOverCapToRefund는 3칸을 넘게 산 거래 중 환불 요청을 아직 못 마친 것을 오래된 순으로 준다.
+// iapOverCapToRefund는 상한을 넘게 산 거래 중 환불 요청을 아직 못 마친 것을 오래된 순으로 준다.
 // routes는 개발자가 환불할 수 있는 경로(구글)만 준다. 애플 거래가 목록을 차지해 구글 거래가 밀리지 않게.
 // 실패하면 간격을 2배씩 늘려 다시 한다(iapRefundDueSQL). 대조는 1분마다 돌아서 간격이 없으면 구글 장애 20분에 20번을 다 쓴다.
-// 이 거래는 이미 소비해 구글 3일 자동 환불도 없다. 20번(약 3일) 넘게 실패한 거래는 빼고 운영자가 본다(/admin/iap/stats의 shelfOverCap).
+// 이 거래는 이미 소비해 구글 3일 자동 환불도 없다. 20번(약 3일) 넘게 실패한 거래는 빼고 운영자가 본다(/admin/iap/stats의 overCap).
 func iapOverCapToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
 	rows, err := q.Query(ctx, `SELECT route, transaction_id FROM iap_purchases
 		WHERE over_cap AND refund_requested_at IS NULL AND state='paid' AND refund_attempts < 20 AND route = ANY($1)
@@ -234,7 +178,7 @@ func iapIsUUID(s string) bool { return iapUUID.MatchString(s) }
 type iapProduct struct {
 	Kind        iap.Kind
 	Entitlement string
-	Shelves     int
+	Units       int  // 한 번 사는 상품이 주는 수량
 	Consume     bool // 구글에서 소비 처리할지
 	Active      bool
 }
@@ -242,16 +186,19 @@ type iapProduct struct {
 // iapFindProduct는 상품을 찾는다. 없으면 pgx.ErrNoRows다.
 func iapFindProduct(ctx context.Context, q dbtx, route iap.Route, productID string) (iapProduct, error) {
 	var p iapProduct
-	err := q.QueryRow(ctx, `SELECT kind, coalesce(entitlement,''), coalesce(shelves,0), consume, active
-		FROM iap_products WHERE route=$1 AND product_id=$2`, string(route), productID).Scan(&p.Kind, &p.Entitlement, &p.Shelves, &p.Consume, &p.Active)
+	err := q.QueryRow(ctx, `SELECT kind, coalesce(entitlement,''), coalesce(units,0), consume, active
+		FROM iap_products WHERE route=$1 AND product_id=$2`, string(route), productID).Scan(&p.Kind, &p.Entitlement, &p.Units, &p.Consume, &p.Active)
 	return p, err
 }
 
 // iapRecordPurchase는 거래를 원장에 넣는다. 처음 들어갔으면 true, 이미 있던 거래면 false다.
 // "먼저 조회하고 없으면 넣기"를 하지 않는다. 유일 키에 맡기고 들어간 줄 수로 판단한다(D6).
 // 결제가 끝난 거래만 받는다. user가 0이면 주인 없이(user_id NULL) 넣는다(결제한 계정이 탈퇴한 거래).
-// 선반 거래는 계정 연결 값으로 연도 책장을 찾아 함께 적는다. 연도용 값이 아니면 연도는 NULL이고 어느 책장에도 칸을 주지 않는다.
-func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase) (bool, error) {
+// 한 번 사는 상품의 대상
+//   - targeted(앱이 대상을 요구, Rules.TargetRequired): NULL(모름). 부르는 쪽이 결제 의도로 찾아 iapSetTarget으로 채운다
+//   - 아니면: 대상 없음(”)
+//   - user가 0이면(주인 없음) 주지 않은 거래라 NULL
+func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, targeted bool) (bool, error) {
 	if p.State != iap.StatePaid {
 		return false, errors.New("iap: 결제가 끝나지 않은 거래는 원장에 넣지 않는다")
 	}
@@ -260,12 +207,14 @@ func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p
 		account = ""
 	}
 	tag, err := q.Exec(ctx, `INSERT INTO iap_purchases
-		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country,confirmed_at,shelf_year)
+		(route,transaction_id,original_id,user_id,account_token,product_id,kind,env,state,purchased_at,currency,price_milli,country,confirmed_at,target)
 		VALUES($1,$2,$3,nullif($4::bigint,0),nullif($5,'')::uuid,$6,$7,$8,'paid',$9,nullif($10,''),nullif($11,0),nullif($12,''),CASE WHEN $13 THEN now() END,
-			CASE WHEN $7='product' THEN (SELECT year FROM iap_account_tokens WHERE token=nullif($5,'')::uuid) END)
+			-- 주인 없이 넣는 거래(결제한 계정이 탈퇴)는 주지 않은 거래라 대상을 비운다(NULL)
+			CASE WHEN $7='product' AND ($4::bigint = 0 OR $14) THEN NULL
+			     WHEN $7='product' THEN '' END)
 		ON CONFLICT (route,transaction_id) DO NOTHING`,
 		string(p.Route), iapTransactionKey(kind, p), p.OriginalTransactionID, user, account, p.ProductID, string(kind), string(p.Env),
-		p.PurchasedAt, p.Currency, p.PriceMilli, p.Country, p.Acknowledged)
+		p.PurchasedAt, p.Currency, p.PriceMilli, p.Country, p.Acknowledged, targeted)
 	if err != nil {
 		return false, err
 	}
@@ -299,30 +248,34 @@ func iapTransactionKey(kind iap.Kind, p iap.Purchase) string {
 
 // iapRevokePurchase는 환불·취소를 원장에 남긴다. 줄을 지우지 않는다. 바뀐 줄이 있으면 true다.
 // 같은 SQL 문에서 환불 고지(T9)도 쓴다: 상태만 바뀌고 고지가 빠지는 일이 없게 한다(주인이 있는 줄만).
-// 선반은 거래마다, 구독은 구독 1건마다 한 번 알린다. 3칸을 넘게 산 선반 거래(over_cap)는 알리지 않는다.
-// 연도를 몰라 칸을 열지 않은 선반은 opened=false를 붙인다. 주인 없는 줄(결제한 계정이 탈퇴)은 받을 사람이 없어 알리지 않는다.
+// 한 번 사는 상품도 구독도 환불된 거래마다 한 번 알린다(구독은 3월분, 5월분이 따로 환불될 수 있다).
+// 구독 상태 쪽(iapNoteSubscriptionChange)이 하루 안에 같은 구독의 환불을 이미 알렸으면 쓰지 않는다. 상한을 넘게 산 거래(over_cap)는 알리지 않는다.
+// 대상을 몰라 주지 않은 거래는 opened=false를 붙인다. 주인 없는 줄(결제한 계정이 탈퇴)은 받을 사람이 없어 알리지 않는다.
 func iapRevokePurchase(ctx context.Context, q dbtx, route iap.Route, transactionID string, at time.Time) (bool, error) {
 	var changed int
 	err := q.QueryRow(ctx, `WITH r AS (
 			UPDATE iap_purchases SET state='revoked', revoked_at=$3, updated_at=now()
 			WHERE route=$1 AND transaction_id=$2 AND state='paid'
-			RETURNING user_id, kind, product_id, original_id, transaction_id, env, revoked_at, shelf_year, over_cap
+			RETURNING user_id, kind, product_id, original_id, transaction_id, env, revoked_at, target, over_cap
 		), n AS (
 			INSERT INTO iap_notices (user_id, kind, template, params, env, dedupe_key)
 			SELECT r.user_id,
-				CASE WHEN r.kind='product' THEN 'shelf_refunded' ELSE 'subscription_refunded' END, 'T9',
+				CASE WHEN r.kind='product' THEN 'product_refunded' ELSE 'subscription_refunded' END, 'T9',
 				jsonb_strip_nulls(jsonb_build_object('route', $1::text, 'productId', r.product_id, 'kind', r.kind,
-					'shelves', CASE WHEN r.kind='product' THEN p.shelves END,
-					'year', r.shelf_year,
-					-- 연도를 몰라 칸을 열지 않은 선반(서버가 환불함). 앱이 "선반이 잠겼다" 대신 "열지 못해 환불했다"고 쓴다
-					'opened', CASE WHEN r.kind='product' AND r.shelf_year IS NULL THEN false END,
+					'units', CASE WHEN r.kind='product' THEN p.units END,
+					'target', r.target,
+					-- 대상을 몰라 주지 않은 거래(서버가 환불함). 앱이 "잠겼다" 대신 "열지 못해 환불했다"고 쓴다
+					'opened', CASE WHEN r.kind='product' AND r.target IS NULL THEN false END,
 					'revokedAt', to_char(r.revoked_at AT TIME ZONE 'UTC', `+iapStampSQL+`))),
 				r.env,
-				CASE WHEN r.kind='product' THEN 'shelf_refunded:' || $1::text || ':' || r.transaction_id
-					ELSE 'subscription_refunded:' || $1::text || ':' || r.original_id END
+				CASE WHEN r.kind='product' THEN 'product_refunded:' || $1::text || ':' || r.transaction_id
+					ELSE 'subscription_refunded:' || $1::text || ':' || r.original_id || ':' || r.transaction_id END
 			FROM r LEFT JOIN iap_products p ON p.route=$1 AND p.product_id=r.product_id
-			-- 3칸을 넘게 사서 칸을 주지 않은 선반은 환불돼도 알리지 않는다(넘김 고지로 이미 알렸고 닫을 칸이 없다)
+			-- 상한을 넘게 사서 주지 않은 거래는 환불돼도 알리지 않는다(넘김 고지로 이미 알렸고 거둘 것이 없다)
 			WHERE r.user_id IS NOT NULL AND NOT (r.kind='product' AND r.over_cap)
+				AND NOT (r.kind='subscription' AND EXISTS(SELECT 1 FROM iap_notices x WHERE x.user_id=r.user_id
+					AND starts_with(x.dedupe_key, 'subscription_refunded:' || $1::text || ':' || r.original_id || ':')
+					AND x.created_at > now() - interval '1 day'))
 			ON CONFLICT (user_id, dedupe_key) DO NOTHING
 		) SELECT count(*)::int FROM r`, string(route), transactionID, at).Scan(&changed)
 	return changed == 1, err
@@ -389,34 +342,48 @@ func iapUpsertSubscription(ctx context.Context, tx pgx.Tx, user int64, s iapSubs
 }
 
 // iapEntitlements는 유저가 지금 가진 것을 계산한다. 따로 저장한 값이 없고 매번 테이블에서 센다(D5).
-//   - plus: 결제된 구독이 있고, 만료 전이거나 유예 기간 안이다(D11). 만료 판단은 DB 서버 시계다(D23).
-//   - shelves: 연도 책장마다, 환불되지 않은 선반 거래가 준 칸 수의 합. 3칸을 넘게 산 거래(over_cap)는 세지 않고, iapPaidShelfMax에서 한 번 더 자른다(D1).
-//     산 칸이 없는 연도는 들어 있지 않다. 연도를 모르는 거래는 어느 책장에도 세지 않는다.
+//   - entitlements: 지금 유효한 구독이 주는 권한 이름(상품 테이블의 entitlement). 결제된 구독이 만료 전이거나 유예 기간 안이다(D11).
+//     만료 판단은 DB 서버 시계다(D23). 이름순이고 같은 이름은 한 번만 든다
+//   - units: 대상마다, 환불되지 않은 거래가 준 수량의 합. 상한을 넘게 산 거래(over_cap)는 세지 않고, cap(0이면 상한 없음)에서 한 번 더 자른다(D1).
+//     산 것이 없는 대상은 들어 있지 않다. 대상을 모르는 거래는 어디에도 세지 않는다. 대상 없는 상품은 빈 문자열 키다
 //
 // allowSandbox가 false면 샌드박스(시험) 거래는 세지 않는다. 스위치를 끄면 전에 준 샌드박스 권한도 함께 사라진다.
-func iapEntitlements(ctx context.Context, q dbtx, user int64, allowSandbox bool) (plus bool, shelves map[int]int, err error) {
-	err = q.QueryRow(ctx, `SELECT
-		EXISTS(SELECT 1 FROM iap_subscriptions s JOIN iap_products p ON p.route=s.route AND p.product_id=s.product_id
-			WHERE s.user_id=$1 AND s.state='paid' AND p.entitlement='plus' AND ($2 OR s.env='production')
-			AND (s.expires_at > now() OR s.grace_until > now()))`, user, allowSandbox).Scan(&plus)
+func iapEntitlements(ctx context.Context, q dbtx, user int64, allowSandbox bool, cap int) (entitlements []string, units map[string]int, err error) {
+	rows, err := q.Query(ctx, `SELECT DISTINCT p.entitlement FROM iap_subscriptions s JOIN iap_products p ON p.route=s.route AND p.product_id=s.product_id
+		WHERE s.user_id=$1 AND s.state='paid' AND p.entitlement IS NOT NULL AND ($2 OR s.env='production')
+			AND (s.expires_at > now() OR s.grace_until > now()) ORDER BY 1`, user, allowSandbox)
 	if err != nil {
 		return
 	}
-	rows, err := q.Query(ctx, `SELECT b.shelf_year, least(sum(p.shelves), $3)::int
+	entitlements = []string{}
+	for rows.Next() {
+		var e string
+		if err = rows.Scan(&e); err != nil {
+			rows.Close()
+			return
+		}
+		entitlements = append(entitlements, e)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return
+	}
+	rows, err = q.Query(ctx, `SELECT b.target, CASE WHEN $3 > 0 THEN least(sum(p.units), $3) ELSE sum(p.units) END::int
 		FROM iap_purchases b JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
-		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND ($2 OR b.env='production') AND b.shelf_year IS NOT NULL AND NOT b.over_cap
-		GROUP BY b.shelf_year`, user, allowSandbox, iapPaidShelfMax)
+		WHERE b.user_id=$1 AND b.kind='product' AND b.state='paid' AND ($2 OR b.env='production') AND b.target IS NOT NULL AND NOT b.over_cap
+		GROUP BY b.target`, user, allowSandbox, cap)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
-	shelves = map[int]int{}
+	units = map[string]int{}
 	for rows.Next() {
-		var year, n int
-		if err = rows.Scan(&year, &n); err != nil {
+		var target string
+		var n int
+		if err = rows.Scan(&target, &n); err != nil {
 			return
 		}
-		shelves[year] = n
+		units[target] = n
 	}
 	err = rows.Err()
 	return
@@ -665,14 +632,14 @@ func iapPendingNotifications(ctx context.Context, q dbtx, limit int) ([]iapNotic
 	return out, rows.Err()
 }
 
-// iapYearlessToRefund는 서버가 환불할 칸 없는 선반 거래를 준다(구글 권고: 받을 수 없는 구매는 자동 환불에 맡기지 않는다, 2026-11-26 결정).
-//   - 연도를 모르는 선반: 2일 기다린다. 앱이 연도와 함께 다시 내면 칸을 받는다(그러면 shelf_year가 채워져 빠진다)
-//   - 주인 없는 선반(결제한 계정이 탈퇴, user_id NULL): 제출 때 이미 환불을 시도했으니 기다리지 않고 다시 한다
+// iapUngrantedToRefund는 서버가 환불할, 주지 않은 거래를 준다(구글 권고: 받을 수 없는 구매는 자동 환불에 맡기지 않는다, 2026-11-26 결정).
+//   - 대상을 모르는 거래: 2일 기다린다. 앱이 대상과 함께 다시 내면 받는다(그러면 target이 채워져 빠진다)
+//   - 주인 없는 거래(결제한 계정이 탈퇴, user_id NULL): 제출 때 이미 환불을 시도했으니 기다리지 않고 다시 한다
 //
 // 3일이 지나면 구글이 이미 자동 환불했으니 뺀다. 20번 넘게 실패한 거래도 빼고 운영자가 본다
-func iapYearlessToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
+func iapUngrantedToRefund(ctx context.Context, q dbtx, routes []string, limit int) ([]iapOverCapRow, error) {
 	rows, err := q.Query(ctx, `SELECT route, transaction_id FROM iap_purchases
-		WHERE kind='product' AND shelf_year IS NULL AND NOT over_cap AND confirmed_at IS NULL AND state='paid'
+		WHERE kind='product' AND target IS NULL AND NOT over_cap AND confirmed_at IS NULL AND state='paid'
 		  AND refund_requested_at IS NULL AND refund_attempts < 20 AND route = ANY($1) AND `+iapRefundDueSQL+`
 		  AND (created_at < now() - interval '2 days' OR user_id IS NULL) AND created_at > now() - interval '3 days'
 		ORDER BY created_at LIMIT $2`, routes, limit)
@@ -703,12 +670,12 @@ type iapUnconfirmed struct {
 }
 
 // iapUnconfirmedPurchases는 스토어 확인을 못 마친 거래를 고른다(정기 대조 1단계).
-// 연도를 모르는 선반은 뺀다. 제출·알림 경로처럼 일부러 소비하지 않은 거래다(연도와 함께 다시 내면 shelf_year가 채워져 그때 대상이 된다).
-// 여기서 소비하면 구글의 3일 자동 환불이 사라지고 앱도 다시 낼 수 없어, 돈은 받고 칸은 없는 채로 굳는다
+// 대상을 모르는 거래는 뺀다. 제출·알림 경로처럼 일부러 소비하지 않은 거래다(대상과 함께 다시 내면 target이 채워져 그때 고른다).
+// 여기서 소비하면 구글의 3일 자동 환불이 사라지고 앱도 다시 낼 수 없어, 돈은 받고 받은 것은 없는 채로 굳는다
 func iapUnconfirmedPurchases(ctx context.Context, q dbtx, limit int) ([]iapUnconfirmed, error) {
 	rows, err := q.Query(ctx, `SELECT route, transaction_id, original_id, product_id, kind FROM iap_purchases
 		WHERE confirmed_at IS NULL AND state='paid' AND created_at < now() - interval '1 minute' AND created_at > now() - interval '4 days'
-		  AND NOT (kind = 'product' AND shelf_year IS NULL)
+		  AND NOT (kind = 'product' AND target IS NULL)
 		ORDER BY created_at LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
@@ -750,7 +717,7 @@ func iapDueSubscriptions(ctx context.Context, q dbtx, limit int) ([][2]string, e
 
 // iapProductList는 지금 파는 상품이다. 앱이 이 목록의 상품 ID로 스토어에 가격을 묻는다. 가격은 여기에 없다(D22).
 func iapProductList(ctx context.Context, q dbtx) ([]map[string]any, error) {
-	rows, err := q.Query(ctx, "SELECT route, product_id, kind, coalesce(entitlement,''), coalesce(shelves,0) FROM iap_products WHERE active ORDER BY route, kind, product_id")
+	rows, err := q.Query(ctx, "SELECT route, product_id, kind, coalesce(entitlement,''), coalesce(units,0) FROM iap_products WHERE active ORDER BY route, kind, product_id")
 	if err != nil {
 		return nil, err
 	}
@@ -758,15 +725,15 @@ func iapProductList(ctx context.Context, q dbtx) ([]map[string]any, error) {
 	out := []map[string]any{}
 	for rows.Next() {
 		var route, id, kind, entitlement string
-		var shelves int
-		if err = rows.Scan(&route, &id, &kind, &entitlement, &shelves); err != nil {
+		var units int
+		if err = rows.Scan(&route, &id, &kind, &entitlement, &units); err != nil {
 			return nil, err
 		}
 		p := map[string]any{"route": route, "productId": id, "kind": kind}
 		if kind == "subscription" {
 			p["entitlement"] = entitlement
 		} else {
-			p["shelves"] = shelves
+			p["units"] = units
 		}
 		out = append(out, p)
 	}
@@ -788,55 +755,125 @@ func iapBumpSubscription(ctx context.Context, q dbtx, route iap.Route, originalI
 	return err
 }
 
-// iapReservation은 선반 결제 중 예약 하나다.
+// iapReservation은 결제 중 예약 하나다.
 type iapReservation struct {
 	ID        string
 	ExpiresAt time.Time
 }
 
-// iapReserveShelf는 그 해 책장에 shelves칸 결제 중 예약을 잡는다. paid는 그 해에 이미 산 칸 수다.
-// 산 칸 + 살아 있는 예약 칸 + 이번 칸이 iapPaidShelfMax를 넘으면 잡지 않고, 가장 먼저 끝나는 예약까지 남은 시간(wait)을 준다.
-// 부르는 쪽이 유저 줄을 잠근 트랜잭션 안에서 부른다(두 기기가 동시에 잡지 못하게). 시각은 DB 시계다(D23).
-func iapReserveShelf(ctx context.Context, tx pgx.Tx, user int64, year, shelves, paid int) (r iapReservation, wait time.Duration, err error) {
-	// 끝난 예약은 지운다. 남아 있어도 세지 않지만 테이블이 쌓이지 않게
-	if _, err = tx.Exec(ctx, "DELETE FROM iap_shelf_reservations WHERE user_id=$1 AND expires_at <= now()", user); err != nil {
+// iapReserve는 결제 의도를 남긴다: 이 유저가 그 대상에 units만큼 사려 한다. paid는 그 대상에서 이미 산 수량이다.
+//   - 결제 의도는 keep 동안 남는다. 결제가 늦게 끝나도 거래와 맞춰 대상을 찾는다(iapIntentTarget)
+//   - cap이 0보다 크면 hold 동안 그 수량을 잡는다(결제 중 예약). 산 수량 + 잡힌 수량 + 이번 수량이 cap을 넘으면
+//     남기지 않고, 가장 먼저 끝나는 예약까지 남은 시간(wait)을 준다
+//
+// 부르는 쪽이 유저 줄을 잠근 트랜잭션 안에서 부른다(두 기기가 동시에 잡지 못하게). 시각은 DB 시계다(D23)
+func iapReserve(ctx context.Context, tx pgx.Tx, user int64, target string, units, paid, cap int, hold, keep time.Duration) (r iapReservation, wait time.Duration, err error) {
+	// 보관 시간이 지난 의도는 지운다. 남아 있어도 쓰지 않지만 테이블이 쌓이지 않게
+	if _, err = tx.Exec(ctx, "DELETE FROM iap_reservations WHERE user_id=$1 AND keep_until <= now()", user); err != nil {
 		return
 	}
+	if cap <= 0 {
+		hold = 0 // 상한이 없으면 잡을 것이 없다. 의도만 남긴다
+	} else if wait, err = iapCheckHold(ctx, tx, user, target, units, paid, cap); err != nil || wait > 0 {
+		return
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO iap_reservations(id, user_id, target, units, expires_at, keep_until)
+		VALUES($1,$2,$3,$4, now() + make_interval(secs => $5), now() + make_interval(secs => $6)) RETURNING id::text, expires_at`,
+		uuid.NewString(), user, target, units, hold.Seconds(), keep.Seconds()).Scan(&r.ID, &r.ExpiresAt)
+	return
+}
+
+// iapCheckHold는 그 대상의 산 수량 + 살아 있는 예약 수량 + units가 cap을 넘는지 본다. 넘으면 가장 먼저 끝나는 예약까지 남은 시간을 준다(1초 이상)
+func iapCheckHold(ctx context.Context, tx pgx.Tx, user int64, target string, units, paid, cap int) (wait time.Duration, err error) {
 	var held int
 	var waitSecs float64
-	if err = tx.QueryRow(ctx, `SELECT coalesce(sum(shelves),0)::int, coalesce(extract(epoch FROM min(expires_at) - now()),0)::float8
-		FROM iap_shelf_reservations WHERE user_id=$1 AND year=$2 AND expires_at > now()`, user, year).Scan(&held, &waitSecs); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT coalesce(sum(units),0)::int, coalesce(extract(epoch FROM min(expires_at) - now()),0)::float8
+		FROM iap_reservations WHERE user_id=$1 AND target=$2 AND expires_at > now()`, user, target).Scan(&held, &waitSecs); err != nil {
 		return
 	}
-	if paid+held+shelves > iapPaidShelfMax {
+	if paid+held+units > cap {
 		wait = time.Duration(waitSecs * float64(time.Second))
 		if wait < time.Second {
 			wait = time.Second
 		}
-		return
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO iap_shelf_reservations(id, user_id, year, shelves, expires_at)
-		VALUES($1,$2,$3,$4, now() + make_interval(secs => $5)) RETURNING id::text, expires_at`,
-		uuid.NewString(), user, year, shelves, iapShelfHold.Seconds()).Scan(&r.ID, &r.ExpiresAt)
 	return
 }
 
-// iapReleaseReservation은 이 유저의 예약 하나를 푼다. 없거나 남의 예약이거나 UUID 모양이 아니면 아무 일도 하지 않는다.
+// iapReleaseReservation은 이 유저의 결제 의도 하나를 지운다(예약도 함께 풀린다). 없거나 남의 것이거나 UUID 모양이 아니면 아무 일도 하지 않는다.
 func iapReleaseReservation(ctx context.Context, q dbtx, user int64, id string) error {
-	_, err := q.Exec(ctx, "DELETE FROM iap_shelf_reservations WHERE user_id=$1 AND id::text=lower($2)", user, id)
+	_, err := q.Exec(ctx, "DELETE FROM iap_reservations WHERE user_id=$1 AND id::text=lower($2)", user, id)
 	return err
 }
 
-// iapReleaseOldestReservation은 그 해 책장의 살아 있는 예약 중 가장 먼저 잡은 것 하나를 푼다.
-// 어느 예약의 결제인지 모를 때 쓴다(스토어 알림으로 지급될 때, 앱이 예약 번호를 보내지 않았을 때).
-func iapReleaseOldestReservation(ctx context.Context, q dbtx, user int64, year int) error {
-	_, err := q.Exec(ctx, `DELETE FROM iap_shelf_reservations WHERE id = (
-		SELECT id FROM iap_shelf_reservations WHERE user_id=$1 AND year=$2 AND expires_at > now()
-		ORDER BY created_at, id LIMIT 1)`, user, year)
-	return err
+// iapIntentLead는 결제 의도를 남긴 뒤 결제가 끝나기까지 봐주는 시간이다. 애플 보호자 승인(24시간), 구글 현금 결제(최대 48시간 안내)를 덮는다.
+// 이보다 먼저 남긴 의도는 번호 없이는 쓰지 않는다(앱이 꺼져 지우지 못하고 남은 며칠 전 의도가 지금 결제를 가져가지 않게)
+const iapIntentLead = 72 * time.Hour
+
+// iapIntentTarget은 이 거래를 위해 남긴 결제 의도를 찾는다(D1). 찾으면 그 의도의 번호와 대상, true를 준다.
+//  1. reservation: 앱이 결제 직전에 받아 제출에 붙인 번호. 이 유저의 것이고 결제보다 먼저 남긴 것만 쓴다
+//     (앱이 끝내지 못한 옛 거래를 지금 번호와 함께 내도, 옛 거래가 지금 결제의 의도를 가져가지 않게)
+//  2. 번호가 없거나 맞지 않으면(스토어 알림이 먼저 온 경우, 앱이 꺼져 번호를 잃은 경우, 늦게 끝난 결제):
+//     결제 전 iapIntentLead 안에 남긴 의도를 본다. 수량이 같은 것들, 없으면 전부를 한 묶음으로 보고
+//     - 묶음의 대상이 모두 같으면 가장 새것(같은 해에 여러 번 결제를 시작했어도 대상은 하나다)
+//     - 대상이 다른 의도가 섞여 있으면 모른다. 알림이 정한 대상은 뒤에 바꾸지 않으므로(iapSetTarget) 추측하지 않고,
+//     앱이 번호나 대상을 붙여 낼 때까지 둔다(두 기기에서 다른 해를 동시에 사는 경우)
+//     - 수량이 달라도 쓰는 까닭: 모른다고 두면 환불로 간다. 상한을 넘으면 iapSettleCap이 주지 않고 환불한다
+//
+// 스토어와 우리 시계의 차이를 1분 봐준다. purchasedAt이 0이면 시각을 보지 않는다. 지우지는 않는다(쓴 쪽이 iapReleaseReservation으로 지운다)
+func iapIntentTarget(ctx context.Context, q dbtx, user int64, reservation string, units int, purchasedAt time.Time) (id, target string, known bool, err error) {
+	at := iapNullTime(purchasedAt)
+	if reservation != "" {
+		err = q.QueryRow(ctx, `SELECT id::text, target FROM iap_reservations WHERE user_id=$1 AND id::text=lower($2)
+			AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz + interval '1 minute')`,
+			user, reservation, at).Scan(&id, &target)
+		if err == nil {
+			return id, target, true, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", false, err
+		}
+	}
+	rows, err := q.Query(ctx, `SELECT id::text, target, units = $2 FROM iap_reservations
+		WHERE user_id=$1 AND keep_until > now()
+			AND ($3::timestamptz IS NULL OR created_at BETWEEN $3::timestamptz - make_interval(secs => $4) AND $3::timestamptz + interval '1 minute')
+		ORDER BY units = $2 DESC, created_at DESC, id DESC LIMIT 20`, user, units, at, iapIntentLead.Seconds())
+	if err != nil {
+		return "", "", false, err
+	}
+	type cand struct {
+		id, target string
+		same       bool
+	}
+	var found []cand
+	for rows.Next() {
+		var c cand
+		if err = rows.Scan(&c.id, &c.target, &c.same); err != nil {
+			rows.Close()
+			return "", "", false, err
+		}
+		found = append(found, c)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return "", "", false, err
+	}
+	if len(found) == 0 {
+		return "", "", false, nil
+	}
+	// 같은 수량이 있으면 그 묶음만(앞에 모여 있다), 없으면 전부. 묶음 안의 대상이 하나여야 쓴다
+	for _, c := range found {
+		if c.same != found[0].same {
+			break
+		}
+		if c.target != found[0].target {
+			return "", "", false, nil
+		}
+	}
+	return found[0].id, found[0].target, true, nil
 }
 
-// iapTokenOwner는 계정 연결 값(구독용이든 연도용이든)을 발급받은 유저다. 모르는 값이면 0이다
+// iapTokenOwner는 계정 연결 값을 발급받은 유저다. 모르는 값이면 0이다
 func iapTokenOwner(ctx context.Context, q dbtx, token string) (int64, error) {
 	if _, err := uuid.Parse(token); err != nil {
 		return 0, nil

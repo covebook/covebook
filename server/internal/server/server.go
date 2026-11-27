@@ -19,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit"
 	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/llm"
 )
 
@@ -27,15 +27,7 @@ type Server struct {
 	DB                *pgxpool.Pool
 	HTTP              *http.Client
 	LLM               *llm.Gateway
-	IAP               map[iap.Route]iap.Store // 결제 경로. 비어 있으면 결제 API가 없다
-	IAPSandbox        bool                    // 샌드박스 거래에도 지급할지 (IAP_ALLOW_SANDBOX)
-	iapMu             sync.Mutex
-	iapHits           map[int64]iapHit
-	iapRenewalAt      time.Time                                             // 갱신 예정 고지를 마지막으로 찾은 때
-	iapCatchUpAt      map[iap.Route]time.Time                               // 경로마다 스토어 목록으로 메우기를 마지막으로 돌린 때
-	iapLoggedAt       time.Time                                             // 대조 요약 로그를 마지막으로 남긴 때
-	iapWake           chan struct{}                                         // 새 알림이 오면 처리 작업을 깨운다
-	iapPushAuth       func(ctx context.Context, authorization string) error // 구글 알림 요청의 인증 확인. 없으면 구글 알림을 받지 않는다
+	IAP               *iapkit.Kit // 결제(server/iapkit). 결제가 꺼져 있으면 경로가 없다
 	ConfigError       error
 	searchMu          sync.Mutex
 	searchCache       map[string]searchEntry
@@ -235,21 +227,17 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /auth/kakao/callback", wrap(s.kakaoCallback))
 	m.HandleFunc("POST /auth/kakao/claim", wrap(s.kakaoClaim))
 	s.routeCommunity(m)
-	s.routeIAP(m)
-	s.routeIAPNotify(m)
+	s.IAP.Routes(m)
 	return m
 }
 func (s *Server) health(w http.ResponseWriter, r *http.Request) error {
 	// community: 커뮤니티를 열어 두었다(앱은 이것으로 커뮤니티 화면을 켠다. 닫혀 있거나 예전 서버면 없음)
-	writeJSON(w, 200, map[string]any{"ok": true, "books": bookSource(), "llmKeys": s.LLM.Available(), "community": communityEnabled(), "iap": len(s.IAP) > 0})
+	writeJSON(w, 200, map[string]any{"ok": true, "books": bookSource(), "llmKeys": s.LLM.Available(), "community": communityEnabled(), "iap": s.IAP.Enabled()})
 	return nil
 }
 func New(db *pgxpool.Pool) *Server {
 	gateway, err := llm.New(os.Getenv("LLM_KEYS"), os.Getenv("GEMINI_MODEL"), os.Getenv("OPENAI_MODEL"), nil)
-	s := &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), IAPSandbox: iapSandboxAllowed(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
-	s.iapWake = make(chan struct{}, 1)
-	if s.IAP[iap.RouteGoogle] != nil {
-		s.iapPushAuth = s.iapGooglePushAuth()
-	}
+	s := &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
+	s.IAP = s.newIAPKit()
 	return s
 }

@@ -32,7 +32,7 @@ type Kind string
 
 const (
 	KindSubscription Kind = "subscription"
-	KindProduct      Kind = "product" // 한 번 사는 상품 (추가 선반)
+	KindProduct      Kind = "product" // 한 번 사는 상품 (책장 한켠: 추가 선반)
 )
 
 // State는 지급 판단에 쓰는 거래 상태다. 구독 만료는 여기 없다. ExpiresAt과 서버 시계로 따로 본다(ADR-0002 D23).
@@ -110,7 +110,7 @@ type Store interface {
 
 // Refunder는 개발자가 거래를 환불할 수 있는 스토어다. 구글만 된다(Play Developer API orders.refund).
 // 애플은 개발자가 환불하는 API가 없다. 사용자가 애플에 직접 요청해야 한다.
-// 쓰는 곳: 칸을 주지 않은 선반 거래. 3칸을 넘음(ADR-0002 D1), 연도를 끝내 모름, 결제한 계정이 탈퇴(D8)
+// 쓰는 곳: 주지 않은 한 번 사는 상품 거래. 대상의 상한을 넘음(ADR-0002 D1), 대상을 끝내 모름, 결제한 계정이 탈퇴(D8)
 type Refunder interface {
 	// Refund는 주문을 환불한다. orderID는 Purchase.TransactionID다(구글 주문 ID). 비어 있으면 오류다(프로모션 코드 구매 등).
 	Refund(ctx context.Context, orderID string) error
