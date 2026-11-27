@@ -276,7 +276,7 @@ func (s *Kit) iapTargetTokenFor(w http.ResponseWriter, r *http.Request) error {
 		if paid+body.Units > rules.Cap {
 			return s.iapCapTooMany()
 		}
-		res, wait, err := iapReserve(ctx, tx, user, target, body.Units, paid, rules.Cap, rules.Hold)
+		res, wait, err := iapReserve(ctx, tx, user, target, body.Units, paid, rules.Cap, rules.hold())
 		if err != nil {
 			return err
 		}
@@ -479,6 +479,14 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if asked.Kind == iap.KindSubscription {
+		// 같은 구독 1건을 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다).
+		// 유저 줄보다 먼저 잡는다. 알림 처리(iapSyncSubscription)도 이 잠금을 먼저 잡고, 뒤에 INSERT의 FK 확인으로 유저 줄을 건드린다.
+		// 순서가 엇갈리면(유저 줄 → 구독 / 구독 → 유저 줄) 새 구독 직후 제출과 SUBSCRIBED 알림이 함께 올 때 교착이 난다
+		if err = iapLockLine(ctx, tx, route, current.OriginalTransactionID); err != nil {
+			return err
+		}
+	}
 	var locked int64
 	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
 		return err
@@ -489,10 +497,6 @@ func (s *Kit) iapSubmit(w http.ResponseWriter, r *http.Request) error {
 	// 한 번 사는 상품만: 받은 대상(known이 false면 모름), 상한을 넘었는지
 	target, known, overCap := "", false, false
 	if asked.Kind == iap.KindSubscription {
-		// 같은 구독 1건을 다루는 다른 제출·알림 처리와 순서를 맞춘다(줄이 아직 없을 때의 경쟁을 막는다)
-		if err = iapLockLine(ctx, tx, route, current.OriginalTransactionID); err != nil {
-			return err
-		}
 		owner, e := iapSubscriptionOwner(ctx, tx, route, current.OriginalTransactionID)
 		if e != nil {
 			return e

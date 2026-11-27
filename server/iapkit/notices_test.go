@@ -222,6 +222,20 @@ func TestIAPNoticeSubscriptionRefundAndGone(t *testing.T) {
 	e.sweep()
 	e.wantKinds(token, "환불 뒤 만료", noticePurchaseDone, noticeSubRefunded)
 
+	// 몇 달 뒤 다시 구독해 다른 갱신분(txnB)이 환불되면 그것도 알린다(환불은 거래마다)
+	if _, err := e.db.Exec(e.ctx, `UPDATE iap_notices SET created_at = now() - interval '2 days'`); err != nil {
+		t.Fatal(err)
+	}
+	txnB := iapTestID(t, "txnB")
+	pb := e.subscription(orig, txnB, account, time.Now().Add(time.Hour))
+	e.apple.Purchases[txnB] = pb
+	e.submit(token, "apple", e.plus, txnB, false)
+	pb.State = iap.StateRevoked
+	e.apple.Purchases[txnB] = pb
+	e.notify("apple", iap.Notice{ID: iapTestID(t, "rB"), Type: "REFUND", Target: &iap.Ref{Kind: iap.KindSubscription, ID: txnB}, OriginalID: orig}, "")
+	e.sweep()
+	e.wantKinds(token, "두 번째 환불", noticePurchaseDone, noticeSubRefunded, noticePurchaseDone, noticeSubRefunded)
+
 	// 다른 구독: 스토어가 더는 모른다고 답하면(구글은 만료 60일 뒤) 만료로 확정하고 알린다
 	other, _ := e.user()
 	orig2, txn2 := iapTestID(t, "orig2"), iapTestID(t, "txn2")

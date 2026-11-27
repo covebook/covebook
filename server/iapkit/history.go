@@ -102,6 +102,13 @@ func iapSeller() map[string]string {
 // 서버 한 대의 메모리로 센다. 서버를 다시 켜면 바로 한 번 돈다. 여러 대면 각자 돌지만 같은 것을 다시 넣어도 결과가 같다.
 const iapCatchUpEvery = 6 * time.Hour
 
+// iapCatchUpRetry는 메우기가 실패했을 때(스토어 장애, 시간 초과) 다시 해 볼 때까지의 간격이다. 6시간을 기다리면 그사이 빠진 환불을 못 되찾는다
+const iapCatchUpRetry = 15 * time.Minute
+
+// iapVoidedWindow는 구글 무효 구매 목록을 얼마나 거슬러 받을지다. 구글이 주는 한도(30일)를 다 받는다.
+// 알림과 대조가 일주일 넘게 실패했어도(권한 문제, Pub/Sub 장애) 그사이의 환불을 놓치지 않는다
+const iapVoidedWindow = 30 * 24 * time.Hour
+
 // iapCatchUpDue는 이 경로의 메우기를 지금 돌릴 차례인지 보고, 차례면 돌린 것으로 적는다.
 func (s *Kit) iapCatchUpDue(route iap.Route, now time.Time) bool {
 	s.iapMu.Lock()
@@ -116,10 +123,19 @@ func (s *Kit) iapCatchUpDue(route iap.Route, now time.Time) bool {
 	return true
 }
 
+// iapCatchUpFailed는 이번 메우기가 실패했다고 적는다. iapCatchUpRetry 뒤에 다시 차례가 온다
+func (s *Kit) iapCatchUpFailed(route iap.Route, now time.Time) {
+	s.iapMu.Lock()
+	defer s.iapMu.Unlock()
+	if s.iapCatchUpAt != nil {
+		s.iapCatchUpAt[route] = now.Add(iapCatchUpRetry - iapCatchUpEvery)
+	}
+}
+
 // iapCatchUpSince는 어디서부터 다시 받을지 정한다.
 //   - 기본은 7일 전: 애플의 재시도가 약 6.5일에 걸쳐 있어, 그 안에 못 받은 것은 이력으로만 되찾는다.
 //   - 마지막으로 알림을 받은 지 오래됐으면(서버가 오래 죽어 있었으면) 그 하루 전부터.
-//   - 30일보다 멀리 가지 않는다(구글 무효 구매 목록의 한도).
+//   - 30일보다 멀리 가지 않는다. 구글 무효 구매 목록은 이 값과 상관없이 늘 30일을 받는다(iapVoidedWindow).
 func iapCatchUpSince(ctx context.Context, q dbtx, route iap.Route, now time.Time) time.Time {
 	since := now.Add(-7 * 24 * time.Hour)
 	var last *time.Time
@@ -151,7 +167,9 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 			past, skipped, err := history.NoticeHistory(storeCtx, since)
 			cancel()
 			if err != nil {
+				// 애플 라이브러리는 쪽을 끝까지 모아 한꺼번에 준다. 중간에 실패하면 받은 것이 없다. 곧 다시 해 본다
 				log.Printf("iap notification history failed: route=%s err=%v", route, err)
+				s.iapCatchUpFailed(route, now)
 			}
 			if skipped > 0 {
 				log.Printf("iap notification history: route=%s unreadable=%d", route, skipped)
@@ -173,10 +191,11 @@ func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 		}
 		if hasVoided {
 			storeCtx, cancel := context.WithTimeout(ctx, 2*iapStoreTimeout)
-			list, err := voided.Voided(storeCtx, since)
+			list, err := voided.Voided(storeCtx, now.Add(-iapVoidedWindow))
 			cancel()
 			if err != nil {
 				log.Printf("iap voided list failed: route=%s err=%v", route, err)
+				s.iapCatchUpFailed(route, now)
 			}
 			for _, v := range list {
 				// 한 건의 패닉이 뒤의 환불 반영을 막지 않게(iapSafely)
@@ -240,6 +259,7 @@ type iapBacklog struct {
 	OldestUnconfirmedSecs  int64 `json:"oldestUnconfirmedSeconds"` // 확인 못 한 구글 구매 중 가장 오래된 것의 나이(대상 모르는 거래는 일부러 안 하므로 뺌). 3일(259200초)이 지나면 구글이 환불한다. 하루를 넘으면 사람이 본다
 	SandboxPurchases30Days int   `json:"sandboxPurchases30Days"`   // 운영 서버가 받은 최근 30일 샌드박스 거래(심사·TestFlight). 갑자기 늘면 무료 누출을 의심한다(D15)
 	NoTarget               int   `json:"noTarget"`                 // 주지 않은 거래(대상 모름, 주인 없음) 중 환불을 요청하지 못한 것(운영 환경). 구글은 대조가 2일 뒤 환불하고, 애플은 사용자가 요청해야 한다
+	NoPlan                 int   `json:"noPlan"`                   // 이용 중인 운영 구독 중 요금제 주기(iap_plans)를 모르는 것. 0이 아니면 연 구독의 갱신 예정 고지(T4)가 나가지 않으니 iap_plans에 줄을 넣는다
 }
 
 func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
@@ -257,9 +277,11 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND target IS NULL AND refund_requested_at IS NULL),
 		coalesce((SELECT extract(epoch FROM now() - min(purchased_at)) FROM iap_purchases
 			WHERE route='google' AND confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND target IS NULL)), 0)::bigint,
-		(SELECT count(*) FROM iap_purchases WHERE env='sandbox' AND purchased_at > now() - interval '30 days')`).
+		(SELECT count(*) FROM iap_purchases WHERE env='sandbox' AND purchased_at > now() - interval '30 days'),
+		(SELECT count(*) FROM iap_subscriptions s WHERE s.state='paid' AND s.env='production' AND coalesce(s.grace_until, s.expires_at) > now()
+			AND NOT EXISTS(SELECT 1 FROM iap_plans pl WHERE pl.route=s.route AND pl.product_id=s.product_id AND pl.plan_id=s.plan_id))`).
 		Scan(&b.PendingNotices, &b.FailedNotices, &b.Unconfirmed, &b.OldestPendingSecs, &b.Subscriptions, &b.RevokedPurchases,
-			&b.OverCap, &b.OverCapRefunded, &b.OverCapApple, &b.NoTarget, &b.OldestUnconfirmedSecs, &b.SandboxPurchases30Days)
+			&b.OverCap, &b.OverCapRefunded, &b.OverCapApple, &b.NoTarget, &b.OldestUnconfirmedSecs, &b.SandboxPurchases30Days, &b.NoPlan)
 	return
 }
 
@@ -281,9 +303,9 @@ func (s *Kit) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	if skip {
 		return
 	}
-	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds over_cap=%d over_cap_apple=%d no_target=%d",
+	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds over_cap=%d over_cap_apple=%d no_target=%d no_plan=%d",
 		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals, res.Refunds,
-		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestUnconfirmedSecs, b.OldestPendingSecs, b.OverCap, b.OverCapApple, b.NoTarget)
+		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestUnconfirmedSecs, b.OldestPendingSecs, b.OverCap, b.OverCapApple, b.NoTarget, b.NoPlan)
 }
 
 // iapAdminStats는 밀린 일의 숫자를 준다. 운영자 토큰이 없으면 없는 경로처럼 답한다(community.go의 adminOK와 같은 방식).

@@ -152,11 +152,17 @@ func iapNoteSubscriptionChange(ctx context.Context, q dbtx, user int64, before i
 	}
 	switch {
 	case s.State == iap.StateRevoked && before.state != iap.StateRevoked:
-		return iapWriteNotice(ctx, q, user, noticeSubRefunded, s.Env, "subscription_refunded:"+line, with("revokedAt", iapStamp(now)))
+		// 환불은 거래마다 알린다(키에 거래 번호). 원장 쪽(iapRevokePurchase)이 하루 안에 이미 알렸으면 쓰지 않는다
+		if refunded, err := iapRecentlyRefunded(ctx, q, user, line); err != nil || refunded {
+			return err
+		}
+		txn := s.LatestTxnID
+		if txn == "" {
+			txn = iapStamp(s.ExpiresAt)
+		}
+		return iapWriteNotice(ctx, q, user, noticeSubRefunded, s.Env, "subscription_refunded:"+line+":"+txn, with("revokedAt", iapStamp(now)))
 	case s.State == iap.StateInactive && before.state == iap.StatePaid:
-		var refunded bool
-		if err := q.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM iap_notices WHERE user_id=$1 AND dedupe_key=$2 AND created_at > now() - interval '1 day')",
-			user, "subscription_refunded:"+line).Scan(&refunded); err != nil || refunded {
+		if refunded, err := iapRecentlyRefunded(ctx, q, user, line); err != nil || refunded {
 			return err
 		}
 		return iapWriteNotice(ctx, q, user, noticeExpired, s.Env, "expired:"+line+":"+iapStamp(s.ExpiresAt), with("expiresAt", iapStamp(s.ExpiresAt)))
@@ -325,4 +331,14 @@ func iapNoteRenewals(ctx context.Context, q dbtx, now time.Time, days int) (int,
 		return 0, err
 	}
 	return int(tag.RowsAffected()), nil
+}
+
+// iapRecentlyRefunded는 이 구독(경로:원래 거래 ID)의 환불을 하루 안에 이미 알렸는지 본다.
+// 환불 키는 "subscription_refunded:<경로>:<원래 거래 ID>:<거래 번호>"라 앞부분으로 찾는다
+func iapRecentlyRefunded(ctx context.Context, q dbtx, user int64, line string) (bool, error) {
+	var refunded bool
+	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM iap_notices WHERE user_id=$1
+		AND starts_with(dedupe_key, $2) AND created_at > now() - interval '1 day')`,
+		user, "subscription_refunded:"+line+":").Scan(&refunded)
+	return refunded, err
 }

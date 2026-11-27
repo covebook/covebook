@@ -269,7 +269,7 @@ func TestIAPAdminStats(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("운영자 조회 %d %v", code, body)
 	}
-	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days", "overCap", "overCapRefunded", "overCapApple", "noTarget", "oldestUnconfirmedSeconds", "sandboxPurchases30Days"} {
+	for _, k := range []string{"pendingNotifications", "failedNotifications", "unconfirmedPurchases", "oldestPendingSeconds", "activeSubscriptions", "revokedPurchases30Days", "overCap", "overCapRefunded", "overCapApple", "noTarget", "oldestUnconfirmedSeconds", "sandboxPurchases30Days", "noPlan"} {
 		if _, ok := body[k].(float64); !ok {
 			t.Fatalf("%s 없음: %v", k, body)
 		}
@@ -336,5 +336,24 @@ func TestIAPAdminStats(t *testing.T) {
 	}
 	if over != 2 {
 		t.Fatalf("구매 내역의 넘은 거래 %d (구글 1, 애플 1)", over)
+	}
+}
+
+// 메우기가 실패하면 6시간이 아니라 15분 뒤에 다시 차례가 온다
+func TestIAPCatchUpRetrySoon(t *testing.T) {
+	k := &Kit{}
+	now := time.Now()
+	if !k.iapCatchUpDue(iap.RouteApple, now) {
+		t.Fatal("처음은 바로 돈다")
+	}
+	if k.iapCatchUpDue(iap.RouteApple, now.Add(time.Hour)) {
+		t.Fatal("성공했으면 6시간을 기다린다")
+	}
+	k.iapCatchUpFailed(iap.RouteApple, now)
+	if k.iapCatchUpDue(iap.RouteApple, now.Add(10*time.Minute)) {
+		t.Fatal("실패해도 15분은 기다린다")
+	}
+	if !k.iapCatchUpDue(iap.RouteApple, now.Add(16*time.Minute)) {
+		t.Fatal("실패하면 15분 뒤 다시 돈다")
 	}
 }

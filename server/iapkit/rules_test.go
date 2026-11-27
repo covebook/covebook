@@ -2,6 +2,7 @@ package iapkit
 
 import (
 	"testing"
+	"time"
 )
 
 // 다른 앱의 규칙으로도 결제가 돈다(결제 키트). 대상이 없는 상품(계정 전체에 붙음)을 판다.
@@ -66,5 +67,15 @@ func TestIAPRulesWithoutTarget(t *testing.T) {
 	}
 	if units, _ := body["unitsByTarget"].(map[string]any); units[""] != float64(2) {
 		t.Fatalf("넘은 거래는 세지 않음: %v", body)
+	}
+}
+
+// Hold를 주지 않은 앱도 결제 중 예약이 5분 산다(0이면 만들자마자 끝나 상한을 지키지 못한다)
+func TestIAPRulesHoldDefault(t *testing.T) {
+	if got := (Rules{}).hold(); got != 5*time.Minute {
+		t.Fatalf("기본 5분, got %v", got)
+	}
+	if got := (Rules{Hold: time.Minute}).hold(); got != time.Minute {
+		t.Fatalf("준 값을 쓴다, got %v", got)
 	}
 }
