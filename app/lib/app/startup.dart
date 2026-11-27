@@ -2,7 +2,7 @@
 // (2026-11-15 QA 지민 F4: 새 설치 첫 실행 8초 넘게 아무 표시 없는 흰 화면).
 // 지난번에 굳힌 책장 사진(home_snapshot.png)이 있으면 그 사진을, 없으면 로딩 화면(2026-11-27 사용자 시안 '로그인 화면에서 책장 좀 내리고 맨 밑에
 // 책장 여는 중 · 진열 중 · 정리 중, 색상이나 디자인은 로그인 화면이랑 유사하게'): 로그인 화면과 같은 책장 그림 · '책장 한켠' · 두 줄 소개 · 바탕,
-// 맨 아래 갈색 원 + 준비 단계 글. 전에는 '느린 계절' 책 그림 + 점 세 개.
+// 맨 아래 회색 원(2026-11-27 댓글 '돌아가는거 회색으로', 처음엔 갈색) + 준비 단계 글. 전에는 '느린 계절' 책 그림 + 점 세 개.
 // 1단계 '책장을 여는 중'(앱 준비) · 2단계 '책을 진열하는 중'(서재 읽기) · 3단계 '책장을 정리하는 중'(책장 그리기) · 4 다 됨(홈이 첫 책장을 다 그리면 shelfReady)
 library;
 
@@ -65,7 +65,7 @@ class StartApp extends StatelessWidget {
 }
 
 /// 로딩 화면(2026-11-27 사용자 시안): 로그인 화면과 같은 바탕(흰색 → 아래로 회색 기운) · 책장 그림 · '책장 한켠'(hero) · 두 줄 소개(row 회색).
-/// 책장은 로그인보다 아래(위 · 아래 남는 높이를 2:3으로 나눠 가운데보다 조금 위), 맨 아래 갈색 원 + 준비 단계 글(startStepText).
+/// 책장은 로그인보다 아래(위 · 아래 남는 높이를 2:3으로 나눠 가운데보다 조금 위), 맨 아래 회색 원 + 준비 단계 글(startStepText).
 /// 화면이 낮으면 그림만 줄어든다(높이의 절반까지)
 class StartCover extends StatelessWidget {
   const StartCover({super.key});
@@ -107,7 +107,7 @@ class StartCover extends StatelessWidget {
                     ]),
                   ),
                   const Spacer(flex: 3),
-                  // 맨 아래: 갈색 원 + 지금 단계(바뀌면 살짝 겹쳐 바뀐다)
+                  // 맨 아래: 회색 원(공용 Spinner 기본색 inkSoft, 옆 글과 같은 색) + 지금 단계(바뀌면 살짝 겹쳐 바뀐다)
                   ValueListenableBuilder<int>(
                     valueListenable: startStep,
                     builder: (context, step, _) => Semantics(
@@ -115,7 +115,7 @@ class StartCover extends StatelessWidget {
                       label: startStepText(step),
                       excludeSemantics: true,
                       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Spinner(color: AppColors.accent),
+                        const Spinner(),
                         const SizedBox(width: Space.s),
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 200),

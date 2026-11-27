@@ -23,7 +23,7 @@ void main() {
     expect(t.getRect(art).top, greaterThan(80), reason: '로그인(맨 위 16)보다 아래로');
     expect(t.getRect(title).top, greaterThan(t.getRect(art).bottom));
     final spin = t.widget<Spinner>(find.byType(Spinner));
-    expect(spin.color, AppColors.accent);
+    expect(spin.color, AppColors.inkSoft, reason: '회색 원(2026-11-27 댓글)');
     expect(find.text('책장을 여는 중'), findsOneWidget);
     expect(t.getRect(find.text('책장을 여는 중')).top, greaterThan(t.getRect(find.textContaining('읽은 시간과 문장을')).bottom + 40), reason: '맨 아래');
     startStep.value = 2;
