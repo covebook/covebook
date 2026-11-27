@@ -29,6 +29,7 @@ type Server struct {
 	LLM               *llm.Gateway
 	IAP               map[iap.Route]iap.Store // 결제 경로. 비어 있으면 결제 API가 없다
 	IAPSandbox        bool                    // 샌드박스 거래에도 지급할지 (IAP_ALLOW_SANDBOX)
+	IAPRules          iapRules                // 앱마다 다른 결제 규칙(대상·상한·문구). 책장 한켠은 covebookIAPRules
 	iapMu             sync.Mutex
 	iapHits           map[int64]iapHit
 	iapRenewalAt      time.Time                                             // 갱신 예정 고지를 마지막으로 찾은 때
@@ -246,7 +247,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) error {
 }
 func New(db *pgxpool.Pool) *Server {
 	gateway, err := llm.New(os.Getenv("LLM_KEYS"), os.Getenv("GEMINI_MODEL"), os.Getenv("OPENAI_MODEL"), nil)
-	s := &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), IAPSandbox: iapSandboxAllowed(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
+	s := &Server{DB: db, HTTP: &http.Client{Timeout: 8 * time.Second}, LLM: gateway, IAP: iapFromEnv(), IAPRules: covebookIAPRules, IAPSandbox: iapSandboxAllowed(), ConfigError: err, searchCache: make(map[string]searchEntry), deletions: make(map[string]deletionEntry), deletionWake: make(chan struct{}, 1)}
 	s.iapWake = make(chan struct{}, 1)
 	if s.IAP[iap.RouteGoogle] != nil {
 		s.iapPushAuth = s.iapGooglePushAuth()

@@ -1,0 +1,84 @@
+package server
+
+import (
+	"strconv"
+	"time"
+)
+
+// iapRules는 앱마다 다른 결제 규칙이다. 결제 코드는 선반·연도를 모르고 이 값만 본다(결제 키트 문서: server/iapkit/README.md).
+//
+// 한 번 사는 상품은 "대상(target)"에 "수량(units)"을 더한다. 대상은 문자열이고 뜻은 앱이 정한다.
+//   - 책장 한켠: 대상은 연도 책장("2026"), 수량은 선반 칸, 대상마다 3칸까지
+//   - 대상이 없는 앱(계정 전체에 붙는 상품): TargetRequired=false. 대상은 빈 문자열(”)이다
+type iapRules struct {
+	// TargetRequired면 한 번 사는 상품은 대상이 정해져야 준다. 대상을 모르는 거래는 기록만 하고
+	// 스토어 확인(소비)을 하지 않으며, 2일 안에 앱이 대상과 함께 다시 내지 않으면 환불한다(D1).
+	TargetRequired bool
+	// ValidTarget은 앱이 보낸 대상 값이 올바른지 본다. TargetRequired일 때만 부른다. 64자를 넘으면 부르기 전에 거절한다
+	ValidTarget func(string) bool
+	// Cap은 대상 하나에서 돈을 내고 살 수 있는 수량의 최대다. 0이면 상한이 없다(예약·넘김 환불을 하지 않는다)
+	Cap int
+	// Hold는 결제 중 예약이 살아 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다
+	Hold time.Duration
+	// Messages는 오류 코드별 사용자 문구다. 없는 코드는 iapDefaultMessages를 쓴다
+	Messages map[string]string
+}
+
+// iapTargetMax는 대상 값의 최대 길이다(DB CHECK와 같다).
+const iapTargetMax = 64
+
+// target은 앱이 보낸 대상을 확인한다. 빈 값은 "보내지 않음"이라 ok다.
+func (r iapRules) target(raw string) (string, bool) {
+	if raw == "" {
+		return "", true
+	}
+	if !r.TargetRequired || len(raw) > iapTargetMax || r.ValidTarget == nil || !r.ValidTarget(raw) {
+		return "", false
+	}
+	return raw, true
+}
+
+// message는 오류 코드의 사용자 문구다.
+func (r iapRules) message(code string) string {
+	if m, ok := r.Messages[code]; ok {
+		return m
+	}
+	return iapDefaultMessages[code]
+}
+
+// iapDefaultMessages는 앱이 문구를 주지 않은 오류의 기본 문구다(대상·수량을 모르는 말로 쓴다).
+var iapDefaultMessages = map[string]string{
+	"iap_cap_full":        "더 살 수 없어요",
+	"iap_cap_too_many":    "남은 수량보다 많아요",
+	"iap_target_busy":     "다른 기기에서 결제하고 있어요. 잠시 뒤 다시 시도해 주세요",
+	"iap_target_missing":  "어디에 쓸 구매인지 알 수 없어요. 문의해 주시면 확인해 드릴게요",
+	"iap_granted_owner":   "결제한 다른 계정에 넣었어요. 그 계정으로 로그인하면 보여요",
+	"iap_owner_refunded":  "결제한 계정이 탈퇴해 받을 수 없어요. 결제는 환불돼요",
+	"iap_owner_later":     "결제한 계정이 탈퇴해 받을 수 없어요. 결제는 며칠 안에 환불돼요",
+	"iap_owner_apple":     "결제한 계정이 탈퇴해 받을 수 없어요. App Store에서 환불을 요청해 주세요",
+	"iap_other_account_p": "다른 계정에 연결된 구매예요",
+}
+
+// covebookIAPRules는 책장 한켠의 규칙이다: 연도 책장마다 추가 선반 3칸까지(책장 6칸 중 3칸 무료, D1).
+var covebookIAPRules = iapRules{
+	TargetRequired: true,
+	ValidTarget:    covebookShelfYear,
+	Cap:            3,
+	Hold:           5 * time.Minute,
+	Messages: map[string]string{
+		"iap_cap_full":       "이 책장의 추가 선반을 모두 열었어요",
+		"iap_cap_too_many":   "이 책장에 남은 칸보다 많아요",
+		"iap_target_busy":    "다른 기기에서 이 책장의 선반을 결제하고 있어요. 잠시 뒤 다시 시도해 주세요",
+		"iap_target_missing": "어느 해 책장의 선반인지 알 수 없어요. 문의해 주시면 확인해 드릴게요",
+		"iap_granted_owner":  "결제한 다른 계정에 선반을 넣었어요. 그 계정으로 로그인하면 보여요",
+		"iap_owner_refunded": "결제한 계정이 탈퇴해 선반을 열 수 없어요. 결제는 환불돼요",
+		"iap_owner_later":    "결제한 계정이 탈퇴해 선반을 열 수 없어요. 결제는 며칠 안에 환불돼요",
+		"iap_owner_apple":    "결제한 계정이 탈퇴해 선반을 열 수 없어요. App Store에서 환불을 요청해 주세요",
+	},
+}
+
+// covebookShelfYear는 연도 책장 값인지 본다. 연도 책장 테이블(bookcases)과 같은 범위이고, "02026"처럼 같은 해가 둘로 나뉘는 모양은 받지 않는다.
+func covebookShelfYear(s string) bool {
+	y, err := strconv.Atoi(s)
+	return err == nil && y >= 2000 && y <= 9999 && strconv.Itoa(y) == s
+}

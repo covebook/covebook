@@ -25,14 +25,14 @@ const (
 	noticeExpired         = "expired"               // T8 구독 만료
 	noticeCancelScheduled = "cancel_scheduled"      // T10 해지 접수(자동 갱신 꺼짐)
 	noticeSubRefunded     = "subscription_refunded" // T9 환불(구독)
-	noticeShelfRefunded   = "shelf_refunded"        // T9 환불(선반)
+	noticeProductRefunded = "product_refunded"      // T9 환불(한 번 사는 상품)
 	noticeRenewalUpcoming = "renewal_upcoming"      // T4 갱신 예정(연 구독)
-	noticeShelfOverCap    = "shelf_over_cap"        // T15 그 해 책장의 유료 칸(3칸)을 넘게 사서 칸을 주지 않음, 환불(D1)
+	noticeProductOverCap  = "product_over_cap"      // T15 대상의 상한을 넘게 사서 주지 않음, 환불(D1)
 )
 
 var iapNoticeTemplate = map[string]string{
 	noticePurchaseDone: "T3", noticePaymentFailed: "T7", noticeExpired: "T8",
-	noticeCancelScheduled: "T10", noticeSubRefunded: "T9", noticeShelfRefunded: "T9", noticeShelfOverCap: "T15",
+	noticeCancelScheduled: "T10", noticeSubRefunded: "T9", noticeProductRefunded: "T9", noticeProductOverCap: "T15",
 	noticeRenewalUpcoming: "T4",
 }
 
@@ -60,41 +60,41 @@ func iapWriteNotice(ctx context.Context, q dbtx, user int64, kind string, env ia
 }
 
 // iapNotePurchaseDone은 새로 지급한 구매를 알린다(T3). 거래 키가 유일 키라 같은 거래는 한 번만 알린다.
-// 추가 선반은 칸이 열린 연도 책장(year)을 함께 적는다. 3칸을 넘게 산 거래에는 쓰지 않는다(iapNoteShelfGrant).
-// 구독이면 shelf는 쓰지 않는다.
-func iapNotePurchaseDone(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, shelf iapShelfGrant) error {
+// 한 번 사는 상품은 수량(units)과 받은 대상(target)을 함께 적는다. 상한을 넘게 산 거래에는 쓰지 않는다(iapNoteProductGrant).
+// 구독이면 grant는 쓰지 않는다.
+func iapNotePurchaseDone(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, grant iapGrant) error {
 	params := map[string]any{"route": string(p.Route), "productId": p.ProductID, "kind": string(kind)}
 	if kind == iap.KindSubscription {
 		params["expiresAt"] = iapStamp(p.ExpiresAt)
 	} else {
-		params["shelves"], params["year"] = shelf.Shelves, shelf.Year
+		params["units"], params["target"] = grant.Units, grant.Target
 	}
 	return iapWriteNotice(ctx, q, user, noticePurchaseDone, p.Env, "purchase_done:"+string(p.Route)+":"+iapTransactionKey(kind, p), params)
 }
 
-// iapShelfGrant는 선반 구매 하나가 어느 해 책장에 몇 칸을 줬는지다.
-type iapShelfGrant struct {
-	Shelves int  // 상품이 주는 칸 수
-	Year    int  // 칸이 열린 연도 책장
-	OverCap bool // 그 해 유료 칸(3칸)을 넘게 샀다. 칸을 주지 않았다
+// iapGrant는 한 번 사는 상품 하나가 어느 대상에 얼마를 줬는지다(책장 한켠: 어느 해 책장에 몇 칸).
+type iapGrant struct {
+	Units   int    // 상품이 주는 수량
+	Target  string // 받은 대상. 대상이 없는 앱은 빈 값
+	OverCap bool   // 대상의 상한을 넘게 샀다. 주지 않았다
 }
 
-// iapNoteShelfGrant는 연도가 정해진 선반 구매를 알린다. 칸을 줬으면 결제 완료(T3), 3칸을 넘었으면 넘김 고지다.
+// iapNoteProductGrant는 대상이 정해진 구매를 알린다. 줬으면 결제 완료(T3), 상한을 넘었으면 넘김 고지다.
 // 넘김 고지의 autoRefund는 처음에 false이고, 서버가 스토어에 환불을 요청하면 true로 바뀐다(iapRefundOverCap).
 // false면 앱이 "스토어에 환불을 요청해 주세요"(애플 등)를 안내한다.
-func iapNoteShelfGrant(ctx context.Context, q dbtx, user int64, p iap.Purchase, shelf iapShelfGrant) error {
-	if !shelf.OverCap {
-		return iapNotePurchaseDone(ctx, q, user, iap.KindProduct, p, shelf)
+func iapNoteProductGrant(ctx context.Context, q dbtx, user int64, p iap.Purchase, grant iapGrant) error {
+	if !grant.OverCap {
+		return iapNotePurchaseDone(ctx, q, user, iap.KindProduct, p, grant)
 	}
 	key := iapTransactionKey(iap.KindProduct, p)
-	return iapWriteNotice(ctx, q, user, noticeShelfOverCap, p.Env, iapOverCapDedupe(p.Route, key), map[string]any{
-		"route": string(p.Route), "productId": p.ProductID, "year": shelf.Year, "shelves": shelf.Shelves, "autoRefund": false,
+	return iapWriteNotice(ctx, q, user, noticeProductOverCap, p.Env, iapOverCapDedupe(p.Route, key), map[string]any{
+		"route": string(p.Route), "productId": p.ProductID, "target": grant.Target, "units": grant.Units, "autoRefund": false,
 	})
 }
 
 // iapOverCapDedupe는 넘김 고지의 유일 키다. 거래마다 한 번이다.
 func iapOverCapDedupe(route iap.Route, key string) string {
-	return noticeShelfOverCap + ":" + string(route) + ":" + key
+	return noticeProductOverCap + ":" + string(route) + ":" + key
 }
 
 // iapSubBefore는 구독 줄을 고치기 전의 값이다. 고지는 이 값과 새 값이 달라진 순간에만 쓴다.

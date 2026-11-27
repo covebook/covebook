@@ -1,6 +1,8 @@
 -- 인앱결제(ADR-0002). 거래 원장, 구독 상태, 받은 알림, 파는 상품, 계정 연결 값.
 -- 규칙
---  * 권한은 저장하지 않는다. plus 여부와 연도 책장마다의 선반 칸 수는 아래 테이블에서 계산한다(D5).
+--  * 권한은 저장하지 않는다. 구독 권한과 대상(target)마다 산 수량은 아래 테이블에서 계산한다(D5).
+--  * 앱마다 다른 것은 테이블에 박지 않는다. 한 번 사는 상품이 붙는 "대상"은 문자열이고 뜻은 앱이 정한다
+--    (책장 한켠: 연도 책장 "2026", 수량은 선반 칸). 대상이 없는 상품은 빈 문자열('')이다. 결제 키트 문서: server/iapkit/README.md
 --  * 결제 경로(route)는 문자열 값이다('apple', 'google'). 새 경로가 생겨도 테이블을 고치지 않게 CHECK를 두지 않는다(D19).
 --  * 거래·구독은 계정을 지워도 남긴다(거래 기록 보존, ADR-0003). 그래서 user_id는 ON DELETE SET NULL이다.
 --    다른 테이블은 CASCADE로 지워지지만 이 두 테이블은 유저 연결만 끊긴다.
@@ -9,44 +11,44 @@
 
 -- 스토어에 넘기는 계정 연결 값(애플 appAccountToken, 구글 obfuscatedAccountId). 유저 번호를 밖에 내보내지 않는다(D7).
 -- 유저 하나에 여러 개다
---  * 구독용: year가 NULL인 값. 유저마다 하나를 쓴다
---  * 추가 선반용: 연도 책장마다 하나(year). 스토어 거래에는 연도가 없어서, 선반을 살 때 그 연도의 값을 넘기고
---    돌아온 값으로 어느 해 책장의 칸인지 찾는다(D1). 앱이 결제 중 꺼져도, 스토어 알림으로 와도 연도를 잃지 않는다
+--  * 구독용: target이 NULL인 값. 유저마다 하나를 쓴다
+--  * 대상용: 대상마다 하나(target). 스토어 거래에는 "무엇을 위해 샀는지"가 없어서, 살 때 그 대상의 값을 넘기고
+--    돌아온 값으로 어느 대상의 구매인지 찾는다(D1). 앱이 결제 중 꺼져도, 스토어 알림으로 와도 대상을 잃지 않는다
 CREATE TABLE iap_account_tokens (
     token      UUID PRIMARY KEY,  -- 무작위 UUID(v4). 서버가 만들어 넣는다. gen_random_uuid()는 PostgreSQL 13부터라 쓰지 않는다
     user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    year       INT CHECK (year BETWEEN 2000 AND 9999),  -- 추가 선반을 여는 연도 책장. 구독용은 NULL
+    target     TEXT CHECK (length(target) <= 64),  -- 한 번 사는 상품이 붙는 대상. 구독용은 NULL
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX iap_account_tokens_user_idx ON iap_account_tokens (user_id, created_at);
--- 연도 하나에 값 하나. 두 기기가 동시에 받아도 같은 값이 나온다
-CREATE UNIQUE INDEX iap_account_tokens_year_idx ON iap_account_tokens (user_id, year) WHERE year IS NOT NULL;
+-- 대상 하나에 값 하나. 두 기기가 동시에 받아도 같은 값이 나온다
+CREATE UNIQUE INDEX iap_account_tokens_target_idx ON iap_account_tokens (user_id, target) WHERE target IS NOT NULL;
 
--- 선반 결제 중 예약. 한 기기가 결제창을 띄우면 몇 분 동안 그 해 책장의 칸을 잡아 둔다.
--- 두 기기에서 동시에 사서 3칸을 넘는 일을 결제 전에 막는다(D1). 결제가 끝나거나 취소되면 지우고, 앱이 꺼져 남은 줄은 expires_at이 지나면 무시한다.
+-- 결제 중 예약. 한 기기가 결제창을 띄우면 몇 분 동안 그 대상의 수량을 잡아 둔다.
+-- 두 기기에서 동시에 사서 대상의 상한을 넘는 일을 결제 전에 막는다(D1). 결제가 끝나거나 취소되면 지우고, 앱이 꺼져 남은 줄은 expires_at이 지나면 무시한다.
 -- 원장이 아니라서 지워도 된다
-CREATE TABLE iap_shelf_reservations (
+CREATE TABLE iap_reservations (
     id         UUID PRIMARY KEY,  -- 무작위 UUID(v4). 서버가 만든다
     user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    year       INT NOT NULL CHECK (year BETWEEN 2000 AND 9999),
-    shelves    INT NOT NULL CHECK (shelves > 0),
+    target     TEXT NOT NULL CHECK (length(target) <= 64),
+    units      INT NOT NULL CHECK (units > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ NOT NULL
 );
-CREATE INDEX iap_shelf_reservations_user_idx ON iap_shelf_reservations (user_id, year, expires_at);
+CREATE INDEX iap_reservations_user_idx ON iap_reservations (user_id, target, expires_at);
 
 -- 파는 상품. "어떤 상품이 무엇을 주는가"를 코드가 아니라 여기에 둔다(D21). 가격은 두지 않는다(스토어가 정한다, D22).
 CREATE TABLE iap_products (
     route       TEXT NOT NULL,
     product_id  TEXT NOT NULL,
     kind        TEXT NOT NULL CHECK (kind IN ('subscription', 'product')),
-    entitlement TEXT,              -- 구독이 주는 권한('plus')
-    shelves     INT,               -- 한 번 사는 상품이 주는 선반 칸 수(1칸, 3칸 묶음)
+    entitlement TEXT,              -- 구독이 주는 권한 이름(책장 한켠: 'plus')
+    units       INT,               -- 한 번 사는 상품이 주는 수량(책장 한켠: 선반 1칸, 3칸 묶음)
     consume     BOOLEAN NOT NULL DEFAULT true,  -- 구글에서 소비 처리할지. true면 같은 상품을 다시 살 수 있고 스토어 복원은 안 된다(D1). 구독에는 뜻이 없다
     active      BOOLEAN NOT NULL DEFAULT true,  -- 새로 팔지 않게 된 상품은 false. 이미 산 것은 그대로 인정한다
     PRIMARY KEY (route, product_id),
-    CHECK ((kind = 'subscription' AND entitlement IS NOT NULL AND shelves IS NULL)
-        OR (kind = 'product' AND shelves > 0 AND entitlement IS NULL))
+    CHECK ((kind = 'subscription' AND entitlement IS NOT NULL AND units IS NULL)
+        OR (kind = 'product' AND units > 0 AND entitlement IS NULL))
 );
 
 -- 거래 원장: 스토어가 확인해 준 거래 1건. 줄을 지우지 않는다. 환불은 state와 revoked_at으로 남긴다.
@@ -58,8 +60,8 @@ CREATE TABLE iap_purchases (
     original_id    TEXT   NOT NULL,   -- 구독 1건을 묶는 값. 애플: 원 거래 ID. 구글: 구매 토큰
     user_id        BIGINT REFERENCES users(id) ON DELETE SET NULL,
     account_token  UUID,              -- 스토어가 돌려준 계정 연결 값. 없는 구매도 있다
-    shelf_year     INT,               -- 추가 선반이 열린 연도 책장. 넣을 때 계정 연결 값에서 찾아 적는다(값을 지워도 남게). 구독·연도 모름은 NULL
-    -- 그 해 책장의 유료 칸(3칸)을 넘게 산 선반 거래. 연도가 정해질 때 한 번 정한다. 칸을 주지 않고 환불한다(D1)
+    target         TEXT,              -- 한 번 사는 상품이 붙은 대상. 넣을 때 계정 연결 값에서 찾아 적는다(값을 지워도 남게). 구독·대상 모름은 NULL, 대상 없는 상품은 ''
+    -- 그 대상의 상한을 넘게 산 거래. 대상이 정해질 때 한 번 정한다. 주지 않고 환불한다(D1)
     over_cap       BOOLEAN NOT NULL DEFAULT false,
     refund_requested_at TIMESTAMPTZ,  -- 넘게 산 거래의 환불을 스토어에 요청한 시각(구글). 애플은 개발자가 환불할 수 없어 비어 있다
     refund_attempts INT NOT NULL DEFAULT 0,  -- 환불 요청을 시도한 횟수. 실패하면 정기 처리가 다시 시도한다

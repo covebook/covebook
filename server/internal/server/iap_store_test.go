@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -113,7 +115,7 @@ func TestIAPShelfToken(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			var err error
-			if tokens[i], err = iapShelfToken(ctx, db, user, 2026); err != nil {
+			if tokens[i], err = iapTargetToken(ctx, db, user, "2026"); err != nil {
 				t.Error(err)
 			}
 		}()
@@ -124,11 +126,11 @@ func TestIAPShelfToken(t *testing.T) {
 			t.Fatalf("2026년 값이 하나가 아님: %v", tokens)
 		}
 	}
-	next, err := iapShelfToken(ctx, db, user, 2027)
+	next, err := iapTargetToken(ctx, db, user, "2027")
 	if err != nil || next == tokens[0] {
 		t.Fatalf("2027년 값 %q %v (2026년과 달라야 함)", next, err)
 	}
-	theirs, err := iapShelfToken(ctx, db, other, 2026)
+	theirs, err := iapTargetToken(ctx, db, other, "2026")
 	if err != nil || theirs == tokens[0] {
 		t.Fatalf("다른 유저의 2026년 값 %q %v", theirs, err)
 	}
@@ -145,18 +147,24 @@ func TestIAPShelfToken(t *testing.T) {
 	if err = tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	for tok, want := range map[string]int{tokens[0]: 2026, next: 2027, plain: 0, "": 0, "uuid가 아닌 값": 0, "00000000-0000-0000-0000-000000000000": 0} {
-		if got, err := iapTokenYear(ctx, db, tok); err != nil || got != want {
-			t.Errorf("iapTokenYear(%q)=%d,%v 기대 %d", tok, got, err, want)
+	// 대상용 값만 대상을 안다. 구독용·빈 값·모양이 다른 값·없는 값은 모른다(known=false)
+	for tok, want := range map[string]string{tokens[0]: "2026", next: "2027", plain: "", "": "", "uuid가 아닌 값": "", "00000000-0000-0000-0000-000000000000": ""} {
+		if got, known, err := iapTokenTarget(ctx, db, tok); err != nil || got != want || known != (want != "") {
+			t.Errorf("iapTokenTarget(%q)=%q,%v,%v 기대 %q", tok, got, known, err, want)
 		}
 	}
 	// 연도용 값도 이 유저의 값이다(스토어 확인에서 남의 거래로 보지 않게)
 	if ok, err := iapOwnsToken(ctx, db, user, next); err != nil || !ok {
 		t.Fatal("연도용 값이 유저의 값으로 안 보임", ok, err)
 	}
-	// 책장 테이블과 같은 범위만 받는다
-	if _, err := iapShelfToken(ctx, db, user, 1999); err == nil {
-		t.Fatal("1999년 값이 만들어짐")
+	// 대상 값의 뜻은 앱 규칙이 본다(책장 한켠: 책장 테이블과 같은 범위의 연도). DB는 길이만 막는다
+	for y, ok := range map[string]bool{"2026": true, "2000": true, "9999": true, "1999": false, "10000": false, "02026": false, "": false, "abc": false} {
+		if covebookShelfYear(y) != ok {
+			t.Errorf("covebookShelfYear(%q) 기대 %v", y, ok)
+		}
+	}
+	if _, err := iapTargetToken(ctx, db, user, strings.Repeat("x", iapTargetMax+1)); err == nil {
+		t.Fatal("64자를 넘는 대상 값이 만들어짐")
 	}
 }
 
@@ -164,10 +172,10 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	ctx, db := iapTestDB(t)
 	user := iapTestUser(t, ctx, db)
 	shelf := iapTestID(t, "shelf")
-	if _, err := db.Exec(ctx, "INSERT INTO iap_products(route,product_id,kind,shelves) VALUES('apple',$1,'product',2)", shelf); err != nil {
+	if _, err := db.Exec(ctx, "INSERT INTO iap_products(route,product_id,kind,units) VALUES('apple',$1,'product',2)", shelf); err != nil {
 		t.Fatal(err)
 	}
-	year2026, err := iapShelfToken(ctx, db, user, 2026)
+	year2026, err := iapTargetToken(ctx, db, user, "2026")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +190,7 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, p)
+			ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, p, true)
 			if err != nil {
 				t.Error(err)
 			}
@@ -202,23 +210,23 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	}
 	shelvesAre := func(want map[int]int) {
 		t.Helper()
-		_, got, err := iapEntitlements(ctx, db, user, true)
+		_, got, err := iapEntitlements(ctx, db, user, true, 3)
 		if err != nil || len(got) != len(want) {
 			t.Fatalf("선반 %v %v (기대 %v)", got, err, want)
 		}
 		for y, n := range want {
-			if got[y] != n {
+			if got[strconv.Itoa(y)] != n {
 				t.Fatalf("선반 %v (기대 %v)", got, want)
 			}
 		}
 	}
 	shelvesAre(map[int]int{2026: 2})
-	var year *int
-	if err := db.QueryRow(ctx, "SELECT shelf_year FROM iap_purchases WHERE route='apple' AND transaction_id=$1", p.TransactionID).Scan(&year); err != nil || year == nil || *year != 2026 {
+	var year *string
+	if err := db.QueryRow(ctx, "SELECT target FROM iap_purchases WHERE route='apple' AND transaction_id=$1", p.TransactionID).Scan(&year); err != nil || year == nil || *year != "2026" {
 		t.Fatalf("거래에 적힌 연도 %v %v", year, err)
 	}
 	// 이 거래는 샌드박스다. 샌드박스를 받지 않는 서버에서는 세지 않는다
-	if _, shelves, err := iapEntitlements(ctx, db, user, false); err != nil || len(shelves) != 0 {
+	if _, shelves, err := iapEntitlements(ctx, db, user, false, 3); err != nil || len(shelves) != 0 {
 		t.Fatalf("샌드박스 거래가 세어짐: %v %v", shelves, err)
 	}
 
@@ -226,20 +234,20 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	p2 := p
 	p2.TransactionID = iapTestID(t, "tx2")
 	p2.OriginalTransactionID = p2.TransactionID
-	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, p2); err != nil || !ok {
+	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, p2, true); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	shelvesAre(map[int]int{2026: iapPaidShelfMax})
+	shelvesAre(map[int]int{2026: covebookIAPRules.Cap})
 
 	// 다른 연도 책장의 칸은 따로 센다
-	year2027, err := iapShelfToken(ctx, db, user, 2027)
+	year2027, err := iapTargetToken(ctx, db, user, "2027")
 	if err != nil {
 		t.Fatal(err)
 	}
 	p3 := p
 	p3.TransactionID, p3.AccountToken = iapTestID(t, "tx-2027"), year2027
 	p3.OriginalTransactionID = p3.TransactionID
-	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, p3); err != nil || !ok {
+	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, p3, true); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	shelvesAre(map[int]int{2026: 3, 2027: 2})
@@ -270,7 +278,7 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 		q := p
 		q.TransactionID, q.AccountToken = iapTestID(t, "tx-noyear"), tok
 		q.OriginalTransactionID = q.TransactionID
-		if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, q); err != nil || !ok {
+		if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, q, true); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 	}
@@ -279,13 +287,13 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	// 결제가 끝나지 않은 거래는 원장에 넣지 않는다
 	pending := p
 	pending.TransactionID, pending.State = iapTestID(t, "tx3"), iap.StatePending
-	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, pending); err == nil || ok {
+	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, pending, true); err == nil || ok {
 		t.Fatal("대기 중인 거래가 들어감")
 	}
 
 	// 구글처럼 금액·주문 ID가 없는 거래: 빈 값은 NULL로, 유일 키는 구매 토큰으로
 	g := iap.Purchase{Route: iap.RouteGoogle, OriginalTransactionID: iapTestID(t, "token"), ProductID: shelf, State: iap.StatePaid, Env: iap.EnvProduction, PurchasedAt: time.Now().UTC()}
-	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, g); err != nil || !ok {
+	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, g, true); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	var key string
@@ -299,14 +307,14 @@ func TestIAPPurchaseLedgerAndShelves(t *testing.T) {
 	}
 	// 구글 한 번 사는 상품은 주문 ID가 있어도 구매 토큰이 유일 키다. 같은 토큰에 주문 ID만 달라도 한 번만 들어간다
 	g.TransactionID = "GPA.다른-주문"
-	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, g); err != nil || ok {
+	if ok, err := iapRecordPurchase(ctx, db, user, iap.KindProduct, g, true); err != nil || ok {
 		t.Fatal("같은 구매 토큰이 두 번 들어감", ok, err)
 	}
 	// 구글 구독 갱신은 토큰이 같고 주문 ID가 달라서 거래 줄이 따로 생긴다
 	sub := iap.Purchase{Route: iap.RouteGoogle, OriginalTransactionID: iapTestID(t, "subtoken"), ProductID: shelf, State: iap.StatePaid, Env: iap.EnvProduction, PurchasedAt: time.Now().UTC()}
 	for i, order := range []string{iapTestID(t, "GPA.0"), iapTestID(t, "GPA.1")} {
 		sub.TransactionID = order
-		if ok, err := iapRecordPurchase(ctx, db, user, iap.KindSubscription, sub); err != nil || !ok {
+		if ok, err := iapRecordPurchase(ctx, db, user, iap.KindSubscription, sub, true); err != nil || !ok {
 			t.Fatalf("구독 갱신 %d: %v %v", i, ok, err)
 		}
 	}
@@ -339,11 +347,11 @@ func TestIAPSubscriptionAndPlus(t *testing.T) {
 	}
 	plus := func(u int64) bool {
 		t.Helper()
-		ok, _, err := iapEntitlements(ctx, db, u, true)
+		ents, _, err := iapEntitlements(ctx, db, u, true, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return ok
+		return slices.Contains(ents, "plus")
 	}
 
 	if prev := upsert(user, sub); prev != 0 || !plus(user) || plus(other) {
@@ -441,7 +449,7 @@ func TestIAPSurvivesAccountDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := iap.Purchase{Route: iap.RouteApple, TransactionID: iapTestID(t, "tx"), OriginalTransactionID: orig, ProductID: product, AccountToken: token, State: iap.StatePaid, Env: iap.EnvProduction, PurchasedAt: time.Now().UTC()}
-	if _, err = iapRecordPurchase(ctx, tx, user, iap.KindSubscription, p); err != nil {
+	if _, err = iapRecordPurchase(ctx, tx, user, iap.KindSubscription, p, true); err != nil {
 		t.Fatal(err)
 	}
 	notice := "purchase_done:apple:" + p.TransactionID
@@ -481,14 +489,14 @@ func TestIAPSurvivesAccountDeletion(t *testing.T) {
 func TestIAPShelfReservation(t *testing.T) {
 	ctx, db := iapTestDB(t)
 	user, other := iapTestUser(t, ctx, db), iapTestUser(t, ctx, db)
-	reserve := func(u int64, year, shelves, paid int) (iapReservation, time.Duration) {
+	reserve := func(u int64, year, units, paid int) (iapReservation, time.Duration) {
 		t.Helper()
 		tx, err := db.Begin(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer tx.Rollback(ctx)
-		r, wait, err := iapReserveShelf(ctx, tx, u, year, shelves, paid)
+		r, wait, err := iapReserve(ctx, tx, u, strconv.Itoa(year), units, paid, covebookIAPRules.Cap, covebookIAPRules.Hold)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -530,7 +538,7 @@ func TestIAPShelfReservation(t *testing.T) {
 		}
 	}
 	var n int
-	if err := db.QueryRow(ctx, "SELECT count(*) FROM iap_shelf_reservations WHERE user_id=$1 AND year=2026", user).Scan(&n); err != nil || n != 2 {
+	if err := db.QueryRow(ctx, "SELECT count(*) FROM iap_reservations WHERE user_id=$1 AND target='2026'", user).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("남이 푼 예약이 지워짐: %d %v", n, err)
 	}
 	// 내 예약을 풀면 그만큼 다시 잡힌다
@@ -541,11 +549,11 @@ func TestIAPShelfReservation(t *testing.T) {
 		t.Fatal("예약 1칸을 풀었으니 1+2 ≤ 3")
 	}
 	// 가장 먼저 잡은 것부터 푼다
-	if err := iapReleaseOldestReservation(ctx, db, user, 2026); err != nil {
+	if err := iapReleaseOldestReservation(ctx, db, user, "2026"); err != nil {
 		t.Fatal(err)
 	}
 	var left []string
-	rows, _ := db.Query(ctx, "SELECT id::text FROM iap_shelf_reservations WHERE user_id=$1 AND year=2026", user)
+	rows, _ := db.Query(ctx, "SELECT id::text FROM iap_reservations WHERE user_id=$1 AND target='2026'", user)
 	for rows.Next() {
 		var id string
 		_ = rows.Scan(&id)
@@ -557,7 +565,7 @@ func TestIAPShelfReservation(t *testing.T) {
 	}
 
 	// 끝난 예약은 세지 않는다
-	if _, err := db.Exec(ctx, "UPDATE iap_shelf_reservations SET expires_at = now() - interval '1 second' WHERE user_id=$1", user); err != nil {
+	if _, err := db.Exec(ctx, "UPDATE iap_reservations SET expires_at = now() - interval '1 second' WHERE user_id=$1", user); err != nil {
 		t.Fatal(err)
 	}
 	if r, _ := reserve(user, 2026, 3, 0); r.ID == "" {
@@ -570,10 +578,10 @@ func TestIAPOverCapNotCounted(t *testing.T) {
 	ctx, db := iapTestDB(t)
 	user := iapTestUser(t, ctx, db)
 	one := iapTestID(t, "shelf1")
-	if _, err := db.Exec(ctx, "INSERT INTO iap_products(route,product_id,kind,shelves) VALUES('apple',$1,'product',1)", one); err != nil {
+	if _, err := db.Exec(ctx, "INSERT INTO iap_products(route,product_id,kind,units) VALUES('apple',$1,'product',1)", one); err != nil {
 		t.Fatal(err)
 	}
-	token, err := iapShelfToken(ctx, db, user, 2026)
+	token, err := iapTargetToken(ctx, db, user, "2026")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +589,7 @@ func TestIAPOverCapNotCounted(t *testing.T) {
 		p := iap.Purchase{Route: iap.RouteApple, TransactionID: iapTestID(t, "tx") + string(rune('a'+i)), ProductID: one, AccountToken: token,
 			State: iap.StatePaid, Env: iap.EnvSandbox, PurchasedAt: time.Now().UTC()}
 		p.OriginalTransactionID = p.TransactionID
-		if _, err = iapRecordPurchase(ctx, db, user, iap.KindProduct, p); err != nil {
+		if _, err = iapRecordPurchase(ctx, db, user, iap.KindProduct, p, true); err != nil {
 			t.Fatal(err)
 		}
 		if i == 1 {
@@ -590,7 +598,7 @@ func TestIAPOverCapNotCounted(t *testing.T) {
 			}
 		}
 	}
-	if _, shelves, err := iapEntitlements(ctx, db, user, true); err != nil || shelves[2026] != 1 {
+	if _, shelves, err := iapEntitlements(ctx, db, user, true, 3); err != nil || shelves["2026"] != 1 {
 		t.Fatalf("넘게 산 거래는 세지 않음: %v %v", shelves, err)
 	}
 }

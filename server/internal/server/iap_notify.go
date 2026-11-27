@@ -192,7 +192,7 @@ type iapSweepResult struct {
 	Notices, NoticesFailed, Confirmed, Refreshed int
 	Backfilled, Voided                           int // 스토어의 목록으로 메운 알림, 반영한 환불
 	Renewals                                     int // 새로 쓴 갱신 예정 고지
-	Refunds                                      int // 칸을 주지 않은 선반 거래(3칸 넘김, 연도 모름, 주인 없음)의 환불을 요청해 성공한 수(구글)
+	Refunds                                      int // 주지 않은 거래(상한 넘김, 대상 모름, 주인 없음)의 환불을 요청해 성공한 수(구글)
 }
 
 // iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
@@ -252,7 +252,7 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		keep(iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note))
 	}
 
-	// 4. 3칸을 넘게 산 선반 거래 중 환불 요청을 못 마친 것(구글). 처음 요청은 제출·알림 처리에서 한다
+	// 4. 상한을 넘게 산 거래 중 환불 요청을 못 마친 것(구글). 처음 요청은 제출·알림 처리에서 한다
 	var refunders []string
 	for route, store := range s.IAP {
 		if _, ok := store.(iap.Refunder); ok {
@@ -281,18 +281,18 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			}
 		})
 	}
-	// 연도를 끝내 모르는 선반(2일 뒤)과 주인 없는 선반. 앱이 연도와 함께 다시 낼 시간을 준 뒤 구글 3일 자동 환불보다 먼저 한다.
-	// 환불하는 순간 앱이 연도를 붙여 내 칸을 받았어도, 구글 환불 알림(voided)이 와서 칸을 회수한다
-	yearless, err := iapYearlessToRefund(ctx, s.DB, refunders, 50)
+	// 대상을 끝내 모르는 거래(2일 뒤)와 주인 없는 거래. 앱이 대상과 함께 다시 낼 시간을 준 뒤 구글 3일 자동 환불보다 먼저 한다.
+	// 환불하는 순간 앱이 대상을 붙여 내 받았어도, 구글 환불 알림(voided)이 와서 회수한다
+	ungranted, err := iapUngrantedToRefund(ctx, s.DB, refunders, 50)
 	keep(err)
-	for _, o := range yearless {
-		iapSafely("yearless refund", func() {
+	for _, o := range ungranted {
+		iapSafely("ungranted refund", func() {
 			store := s.IAP[o.Route]
 			storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 			p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
 			cancel()
 			if e != nil {
-				log.Printf("iap yearless refund: lookup failed route=%s err=%v", o.Route, e)
+				log.Printf("iap ungranted refund: lookup failed route=%s err=%v", o.Route, e)
 				return
 			}
 			if s.iapRefundPurchase(ctx, store, o.Key, p.TransactionID) {
@@ -506,7 +506,7 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 		}
 		// 알림만으로 새로 지급한 구독도 결제 완료를 알린다(T3). 뒤에 앱이 같은 거래를 제출하면 "전에 지급한 것"이라 다시 알리지 않는다
 		if cur.State == iap.StatePaid {
-			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapShelfGrant{}); err != nil {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapGrant{}); err != nil {
 				return "", err
 			}
 		}
@@ -518,14 +518,14 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	// 가장 최근 거래를 원장에 남긴다(갱신 거래). 주인을 아는 경우에만.
 	key := iapTransactionKey(iap.KindSubscription, cur)
 	if user != 0 && cur.State == iap.StatePaid {
-		inserted, e := iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur)
+		inserted, e := iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur, s.IAPRules.TargetRequired)
 		if e != nil {
 			return "", e
 		}
 		// 주인이 있던 구독에 처음 보는 결제 거래: 갱신(또는 요금제 변경) 결제다. 결제 완료를 알린다(T3, ADR-0003 L7 "구매·갱신 직후").
 		// 고지의 유일 키가 거래 단위라, 같은 거래를 제출 경로가 먼저 알렸어도 한 줄이다
 		if inserted && owner.found {
-			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapShelfGrant{}); err != nil {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapGrant{}); err != nil {
 				return "", err
 			}
 		}
@@ -595,55 +595,55 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if err != nil {
 		return "", err
 	}
-	// 원장, 3칸 넘김 판정, 결제 중 예약 풀기, 고지(T3 또는 넘김)를 한 트랜잭션에 쓴다(앱보다 알림이 먼저 온 경우)
+	// 원장, 상한 넘김 판정, 결제 중 예약 풀기, 고지(T3 또는 넘김)를 한 트랜잭션에 쓴다(앱보다 알림이 먼저 온 경우)
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback(ctx)
-	inserted, err := iapRecordPurchase(ctx, tx, user, iap.KindProduct, p)
+	inserted, err := iapRecordPurchase(ctx, tx, user, iap.KindProduct, p, s.IAPRules.TargetRequired)
 	if err != nil {
 		return "", err
 	}
-	// 어느 해 책장의 칸인지는 넣을 때 계정 연결 값으로 적었다(D1). 연도를 모르면 칸을 주지 않았으니 결제 완료도 알리지 않는다
-	year, err := iapTokenYear(ctx, tx, p.AccountToken)
+	// 어느 대상의 구매인지는 넣을 때 계정 연결 값으로 적었다(D1). 대상을 모르면 주지 않았으니 결제 완료도 알리지 않는다
+	target, known, _, err := iapSetTarget(ctx, tx, route, key, "")
 	if err != nil {
 		return "", err
 	}
 	overCap := false
-	if inserted && year > 0 {
-		if overCap, err = iapSettleShelf(ctx, tx, user, route, key, s.IAPSandbox); err != nil {
+	if inserted && known {
+		if overCap, err = iapSettleCap(ctx, tx, user, route, key, s.IAPSandbox, s.IAPRules.Cap); err != nil {
 			return "", err
 		}
-		if err = iapReleaseOldestReservation(ctx, tx, user, year); err != nil {
+		if err = iapReleaseOldestReservation(ctx, tx, user, target); err != nil {
 			return "", err
 		}
-		if err = iapNoteShelfGrant(ctx, tx, user, p, iapShelfGrant{Shelves: product.Shelves, Year: year, OverCap: overCap}); err != nil {
+		if err = iapNoteProductGrant(ctx, tx, user, p, iapGrant{Units: product.Units, Target: target, OverCap: overCap}); err != nil {
 			return "", err
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return "", err
 	}
-	// 연도를 모르면 소비하지 않는다. 앱이 연도와 함께 내면 그때 소비하고, 끝내 안 내면 구글이 3일 뒤 환불한다(제출 경로와 같다)
-	if inserted && year > 0 && !p.Acknowledged {
+	// 대상을 모르면 소비하지 않는다. 앱이 대상과 함께 내면 그때 소비하고, 끝내 안 내면 서버가 2일 뒤 환불한다(제출 경로와 같다)
+	if inserted && known && !p.Acknowledged {
 		if e := iapConfirmAfter(ctx, store, ref, p.ProductID, product.Consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
 		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
 		}
 	}
-	if year == 0 {
-		return "연도를 모르는 선반 구매 기록. 앱이 연도와 함께 제출하면 그 해 책장에 줌", nil
+	if !known {
+		return "대상을 모르는 구매 기록. 앱이 대상과 함께 제출하면 그 대상에 줌", nil
 	}
 	if overCap {
-		log.Printf("iap shelf over cap: route=%s user=%d year=%d", route, user, year)
+		log.Printf("iap over cap: route=%s user=%d target=%s", route, user, target)
 		if s.iapRefundOverCap(ctx, store, key, p.TransactionID) {
-			return fmt.Sprintf("알림으로 새 구매 기록(%d년 책장, 3칸 넘음: 칸을 주지 않고 환불 요청)", year), nil
+			return fmt.Sprintf("알림으로 새 구매 기록(대상 %q, 상한 넘음: 주지 않고 환불 요청)", target), nil
 		}
-		return fmt.Sprintf("알림으로 새 구매 기록(%d년 책장, 3칸 넘음: 칸을 주지 않음, 환불은 사용자 요청 또는 다시 시도)", year), nil
+		return fmt.Sprintf("알림으로 새 구매 기록(대상 %q, 상한 넘음: 주지 않음, 환불은 사용자 요청 또는 다시 시도)", target), nil
 	}
-	return fmt.Sprintf("알림으로 새 구매 지급(%d년 책장)", year), nil
+	return fmt.Sprintf("알림으로 새 구매 지급(대상 %q)", target), nil
 }
 
 // iapConfirmAfter는 DB 커밋 뒤의 스토어 확인이다. 앞의 조회와 제한 시간을 나눠 쓰지 않게 새로 준다

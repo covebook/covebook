@@ -16,16 +16,16 @@ import (
 // iapPurchases는 내 구매 내역을 최신순으로 준다(ADR-0003 L17). 원장의 줄 그대로이고 환불된 줄도 보인다.
 // 금액은 스토어가 알려 준 거래에만 있다(애플은 거래에, 구글은 주문 조회 orders.get에 있다. 조회가 실패한 구글 거래는 비어 있다).
 //
-// 응답: {"purchases":[{"route","productId","kind","state":"paid|revoked","purchasedAt","revokedAt","shelves","year","overCap","currency","priceMilli"}]}
-// 추가 선반은 shelves(상품이 주는 칸 수)와 year(칸이 열린 연도 책장)를 준다. 연도를 모르는 거래는 year가 없다.
-// 그 해 3칸을 넘게 사서 칸을 주지 않은 거래는 "overCap":true다(환불 대상).
+// 응답: {"purchases":[{"route","productId","kind","state":"paid|revoked","purchasedAt","revokedAt","units","target","overCap","currency","priceMilli"}]}
+// 한 번 사는 상품은 units(상품이 주는 수량)와 target(받은 대상)을 준다. 대상을 모르는 거래는 target이 없다.
+// 대상의 상한을 넘게 사서 주지 않은 거래는 "overCap":true다(환불 대상).
 func (s *Server) iapPurchases(w http.ResponseWriter, r *http.Request) error {
 	user, err := s.user(r)
 	if err != nil {
 		return err
 	}
 	ctx := r.Context()
-	rows, err := s.DB.Query(ctx, `SELECT b.route, b.product_id, b.kind, b.state, b.purchased_at, b.revoked_at, coalesce(p.shelves,0), coalesce(b.currency,''), b.price_milli, b.shelf_year, b.over_cap
+	rows, err := s.DB.Query(ctx, `SELECT b.route, b.product_id, b.kind, b.state, b.purchased_at, b.revoked_at, coalesce(p.units,0), coalesce(b.currency,''), b.price_milli, b.target, b.over_cap
 		FROM iap_purchases b LEFT JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
 		WHERE b.user_id=$1 AND ($2 OR b.env='production')
 		ORDER BY b.purchased_at DESC, b.id DESC LIMIT 200`, user, s.IAPSandbox)
@@ -38,21 +38,21 @@ func (s *Server) iapPurchases(w http.ResponseWriter, r *http.Request) error {
 		var route, product, kind, state, currency string
 		var purchased time.Time
 		var revoked *time.Time
-		var shelves int
+		var units int
 		var price *int64
-		var year *int
+		var target *string
 		var overCap bool
-		if err = rows.Scan(&route, &product, &kind, &state, &purchased, &revoked, &shelves, &currency, &price, &year, &overCap); err != nil {
+		if err = rows.Scan(&route, &product, &kind, &state, &purchased, &revoked, &units, &currency, &price, &target, &overCap); err != nil {
 			return err
 		}
 		item := map[string]any{"route": route, "productId": product, "kind": kind, "state": state, "purchasedAt": purchased.UTC().Format(time.RFC3339)}
 		if revoked != nil {
 			item["revokedAt"] = revoked.UTC().Format(time.RFC3339)
 		}
-		if kind == string(iap.KindProduct) && shelves > 0 {
-			item["shelves"] = shelves
-			if year != nil {
-				item["year"] = *year
+		if kind == string(iap.KindProduct) && units > 0 {
+			item["units"] = units
+			if target != nil {
+				item["target"] = *target
 			}
 			if overCap {
 				item["overCap"] = true
@@ -230,23 +230,23 @@ func (s *Server) iapApplyVoided(ctx context.Context, store iap.Store, v iap.Void
 type iapBacklog struct {
 	PendingNotices         int   `json:"pendingNotifications"`     // 받았지만 아직 처리하지 않은 알림
 	FailedNotices          int   `json:"failedNotifications"`      // 처리에 실패해 다시 시도할 알림
-	Unconfirmed            int   `json:"unconfirmedPurchases"`     // 지급했는데 스토어 확인을 못 마친 구매(구글은 3일 안에 해야 한다). 일부러 소비하지 않은 연도 모르는 선반은 shelfNoYear로 따로 센다
+	Unconfirmed            int   `json:"unconfirmedPurchases"`     // 지급했는데 스토어 확인을 못 마친 구매(구글은 3일 안에 해야 한다). 일부러 소비하지 않은 대상 모르는 거래는 noTarget으로 따로 센다
 	OldestPendingSecs      int64 `json:"oldestPendingSeconds"`     // 가장 오래 기다린 알림의 나이
 	Subscriptions          int   `json:"activeSubscriptions"`      // 지금 유효한 구독 1건(운영 환경)
 	RevokedPurchases       int   `json:"revokedPurchases30Days"`   // 최근 30일에 환불된 거래
-	ShelfOverCap           int   `json:"shelfOverCap"`             // 한 연도 책장에서 3칸을 넘게 사서 칸을 주지 않은 거래 중 돈이 아직 돌아가지 않은 것(운영 환경). 애플 거래와 구글 환불 요청 실패(D1)
-	ShelfOverCapRefunded   int   `json:"shelfOverCapRefunded"`     // 넘게 산 구글 거래 중 서버가 환불을 요청한 것(운영 환경)
-	ShelfOverCapApple      int   `json:"shelfOverCapApple"`        // 넘게 산 애플 거래 중 아직 환불되지 않은 것(운영 환경). 개발자가 환불할 수 없어 사용자가 애플에 요청해야 한다
-	OldestUnconfirmedSecs  int64 `json:"oldestUnconfirmedSeconds"` // 확인 못 한 구글 구매 중 가장 오래된 것의 나이(연도 모르는 선반은 일부러 안 하므로 뺌). 3일(259200초)이 지나면 구글이 환불한다. 하루를 넘으면 사람이 본다
+	OverCap                int   `json:"overCap"`                  // 대상의 상한을 넘게 사서 주지 않은 거래 중 돈이 아직 돌아가지 않은 것(운영 환경). 애플 거래와 구글 환불 요청 실패(D1)
+	OverCapRefunded        int   `json:"overCapRefunded"`          // 넘게 산 구글 거래 중 서버가 환불을 요청한 것(운영 환경)
+	OverCapApple           int   `json:"overCapApple"`             // 넘게 산 애플 거래 중 아직 환불되지 않은 것(운영 환경). 개발자가 환불할 수 없어 사용자가 애플에 요청해야 한다
+	OldestUnconfirmedSecs  int64 `json:"oldestUnconfirmedSeconds"` // 확인 못 한 구글 구매 중 가장 오래된 것의 나이(대상 모르는 거래는 일부러 안 하므로 뺌). 3일(259200초)이 지나면 구글이 환불한다. 하루를 넘으면 사람이 본다
 	SandboxPurchases30Days int   `json:"sandboxPurchases30Days"`   // 운영 서버가 받은 최근 30일 샌드박스 거래(심사·TestFlight). 갑자기 늘면 무료 누출을 의심한다(D15)
-	ShelfNoYear            int   `json:"shelfNoYear"`              // 칸을 주지 않은 선반 거래(연도 모름, 주인 없음) 중 환불을 요청하지 못한 것(운영 환경). 구글은 대조가 2일 뒤 환불하고, 애플은 사용자가 요청해야 한다
+	NoTarget               int   `json:"noTarget"`                 // 주지 않은 거래(대상 모름, 주인 없음) 중 환불을 요청하지 못한 것(운영 환경). 구글은 대조가 2일 뒤 환불하고, 애플은 사용자가 요청해야 한다
 }
 
 func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 	err = q.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM iap_notifications WHERE result='received'),
 		(SELECT count(*) FROM iap_notifications WHERE result='failed' AND received_at > now() - interval '8 days'),
-		(SELECT count(*) FROM iap_purchases WHERE confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND shelf_year IS NULL)),
+		(SELECT count(*) FROM iap_purchases WHERE confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND target IS NULL)),
 		coalesce((SELECT extract(epoch FROM now() - min(received_at)) FROM iap_notifications
 			WHERE result IN ('received','failed') AND received_at > now() - interval '8 days'), 0)::bigint,
 		(SELECT count(*) FROM iap_subscriptions WHERE state='paid' AND env='production' AND coalesce(grace_until, expires_at) > now()),
@@ -254,12 +254,12 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 		(SELECT count(*) FROM iap_purchases WHERE over_cap AND state='paid' AND env='production' AND refund_requested_at IS NULL),
 		(SELECT count(*) FROM iap_purchases WHERE over_cap AND env='production' AND refund_requested_at IS NOT NULL),
 		(SELECT count(*) FROM iap_purchases WHERE over_cap AND state='paid' AND env='production' AND route='apple'),
-		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND shelf_year IS NULL AND refund_requested_at IS NULL),
+		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND target IS NULL AND refund_requested_at IS NULL),
 		coalesce((SELECT extract(epoch FROM now() - min(purchased_at)) FROM iap_purchases
-			WHERE route='google' AND confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND shelf_year IS NULL)), 0)::bigint,
+			WHERE route='google' AND confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND target IS NULL)), 0)::bigint,
 		(SELECT count(*) FROM iap_purchases WHERE env='sandbox' AND purchased_at > now() - interval '30 days')`).
 		Scan(&b.PendingNotices, &b.FailedNotices, &b.Unconfirmed, &b.OldestPendingSecs, &b.Subscriptions, &b.RevokedPurchases,
-			&b.ShelfOverCap, &b.ShelfOverCapRefunded, &b.ShelfOverCapApple, &b.ShelfNoYear, &b.OldestUnconfirmedSecs, &b.SandboxPurchases30Days)
+			&b.OverCap, &b.OverCapRefunded, &b.OverCapApple, &b.NoTarget, &b.OldestUnconfirmedSecs, &b.SandboxPurchases30Days)
 	return
 }
 
@@ -281,9 +281,9 @@ func (s *Server) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	if skip {
 		return
 	}
-	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds shelf_over_cap=%d shelf_over_cap_apple=%d shelf_no_year=%d",
+	log.Printf("iap sweep: notices=%d notices_failed=%d confirmed=%d refreshed=%d backfilled=%d voided=%d renewals=%d refunds=%d | backlog: pending=%d failed=%d unconfirmed=%d oldest_unconfirmed=%ds oldest_pending=%ds over_cap=%d over_cap_apple=%d no_target=%d",
 		res.Notices, res.NoticesFailed, res.Confirmed, res.Refreshed, res.Backfilled, res.Voided, res.Renewals, res.Refunds,
-		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestUnconfirmedSecs, b.OldestPendingSecs, b.ShelfOverCap, b.ShelfOverCapApple, b.ShelfNoYear)
+		b.PendingNotices, b.FailedNotices, b.Unconfirmed, b.OldestUnconfirmedSecs, b.OldestPendingSecs, b.OverCap, b.OverCapApple, b.NoTarget)
 }
 
 // iapAdminStats는 밀린 일의 숫자를 준다. 운영자 토큰이 없으면 없는 경로처럼 답한다(community.go의 adminOK와 같은 방식).
