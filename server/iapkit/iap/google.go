@@ -160,7 +160,7 @@ func (g *Google) fillPrice(ctx context.Context, p *Purchase) {
 	defer cancel()
 	o, err := g.api.GetOrder(ctx, g.packageName, p.TransactionID)
 	if err != nil {
-		err = g.lim.note(RouteGoogle, err) // 금액 조회도 같은 한도를 쓴다
+		// 한도(429)여도 쉬기를 적지 않는다. 금액은 없어도 되는 값이고, 주문 API의 한도로 구매 확인까지 멈추면 안 된다
 		log.Printf("google order price unavailable: product=%s err=%v", p.ProductID, err)
 		return
 	}

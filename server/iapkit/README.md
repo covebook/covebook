@@ -150,7 +150,8 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 | 422 | `iap_bad_proof`, `iap_unknown_product` | 안 끝냄 | 증거를 확인 못 함, 상품 테이블에 없음 |
 | 422 | `iap_target_missing` | 안 끝냄 | 대상을 모름. 대상을 붙여 다시 낸다 |
 | 429 | `iap_too_many` | 안 끝냄 | 유저당 1분 제출 횟수 넘음 |
-| 503 | `iap_store_unavailable` | 안 끝냄 | 스토어 조회 실패 |
+| 503 | `iap_store_unavailable` | 안 끝냄 | 스토어 조회 실패, 스토어가 한도(429)에 걸려 쉬는 중 |
+| 503 | `iap_busy` | 안 끝냄 | DB 잠금을 5초 넘게 기다림(결제 트랜잭션의 `lock_timeout`) |
 
 같은 응답 코드에 상황마다 다른 문구를 주려고 문구 키를 따로 둔다.
 
@@ -185,6 +186,10 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 4. 상한을 넘게 산 거래 중 환불 요청을 못 마친 것을 다시 요청한다(구글)
 5. 대상을 끝내 모르는 거래(2일 뒤)와 주인 없는 거래를 환불한다
 6. 연 구독의 갱신 예정 고지를 쓴다(6시간에 한 번)
+
+한 바퀴는 2분 안에 끝난다. 단계마다 마감 시각(`iapSweepStages`, 시작부터 30·60·80·95·115초)이 있어 느린 스토어가 앞 단계를 붙잡아도 뒤 단계가 돈다. 마감에 걸린 건은 다음 바퀴에 이어서 한다.
+
+스토어가 한도 초과(429)로 답하면 그 경로는 `Retry-After`까지 부르지 않는다(`iap.RateLimitError`, `iap.Rester`). 쉬는 동안의 건은 건너뛰고 시도 횟수를 쓰지 않는다. 요약 로그의 `resting`은 건너뛴 건, `cut`은 마감에 걸린 단계 수다.
 
 ## 시험
 
