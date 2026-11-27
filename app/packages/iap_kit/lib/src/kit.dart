@@ -2,8 +2,13 @@
 library;
 
 /// 서버 호출. 성공하면 JSON 본문(본문이 없거나 202면 null), 실패하면 IapApiError를 던진다.
-/// 로그인하지 않았으면 아무 오류나 던진다(키트는 "지금은 못 한다"로 보고 다음에 다시 한다)
+/// 로그인하지 않았거나 서버가 없는 빌드면 IapSignedOut을 던진다(키트는 "지금은 못 한다"로 보고 다음에 다시 한다)
 typedef IapApi = Future<Object?> Function(String method, String path, [Object? body]);
+
+/// 로그인하지 않았거나 서버가 없는 빌드. 알림함은 이때 null을 돌려줘 앱이 기기 기준으로 알릴 수 있게 한다(fetchIapNotices)
+class IapSignedOut implements Exception {
+  const IapSignedOut();
+}
 
 /// 서버가 준 오류 응답 {"error":{"code","message"}}
 class IapApiError implements Exception {

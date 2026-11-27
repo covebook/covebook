@@ -381,7 +381,7 @@ void main() {
       PurchaseHistoryScreen(items: [
         IapHistoryItem(route: iapRoute, productId: 'plus', kind: 'subscription', state: 'paid', purchasedAt: DateTime.utc(2026, 12, 18, 3)),
         IapHistoryItem(route: iapRoute, productId: 'plus', kind: 'subscription', state: 'paid', purchasedAt: DateTime.utc(2026, 11, 18, 3)),
-        IapHistoryItem(route: iapRoute, productId: 'shelf', kind: 'product', state: 'revoked', purchasedAt: DateTime.utc(2026, 11, 10, 3), revokedAt: DateTime.utc(2026, 11, 12, 3), shelves: 1),
+        IapHistoryItem(route: iapRoute, productId: 'shelf', kind: 'product', state: 'revoked', purchasedAt: DateTime.utc(2026, 11, 10, 3), revokedAt: DateTime.utc(2026, 11, 12, 3), units: 1),
       ]),
     );
     expect(find.text('책장 한켠 플러스'), findsNWidgets(2));

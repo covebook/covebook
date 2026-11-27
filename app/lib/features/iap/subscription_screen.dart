@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/iap.dart';
 import '../../store/entitlement_store.dart';
+import '../../ui/feedback.dart' show showToast;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import '../settings/terms.dart' show openTermsPage;
@@ -92,7 +93,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     await _iap.restorePurchases();
     if (!mounted) return;
     final m = _iap.lastMessage;
-    if (m != null) ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(m), duration: const Duration(seconds: 3), persist: false));
+    if (m != null) showToast(context, m);
   }
 
   @override

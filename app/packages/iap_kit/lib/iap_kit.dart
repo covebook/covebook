@@ -4,5 +4,6 @@ library;
 
 export 'src/entitlements.dart';
 export 'src/kit.dart';
+export 'src/notices.dart';
 export 'src/plan.dart';
 export 'src/service.dart';

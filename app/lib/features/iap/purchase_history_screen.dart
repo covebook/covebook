@@ -7,9 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../db/kv_store.dart';
 import '../../services/iap.dart';
-import '../../services/sync.dart' show api, syncTokenKey;
+import '../../ui/feedback.dart' show showToast;
 import '../../ui/kit.dart';
 import '../../ui/theme.dart';
 import 'subscription_screen.dart' show iapDate, storeName, storeRefundUrl;
@@ -17,51 +16,16 @@ import 'subscription_screen.dart' show iapDate, storeName, storeRefundUrl;
 Future<void> openPurchaseHistory(BuildContext context) => Navigator.of(context, rootNavigator: true)
     .push(MaterialPageRoute<void>(settings: const RouteSettings(name: '/me/purchases'), builder: (_) => const PurchaseHistoryScreen()));
 
-class IapHistoryItem {
-  const IapHistoryItem({required this.route, required this.productId, required this.kind, required this.state, required this.purchasedAt, this.revokedAt, this.shelves = 0, this.year, this.currency, this.priceMilli});
-  final String route, productId, kind, state;
-  final DateTime purchasedAt;
-  final DateTime? revokedAt;
-  final int shelves;
+/// 구매 내역 한 줄의 책장 한켠 말. 데이터와 서버 읽기는 결제 키트(IapHistoryItem, fetchIapPurchases)에 있다
+extension CovebookHistory on IapHistoryItem {
+  /// 서버 키트의 수량(units)이 칸 수, 대상(target)이 연도 책장이다
+  int get shelves => units;
 
   /// 추가 선반을 연 연도 책장(서버가 주지 않으면 null)
-  final int? year;
-  final String? currency;
+  int? get year => int.tryParse(target);
 
-  /// 통화 1단위 = 1000인 정수(서버 D20)
-  final int? priceMilli;
-
-  static IapHistoryItem? from(Object? j) {
-    if (j is! Map) return null;
-    final at = DateTime.tryParse('${j['purchasedAt']}');
-    if (at == null) return null;
-    return IapHistoryItem(
-      route: '${j['route'] ?? ''}',
-      productId: '${j['productId'] ?? ''}',
-      kind: '${j['kind'] ?? ''}',
-      state: '${j['state'] ?? ''}',
-      purchasedAt: at,
-      revokedAt: DateTime.tryParse('${j['revokedAt']}'),
-      // 서버 키트의 수량(units)이 칸 수, 대상(target)이 연도 책장이다
-      shelves: (j['units'] as num?)?.toInt() ?? 0,
-      year: int.tryParse('${j['target'] ?? ''}'),
-      currency: j['currency'] as String?,
-      priceMilli: (j['priceMilli'] as num?)?.toInt(),
-    );
-  }
-
-  bool get refunded => state == 'revoked';
   String get name => kind == 'subscription' ? '책장 한켠 플러스' : year == null ? '추가 선반 $shelves칸' : '$year년 책장 추가 선반 $shelves칸';
   String get stateLabel => refunded ? '환불됨' : '결제 완료';
-
-  /// 금액: 서버가 가진 값을 통화 코드와 함께 그대로(환율·세금 계산을 하지 않는다). 없으면 null
-  String? get price {
-    final c = currency, m = priceMilli;
-    if (c == null || m == null) return null;
-    final whole = m ~/ 1000, frac = m % 1000;
-    final digits = '$whole'.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
-    return frac == 0 ? '$digits $c' : '$digits.${'$frac'.padLeft(3, '0').replaceFirst(RegExp(r'0+$'), '')} $c';
-  }
 
   /// 따로 남길 때의 한 줄
   String get line => [iapDate(purchasedAt), name, ?price, storeName(route), stateLabel, if (revokedAt != null) '환불일 ${iapDate(revokedAt!)}'].join(', ');
@@ -91,11 +55,8 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
   Future<void> _load() async {
     setState(() => _failed = false);
     try {
-      final token = await KvStore.get(syncTokenKey);
-      if (token == null) throw StateError('로그인이 필요해요');
-      final res = await api('GET', '/iap/purchases', token);
-      final list = res is Map<String, dynamic> && res['purchases'] is List ? res['purchases'] as List : const [];
-      if (mounted) setState(() => _items = [for (final j in list) ?IapHistoryItem.from(j)]);
+      final items = await fetchIapPurchases();
+      if (mounted) setState(() => _items = items);
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }
@@ -104,7 +65,7 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
   Future<void> _copy(List<IapHistoryItem> items) async {
     await Clipboard.setData(ClipboardData(text: ['책장 한켠 구매 내역', for (final i in items) i.line].join('\n')));
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('구매 내역을 복사했어요.'), duration: Duration(seconds: 3), persist: false));
+    showToast(context, '구매 내역을 복사했어요.');
   }
 
   @override
