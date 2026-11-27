@@ -1,6 +1,7 @@
 package iapkit
 
 import (
+	"context"
 	"errors"
 	"net/http/httptest"
 	"strings"
@@ -163,5 +164,35 @@ func TestIAPBeginTimeouts(t *testing.T) {
 	// 문장 시간 초과(57014)도 같다
 	if !iapDBBusy(&pgconn.PgError{Code: "57014"}) || iapDBBusy(&pgconn.PgError{Code: "23505"}) {
 		t.Fatal("코드 판정이 틀림")
+	}
+}
+
+// 대조 단계 마감이 환불 요청 도중에 지나도, 시작한 환불은 끝까지 하고 "요청함"을 적는다.
+// 끊기면 스토어는 환불했는데 원장에는 안 한 것으로 남아 다음 바퀴가 같은 주문을 또 환불하려 한다
+func TestIAPRefundSurvivesStageDeadline(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	y := e.shelfToken(token, 2027)
+	e.shelfToken(token, 2027)
+	a, b := iapTestID(t, "g1"), iapTestID(t, "g2")
+	e.google.Purchases[a] = e.shelfPurchase(a, y)
+	e.google.Purchases[b] = e.shelfPurchase(b, y)
+	e.submit(token, "google", e.shelf, a, false)
+	e.google.RefundErr = errors.New("구글 장애")
+	if code, body := e.submit(token, "google", e.shelf, b, false); code != 200 || body["overCap"] != true || body["autoRefund"] != false {
+		t.Fatalf("상한 넘긴 구매가 환불 대기로 남지 않음: %d %v", code, body)
+	}
+	e.google.RefundErr = nil
+
+	// 단계 마감 300ms, 환불 요청은 500ms 걸린다
+	e.google.Delay = 500 * time.Millisecond
+	ctx, cancel := context.WithTimeout(e.ctx, 300*time.Millisecond)
+	defer cancel()
+	if !e.srv.iapRefundOverCap(ctx, e.google, b, "GPA."+b) {
+		t.Fatal("마감에 환불 요청이 끊김")
+	}
+	var requested bool
+	if err := e.db.QueryRow(e.ctx, "SELECT refund_requested_at IS NOT NULL FROM iap_purchases WHERE route='google' AND transaction_id=$1", b).Scan(&requested); err != nil || !requested {
+		t.Fatalf("환불했는데 기록이 없음: %v %v", requested, err)
 	}
 }

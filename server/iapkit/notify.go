@@ -282,7 +282,8 @@ func (s *Kit) iapSweep(jobCtx context.Context) (iapSweepResult, error) {
 				log.Printf("iap confirm retry failed: route=%s product=%s err=%v", u.Route, u.ProductID, e)
 				return
 			}
-			if e = iapMarkConfirmed(ctx, s.DB, u.Route, u.Key); e != nil {
+			// 스토어 확인은 됐다. 단계 마감에 기록이 끊기지 않게 한다
+			if e = iapMarkConfirmed(context.WithoutCancel(ctx), s.DB, u.Route, u.Key); e != nil {
 				keep(e)
 				return
 			}
@@ -641,7 +642,7 @@ func (s *Kit) iapSyncSubscription(ctx context.Context, store iap.Store, original
 	if granted && cur.State == iap.StatePaid && !cur.Acknowledged {
 		if e := iapConfirmAfter(ctx, store, iap.Ref{Kind: iap.KindSubscription, ID: sub.OriginalID}, cur.ProductID, false); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
-		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
+		} else if e = iapMarkConfirmed(context.WithoutCancel(ctx), s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
 		}
 	}
@@ -745,7 +746,7 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 	if inserted && known && !p.Acknowledged {
 		if e := iapConfirmAfter(ctx, store, ref, p.ProductID, product.Consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
-		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
+		} else if e = iapMarkConfirmed(context.WithoutCancel(ctx), s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
 		}
 	}

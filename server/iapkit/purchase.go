@@ -745,6 +745,9 @@ func (s *Kit) iapRefundOverCap(ctx context.Context, store iap.Store, key, orderI
 		}
 		return false
 	}
+	// 여기부터는 부른 쪽의 마감(요청 끊김, 대조 단계 마감)과 상관없이 끝까지 한다. 스토어는 환불했는데
+	// 기록이 끊기면 다음 바퀴가 같은 주문을 또 환불하려 한다. 스토어 호출은 아래에서 따로 15초를 둔다
+	ctx = context.WithoutCancel(ctx)
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
 	err := rf.Refund(refundCtx, orderID)
@@ -828,6 +831,9 @@ func (s *Kit) iapRefundPurchase(ctx context.Context, store iap.Store, key, order
 		}
 		return false
 	}
+	// 여기부터는 부른 쪽의 마감(요청 끊김, 대조 단계 마감)과 상관없이 끝까지 한다. 스토어는 환불했는데
+	// 기록이 끊기면 다음 바퀴가 같은 주문을 또 환불하려 한다. 스토어 호출은 아래에서 따로 15초를 둔다
+	ctx = context.WithoutCancel(ctx)
 	refundCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
 	err := rf.Refund(refundCtx, orderID)

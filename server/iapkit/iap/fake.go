@@ -87,8 +87,11 @@ type FakeRefunder struct {
 	RefundErr error    // 값이 있으면 Refund가 실패한다
 }
 
-func (f *FakeRefunder) Refund(_ context.Context, orderID string) error {
+func (f *FakeRefunder) Refund(ctx context.Context, orderID string) error {
 	if err := f.limited(); err != nil {
+		return err
+	}
+	if err := f.slow(ctx); err != nil {
 		return err
 	}
 	if f.RefundErr != nil {
