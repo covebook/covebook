@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // notices는 알림함을 읽는다(최신순).

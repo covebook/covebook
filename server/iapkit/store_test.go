@@ -1,8 +1,7 @@
-package server
+package iapkit
 
 import (
 	"context"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,18 +10,17 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 결제 테이블과 저장소 함수 시험. 실제 PostgreSQL이 있어야 돈다(TEST_DATABASE_URL).
 func iapTestDB(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
+	if iapTestDSN == "" {
 		t.Skip("set TEST_DATABASE_URL to a disposable PostgreSQL database")
 	}
 	ctx := context.Background()
-	db, err := pgxpool.New(ctx, dsn)
+	db, err := pgxpool.New(ctx, iapTestDSN)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,12 +155,7 @@ func TestIAPShelfToken(t *testing.T) {
 	if ok, err := iapOwnsToken(ctx, db, user, next); err != nil || !ok {
 		t.Fatal("연도용 값이 유저의 값으로 안 보임", ok, err)
 	}
-	// 대상 값의 뜻은 앱 규칙이 본다(책장 한켠: 책장 테이블과 같은 범위의 연도). DB는 길이만 막는다
-	for y, ok := range map[string]bool{"2026": true, "2000": true, "9999": true, "1999": false, "10000": false, "02026": false, "": false, "abc": false} {
-		if covebookShelfYear(y) != ok {
-			t.Errorf("covebookShelfYear(%q) 기대 %v", y, ok)
-		}
-	}
+	// 대상 값의 뜻은 앱 규칙이 본다(책장 한켠의 연도 범위는 server/internal/server/iap_test.go). DB는 길이만 막는다
 	if _, err := iapTargetToken(ctx, db, user, strings.Repeat("x", iapTargetMax+1)); err == nil {
 		t.Fatal("64자를 넘는 대상 값이 만들어짐")
 	}

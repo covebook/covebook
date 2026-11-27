@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 결제 고지(앱 안 알림함, ADR-0003 L8·L11·L18).
@@ -185,8 +185,8 @@ func iapUnreadNotices(ctx context.Context, q dbtx, user int64, allowSandbox bool
 // iapNotices는 내 고지 목록이다(알림함). 최신순 100건.
 //
 // 응답: {"notices":[{"id":1,"kind":"payment_failed","template":"T7","templateVersion":1,"createdAt":"...","readAt":"...(읽은 것만)","params":{...}}]}
-func (s *Server) iapNotices(w http.ResponseWriter, r *http.Request) error {
-	user, err := s.user(r)
+func (s *Kit) iapNotices(w http.ResponseWriter, r *http.Request) error {
+	user, err := s.user(w, r)
 	if err != nil {
 		return err
 	}
@@ -228,8 +228,8 @@ func (s *Server) iapNotices(w http.ResponseWriter, r *http.Request) error {
 
 // iapNoticesRead는 고지를 읽음으로 표시한다. 요청: {"ids":[1,2]} 또는 {"all":true}. 응답: {"unread":n}
 // 내 것이 아닌 번호는 조용히 지나친다(남의 고지가 있는지 알려 주지 않는다). 이미 읽은 것의 읽은 시각은 바꾸지 않는다.
-func (s *Server) iapNoticesRead(w http.ResponseWriter, r *http.Request) error {
-	user, err := s.user(r)
+func (s *Kit) iapNoticesRead(w http.ResponseWriter, r *http.Request) error {
+	user, err := s.user(w, r)
 	if err != nil {
 		return err
 	}
@@ -295,7 +295,7 @@ func iapRenewalNoticeDays() int {
 }
 
 // iapRenewalDue는 갱신 예정 고지를 지금 찾을 차례인지 보고, 차례면 찾은 것으로 적는다(서버 한 대의 메모리로 센다).
-func (s *Server) iapRenewalDue(now time.Time) bool {
+func (s *Kit) iapRenewalDue(now time.Time) bool {
 	s.iapMu.Lock()
 	defer s.iapMu.Unlock()
 	if !s.iapRenewalAt.IsZero() && now.Sub(s.iapRenewalAt) < iapRenewalEvery {

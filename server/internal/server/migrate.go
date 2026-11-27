@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit"
 	"sort"
 	"strconv"
 	"strings"
@@ -118,5 +119,9 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	// 결제 키트의 테이블(iap_*)은 키트가 따로 관리한다(iapkit_schema_history). users 테이블을 가리켜서 앱 마이그레이션 뒤에 돈다
+	return iapkit.Migrate(ctx, db)
 }

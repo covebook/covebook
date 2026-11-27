@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 func (e *iapEnv) purchases(token string) []map[string]any {

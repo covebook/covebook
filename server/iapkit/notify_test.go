@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // notify는 스토어 알림을 보낸다. 가짜 스토어는 본문을 iap.Notice의 JSON으로 읽는다.
@@ -119,7 +119,7 @@ func TestIAPNotifyReceive(t *testing.T) {
 		t.Fatalf("맞는 인증 %d", code)
 	}
 	// 인증 설정이 없는 서버는 구글 알림 경로를 열지 않는다
-	srv := New(e.db)
+	srv := iapTestKit(e.db)
 	srv.IAP = map[iap.Route]iap.Store{iap.RouteGoogle: e.google}
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/iap/notifications/google", bytes.NewReader([]byte("{}"))))

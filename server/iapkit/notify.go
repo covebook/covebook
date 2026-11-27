@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 스토어 알림 수신과 정기 대조. 근거: docs/reports/2026-11-19-iap-pitfalls.md 3-4장, 3-5장, 8-2장(T4, T5)
@@ -29,7 +29,7 @@ type iapNoticeParser interface {
 	ParseNotice(body []byte) (iap.Notice, error)
 }
 
-func (s *Server) routeIAPNotify(m *http.ServeMux) {
+func (s *Kit) routeIAPNotify(m *http.ServeMux) {
 	if _, ok := s.IAP[iap.RouteApple].(iapNoticeParser); ok {
 		m.HandleFunc("POST /iap/notifications/apple", wrap(s.iapNotify(iap.RouteApple)))
 	}
@@ -44,7 +44,7 @@ func (s *Server) routeIAPNotify(m *http.ServeMux) {
 //   - IAP_GOOGLE_PUSH_EMAIL: 푸시에 쓰는 서비스 계정 이메일
 //
 // 구글이 서명한 토큰인지, 대상이 우리인지, 그 서비스 계정이 보낸 것인지 본다.
-func (s *Server) iapGooglePushAuth() func(ctx context.Context, header string) error {
+func (s *Kit) iapGooglePushAuth() func(ctx context.Context, header string) error {
 	audience, email := strings.TrimSpace(os.Getenv("IAP_GOOGLE_PUSH_AUDIENCE")), strings.TrimSpace(os.Getenv("IAP_GOOGLE_PUSH_EMAIL"))
 	if audience == "" || email == "" {
 		return nil
@@ -74,7 +74,7 @@ func (s *Server) iapGooglePushAuth() func(ctx context.Context, header string) er
 	}
 }
 
-func (s *Server) iapNotify(route iap.Route) handler {
+func (s *Kit) iapNotify(route iap.Route) handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		ctx := r.Context()
 		if route == iap.RouteGoogle {
@@ -126,7 +126,7 @@ func (s *Server) iapNotify(route iap.Route) handler {
 	}
 }
 
-func (s *Server) iapWakeUp() {
+func (s *Kit) iapWakeUp() {
 	select {
 	case s.iapWake <- struct{}{}:
 	default:
@@ -135,7 +135,7 @@ func (s *Server) iapWakeUp() {
 
 // StartIAPWorker는 알림 처리와 대조를 뒤에서 돌린다. 1분마다, 그리고 새 알림이 오면 바로 돈다.
 // 서버가 여러 대여도 한 번에 한 곳만 돌게 DB 자문 락을 잡는다.
-func (s *Server) StartIAPWorker(ctx context.Context) {
+func (s *Kit) StartIAPWorker(ctx context.Context) {
 	if len(s.IAP) == 0 {
 		return
 	}
@@ -156,7 +156,7 @@ func (s *Server) StartIAPWorker(ctx context.Context) {
 
 // iapSweepSafely는 한 번 돌리되, 그 안에서 패닉이 나도 서버 전체가 죽지 않게 한다.
 // 고루틴의 패닉은 잡지 않으면 프로세스를 내린다. 스토어가 보낸 예상 밖의 값 하나로 서버가 죽으면 안 된다.
-func (s *Server) iapSweepSafely(ctx context.Context) {
+func (s *Kit) iapSweepSafely(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("iap sweep panic: %v", r)
@@ -171,7 +171,7 @@ func (s *Server) iapSweepSafely(ctx context.Context) {
 
 const iapSweepLockKey = 987614003 // migrate.go가 987614002를 쓴다
 
-func (s *Server) iapSweepLocked(ctx context.Context) error {
+func (s *Kit) iapSweepLocked(ctx context.Context) error {
 	conn, err := s.DB.Acquire(ctx)
 	if err != nil {
 		return err
@@ -197,7 +197,7 @@ type iapSweepResult struct {
 
 // iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
 // 순서: 기한이 있는 것(구글 확인 3일)을 가장 먼저 한다. 한 단계가 실패해도 다음 단계는 돈다.
-func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
+func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	var res iapSweepResult
 	var firstErr error
 	keep := func(err error) {
@@ -350,7 +350,7 @@ func iapSafely(what string, fn func()) (panicked bool) {
 // iapProcessNoticeSafely는 알림 한 건의 패닉을 그 알림의 실패로 가둔다.
 // 대조 전체의 recover(iapSweepSafely)만 있으면, 패닉 난 알림은 실패로 기록되지 않아 시도 횟수가 오르지 않고
 // 다음 바퀴에도 맨 앞에 뽑혀 뒤의 알림과 4단계(만료 구독 재조회)를 매번 막는다. 실패로 남기면 다른 실패처럼 간격을 두고 다시 시도한다
-func (s *Server) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (result, note string) {
+func (s *Kit) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (result, note string) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("iap notification panic: route=%s id=%s panic=%v", n.Route, n.ID, r)
@@ -361,7 +361,7 @@ func (s *Server) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (re
 }
 
 // iapProcessNotice는 알림 한 건을 처리하고 결과(processed, ignored, failed)와 메모를 돌려준다.
-func (s *Server) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, note string) {
+func (s *Kit) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, note string) {
 	store := s.IAP[n.Route]
 	if store == nil {
 		return "failed", "그 경로의 스토어가 꺼져 있음"
@@ -424,7 +424,7 @@ func (s *Server) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, 
 }
 
 // iapBasics는 알림·대조로 알게 된 거래가 우리 앱의 아는 상품인지, 받아도 되는 환경인지 본다. 계정과 상태는 보지 않는다.
-func (s *Server) iapBasics(ctx context.Context, store iap.Store, p iap.Purchase) error {
+func (s *Kit) iapBasics(ctx context.Context, store iap.Store, p iap.Purchase) error {
 	products, err := iapProductSet(ctx, s.DB, store.Route())
 	if err != nil {
 		return err
@@ -436,7 +436,7 @@ func (s *Server) iapBasics(ctx context.Context, store iap.Store, p iap.Purchase)
 // iapSyncSubscription은 구독 1건을 스토어에 다시 묻고 우리 테이블을 그 답으로 맞춘다.
 //   - 줄이 있으면 상태만 고친다. 주인은 그대로다(주인은 우리 테이블이 정한다. 스토어의 계정 연결 값은 옮긴 뒤에도 옛 값이다).
 //   - 줄이 없으면(앱이 제출하기 전에 알림이 먼저 옴, 앱 밖 구매) 계정 연결 값으로 주인을 찾아 만든다. 못 찾으면 만들지 않는다.
-func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, originalID string) (string, error) {
+func (s *Kit) iapSyncSubscription(ctx context.Context, store iap.Store, originalID string) (string, error) {
 	route := store.Route()
 	storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
@@ -546,7 +546,7 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 
 // iapSyncPurchase는 거래 하나를 스토어에 다시 묻고 원장의 환불 상태를 맞춘다.
 // 한 번 사는 상품이 원장에 없으면(앱이 제출하기 전에 알림이 먼저 옴) 계정 연결 값으로 주인을 찾아 지급한다.
-func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref) (string, error) {
+func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref) (string, error) {
 	route := store.Route()
 	storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
@@ -655,7 +655,7 @@ func iapConfirmAfter(ctx context.Context, store iap.Store, ref iap.Ref, productI
 
 // iapSyncRevoked는 제출에서 스토어가 환불이라고 답한 거래를 알림 처리와 같은 길로 반영한다.
 // 요청이 끊겨도 끝까지 하도록 취소를 떼어 낸다(안의 스토어 조회는 각자 제한 시간을 둔다)
-func (s *Server) iapSyncRevoked(ctx context.Context, store iap.Store, kind iap.Kind, ref iap.Ref, originalID string) {
+func (s *Kit) iapSyncRevoked(ctx context.Context, store iap.Store, kind iap.Kind, ref iap.Ref, originalID string) {
 	c := context.WithoutCancel(ctx)
 	var note string
 	var err error

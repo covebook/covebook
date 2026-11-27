@@ -1,11 +1,11 @@
-package server
+package iapkit
 
 import (
 	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 갱신 예정 고지(T4): 연 구독이고, 이용 중이고, 자동 갱신이 켜져 있고, 갱신일이 N일 안일 때만 한 번 쓴다.
@@ -149,7 +149,7 @@ func TestIAPRenewalSchedule(t *testing.T) {
 			t.Fatalf("%q → %d, 기대 %d", v, got, want)
 		}
 	}
-	s := &Server{}
+	s := &Kit{}
 	now := time.Now()
 	if !s.iapRenewalDue(now) || s.iapRenewalDue(now.Add(time.Hour)) || !s.iapRenewalDue(now.Add(iapRenewalEvery)) {
 		t.Fatal("서버를 켜면 바로 한 번, 그 뒤로는 6시간에 한 번")

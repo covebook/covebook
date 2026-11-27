@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 구매 내역, 사업자 정보, 빠진 알림 메우기, 밀린 일의 숫자.
@@ -19,8 +19,8 @@ import (
 // 응답: {"purchases":[{"route","productId","kind","state":"paid|revoked","purchasedAt","revokedAt","units","target","overCap","currency","priceMilli"}]}
 // 한 번 사는 상품은 units(상품이 주는 수량)와 target(받은 대상)을 준다. 대상을 모르는 거래는 target이 없다.
 // 대상의 상한을 넘게 사서 주지 않은 거래는 "overCap":true다(환불 대상).
-func (s *Server) iapPurchases(w http.ResponseWriter, r *http.Request) error {
-	user, err := s.user(r)
+func (s *Kit) iapPurchases(w http.ResponseWriter, r *http.Request) error {
+	user, err := s.user(w, r)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func iapSeller() map[string]string {
 const iapCatchUpEvery = 6 * time.Hour
 
 // iapCatchUpDue는 이 경로의 메우기를 지금 돌릴 차례인지 보고, 차례면 돌린 것으로 적는다.
-func (s *Server) iapCatchUpDue(route iap.Route, now time.Time) bool {
+func (s *Kit) iapCatchUpDue(route iap.Route, now time.Time) bool {
 	s.iapMu.Lock()
 	defer s.iapMu.Unlock()
 	if last, ok := s.iapCatchUpAt[route]; ok && now.Sub(last) < iapCatchUpEvery {
@@ -137,7 +137,7 @@ func iapCatchUpSince(ctx context.Context, q dbtx, route iap.Route, now time.Time
 // iapCatchUp은 스토어가 가진 목록으로 빠진 것을 메운다. 실패해도 다른 대조는 계속 돈다.
 //   - 알림 이력: 우리가 못 받은 알림을 알림 테이블에 넣는다. 처리는 이어지는 알림 처리 단계가 한다. 이미 받은 것은 유일 키가 거른다.
 //   - 무효 구매 목록: 환불을 원장에 반영한다. 환불 알림이 빠졌을 때의 대비다.
-func (s *Server) iapCatchUp(ctx context.Context, res *iapSweepResult) {
+func (s *Kit) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 	now := time.Now().UTC()
 	for route, store := range s.IAP {
 		history, hasHistory := store.(iap.NoticeHistory)
@@ -196,7 +196,7 @@ func (s *Server) iapCatchUp(ctx context.Context, res *iapSweepResult) {
 // iapApplyVoided는 스토어가 환불했다고 알려 준 구매 한 건을 원장에 반영한다. 새로 바뀐 줄이 있으면 true다.
 // 목록에는 구독인지 한 번 사는 상품인지가 없다. 한 번 사는 상품은 구매 토큰이, 구독의 갱신 거래는 주문 ID가 원장의 키라서 둘 다 찾는다.
 // 우리 원장에 없는 구매(다른 서버 환경, 지급 전에 환불)는 바뀌는 줄이 없어 그냥 지나간다.
-func (s *Server) iapApplyVoided(ctx context.Context, store iap.Store, v iap.VoidedPurchase, now time.Time) bool {
+func (s *Kit) iapApplyVoided(ctx context.Context, store iap.Store, v iap.VoidedPurchase, now time.Time) bool {
 	at := v.VoidedAt
 	if at.IsZero() {
 		at = now
@@ -264,7 +264,7 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 }
 
 // iapLogSweep은 한 번 돈 결과와 밀린 일을 한 줄로 남긴다. 한 일도 밀린 일도 없으면 한 시간에 한 번만 남긴다.
-func (s *Server) iapLogSweep(ctx context.Context, res iapSweepResult) {
+func (s *Kit) iapLogSweep(ctx context.Context, res iapSweepResult) {
 	b, err := iapBacklogNow(ctx, s.DB)
 	if err != nil {
 		log.Printf("iap backlog query failed: %v", err)
@@ -287,8 +287,8 @@ func (s *Server) iapLogSweep(ctx context.Context, res iapSweepResult) {
 }
 
 // iapAdminStats는 밀린 일의 숫자를 준다. 운영자 토큰이 없으면 없는 경로처럼 답한다(community.go의 adminOK와 같은 방식).
-func (s *Server) iapAdminStats(w http.ResponseWriter, r *http.Request) error {
-	if !adminOK(r) {
+func (s *Kit) iapAdminStats(w http.ResponseWriter, r *http.Request) error {
+	if !s.adminOK(r) {
 		return notFound
 	}
 	b, err := iapBacklogNow(r.Context(), s.DB)

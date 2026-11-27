@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 //   - 상한이 있으면: 대상이 없어도 계정 하나의 상한으로 예약·넘김 환불이 똑같이 돈다
 func TestIAPRulesWithoutTarget(t *testing.T) {
 	e := newIAPEnv(t)
-	e.srv.IAPRules = iapRules{} // 대상 없음, 상한 없음, 기본 문구
+	e.srv.IAPRules = Rules{} // 대상 없음, 상한 없음, 기본 문구
 	token, _ := e.user()
 
 	// 대상을 보내면 받지 않는다(이 앱에는 대상이 없다)
@@ -45,7 +45,7 @@ func TestIAPRulesWithoutTarget(t *testing.T) {
 	}
 
 	// 상한 3: 2 + 2는 넘는다. 계정 하나가 대상 하나('')다
-	e.srv.IAPRules = iapRules{Cap: 3, Hold: covebookIAPRules.Hold}
+	e.srv.IAPRules = Rules{Cap: 3, Hold: covebookIAPRules.Hold}
 	other, _ := e.user()
 	code, body = e.call("POST", "/iap/target-token", other, map[string]any{"units": 2})
 	if code != 200 || body["reservation"] == nil {
@@ -58,7 +58,7 @@ func TestIAPRulesWithoutTarget(t *testing.T) {
 		t.Fatalf("상한 안: %d %v", code, body)
 	}
 	if code, body = e.call("POST", "/iap/target-token", other, map[string]any{"units": 2}); code != 409 || errCode(body) != "iap_cap_full" ||
-		body["error"].(map[string]any)["message"] != iapDefaultMessages["iap_cap_too_many"] {
+		body["error"].(map[string]any)["message"] != DefaultMessages["iap_cap_too_many"] {
 		t.Fatalf("남은 수량보다 많음(기본 문구): %d %v", code, body)
 	}
 	if code, body = buy(""); code != 200 || body["overCap"] != true {

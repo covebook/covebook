@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 결제 테이블(V21)을 읽고 쓰는 함수들. 지급 판단은 여기서 하지 않는다. 부르는 쪽이 스토어 조회와 iap.Check를 끝낸 뒤 부른다.
@@ -23,7 +23,7 @@ type dbtx interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// 대상마다의 상한(iapRules.Cap)은 두 겹으로 지킨다(D1)
+// 대상마다의 상한(Rules.Cap)은 두 겹으로 지킨다(D1)
 //   - 결제 전: 결제 중 예약(iap_reservations)으로 두 기기가 동시에 상한을 넘게 사지 못하게 막는다
 //   - 결제 뒤: 그래도 넘은 거래는 over_cap으로 표시해 주지 않고 환불한다. 수량을 셀 때도 상한에서 한 번 더 자른다
 
@@ -247,7 +247,7 @@ func iapFindProduct(ctx context.Context, q dbtx, route iap.Route, productID stri
 // "먼저 조회하고 없으면 넣기"를 하지 않는다. 유일 키에 맡기고 들어간 줄 수로 판단한다(D6).
 // 결제가 끝난 거래만 받는다. user가 0이면 주인 없이(user_id NULL) 넣는다(결제한 계정이 탈퇴한 거래).
 // 한 번 사는 상품은 대상을 함께 적는다
-//   - targeted(앱이 대상을 요구, iapRules.TargetRequired): 계정 연결 값으로 대상을 찾는다. 대상용 값이 아니면 NULL(모름)이고 아무 대상에도 주지 않는다
+//   - targeted(앱이 대상을 요구, Rules.TargetRequired): 계정 연결 값으로 대상을 찾는다. 대상용 값이 아니면 NULL(모름)이고 아무 대상에도 주지 않는다
 //   - 아니면: 대상 없음(”)
 //   - user가 0이면(주인 없음) 주지 않은 거래라 NULL
 func iapRecordPurchase(ctx context.Context, q dbtx, user int64, kind iap.Kind, p iap.Purchase, targeted bool) (bool, error) {
