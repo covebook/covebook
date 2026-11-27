@@ -169,7 +169,9 @@ func (s *Kit) iapSweepSafely(ctx context.Context) {
 	}
 }
 
-const iapSweepLockKey = 987614003 // migrate.go가 987614002를 쓴다
+// iapSweepLock은 정기 대조를 한 서버에서만 돌리는 잠금의 이름이다. 숫자 대신 이름에서 키를 만들어(hashtextextended)
+// 키트를 붙인 앱이 쓰는 다른 advisory lock 숫자와 겹치지 않게 한다.
+const iapSweepLock = "iapkit.sweep"
 
 func (s *Kit) iapSweepLocked(ctx context.Context) error {
 	conn, err := s.DB.Acquire(ctx)
@@ -178,10 +180,10 @@ func (s *Kit) iapSweepLocked(ctx context.Context) error {
 	}
 	defer conn.Release()
 	var got bool
-	if err = conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", iapSweepLockKey).Scan(&got); err != nil || !got {
+	if err = conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtextextended($1, 0))", iapSweepLock).Scan(&got); err != nil || !got {
 		return err // 다른 곳에서 돌고 있으면 이번에는 건너뛴다
 	}
-	defer conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", iapSweepLockKey)
+	defer conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtextextended($1, 0))", iapSweepLock)
 	res, err := s.iapSweep(ctx)
 	s.iapLogSweep(ctx, res)
 	return err
