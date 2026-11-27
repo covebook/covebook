@@ -46,7 +46,8 @@ func TestIAPPurchaseHistory(t *testing.T) {
 	sub := e.subscription(orig, txn, account, time.Now().Add(time.Hour))
 	sub.Currency, sub.PriceMilli = "XTS", 1234
 	e.apple.Purchases[txn] = sub
-	if code, body := e.submit(token, "google", e.shelf, shelfID, false); code != 200 {
+	// 어제 산 거래는 지금 남긴 결제 의도보다 앞서 의도로 찾지 않는다. 앱이 보낸 연도로 들어간다
+	if code, body := e.submitYear(token, "google", e.shelf, shelfID, 2026); code != 200 {
 		t.Fatalf("선반 제출 %d %v", code, body)
 	}
 	if code, body := e.submit(token, "apple", e.plus, txn, false); code != 200 {
@@ -195,9 +196,8 @@ func TestIAPVoidedList(t *testing.T) {
 	token, _ := e.user()
 	account := e.accountToken(token)
 	shelfID, kept := iapTestID(t, "tok"), iapTestID(t, "kept")
-	e.google.Purchases[shelfID] = e.shelfPurchase(shelfID, e.shelfToken(token, 2026))
-	e.google.Purchases[kept] = e.shelfPurchase(kept, e.shelfToken(token, 2027))
-	for _, id := range []string{shelfID, kept} {
+	for id, year := range map[string]int{shelfID: 2026, kept: 2027} {
+		e.google.Purchases[id] = e.shelfPurchase(id, e.shelfToken(token, year))
 		if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 {
 			t.Fatalf("선반 제출 %d %v", code, body)
 		}
@@ -285,13 +285,16 @@ func TestIAPAdminStats(t *testing.T) {
 
 	// 한 책장에서 3칸을 넘게 산 거래와 연도를 모르는 선반 거래가 숫자에 잡힌다(차이로 본다)
 	token, _ := e.user()
-	year := e.shelfToken(token, 2026)
 	for _, c := range []struct {
-		account string
-		code    int
-	}{{year, 200}, {year, 200}, {"", 422}} { // 2칸 + 2칸(넘음), 연도 모름
+		year int
+		code int
+	}{{2026, 200}, {2026, 200}, {0, 422}} { // 2칸 + 2칸(넘음), 연도 모름(결제 의도 없음)
 		id := iapTestID(t, "tok")
-		e.google.Purchases[id] = e.shelfPurchase(id, c.account)
+		account := e.accountToken(token)
+		if c.year != 0 {
+			account = e.shelfToken(token, c.year)
+		}
+		e.google.Purchases[id] = e.shelfPurchase(id, account)
 		if code, body := e.submit(token, "google", e.shelf, id, false); code != c.code {
 			t.Fatalf("선반 제출 %d %v", code, body)
 		}
@@ -314,10 +317,9 @@ func TestIAPAdminStats(t *testing.T) {
 		t.Fatalf("확인 못 한 구매의 나이, 샌드박스 수: %+v → %+v %v", after, aged, err)
 	}
 	// 애플의 넘은 거래는 사용자가 환불을 요청해야 해서 남는다
-	ya := e.shelfToken(token, 2027)
 	for range 2 {
 		id := iapTestID(t, "apple")
-		p := e.shelfPurchase(id, ya)
+		p := e.shelfPurchase(id, e.shelfToken(token, 2027))
 		p.Route, p.TransactionID, p.Acknowledged = iap.RouteApple, id, true
 		e.apple.Purchases[id] = p
 		e.submit(token, "apple", e.shelf, id, false)

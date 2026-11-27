@@ -15,8 +15,12 @@ type Rules struct {
 	ValidTarget func(string) bool
 	// Cap은 대상 하나에서 돈을 내고 살 수 있는 수량의 최대다. 0이면 상한이 없다(예약·넘김 환불을 하지 않는다)
 	Cap int
-	// Hold는 결제 중 예약이 살아 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다
+	// Hold는 결제 중 예약이 상한을 잡고 있는 시간이다. 결제가 끝나거나 취소되면 앱이 바로 푼다
 	Hold time.Duration
+	// Keep은 결제 의도(어느 대상에 얼마를 사려 했는지)를 기억하는 시간이다. 0이면 4일이다.
+	// 결제가 늦게 끝나는 경우(구글 현금 결제 대기는 최대 48시간이라는 안내가 있고, 3일쯤 지나 취소된다는 보고가 있다.
+	// 애플 보호자 승인은 24시간)에도 알림만으로 대상을 찾으려면 그보다 길어야 한다
+	Keep time.Duration
 	// Messages는 오류 코드별 사용자 문구다. 없는 코드는 DefaultMessages를 쓴다(앱 언어·말투에 맞춰 바꾼다)
 	Messages map[string]string
 }
@@ -33,6 +37,21 @@ func (r Rules) target(raw string) (string, bool) {
 		return "", false
 	}
 	return raw, true
+}
+
+// iapKeepDefault는 Rules.Keep이 0일 때의 결제 의도 보관 시간이다.
+const iapKeepDefault = 96 * time.Hour
+
+// keep은 결제 의도를 기억하는 시간이다. 예약(Hold)보다 짧으면 Hold를 쓴다.
+func (r Rules) keep() time.Duration {
+	k := r.Keep
+	if k <= 0 {
+		k = iapKeepDefault
+	}
+	if k < r.Hold {
+		k = r.Hold
+	}
+	return k
 }
 
 // message는 오류 코드의 사용자 문구다.

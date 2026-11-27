@@ -603,21 +603,33 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 		return "", err
 	}
 	defer tx.Rollback(ctx)
+	// 유저 줄을 잠근다. 같은 유저의 제출과 차례로 결제 의도를 보고 지운다
+	var locked int64
+	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+		return "", err
+	}
 	inserted, err := iapRecordPurchase(ctx, tx, user, iap.KindProduct, p, s.IAPRules.TargetRequired)
 	if err != nil {
 		return "", err
 	}
-	// 어느 대상의 구매인지는 넣을 때 계정 연결 값으로 적었다(D1). 대상을 모르면 주지 않았으니 결제 완료도 알리지 않는다
-	target, known, _, err := iapSetTarget(ctx, tx, route, key, "")
+	// 어느 대상의 구매인지는 결제 의도로 찾는다(D1). 결제가 늦게 끝나도 의도는 며칠 남아 있다(Rules.Keep).
+	// 대상을 모르면 주지 않았으니 결제 완료도 알리지 않는다
+	intentID, intentTarget, intentKnown, err := iapIntentTarget(ctx, tx, user, "", product.Units, p.PurchasedAt)
 	if err != nil {
 		return "", err
+	}
+	target, known, filled, err := iapSetTarget(ctx, tx, route, key, intentTarget)
+	if err != nil {
+		return "", err
+	}
+	if intentKnown && (inserted || filled) {
+		if err = iapReleaseReservation(ctx, tx, user, intentID); err != nil {
+			return "", err
+		}
 	}
 	overCap := false
 	if inserted && known {
 		if overCap, err = iapSettleCap(ctx, tx, user, route, key, s.IAPSandbox, s.IAPRules.Cap); err != nil {
-			return "", err
-		}
-		if err = iapReleaseOldestReservation(ctx, tx, user, target); err != nil {
 			return "", err
 		}
 		if err = iapNoteProductGrant(ctx, tx, user, p, iapGrant{Units: product.Units, Target: target, OverCap: overCap}); err != nil {

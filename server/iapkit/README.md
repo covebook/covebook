@@ -13,7 +13,7 @@
 |---|---|
 | 구매 확인: 앱이 낸 증거로 스토어에 다시 물어 지급 | `purchase.go` `POST /iap/purchases` |
 | 원장: 거래 1건 1줄, 지우지 않음. 권한은 저장하지 않고 원장에서 계산 | `store.go`, `migrations/001_iap.sql` |
-| 한 번 사는 상품의 대상·상한·결제 중 예약 | `purchase.go` `POST /iap/target-token` |
+| 한 번 사는 상품의 대상(결제 의도)·상한(결제 중 예약) | `purchase.go` `POST /iap/intent` |
 | 스토어 알림 받기(애플 App Store Server Notifications v2, 구글 RTDN Pub/Sub) | `notify.go` |
 | 정기 대조: 밀린 알림, 확인 못 한 거래, 스토어 목록으로 빠진 환불 메우기, 넘김 환불 | `notify.go` `StartWorker` |
 | 결제 고지 기록(알림함): 결제 완료, 실패, 만료, 환불, 갱신 예정, 넘김 | `notices.go` |
@@ -64,18 +64,28 @@ go kit.StartWorker(ctx)                 // 1분마다 정기 대조. 결제가 �
 | `TargetRequired` | 한 번 사는 상품이 어느 대상에 붙는지 정해져야 지급하는가 | `true` | `false` |
 | `ValidTarget` | 앱이 보낸 대상 문자열이 맞는지(64자 이하는 키트가 먼저 본다) | 2000~9999 연도, `"02026"` 거절 | `nil` |
 | `Cap` | 대상 하나에서 돈 내고 살 수 있는 수량의 최대. 0이면 상한 없음 | 3(연도 책장마다 선반 3칸) | 0 |
-| `Hold` | 결제 중 예약 유지 시간 | 5분 | 상한이 없으면 쓰지 않음 |
+| `Hold` | 결제 중 예약이 상한을 잡는 시간 | 5분 | 상한이 없으면 쓰지 않음 |
+| `Keep` | 결제 의도(어느 대상에 얼마를 사려 했는지)를 기억하는 시간. 0이면 4일 | 0(4일) | 쓰지 않음 |
 | `Messages` | 오류 문구(문구 키 → 문장). 없는 키는 `DefaultMessages` | 선반 말로 바꾼 8개 | 비워 둠 |
 
 - 대상(target): 한 번 사는 상품이 붙는 자리. 문자열이고 뜻은 앱이 정한다. 대상이 없는 앱은 `''`
 - 수량(units): 상품 하나가 대상에 더하는 양. `iap_products.units`
 - 권한(entitlement): 구독이 주는 이름. `iap_products.entitlement`. 지금 유효한 구독이 주는 이름만 `entitlements`에 나온다
 
-DB 값의 뜻(`iap_purchases.target`, `iap_account_tokens.target`)
+대상은 스토어에 싣지 않는다. 계정 연결 값(애플 `appAccountToken`, 구글 `obfuscatedAccountId`)은 계정마다 하나이고, 어느 대상의 구매인지는 서버에 남긴 결제 의도로 찾는다(D1, D7, 2026-11-27 개정)
+
+1. 앱이 제출에 붙인 결제 의도 번호(`reservation`). 이 유저의 것이고 결제보다 먼저 남긴 것만
+2. 보관 시간(`Keep`) 안에서 결제보다 먼저 남긴 의도 중 수량이 같은 것, 없으면 다른 것의 가장 새것. 스토어 알림이 먼저 온 경우도 이 길로 찾는다
+3. 앱이 보낸 `target`(앱 밖에서 산 구매 등)
+
+- 왜 스토어에 싣지 않나: 애플은 한 계정의 모든 구매에 같은 `appAccountToken`을 쓰라고 권하고(WWDC25 세션 249), 구매마다 새 값을 넣었는데 첫 값이 돌아왔다는 보고가 있다(애플 포럼 800411). 구글은 이 값을 계정 식별자로 보고 사기 탐지에 쓴다
+- 왜 며칠 기억하나: 결제가 늦게 끝나는 경우(구글 현금 결제 대기, 애플 보호자 승인)에도 알림만으로 대상을 찾으려고
+
+DB 값의 뜻(`iap_purchases.target`)
 
 | 값 | 뜻 |
 |---|---|
-| `NULL` | 대상을 모름(거래만 기록, 지급하지 않음, 2일 뒤 환불) 또는 대상이 없는 값(구독용 계정 연결 값) |
+| `NULL` | 대상을 모름(거래만 기록, 지급하지 않음, 2일 뒤 환불) |
 | `''` | 대상이 없는 앱의 상품 |
 | `'2026'` 등 | 그 대상 |
 
@@ -112,9 +122,9 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 
 | 경로 | 하는 일 |
 |---|---|
-| `GET /iap/me` | 지금 상태: `entitlements`, `unitsByTarget`, `capPerTarget`, `subscription`, `accountToken`(구독용 계정 연결 값), `products`, `routes`, `seller`, `unreadNotices` |
-| `POST /iap/target-token` | 한 번 사는 상품의 계정 연결 값. 요청 `{target, units}`, 응답 `{token, target, units(이미 산 수량), reservation?, expiresAt?}` |
-| `POST /iap/target-token/release` | 결제 중 예약 풀기. 요청 `{reservation}`. 언제나 204 |
+| `GET /iap/me` | 지금 상태: `entitlements`, `unitsByTarget`, `capPerTarget`, `subscription`, `accountToken`(계정 연결 값), `products`, `routes`, `seller`, `unreadNotices` |
+| `POST /iap/intent` | 한 번 사는 상품의 결제를 시작하기 직전. 결제 의도를 남기고 계정 연결 값을 준다. 요청 `{target, units}`, 응답 `{token, target, units(이미 산 수량), reservation?, expiresAt?}`. 대상도 상한도 없는 앱은 `reservation`이 없다 |
+| `POST /iap/intent/release` | 결제 의도 지우기(결제 취소·실패). 결제 대기에는 부르지 않는다. 요청 `{reservation}`. 언제나 204 |
 | `POST /iap/purchases` | 구매 제출. 요청 `{route, productId, proof, restore, target?, reservation?}`, 응답 `{status: granted\|already\|inactive, target?, overCap?, autoRefund?, ...상태}` 또는 202 |
 | `GET /iap/purchases` | 구매 내역(L17) |
 | `GET /iap/notices`, `POST /iap/notices/read` | 결제 고지 알림함(L8, L11) |
@@ -158,8 +168,8 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 |---|---|
 | `iap_products` | 파는 상품과 주는 것(권한 이름 또는 수량) |
 | `iap_plans` | 구독 요금제의 결제 주기 |
-| `iap_account_tokens` | 스토어에 넘기는 계정 연결 값(유저 번호를 밖에 내보내지 않는다, D7). 대상마다 하나 |
-| `iap_reservations` | 결제 중 예약(원장이 아니라 지워도 된다) |
+| `iap_account_tokens` | 스토어에 넘기는 계정 연결 값(유저 번호를 밖에 내보내지 않는다, D7). 계정마다 하나(2026-11-27 전에 대상마다 준 값도 그 유저의 값으로 남는다) |
+| `iap_reservations` | 결제 의도(`keep_until`까지)와 결제 중 예약(`expires_at`까지). 원장이 아니라 지워도 된다 |
 | `iap_purchases` | 거래 원장. 계정을 지워도 남는다(`ON DELETE SET NULL`, 5년 보존 L13) |
 | `iap_subscriptions` | 구독 1건의 지금 상태 |
 | `iap_notifications` | 받은 스토어 알림 원문 |

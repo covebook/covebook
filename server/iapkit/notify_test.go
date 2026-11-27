@@ -277,7 +277,7 @@ func TestIAPNotifyRefund(t *testing.T) {
 	}
 	// 스토어가 그 토큰을 더는 모른다고 답해도 환불은 반영된다
 	gone := iapTestID(t, "gone")
-	e.google.Purchases[gone] = e.shelfPurchase(gone, shelfAccount)
+	e.google.Purchases[gone] = e.shelfPurchase(gone, e.shelfToken(token, 2026))
 	e.submit(token, "google", e.shelf, gone, false)
 	delete(e.google.Purchases, gone)
 	e.notify("google", iap.Notice{ID: iapTestID(t, "r1c"), Type: "voided/2", Voided: true, Target: &iap.Ref{Kind: iap.KindProduct, ID: gone}}, "Bearer pubsub")
@@ -308,7 +308,7 @@ func TestIAPNotifyRefund(t *testing.T) {
 
 	// 애플 선반 환불과 환불 되돌림: 애플은 거래마다 환불 여부를 알려 준다
 	txn := iapTestID(t, "atxn")
-	a := e.shelfPurchase(txn, shelfAccount)
+	a := e.shelfPurchase(txn, e.shelfToken(token, 2026))
 	a.Route, a.TransactionID, a.Acknowledged = iap.RouteApple, txn, true
 	e.apple.Purchases[txn] = a
 	e.submit(token, "apple", e.shelf, txn, false)
@@ -579,7 +579,7 @@ func TestIAPSubmitAndNoticeRace(t *testing.T) {
 func TestIAPNotifyOverCap(t *testing.T) {
 	e := newIAPEnv(t)
 	token, user := e.user()
-	_, res := e.call("POST", "/iap/target-token", token, map[string]any{"target": iapY(2026), "units": 2})
+	_, res := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2026), "units": 2})
 	y := res["token"].(string)
 
 	first, second := iapTestID(t, "t1"), iapTestID(t, "t2")
@@ -591,7 +591,8 @@ func TestIAPNotifyOverCap(t *testing.T) {
 	if err := e.db.QueryRow(e.ctx, "SELECT count(*) FROM iap_reservations WHERE user_id=$1", user).Scan(&held); err != nil || held != 0 {
 		t.Fatalf("알림으로 지급하면 예약이 풀려야 함: %d %v", held, err)
 	}
-	// 두 번째(예약을 지나친 구매)는 환불 요청이 실패한다
+	// 두 번째(예약이 끝난 뒤 다시 남긴 의도로 산 구매)는 환불 요청이 실패한다
+	e.shelfToken(token, 2026)
 	e.google.RefundErr = errors.New("구글 장애")
 	n2 := iapTestID(t, "n2")
 	e.notify("google", iap.Notice{ID: n2, Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: second}}, "Bearer pubsub")
