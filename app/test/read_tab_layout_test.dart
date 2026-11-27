@@ -1,4 +1,4 @@
-// 읽기 탭 배치(2026-11-25 사용자 시안, 2026-11-26 머리): 맨 위 가운데 '‹ 날짜 ›'(전날 · 다음 날 기록 보기), 그 아래 '오늘 읽은 시간 N' · 오른쪽 '시간 추가',
+// 읽기 탭 배치(2026-11-25 사용자 시안, 2026-11-26 머리): 맨 위 가운데 '‹ 날짜 ›'(전날 · 다음 날 기록 보기), 그 아래 '오늘 N'(2026-11-27 '오늘 읽은 시간'에서) · 오른쪽 '시간 추가',
 // 최근 읽던 책 표지 92 · 제목은 표지 위 끝 줄 · 오늘 시간은 단추 오른쪽 위 · 단추 아래 끝은 표지 아래 끝, '+ 책 추가'는 목록 아래(제목 오른쪽 +는 없다)
 import 'dart:math' as math;
 import 'package:chaekjang/domain/library.dart';
@@ -69,7 +69,7 @@ void main() {
   testWidgets('맨 위: 가운데 ‹ 날짜 ›(다음 날은 꺼짐), 그 아래 오늘 읽은 시간 · 오른쪽 끝 시간 추가', (t) async {
     await pump(t);
     expect(find.textContaining('오늘 총'), findsNothing);
-    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '));
+    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 '));
     expect(line, findsOneWidget);
     final date = find.textContaining('요일');
     final screenW = t.getSize(find.byType(ReadList)).width;
@@ -109,7 +109,7 @@ void main() {
     await t.tap(find.bySemanticsLabel('다음 날'));
     await t.pump(const Duration(milliseconds: 300));
     expect(find.text('내 읽기 목록'), findsOneWidget, reason: '오늘로 돌아왔다');
-    expect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 ')), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 ')), findsOneWidget);
     // 다른 날을 보다가 다른 탭에 갔다 오면 오늘
     await t.tap(find.bySemanticsLabel('이전 날'));
     await t.pump(const Duration(milliseconds: 300));
@@ -142,7 +142,7 @@ void main() {
     await pump(t);
     expect(find.text('최근 읽던 책'), findsNothing);
     expect(find.text('잠깐 멈춘 책'), findsNothing);
-    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '));
+    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 '));
     final c = t.getRect(find.bySemanticsLabel('아몬드 책 정보'));
     final add = t.getRect(find.text('시간 추가'));
     expect(c.top - math.max(t.getRect(line).bottom, add.bottom), closeTo(Space.xl, 1.5));
@@ -159,7 +159,7 @@ void main() {
     expect(t.getRect(add).height, greaterThanOrEqualTo(48));
     final plus = find.descendant(of: add, matching: find.byType(LucideIcon));
     final glyphLeft = t.getRect(plus).left + 22 * 4.2 / 24;
-    final pageLeft = t.getRect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '))).left;
+    final pageLeft = t.getRect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 '))).left;
     expect(glyphLeft, closeTo(pageLeft, 0.5));
   });
 
@@ -170,7 +170,7 @@ void main() {
     expect(t.getRect(featureTitle('아몬드')).top, closeTo(c.top, 0.5));
     final b = t.getRect(find.widgetWithText(Btn, '이어서 읽기'));
     expect(b.bottom, greaterThanOrEqualTo(c.bottom - 0.5));
-    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '));
+    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 '));
     expect(t.getRect(find.text('시간 추가')).center.dy, closeTo(t.getRect(line).center.dy, 2));
   });
 

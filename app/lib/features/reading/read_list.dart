@@ -221,10 +221,10 @@ class _ReadListState extends State<ReadList> {
     setState(() => _day = next == now ? null : next);
   }
 
-  /// 날 넘기기 아래 한 줄: 왼쪽 '오늘 읽은 시간 N'(다른 날은 '읽은 시간 N'), 오른쪽 '시간 추가'(그 날짜로 독서 기록 추가, 타이머 없이 읽은 시간).
+  /// 날 넘기기 아래 한 줄: 왼쪽 '오늘 N'(2026-11-27 사용자 '오늘 읽은 시간 말고 그냥 오늘', 다른 날은 '읽은 시간 N'), 오른쪽 '시간 추가'(그 날짜로 독서 기록 추가, 타이머 없이 읽은 시간).
   /// 2026-11-25 사용자 시안 '수동 시간 추가는 오른쪽에'. '시간 추가'는 회색 글자 단추(누르는 높이 48)
   Widget _totalLine(String date, bool isToday, num total, Active? active) {
-    final name = isToday ? '오늘 읽은 시간' : '읽은 시간';
+    final name = isToday ? '오늘' : '읽은 시간';
     final label = '$name ${formatDuration(total)}${isToday && active != null ? (_reading.running ? ', 읽는 중' : ', 일시정지') : ''}';
     final ink = AppType.sub.copyWith(color: AppColors.ink);
     return Row(children: [
