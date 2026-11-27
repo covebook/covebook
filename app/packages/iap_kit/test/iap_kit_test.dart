@@ -44,6 +44,20 @@ void main() {
     expect(e.has('pro'), isFalse, reason: '2000년에 끝난 구독');
   });
 
+  test('오프라인: 서버에 닿지 못하면 만료가 지난 권한을 끄고, 서버 값이 있으면 기기 시계로 끄지 않는다', () {
+    final e = EntitlementStore.instance;
+    final sub = {'route': 'google', 'productId': 'pro', 'state': 'paid', 'active': true, 'autoRenew': true};
+    // 앱을 켠 뒤 만료일이 지났고 서버에 닿지 못했다
+    e.apply({'entitlements': ['pro'], 'subscription': {...sub, 'expiresAt': '2000-01-01T00:00:00Z'}}, save: false);
+    expect(e.has('pro'), isTrue, reason: '서버가 준 값은 그대로 쓴다');
+    e.expireIfStale();
+    expect(e.has('pro'), isFalse);
+    // 아직 남은 구독은 그대로
+    e.apply({'entitlements': ['pro'], 'subscription': {...sub, 'expiresAt': '2999-01-01T00:00:00Z'}}, save: false);
+    e.expireIfStale();
+    expect(e.has('pro'), isTrue);
+  });
+
   test('거래를 끝내도 되는 때', () {
     expect(iapShouldFinish(status: 200), isTrue);
     expect(iapShouldFinish(status: 409, code: 'iap_cap_full'), isTrue);

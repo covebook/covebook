@@ -143,13 +143,18 @@ class EntitlementStore extends ChangeNotifier {
     if (raw == null) return;
     try {
       apply(jsonDecode(raw) as Map<String, dynamic>, save: false);
-      // 만료가 지난 사본의 권한은 서버 확인 전까지 끈다(오프라인에서 끝없이 쓰지 않게)
-      if (entitlements.isNotEmpty && !iapCachedEntitlementsValid(subscription: subscription, now: DateTime.now())) {
-        entitlements = const {};
-        notifyListeners();
-      }
+      expireIfStale();
     } catch (_) {
       // 사본이 깨졌으면 서버 값으로 다시 채운다
+    }
+  }
+
+  /// 서버에 닿지 못할 때 부른다: 만료가 지난 사본의 권한은 서버 확인 전까지 끈다(오프라인으로 오래 켜 두어도 끝없이 쓰지 않게).
+  /// 서버에 닿으면 서버 값이 맞다(기기 시계가 틀린 사람이 돈 낸 기능을 잃지 않게 그때는 보지 않는다)
+  void expireIfStale() {
+    if (entitlements.isNotEmpty && !iapCachedEntitlementsValid(subscription: subscription, now: DateTime.now())) {
+      entitlements = const {};
+      notifyListeners();
     }
   }
 

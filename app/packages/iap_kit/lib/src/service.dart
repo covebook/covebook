@@ -53,6 +53,12 @@ class IapService extends ChangeNotifier {
   String? _buying;
   bool _restoring = false;
 
+  /// 지금 버튼을 잠근 결제의 상품(구독 포함). 다른 상품의 옛 거래 이벤트가 이 결제의 버튼·결과·의도를 건드리지 않게 본다
+  String? _active;
+
+  /// 서버에 내는 중인 거래 수. 복원은 이것이 끝날 때까지 기다린다
+  int _submitting = 0;
+
   /// 결제·복원이 진행 중인지(버튼을 잠근다. 연타와 결제 중 계정 전환을 막는다)
   bool busy = false;
 
@@ -151,7 +157,9 @@ class IapService extends ChangeNotifier {
           synced = true;
         }
       } catch (_) {
-        return; // 서버에 닿지 못하면 지난번 값으로 둔다
+        // 서버에 닿지 못하면 지난번 값으로 둔다. 다만 만료가 지난 구독 권한은 끈다
+        if (epoch == _epoch) EntitlementStore.instance.expireIfStale();
+        return;
       }
       final ids = {for (final p in EntitlementStore.instance.products) if (p.route == iapRoute) p.productId};
       if (ids.isEmpty || !await _store.isAvailable()) return;
@@ -179,12 +187,17 @@ class IapService extends ChangeNotifier {
     final once = product.kind != 'subscription';
     if (busy || d == null || (!once && EntitlementStore.instance.accountToken.isEmpty)) return;
     _busy(true);
+    _active = product.productId;
+    final epoch = _epoch;
     try {
       String? account = EntitlementStore.instance.accountToken;
       if (once) {
         final to = target ?? IapKit.defaultTarget();
         try {
           final t = await intent(to, units: product.units);
+          // 기다리는 사이 로그아웃했다: 앞 계정의 결제를 새 계정 위에서 잇지 않는다. 버튼·결과는 reset이 이미 새로 했다
+          // (남은 앞 계정의 의도는 서버가 보관 시간 뒤 지운다. 지금 토큰은 새 계정이라 풀 수 없다)
+          if (epoch != _epoch) return;
           account = t?.token;
           _reservation = t?.reservation;
         } on IapApiError catch (e) {
@@ -206,7 +219,7 @@ class IapService extends ChangeNotifier {
         unawaited(_saveBuying());
       }
       if (account == null || account.isEmpty) {
-        _done(IapResult.retryLater, IapKit.text('start_failed'));
+        _failStart(); // 기기에 남긴 결제(_saveBuying)도 지운다. 남기면 뒤에 같은 상품의 옛 거래에 이번 대상이 붙는다
         return;
       }
       // 계정 연결 값을 스토어에 넘긴다(애플 appAccountToken, 구글 obfuscatedAccountId). 서버가 이 값으로 누구의 구매인지 본다
@@ -238,13 +251,18 @@ class IapService extends ChangeNotifier {
     }
   }
 
-  /// 지금 결제가 취소·실패했다. 뒤에 같은 상품의 옛 거래를 다시 낼 때 이번 대상이 붙지 않게 비운다
-  void _forgetBuying(String productId) {
-    if (productId != _buying) return;
+  /// 지금 결제가 취소·실패했다. 뒤에 같은 상품의 옛 거래를 다시 낼 때 이번 대상이 붙지 않게 비운다. 지금 결제였으면 true
+  bool _forgetBuying(String productId) {
+    if (productId != _buying) return false;
     _buying = null;
     _target = null;
     unawaited(_clearBuying());
+    return true;
   }
+
+  /// 다른 상품의 결제가 버튼을 잠그고 진행 중인지(복원 중은 아님). iOS는 앱을 켤 때 끝내지 않은 옛 거래를 한꺼번에 주는데,
+  /// 그 결과로 진행 중인 결제의 버튼을 풀면 연타로 두 번째 결제가 들어간다
+  bool _othersBusy(String productId) => busy && !_restoring && _active != null && _active != productId;
 
   void _failStart() {
     unawaited(_release());
@@ -347,8 +365,14 @@ class IapService extends ChangeNotifier {
     try {
       await _store.restorePurchases(applicationUserName: EntitlementStore.instance.accountToken);
       // 복원할 것이 없으면 스토어가 아무것도 보내지 않는다. 잠깐 기다렸다가 끝낸다
+      final epoch = _epoch;
       await Future<void>.delayed(const Duration(seconds: 3));
-      if (busy) _done(lastResult ?? IapResult.inactive, lastMessage ?? IapKit.text('nothing_to_restore'));
+      // 받은 거래를 서버에 내는 중이면(느린 망) 끝날 때까지 기다린다(최대 30초). 먼저 "복원할 것이 없어요"를 보이지 않게
+      for (var i = 0; i < 60 && _submitting > 0 && epoch == _epoch; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      // 그사이 계정이 바뀌었으면 새 계정의 작업을 끝내지 않는다
+      if (busy && epoch == _epoch) _done(lastResult ?? IapResult.inactive, lastMessage ?? IapKit.text('nothing_to_restore'));
     } catch (_) {
       _done(IapResult.retryLater, IapKit.text('restore_failed'));
     } finally {
@@ -368,28 +392,34 @@ class IapService extends ChangeNotifier {
         // 결제가 아직 끝나지 않았다(편의점 결제, 보호자 승인 등). 끝나면 스토어가 다시 알려 주고 그때 서버에 낸다.
         // 결제 의도는 지우지 않는다. 앱을 닫아도 서버가 스토어 알림과 의도를 맞춰 대상을 찾는다(Rules.Keep, 기본 8일).
         // 버튼을 풀어 화면을 떠날 수 있게 한다
-        _done(IapResult.pending, IapKit.text('pending'));
+        if (!_othersBusy(d.productID)) _done(IapResult.pending, IapKit.text('pending'));
         return;
       case PurchaseStatus.canceled:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
-        _forgetBuying(d.productID);
-        unawaited(_release());
-        _done(IapResult.rejected, null);
+        // 지금 결제의 취소일 때만 의도를 푼다. 다른 상품의 옛 취소가 진행 중인 결제의 의도를 지우지 않게
+        if (_forgetBuying(d.productID)) unawaited(_release());
+        if (!_othersBusy(d.productID)) _done(IapResult.rejected, null);
         return;
       case PurchaseStatus.error:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
-        _forgetBuying(d.productID);
-        unawaited(_release());
-        _done(IapResult.retryLater, IapKit.text('not_paid'));
+        if (_forgetBuying(d.productID)) unawaited(_release());
+        if (!_othersBusy(d.productID)) _done(IapResult.retryLater, IapKit.text('not_paid'));
         return;
       case PurchaseStatus.purchased:
       case PurchaseStatus.restored:
         final epoch = _epoch;
-        final result = await _submit(d, restore: _restoring || d.status == PurchaseStatus.restored);
+        _submitting++;
+        final (IapResult, bool, String?) result;
+        try {
+          result = await _submit(d, restore: _restoring || d.status == PurchaseStatus.restored);
+        } finally {
+          _submitting--;
+        }
         final finish = result.$2;
         // 애플만 앱이 거래를 끝낸다. 안드로이드는 서버가 확인·소비한다
         if (finish && Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
-        if (epoch == _epoch) _done(result.$1, result.$3); // 계정이 바뀌었으면 앞 계정의 결과 문구를 보이지 않는다
+        // 계정이 바뀌었으면 앞 계정의 결과 문구를 보이지 않는다. 다른 상품을 사는 중이면 그 결제의 버튼을 풀지 않는다
+        if (epoch == _epoch && !_othersBusy(d.productID)) _done(result.$1, result.$3);
     }
   }
 
