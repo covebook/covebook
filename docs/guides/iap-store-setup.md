@@ -279,21 +279,22 @@ gcloud pubsub subscriptions describe play-rtdn-push --format='value(pushConfig)'
 
 ## 4. 서버 [Claude + 사람]
 
-- PR 머지 [Claude, 사람이 머지를 요청한 뒤]
-  - 순서: #21 → #43·#44 → #46 → #47 → #48
-  - 머지 직전 마이그레이션 번호(V21~V23)를 main과 맞춘다
+- PR 머지: 끝남(2026-11-27)
+  - 서버 스택(#44·#46·#47·#48·#53·#55)을 위에서부터 접어 #43으로 main에 한 번 넣음(`3e0d80c`), 앱은 #54·#56을 접어 #45로(`ab3f27b`)
+  - 결제 테이블은 결제 키트가 따로 만든다(`server/iapkit/migrations/001~004`, 이력 `iapkit_schema_history`). 운영에 들어갔던 옛 V21 테이블은 기동 때 지워졌다(줄이 있었다면 서버가 기동을 거부한다. 떴으니 비어 있었다)
+  - 자동 배포(`kodeploy-server.yml`) 성공, `/healthz`의 `iap`는 false(아직 꺼짐)
 - KoDeploy 환경 변수 [사람]: 7장 표의 값을 넣는다
-- KoDeploy 재배포 [사람]. push만으로는 반영되지 않는다
+- KoDeploy 재배포 [사람]: 코드는 main push로 자동 배포되지만, 환경 변수를 바꾼 뒤에는 KoDeploy에서 다시 띄워야 반영된다
 - 확인 [Claude]: `/healthz`의 `iap`가 true
 - [ ] 보관 기간이 지난 결제 기록 삭제 작업 (아직 없음. 처리방침 초안의 5년·3년). 탈퇴한 계정의 결제 고지도 `user_id`가 NULL인 채 남는다(#47)
 - [ ] `GET /admin/iap/stats`로 숫자가 나오는지
-- [ ] 선반 숫자: `shelfOverCap`(3칸을 넘은 거래), `shelfOverCapRefunded`(구글 자동 환불 요청), `shelfOverCapApple`(애플, 사용자 환불 요청 안내), `shelfNoYear`(연도를 모르는 거래). 0이 아니면 거래를 확인
+- [ ] 선반 숫자(키트 이름): `overCap`(3칸을 넘은 거래), `overCapRefunded`(구글 자동 환불 요청), `overCapApple`(애플, 사용자 환불 요청 안내), `noTarget`(연도를 모르거나 주인이 없어 주지 않은 거래), `noPlan`(요금제 주기를 모르는 구독). 0이 아니면 거래를 확인
 - [ ] 확인·샌드박스 숫자: `oldestUnconfirmedSeconds`(확인 못 한 구글 구매 중 가장 오래된 것, 86400을 넘으면 거래를 확인. 3일이면 구글이 환불), `sandboxPurchases30Days`(최근 30일 샌드박스 거래, 갑자기 늘면 확인)
 - DB 상품 줄 [Claude, 운영 DB 접속은 사람이 연다]
 
 ```sql
 -- 상품이 주는 것. 가격은 넣지 않는다
-INSERT INTO iap_products(route, product_id, kind, entitlement, shelves, consume) VALUES
+INSERT INTO iap_products(route, product_id, kind, entitlement, units, consume) VALUES
   ('apple',  'app.covebook.plus.monthly', 'subscription', 'plus', NULL, false),
   ('apple',  'app.covebook.plus.yearly',  'subscription', 'plus', NULL, false),
   ('apple',  'app.covebook.shelf.1', 'product', NULL, 1, true),
@@ -309,7 +310,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
   ('google', 'app.covebook.plus', 'yearly',  'year');
 ```
 
-- 위 칸 이름은 PR 브랜치 기준이다. 넣기 전에 머지된 마이그레이션과 맞춘다
+- 칸 이름은 머지된 키트 마이그레이션(`server/iapkit/migrations/001_iap.sql`, `003_plans.sql`) 기준이다. 선반 칸 수는 `units`
 - 상품 ID를 제안과 다르게 만들었으면 실제 ID로 바꿔 넣는다
 - `iap_plans` 줄이 없으면 서버가 주기를 몰라 연 구독 갱신 예정 고지와 앱의 갱신 전 알림이 나가지 않는다
 - 웹 약관 `/terms`: 만듦(2-8). 재배포해야 열린다
@@ -332,7 +333,7 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 |---|---|---|
 | 요금제 화면 열기 | 결제 6 (미리 고른 것 없음) | |
 | 월간 고르고 구독 | 결제 7 → 결제 12 결제 완료 | 거래 줄, 구독 줄, `purchase_done` 고지 |
-| (첫 구매 직후) 계정 연결 값 확인 | | 거래 줄의 `account_token`이 **비어 있지 않은지**. 애플은 UUID 모양이 아닌 값을 오류 없이 버린다. Flutter에서 비어 오는 사례가 보고됨(2026-11-26 조사) |
+| (첫 구매 직후) 계정 연결 값 확인 | | 거래 줄의 `account_token`이 **비어 있지 않은지**. 애플은 UUID 모양이 아닌 값을 오류 없이 버린다. Flutter에서 비어 오는 사례가 보고됨(2026-11-26 조사). 같은 계정의 구독·선반 거래는 모두 같은 값이어야 한다(계정마다 하나, ADR-0002 D7 개정) |
 | 결제 대기(구글 느린 카드) | 결제 17 | 대기 뒤 지급 |
 | 구독 관리 | 결제 1 | |
 | 스토어에서 해지 | 결제 2, 알림함에 해지 접수 | `auto_renew=false`, `cancel_scheduled` 고지 |
@@ -341,16 +342,17 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 | 연간 구독 결제 직후 | 결제 12 뒤 알림 권한을 한 번 묻는다(거절해도 알림함에 남음) | `/iap/me`의 `subscription.period=year` |
 | 연간 구독, 갱신 14일 전 | 기기 예약 알림(오전 10시), 알림함 갱신 예정 | `renewal_upcoming` 고지. 애플 샌드박스는 연 구독이 1시간마다 갱신돼 고지가 하루 최대 4줄 쌓일 수 있다 |
 | 구독 환불 | 앱 열 때 결제 15 창 | `state=revoked`, `subscription_refunded` 고지 |
-| 추가 선반 1칸 구매 | 결제 5 → 그 해 책장만 칸이 늘고 시트 닫힘 | 거래 줄과 연도, 확인(acknowledge·consume) 시각 |
-| 2026년 1칸을 산 뒤 바로 2027년 책장에서 1칸 | 2027년 책장에 열림 | 두 거래의 `shelf_year`가 2026, 2027. 로그 `iap shelf year from reservation`이 나오면 애플이 앞의 계정 연결 값을 돌려준 것이고 예약 연도로 바로잡은 것(포럼 보고, erd.md 3.7) |
+| 추가 선반 1칸 구매 | 결제 5 → 그 해 책장만 칸이 늘고 시트 닫힘 | 거래 줄의 `target`(연도), `confirmed_at`(구글 소비 시각), 결제 의도 줄(`iap_reservations`) |
+| 2026년 1칸을 산 뒤 바로 2027년 책장에서 1칸 | 2027년 책장에 열림 | 두 거래의 `target`이 2026, 2027. 계정 연결 값은 둘이 같고, 연도는 결제 의도에서 찾는다(번호가 먼저, 없으면 결제 전 72시간 안의 의도가 한 연도로 모일 때) |
+| 다른 해 책장 둘에서 같은 칸 수를 몇 분 사이에 사고, 한쪽은 결제 직후 앱을 강제 종료 | 앱을 다시 켜면 그 해 책장에 열림 | 앱이 내기 전 스토어 알림이 오면 연도가 갈려 처리하지 않고 기다림(소비도 안 함). 앱을 끝내 안 켜면 2일 뒤 환불, `noTarget` |
 | 추가 선반 3칸 묶음 | 산 칸이 없는 해에만 보임, 결제 18 | 칸 수 3, 다른 해 책장은 그대로 |
 | 지난해 책장으로 넘겨 보기 | 지난해 책장의 칸 수는 그 해에 산 만큼 | |
-| 한 기기에서 선반 결제창을 띄운 채 다른 기기에서 같은 해 선반 구매 | 뒤 기기는 "다른 기기에서 결제하고 있어요" | 예약 줄, 409 `iap_shelf_busy` |
+| 한 기기에서 선반 결제창을 띄운 채 다른 기기에서 같은 해 선반 구매 | 뒤 기기는 "다른 기기에서 결제하고 있어요" | 예약 줄, 409 `iap_target_busy` |
 | 결제창을 취소 | 다른 기기에서 바로 살 수 있음 | 예약이 풀림 |
-| 예약이 끝난 뒤 늦게 결제돼 3칸 초과 | 3칸까지만 열림, 결제 26 창 | 구글은 자동 환불 요청 시각, 애플은 `shelf_over_cap` 고지(autoRefund=false) |
+| 예약이 끝난 뒤 늦게 결제돼 3칸 초과 | 3칸까지만 열림, 결제 26 창 | `over_cap`, 구글은 `refund_requested_at`, 애플은 `product_over_cap` 고지(autoRefund=false) |
 | 선반 결제 직후 앱을 강제 종료하고 다시 켬(안드로이드) | 칸이 열림 | 앱이 켜질 때 다시 낸 제출과 확인 시각. 안 열리면 3일 뒤 구글이 환불하니 꼭 볼 것 |
-| 계정 A로 선반 결제 직후 앱을 끄고 계정 B로 로그인해 켬 | B에는 "결제한 다른 계정에 선반을 넣었어요", A로 돌아가면 칸이 있음 | 거래 줄의 `user_id`가 A, 로그 `iap shelf for other account` |
-| 추가 선반 환불 | 앱 열 때 결제 16 창, 그 칸의 책이 내 책으로, 칸이 잠긴 모양 | `shelf_refunded` 고지 |
+| 계정 A로 선반 결제 직후 앱을 끄고 계정 B로 로그인해 켬 | B에는 "결제한 다른 계정에 선반을 넣었어요", A로 돌아가면 칸이 있음 | 거래 줄의 `user_id`가 A, 로그 `iap product for other account` |
+| 추가 선반 환불 | 앱 열 때 결제 16 창, 그 칸의 책이 내 책으로, 칸이 잠긴 모양 | `product_refunded` 고지 |
 | 구매 복원(다른 회원 계정) | 구독이 새 계정으로 옮겨짐 | 구독 줄 `user_id` 변경 |
 | 다른 기기 같은 계정 | 같은 상태, 알림 창은 한 기기에서만 한 번 | |
 | 구매 내역 | 결제 9 | `GET /iap/purchases` |
@@ -358,6 +360,10 @@ INSERT INTO iap_plans(route, product_id, plan_id, period) VALUES
 | 구독 중 회원탈퇴 | 결제 11 안내 → 탈퇴 | 결제 기록 줄이 남고 `user_id`가 NULL |
 | 알림함 | 결제 23 점 → 결제 24 → 결제 21 | 읽음 처리 뒤 `unreadNotices=0` |
 | 서버를 잠시 끄고 구매 | 앱이 나중에 다시 보내 지급 | 끝내지 않은 거래가 다음 실행에 다시 옴 |
+| (아이폰) 선반 결제 직후 강제 종료, 다시 켜서 같은 선반 결제 | 화면 349 "끝나지 않은 지난 결제를 먼저 확인했어요" | 앞 거래가 먼저 제출되고 새 결제가 시작됨 |
+| 구독 중 비행기 모드로 만료일을 넘김 | 유료 꾸미기가 꺼짐(서버에 닿으면 다시 맞춤) | |
+| 스토어 알림을 놓친 경우(알림 주소를 잠시 막고 환불) | 메우기 뒤 환불 반영 | 6시간마다 메우기(실패하면 15분 뒤 다시), 로그 `iap catch`. 출시 전 한 번은 일부러 해 본다(#15 알람·대조 훈련) |
+| 애플 테스트 알림(App Store Connect에서 요청) | | 서버 로그에 그 알림 처리. 실제 서명 샘플 확보 |
 
 ## 7. Claude Code에 넘길 값 (저장소에 적지 말 것)
 
