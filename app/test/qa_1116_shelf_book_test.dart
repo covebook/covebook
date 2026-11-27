@@ -193,7 +193,7 @@ void main() {
         expect(tester.getSize(title).width, greaterThan(22 * scale * 3 - 1));
         if (scale == 1.0) expect((tester.getCenter(title).dy - tester.getCenter(find.text('배치')).dy).abs(), lessThan(4), reason: '기본 글씨는 같은 줄');
         // 줄 이름('앞뒤 위치')은 한 줄로 다 보인다(이름 칸 폭을 글자 크기대로 잰다)
-        for (final n in ['돌리기', '앞뒤 위치', '기대기']) {
+        for (final n in ['돌리기', '앞뒤 위치']) {
           expect(tester.getSize(find.text(n)).height, lessThan(22.5 * scale * 1.5), reason: '$n 한 줄');
         }
         await tester.tap(find.text('디자인'));
@@ -232,7 +232,9 @@ void main() {
       expect(find.text(keepAll('작별하지 않는다')), findsOneWidget);
       expect(find.text('세우기'), findsOneWidget);
       expect(find.text('앞뒤 위치'), findsOneWidget);
-      expect(find.text('기대기'), findsOneWidget);
+      // 기대기 칸은 줄 이름 없이 폭 가득(2026-11-27 댓글), 화면 읽기 이름만 '기대기'
+      expect(find.text('기대기'), findsNothing);
+      expect(find.bySemanticsLabel(RegExp('^기대기')), findsOneWidget);
       expect(find.text('순서'), findsNothing);
       expect(find.textContaining('번째 선반'), findsNothing);
       expect(find.bySemanticsLabel('왼쪽으로 한 칸 옮기기'), findsNothing);
@@ -243,7 +245,7 @@ void main() {
       final poses = <Pose>[];
       await tester.pumpWidget(panel(pose: Pose.front, turn: 30, onLean: leans.add, onPose: poses.add, canLean: (left: false, right: true)));
       expect(tester.takeException(), isNull);
-      for (final t in ['세우기', '눕히기', '돌리기', '앞뒤 위치', '기대기', '기본', '왼쪽', '오른쪽', '뒤']) {
+      for (final t in ['세우기', '눕히기', '돌리기', '앞뒤 위치', '기본', '왼쪽', '오른쪽', '뒤']) {
         expect(find.text(t), findsOneWidget, reason: t);
       }
       for (final t in ['책등', '표지', '눕힘', '자세', '회전', '바로']) {

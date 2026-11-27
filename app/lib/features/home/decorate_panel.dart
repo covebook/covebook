@@ -3,7 +3,7 @@
 //  - 책 배치: 책을 고르기 전 DecorateHint(떠 있는 안내 '책을 하나 골라 주세요'), 고르면 DecoratePanel('배치 | 디자인' 전환 칸, 2026-11-20 사용자. 이름은 2026-11-26)
 //  - 선반·벽지: SkinSheet(선반 색·벽 틀 / 벽지, 고르는 대로 책장에 바로 보인다. 예전 '선반, 벽지' 스토어 화면을 대신한다)
 // DecoratePanel: 고른 책 제목, '배치 | 디자인'. 배치는 폭 가득 '세우기 | 눕히기', 줄마다 '이름 · 막대 · 값'(돌리기 °, 앞뒤 위치 mm), 세우면 기대기
-// '기본 | 왼쪽 | 오른쪽 | 뒤'(2026-11-26 사용자 시안 '똑바로 | 왼쪽 | 오른쪽 | 뒤로', 이름은 2026-11-27 댓글로 바꿈 '정면이랑 측면을 세우기로 통일하고 디자인 옆에 위치, 각도를 배치로 통일해 기대기도 저렇게'):
+// '기본 | 왼쪽 | 오른쪽 | 뒤'(줄 이름 없이 폭 가득, 2026-11-27 댓글 '기대기 글자 빼는 거 어때')(2026-11-26 사용자 시안 '똑바로 | 왼쪽 | 오른쪽 | 뒤로', 이름은 2026-11-27 댓글로 바꿈 '정면이랑 측면을 세우기로 통일하고 디자인 옆에 위치, 각도를 배치로 통일해 기대기도 저렇게'):
 // 책등 · 표지 자세를 '세우기' 하나로 합쳐 돌리기 0° = 책등이 앞, 90° = 표지가 앞(layout_engine setStandTurn).
 // 디자인은 책 옆면(단색 | 실물 | 겹무늬, 고른 책에만)과 이 책의 책 꾸미기(그림, 색상, 재질)로 가는 줄.
 // 2026-11-23 사용자: 책 옆면은 책마다 따로('가호를 눌러 연 화면이니까 여기서 고른 모양은 가호에만'), 그래서 적용 범위 글('모든 책')을 뺐다.
@@ -287,7 +287,7 @@ class _DecoratePanelState extends State<DecoratePanel> {
   Widget _move(BuildContext context, bool big) {
     final w = widget, standing = _standing;
     // 줄 이름 칸 폭: 보이는 이름 중 가장 긴 것('앞뒤 위치')이 한 줄로 들어가게 글자 크기대로 잰다
-    final names = ['돌리기', if (w.depth != null) '앞뒤 위치', if (standing) '기대기'];
+    final names = ['돌리기', if (w.depth != null) '앞뒤 위치'];
     final labelW = _labelWidth(context, names) + Space.m;
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       // 세우기 | 눕히기: 폭 가득(2026-11-26 사용자 시안). 세우기는 책등이 앞인 자세로 시작한다(돌리기로 표지까지)
@@ -312,20 +312,28 @@ class _DecoratePanelState extends State<DecoratePanel> {
       if (w.depth != null)
         // 앞뒤만 옮긴다(좌우는 책을 끌어서). 2026-11-26 시안 이름 '앞뒤 위치'(2026-11-18 '위치'는 좌우로 읽혀 '앞뒤'였다)
         _Row(label: '앞뒤 위치', width: labelW, child: _DepthSlider(key: ValueKey(('d', w.bookKey)), lo: w.depth!.lo, hi: w.depth!.hi, back: w.depth!.back, value: w.depth!.z, onChange: w.onDepth)),
-      // 기대기: 기본 · 왼쪽 · 오른쪽(옆 책에, 기댈 옆 책이 없는 쪽은 흐리게) · 뒤(뒤 벽에)
+      // 기대기: 기본 · 왼쪽 · 오른쪽(옆 책에, 기댈 옆 책이 없는 쪽은 흐리게) · 뒤(뒤 벽에).
+      // 줄 이름 '기대기'는 빼고 세우기 | 눕히기처럼 폭 가득(2026-11-27 사용자 댓글 '기대기 글자 빼는 거 어때'). 화면 읽기 이름은 '기대기'로 남긴다
       if (standing)
-        _Row(
-          label: '기대기',
-          width: labelW,
-          child: Segmented<StandLean>(
-            items: [for (final e in _leanNames.entries) (e.key, e.value)],
-            value: _leanNow,
-            disabled: {if (!w.canLean.left) StandLean.left, if (!w.canLean.right) StandLean.right},
-            onChange: w.onLean,
+        Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: Semantics(
+            container: true,
+            label: '기대기',
+            child: Segmented<StandLean>(
+              items: [for (final e in _leanNames.entries) (e.key, e.value)],
+              value: _leanNow,
+              disabled: {if (!w.canLean.left) StandLean.left, if (!w.canLean.right) StandLean.right},
+              onChange: w.onLean,
+            ),
           ),
         ),
       if (_angleNote() case final note?)
-        Padding(padding: EdgeInsets.only(left: big ? 0 : labelW), child: Align(alignment: Alignment.centerLeft, child: Text(note, style: AppType.caption))),
+        Padding(
+          // 기대기 칸 아래 글은 칸과 같이 왼쪽 끝에서(줄 이름 칸만큼 들이지 않는다)
+          padding: EdgeInsets.only(left: big || standing ? 0 : labelW, top: standing ? Space.xs : 0),
+          child: Align(alignment: Alignment.centerLeft, child: Text(note, style: AppType.caption)),
+        ),
     ]);
   }
 
