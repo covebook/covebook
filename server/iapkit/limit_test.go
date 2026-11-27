@@ -327,3 +327,57 @@ func TestIAPConfirmSurvivesStageDeadline(t *testing.T) {
 		t.Fatalf("마감에 확인이 끊김: %v %v", at, err)
 	}
 }
+
+// 쉬는 동안 건너뛴 메우기는 차례를 쓰지 않는다. 쉬기가 끝난 다음 바퀴에 바로 돈다(6시간 뒤가 아니라)
+func TestIAPCatchUpAfterRest(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	id := iapTestID(t, "tok")
+	e.google.Purchases[id] = e.shelfPurchase(id, e.shelfToken(token, 2026))
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 {
+		t.Fatalf("제출 %d %v", code, body)
+	}
+	e.google.VoidedList = []iap.VoidedPurchase{{Token: id, OrderID: "GPA." + id, VoidedAt: time.Now().Add(-time.Hour)}}
+	e.srv.iapCatchUpAt = map[iap.Route]time.Time{iap.RouteApple: time.Now()} // 애플은 방금 메웠다
+	e.google.ListRestUntil = time.Now().Add(time.Hour)
+	if res := e.sweep(); res.Voided != 0 {
+		t.Fatalf("쉬는 중인데 목록을 받음: %+v", res)
+	}
+	e.google.ListRestUntil = time.Time{}
+	if res := e.sweep(); res.Voided != 1 {
+		t.Fatalf("쉬기가 끝났는데 메우기가 돌지 않음: %+v", res)
+	}
+}
+
+// 목록 조회(무효 구매 목록·알림 이력)의 한도는 따로 센다. 목록이 쉬는 동안에도 결제 제출은 된다
+func TestIAPListRestDoesNotBlockSubmit(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	e.google.ListRestUntil = time.Now().Add(time.Hour)
+	id := iapTestID(t, "tok")
+	e.google.Purchases[id] = e.shelfPurchase(id, e.shelfToken(token, 2026))
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 || shelvesIn(body, 2026) != 2 {
+		t.Fatalf("목록이 쉬는 동안 제출이 막힘: %d %v", code, body)
+	}
+}
+
+// 주지 않은 거래(탈퇴, 대상 모름)의 환불도 시작했으면 단계 마감과 상관없이 끝까지 하고 기록한다
+func TestIAPRefundPurchaseSurvivesStageDeadline(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	id := iapTestID(t, "tok")
+	e.google.Purchases[id] = e.shelfPurchase(id, e.shelfToken(token, 2026))
+	if code, body := e.submit(token, "google", e.shelf, id, false); code != 200 {
+		t.Fatalf("제출 %d %v", code, body)
+	}
+	e.google.Delay = 500 * time.Millisecond
+	ctx, cancel := context.WithTimeout(e.ctx, 300*time.Millisecond)
+	defer cancel()
+	if !e.srv.iapRefundPurchase(ctx, e.google, id, "GPA."+id) {
+		t.Fatal("마감에 환불 요청이 끊김")
+	}
+	var requested bool
+	if err := e.db.QueryRow(e.ctx, "SELECT refund_requested_at IS NOT NULL FROM iap_purchases WHERE route='google' AND transaction_id=$1", id).Scan(&requested); err != nil || !requested {
+		t.Fatalf("환불했는데 기록이 없음: %v %v", requested, err)
+	}
+}

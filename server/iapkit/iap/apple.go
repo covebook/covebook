@@ -38,11 +38,15 @@ type Apple struct {
 	parseRenewal func(signed string) (*api.JWSRenewalInfoDecodedPayload, error)
 	// verifyNotice는 알림의 서명과 인증서 사슬을 확인하고 내용을 푼다. 시험에서는 가짜로 바꾼다.
 	verifyNotice func(signed string, into *appstore.SubscriptionNotificationV2DecodedPayload) error
-	lim          limiter // 한도(429)에 걸리면 Retry-After까지 부르지 않는다
+	lim          limiter // 한도(429)에 걸리면 Retry-After까지 부르지 않는다. 거래 조회용
+	listLim      limiter // 알림 이력 조회용. 따로 센다(ListRester)
 }
 
 // RestingUntil은 한도에 걸려 언제까지 쉬는지 준다(Rester).
 func (a *Apple) RestingUntil() time.Time { return a.lim.restingUntil() }
+
+// ListRestingUntil은 알림 이력 조회가 언제까지 쉬는지 준다(ListRester).
+func (a *Apple) ListRestingUntil() time.Time { return a.listLim.restingUntil() }
 
 // NewApple은 운영에 먼저 묻고, 없으면 샌드박스에 묻는 클라이언트를 만든다.
 // 심사와 TestFlight 구매가 샌드박스 거래라서 필요하다(ADR-0002 D15).

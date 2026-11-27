@@ -38,11 +38,15 @@ const googleOrderTimeout = 3 * time.Second
 type Google struct {
 	api         googleAPI
 	packageName string
-	lim         limiter // 한도(429)에 걸리면 Retry-After까지 부르지 않는다
+	lim         limiter // 한도(429)에 걸리면 Retry-After까지 부르지 않는다. 구매 조회·확인·환불용
+	listLim     limiter // 무효 구매 목록용. 따로 센다(ListRester)
 }
 
 // RestingUntil은 한도에 걸려 언제까지 쉬는지 준다(Rester).
 func (g *Google) RestingUntil() time.Time { return g.lim.restingUntil() }
+
+// ListRestingUntil은 무효 구매 목록 조회가 언제까지 쉬는지 준다(ListRester).
+func (g *Google) ListRestingUntil() time.Time { return g.listLim.restingUntil() }
 
 // fail은 스토어 오류를 한도 초과면 RateLimitError로, 아니면 googleErr로 바꾼다.
 func (g *Google) fail(err error) error {
