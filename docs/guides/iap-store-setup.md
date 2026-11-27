@@ -259,10 +259,18 @@ gcloud pubsub topics add-iam-policy-binding play-rtdn \
   --member=serviceAccount:google-play-developer-notifications@system.gserviceaccount.com \
   --role=roles/pubsub.publisher
 gcloud pubsub subscriptions create play-rtdn-push --topic=play-rtdn \
-  --push-endpoint="$URL" --push-auth-service-account="$SA" --push-auth-token-audience="$URL"
+  --push-endpoint="$URL" --push-auth-service-account="$SA" --push-auth-token-audience="$URL" \
+  --ack-deadline=30 --min-retry-delay=10s --max-retry-delay=600s --expiration-period=never
 # 확인: 구독의 엔드포인트·인증 값
 gcloud pubsub subscriptions describe play-rtdn-push --format='value(pushConfig)'
 ```
+
+- 뒤 네 옵션(이슈 #12)
+  - `--expiration-period=never`: 기본값이면 31일 동안 활동이 없을 때 구독이 지워지고 구글 알림이 조용히 끊긴다. 출시 전이나 결제가 드문 동안 그럴 수 있다
+  - `--min-retry-delay`·`--max-retry-delay`: 기본은 실패하면 바로 다시 보낸다. 서버가 잠깐 500을 내면 같은 메시지가 몰리니 10초에서 10분까지 늘려 가며 보내게 한다
+  - `--ack-deadline=30`: 푸시는 응답할 때까지 기다리는 시간. 서버는 저장만 하고 바로 답하지만, DB가 느린 순간에 재전송이 겹치지 않게 기본 10초보다 여유를 둔다
+  - 메시지 보관은 기본 7일이다. 서버의 결제 의도 보관(8일)은 이보다 길게 잡았다(ADR-0002 D7 개정)
+- 이미 만든 구독은 `gcloud pubsub subscriptions update play-rtdn-push`에 같은 옵션을 붙여 바꾼다
 
   - 이렇게 하면 `IAP_GOOGLE_PUSH_AUDIENCE`는 `$URL`, `IAP_GOOGLE_PUSH_EMAIL`은 `$SA`다
 - Play Console → 수익 창출 설정 → **실시간 개발자 알림**
