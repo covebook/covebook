@@ -80,6 +80,13 @@ jobs:
       - run: flutter test
         env:
           TZ: Asia/Seoul
+      # 결제 키트는 따로 된 패키지라 위 분석·시험에 들어가지 않는다. iOS 워크플로에는 넣지 않는다(macOS 러너가 비싸고 같은 시험이다)
+      - name: Payment kit package
+        working-directory: app/packages/iap_kit
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
 
       - name: Resolve release metadata
         env:

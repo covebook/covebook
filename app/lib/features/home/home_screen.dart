@@ -2681,10 +2681,11 @@ class _HeaderIconsState extends State<_HeaderIcons> {
               left: i * _headerPitch + Space.hit / 2 + _headerArt / 2 - 13,
               top: Space.hit / 2 - _headerArt / 2 + 3,
               child: IgnorePointer(
+                // 새 알림 점: 위험 색 토큰. 테두리는 머리 그림과 떼어 보이게 하는 밝은 띠(자물쇠 구멍과 같은 값)
                 child: Container(
                   width: 9,
                   height: 9,
-                  decoration: BoxDecoration(color: const Color(0xFFD9534F), shape: BoxShape.circle, border: Border.all(color: const Color(0xFFF4F3F2), width: 1.5)),
+                  decoration: BoxDecoration(color: AppColors.danger, shape: BoxShape.circle, border: Border.all(color: const Color(0xFFF4F3F2), width: 1.5)),
                 ),
               ),
             ),
