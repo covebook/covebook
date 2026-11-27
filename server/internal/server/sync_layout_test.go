@@ -192,8 +192,13 @@ func TestFlywayV7UpgradesLayout(t *testing.T) {
 	if err = Migrate(ctx, db); err != nil {
 		t.Fatal(err)
 	}
+	// Flyway가 적용한 V1~V7 다음부터 마지막 파일까지 Go가 적용한다(새 마이그레이션이 생겨도 깨지지 않게)
+	var want []int32
+	for _, m := range files[flywayBase:] {
+		want = append(want, int32(m.version))
+	}
 	var versions []int32
-	if err = db.QueryRow(ctx, "SELECT array_agg(version ORDER BY version) FROM go_schema_history").Scan(&versions); err != nil || !reflect.DeepEqual(versions, []int32{8}) {
+	if err = db.QueryRow(ctx, "SELECT array_agg(version ORDER BY version) FROM go_schema_history").Scan(&versions); err != nil || !reflect.DeepEqual(versions, want) {
 		t.Fatalf("go history %v %v", versions, err)
 	}
 	var shelves string
