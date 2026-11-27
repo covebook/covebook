@@ -38,10 +38,12 @@ const _actionsW = 112.0; // 펼친 왼쪽 부분(바로가기 + 재생/일시정
 /// 펼쳤을 때 시간 오른쪽 여백(왼쪽 바로가기 그림 옆 여백과 맞춘다)
 const _openPad = Space.l;
 const _gap = 12.0;
-// 하단 탭 화면(앱 틀 tabPaths에서 읽기 탭만 뺀 것: 읽기 탭에서는 타이머를 띄우지 않는다)
-const _tabs = ['/', '/books', '/records', '/stats'];
+// 하단 탭 화면(타이머가 탭 위에 뜨는 화면)
+const _tabs = ['/', '/books', '/read', '/records', '/stats'];
 
-bool miniTimerHidden(String path) => path == '/read' || path.startsWith('/reading');
+/// 읽기 장면 · 독서 끝에서는 숨는다. 읽기 탭은 재는 동안만 띄운다(2026-11-27 사용자 '뒤로가기 누르면 타이머 뜨고 우측하단에':
+/// 장면에서 ⌄ · 뒤로 나오면 어느 탭이든 오른쪽 아래. 멈춘 독서는 읽기 탭 카드의 '이어서 읽기'로 이어 가 띄우지 않는다)
+bool miniTimerHidden(String path, {bool running = false}) => (path == '/read' && !running) || path.startsWith('/reading');
 
 /// 시간 글자 양쪽 여백(캡슐일 때)
 const miniTimerPad = Space.m;
@@ -162,7 +164,7 @@ class _MiniTimerState extends State<MiniTimer> {
     final dismissed = _dismissed != null && _dismissed == _reading.active?.id && !_reading.running;
     // 책장 탭에서 가만히 있어 아래를 비운 동안(IdleBars)도 숨긴다(책장만 보이게, 2026-11-25)
     final idle = IdleBars.instance.down && _place.route == '/' && _place.tab == '/';
-    final hidden = _reading.active == null || _reading.stale || dismissed || idle || miniTimerHidden(path) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
+    final hidden = _reading.active == null || _reading.stale || dismissed || idle || miniTimerHidden(path, running: _reading.running) || (_place.hidden && _place.route == '/') || _place.modal || keyboard;
     // 화면이 바뀌거나 숨으면 접어 둔다(다시 나타날 때 늘 원)
     final key = '$path|$hidden';
     if (key != _lastKey) {

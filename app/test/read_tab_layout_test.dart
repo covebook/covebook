@@ -2,6 +2,7 @@
 // 최근 읽던 책 표지 92 · 제목은 표지 위 끝 줄 · 오늘 시간은 단추 오른쪽 위 · 단추 아래 끝은 표지 아래 끝, '+ 책 추가'는 목록 아래(제목 오른쪽 +는 없다)
 import 'dart:math' as math;
 import 'package:chaekjang/domain/library.dart';
+import 'package:chaekjang/features/reading/mini_timer.dart' show miniTimerHidden;
 import 'package:chaekjang/features/reading/read_list.dart';
 import 'package:chaekjang/store/library_model.dart';
 import 'package:chaekjang/store/mini_timer_store.dart' show MiniTimerPlace;
@@ -171,5 +172,13 @@ void main() {
     expect(b.bottom, greaterThanOrEqualTo(c.bottom - 0.5));
     final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().startsWith('오늘 읽은 시간 '));
     expect(t.getRect(find.text('시간 추가')).center.dy, closeTo(t.getRect(line).center.dy, 2));
+  });
+
+  test('작은 타이머: 읽기 탭은 재는 동안만, 장면 · 독서 끝에서는 숨김(2026-11-27)', () {
+    expect(miniTimerHidden('/read', running: true), isFalse, reason: '장면에서 ⌄로 나오면 오른쪽 아래');
+    expect(miniTimerHidden('/read'), isTrue, reason: '멈춘 독서는 카드의 이어서 읽기');
+    expect(miniTimerHidden('/reading/session', running: true), isTrue);
+    expect(miniTimerHidden('/reading/finish'), isTrue);
+    expect(miniTimerHidden('/books'), isFalse);
   });
 }

@@ -1,8 +1,11 @@
-// 독서 실행 화면(지금 앱 features/reading/ReadingScreen.tsx): 장면이 화면 대부분, 아래 조작부는 위에서부터 연결된 책 · 시간 · [분위기 | 재생/일시정지 | 목표] 한 줄.
-// 분위기 = 장면+환경음 한 세트. 조작부를 접으면 [스피커 · 밝은 시간 · 재생·일시정지]가 남는다(다시 열어도 타이머는 멈추지 않는다).
-// 일시정지를 누르면 멈추고 이 화면을 닫아 시작한 화면으로 돌아간다(2026-11-24 사용자). 멈춘 독서는 작은 타이머 · 읽기 탭에서 이어 읽는다.
+// 독서 실행 화면(지금 앱 features/reading/ReadingScreen.tsx): 장면이 화면 가득, 바로 아래에 [스피커 · 밝은 시간 · 재생·일시정지]와 장면 점.
+// 2026-11-27 사용자 시안 '읽기 누르면 왼쪽처럼 바로 밑에 있는 걸로': 열면 접은 모습이 기본(전에는 아래 흰 조작부가 펼쳐져 열렸다).
+// 위 줄은 왼쪽 ⌄(나가기: 타이머는 계속, 오른쪽 아래 작은 타이머) · 오른쪽 읽는 책 이름(누르면 책 바꾸기). 끝내기는 일시정지해 나온 읽기 탭 카드 아래.
+// 시간을 누르면 흰 조작부(연결된 책 · 시간 · [분위기 | 재생/일시정지 | 목표])가 열린다. 분위기 = 장면+환경음 한 세트.
+// 정지(❚❚)를 누르면 독서를 끝내 묻지 않고 그 책에 거기까지 기록하고 이 화면을 닫아 시작한 화면으로 돌아간다(토스트). 2026-11-27 사용자 '그냥 정지 누르면 끝나는 거라니까'.
+// 전에는 일시정지하고 나와 작은 타이머 · 읽기 탭에서 이어 읽었다(2026-11-24). 쪽 · 메모는 독서 기록 수정에서 적는다.
 // 스피커를 누르면 그 줄 위에 왼쪽부터 차는 소리 막대가 열리고, 한 번 더 누르거나 막대를 맨 왼쪽까지 내리면 음소거.
-// 장면은 옆으로 밀어 바꾼다(접었을 때 아래 점이 지금 장면). 소리만 듣기(soundOnly)는 타이머 없이 소리만: 독서 시간으로 기록하지 않는다
+// 장면은 옆으로 넘겨 고른다(손가락을 따라 다음 장면이 밀려 들어오고, 놓으면 그 장면 · 소리. 아래 점이 지금 장면). 소리만 듣기(soundOnly)는 타이머 없이 소리만: 독서 시간으로 기록하지 않는다
 library;
 
 import 'dart:async';
@@ -15,7 +18,9 @@ import 'package:video_player/video_player.dart';
 import '../../domain/library.dart';
 import '../../domain/reading.dart';
 import '../../services/ambient.dart';
-import '../../store/finish_reading.dart' show pauseReading;
+import '../../store/finish_reading.dart' show saveDraftAsIs;
+import '../../ui/alert.dart' show appAlert;
+import '../../ui/feedback.dart' show errorText, showToast;
 import '../../store/library_model.dart';
 import '../../store/reading_store.dart';
 import '../../store/settings_store.dart';
@@ -95,7 +100,8 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   final _reading = ReadingStore.instance;
   final _settings = SettingsStore.instance;
   final _audio = Ambient.instance;
-  bool _open = true;
+  /// 흰 조작부가 열렸나(소리만 듣기는 '지금부터 독서 기록' 단추가 있어 열고 시작)
+  late bool _open = widget.soundOnly;
   bool _volOpen = false;
   double? _dragVolume;
   String? _draftBookId;
@@ -104,7 +110,10 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   final _panelKey = GlobalKey();
   final _rowKey = GlobalKey();
   double _rowW = 0;
-  double _swipeDx = 0;
+
+  /// 장면 넘기기: 끝없이 돈다(마지막 다음은 처음). 쪽 번호 % 장면 수 = 장면
+  late final PageController _pager = PageController(initialPage: scenes.length * 500 + _sceneIndex);
+  int get _sceneIndex => math.max(0, scenes.indexWhere((x) => x.id == _settings.scene));
 
   @override
   void initState() {
@@ -122,6 +131,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     for (final n in [_lib, _reading, _settings, _audio]) {
       n.removeListener(_changed);
     }
+    _pager.dispose();
     super.dispose();
   }
 
@@ -130,8 +140,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
 
   void _changed() {
     if (!mounted) return;
-    // 재는 것도 소리도 없으면 조작부를 펼친다
-    if (_reading.active == null && !widget.soundOnly && !_audio.playing) _open = true;
+    // 재는 것이 없어도 접은 모습 그대로(재생 단추가 읽기 시작이다). 전에는 조작부를 펼쳤다
     setState(() {});
   }
 
@@ -149,29 +158,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
   /// 이 화면에서 읽는 중인데 소리가 꺼져 있다(앱이 꺼졌다 켜진 뒤 등): 화면도 꺼짐으로 보인다(2026-11-15 QA 수아 F2)
   bool get _soundOff => !widget.soundOnly && _reading.active != null && !_audio.playing;
 
-  void _finish() {
-    if (_reading.active == null) return;
-    // 1초도 안 됐으면 저장할 것이 없다: 초안을 남기지 않고 닫는다(0초 초안이 다음 '읽기 시작'을 계속 막았다, 점검 B11)
-    if (_reading.elapsed < 1000) {
-      unawaited(_reading.discardActive());
-      _leave();
-      return;
-    }
-    _reading.finish();
-    openFinish(context, replace: true);
-  }
-
   void _leave() => Navigator.of(context).maybePop();
-
-  /// 오른쪽 위 단추: 소리만 듣기면 소리를 끄고 나가기, 읽는 중이면 독서 끝내기, 아니면 닫기
-  VoidCallback _endOrLeave(bool soundOnly, bool reading) => soundOnly
-      ? () {
-          _audio.stop();
-          _leave();
-        }
-      : reading
-          ? _finish
-          : _leave;
 
   void _start() {
     if (_reading.active != null || _reading.pending != null) {
@@ -189,24 +176,51 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     } else if (_reading.active == null) {
       _start();
     } else if (_reading.running) {
-      pauseReading();
-      // 일시정지하면 읽기 화면을 닫고 시작한 자리로 돌아간다(2026-11-24 사용자 '타이머 일시정지 하면 밖으로 나오게').
-      // 멈춘 독서는 그 화면의 작은 타이머 · 읽기 탭 카드에서 이어 읽는다. 펼친 조작부 · 접은 조작부의 단추가 같다
-      _leave();
+      _stop();
     } else {
       unawaited(resumeReadingOrTell(context));
     }
   }
 
-  // 장면 고르기: 배경과 환경음이 함께 바뀐다(소리가 나는 중이면 새 장면 소리로 바로 바꾼다)
-  void _chooseScene(String id) {
+  /// 정지 = 독서 끝(2026-11-27 사용자 '그냥 정지 누르면 끝나는 거라니까?'): 끝내고 소리를 멈추고 장면을 닫은 뒤, 묻지 않고 그 책에 거기까지 기록한다
+  /// (독서 끝 화면에서 뒤로 · 통화로 끊길 때와 같은 저장, saveDraftAsIs). 시작한 화면에 토스트. 1초가 안 되면 남길 것이 없어 지운다.
+  /// 펼친 조작부 · 접은 조작부의 단추가 같다
+  void _stop() {
+    final d = _reading.finish();
+    _audio.stop();
+    final nav = Navigator.of(context);
+    final title = d == null ? null : bookTitle(lib, d.myBookId);
+    _leave();
+    if (d == null) return;
+    saveDraftAsIs(d).then((saved) {
+      if (saved && nav.mounted) showToast(nav.context, '${title == null ? '' : '‘$title’ '}${withJosa(formatDurationPrecise(d.durationMs), '을', '를')} 기록했어요.');
+    }, onError: (Object e) {
+      if (nav.mounted) appAlert(nav.context, '독서 기록을 저장하지 못했어요', '기록은 읽기 탭에 남아 있어요. ${errorText(e)}');
+    });
+  }
+
+  // 장면 고르기: 배경과 환경음이 함께 바뀐다(소리가 나는 중이면 새 장면 소리로 바로 바꾼다). 넘기기가 아닌 곳(분위기 시트 · 화면 읽기)에서 고르면 그 쪽으로 넘긴다
+  void _chooseScene(String id, {bool fromPager = false}) {
+    if (id == _settings.scene) return;
     _settings.set({'scene': id});
     if (_audio.playing) _audio.play(id);
+    if (!fromPager && _pager.hasClients) {
+      final cur = (_pager.page ?? _pager.initialPage.toDouble()).round();
+      _pager.jumpToPage(cur - cur % scenes.length + _sceneIndex);
+    }
+  }
+
+  /// 넘기기가 멈췄다: 멈춘 쪽의 장면으로
+  void _settleScene() {
+    final p = _pager.hasClients ? _pager.page : null;
+    if (p == null) return;
+    _chooseScene(scenes[p.round() % scenes.length].id, fromPager: true);
   }
 
   void _stepScene(int dir) {
-    final i = scenes.indexWhere((x) => x.id == _settings.scene);
-    _chooseScene(scenes[(i + dir + scenes.length) % scenes.length].id);
+    if (!_pager.hasClients) return;
+    final cur = (_pager.page ?? _pager.initialPage.toDouble()).round();
+    _pager.animateToPage(cur + dir, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic);
   }
 
   // 스피커: 닫혀 있으면 막대를 연다(음소거였으면 소리를 켠다), 열려 있으면 음소거하고 닫는다. 소리가 꺼져 있으면 켠다
@@ -232,7 +246,7 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
       : _reading.active == null
           ? '읽기 시작'
           : _reading.running
-              ? '일시정지'
+              ? '독서 끝내기'
               : '이어서 읽기';
 
   Future<void> _pickBook() async {
@@ -468,17 +482,25 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
       child: Material(
         color: const Color(0xFF182C44),
         child: Stack(children: [
-          Positioned(left: 0, top: 0, width: size.width, height: sceneH, child: SceneVideo(id: _settings.scene, play: animate)),
-          // 옆으로 밀어 장면 바꾸기: 왼쪽으로 밀면 다음 장면, 끝에서는 처음으로 돈다
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragStart: (_) => _swipeDx = 0,
-              onHorizontalDragUpdate: (d) => _swipeDx += d.delta.dx,
-              onHorizontalDragEnd: (d) {
-                final v = d.primaryVelocity ?? 0;
-                if (_swipeDx.abs() > 60 || v.abs() > 500) _stepScene((_swipeDx != 0 ? _swipeDx : v) < 0 ? 1 : -1);
+          // 옆으로 넘겨 장면 고르기(2026-11-27 사용자 '고르기는 그냥 옆으로 넘기면 골라지고'): 손가락을 따라 옆 장면(정지 그림 → 영상)이 밀려 들어오고,
+          // 놓아 멈춘 쪽 장면 · 소리로 바뀐다. 왼쪽으로 넘기면 다음 장면, 끝에서는 처음으로 돈다. 보이는 쪽만 영상을 튼다
+          Positioned(
+            left: 0,
+            top: 0,
+            width: size.width,
+            height: sceneH,
+            child: NotificationListener<ScrollEndNotification>(
+              onNotification: (_) {
+                _settleScene();
+                return false;
               },
+              child: PageView.builder(
+                controller: _pager,
+                itemBuilder: (_, i) {
+                  final sc = scenes[i % scenes.length];
+                  return SceneVideo(key: ValueKey('scene-$i'), id: sc.id, play: animate && sc.id == _settings.scene);
+                },
+              ),
             ),
           ),
           _topBar(insets),
@@ -489,40 +511,50 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
     );
   }
 
-  /// 위 줄: 뒤로 · 가운데 '읽기' · 끝내기(장면 위 밝은 글자). 장면·책 이름 줄은 뺐다: 조작부에 책·소리 이름이 이미 있다(2026-11-17 사용자 시안)
+  /// 위 줄(장면 위 밝은 글자): 왼쪽 ⌄ 나가기(독서는 계속, 오른쪽 아래 작은 타이머) · 오른쪽 읽는 책 이름(누르면 책 바꾸기).
+  /// 2026-11-27 사용자 시안 '우측상단에 책 이름'. 가운데 '읽기'와 오른쪽 '끝내기'는 뺐다(끝내기는 일시정지해 나온 읽기 탭 카드 아래)
   Widget _topBar(EdgeInsets insets) {
     final active = _reading.active != null;
     final soundOnly = widget.soundOnly;
-    final end = _endOrLeave(soundOnly, active);
+    final bookId = _bookId;
+    final name = soundOnly ? '소리 듣기' : bookId != null ? bookTitle(lib, bookId) ?? '' : NoBookCover.name;
     return Positioned(
       left: 0,
       right: 0,
       top: 0,
       child: Padding(
-        // 단추 누르는 자리 44 → 48: 늘어난 만큼 위 여백을 줄여 제목·단추 자리는 그대로
-        padding: EdgeInsets.fromLTRB(12, insets.top + 6 - _hitPad, 12, 16 - _hitPad),
+        // 단추 누르는 자리 44 → 48: 늘어난 만큼 위 여백을 줄여 제목·단추 자리는 그대로. 책 이름 오른쪽 끝은 ⌄ 그림 왼쪽 끝과 맞선다(화면 끝에서 24)
+        padding: EdgeInsets.fromLTRB(12, insets.top + 6 - _hitPad, Space.page, 16 - _hitPad),
         child: Row(children: [
           Semantics(
             container: true,
             button: true,
-            // 장면은 읽기 탭 위에 열린다: 읽는 중이 아니면 앱 공통 뒤로 이름
+            // 장면은 시작한 화면 위에 열린다: 읽는 중이 아니면 앱 공통 뒤로 이름
             label: active ? '나가기(독서는 계속)' : '뒤로',
             onTap: _leave,
             excludeSemantics: true,
-            child: Pressable(onPress: _leave, child: const SizedBox(width: 52, height: Space.hit, child: Center(child: LucideIcon('ChevronLeft', size: 28, color: _light)))),
+            child: Pressable(onPress: _leave, child: const SizedBox(width: 52, height: Space.hit, child: Center(child: LucideIcon('ChevronDown', size: 28, color: _light)))),
           ),
-          Expanded(child: Text(soundOnly ? '소리 듣기' : '읽기', textAlign: TextAlign.center, style: AppType.title.copyWith(color: _light, shadows: _shade))),
-          // 이름은 한 번만('독서 끝내기 / 끝내기'로 두 번 읽혔다, 2026-11-16 QA 영숙 F9)
-          Semantics(
-            button: true,
-            label: soundOnly ? '소리 끄고 나가기' : active ? '독서 끝내기' : '닫기',
-            onTap: end,
-            excludeSemantics: true,
-            child: Pressable(
-              onPress: end,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 52, minHeight: Space.hit),
-                child: Center(child: Text(active || soundOnly ? '끝내기' : '닫기', style: AppType.buttonSmall.copyWith(color: _light, shadows: _shade))),
+          const SizedBox(width: Space.l),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Semantics(
+                button: !soundOnly,
+                label: soundOnly ? name : '책 변경, $name',
+                onTap: soundOnly ? null : _pickBook,
+                excludeSemantics: true,
+                child: Pressable(
+                  onPress: soundOnly ? null : _pickBook,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: Space.hit),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      widthFactor: 1,
+                      child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.title.copyWith(color: _light, shadows: _shade)),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -809,7 +841,9 @@ class _ReadingScreenState extends State<ReadingScreen> with WidgetsBindingObserv
                     }),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: Space.hit),
+                      // 글자 폭만큼(시안: 스피커 · 일시정지가 시간 바로 양옆). 전에는 남는 폭을 다 써 두 단추가 화면 끝으로 갔다
                       child: Center(
+                        widthFactor: 1,
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: soundOnly
