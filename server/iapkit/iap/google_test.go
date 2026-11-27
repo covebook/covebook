@@ -4,17 +4,37 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/awa/go-iap/playstore"
 	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 )
 
 type fakeGoogleAPI struct {
-	sub   *androidpublisher.SubscriptionPurchaseV2
-	prod  *androidpublisher.ProductPurchaseV2
-	err   error
-	calls *[]string // 확인·소비 호출 기록
+	sub      *androidpublisher.SubscriptionPurchaseV2
+	prod     *androidpublisher.ProductPurchaseV2
+	err      error
+	calls    *[]string                                                // 확인·소비 호출 기록
+	voided   map[string]*androidpublisher.VoidedPurchasesListResponse // 쪽 토큰 → 응답
+	order    *androidpublisher.Order                                  // 주문 조회(금액) 결과. nil이면 주문 없음
+	orderErr error
+}
+
+func (f fakeGoogleAPI) GetOrder(context.Context, string, string) (*androidpublisher.Order, error) {
+	return f.order, f.orderErr
+}
+
+func (f fakeGoogleAPI) VoidedPurchases(_ context.Context, _ string, _, _, _ int64, token string, _ int64, _ playstore.VoidedPurchaseType) (*androidpublisher.VoidedPurchasesListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.voided[token], nil
 }
 
 func (f fakeGoogleAPI) AcknowledgeSubscription(_ context.Context, pkg, id, token string, _ *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error {
@@ -27,6 +47,10 @@ func (f fakeGoogleAPI) AcknowledgeProduct(_ context.Context, pkg, id, token, _ s
 }
 func (f fakeGoogleAPI) ConsumeProduct(_ context.Context, pkg, id, token string) error {
 	*f.calls = append(*f.calls, "consume "+pkg+" "+id+" "+token)
+	return f.err
+}
+func (f fakeGoogleAPI) Refund(_ context.Context, pkg, order string) error {
+	*f.calls = append(*f.calls, "refund "+pkg+" "+order)
 	return f.err
 }
 
@@ -57,7 +81,7 @@ func TestGoogleSubscription(t *testing.T) {
 	if p.ProductID != "plus" || p.PlanID != "monthly" || p.AccountToken != "u-1" || p.Country != "KR" {
 		t.Fatalf("상품·계정 값이 다름: %+v", p)
 	}
-	if p.State != StatePaid || p.Env != EnvSandbox {
+	if p.State != StatePaid || p.Env != EnvSandbox || p.Acknowledged {
 		t.Fatalf("상태·환경이 다름: %+v", p)
 	}
 	// 다른 시간대로 와도 UTC로 맞춘다
@@ -65,7 +89,38 @@ func TestGoogleSubscription(t *testing.T) {
 		t.Fatalf("만료 시각: %s", got)
 	}
 	if p.PriceMilli != 0 || p.Currency != "" {
-		t.Fatalf("구글 조회에는 금액이 없다: %+v", p)
+		t.Fatalf("주문 조회 결과가 없으면 금액은 비어 있다: %+v", p)
+	}
+}
+
+// 금액은 주문 조회(orders.get)의 total로 채운다. 주문 조회가 실패해도 구매 조회는 성공한다
+func TestGooglePriceFromOrder(t *testing.T) {
+	prod := &androidpublisher.ProductPurchaseV2{OrderId: "GPA.9", PurchaseCompletionTime: "2026-11-26T03:00:00Z",
+		PurchaseStateContext: &androidpublisher.PurchaseStateContext{PurchaseState: "PURCHASED"},
+		ProductLineItem:      []*androidpublisher.ProductLineItem{{ProductId: "shelf"}}}
+	for _, c := range []struct {
+		name     string
+		total    *androidpublisher.Money
+		orderErr error
+		currency string
+		milli    int64
+	}{
+		{"원화", &androidpublisher.Money{CurrencyCode: "KRW", Units: 3300}, nil, "KRW", 3_300_000},
+		{"소수 있는 통화", &androidpublisher.Money{CurrencyCode: "USD", Units: 2, Nanos: 990_000_000}, nil, "USD", 2990},
+		{"주문 조회 실패", nil, errors.New("403 권한 없음"), "", 0},
+	} {
+		var order *androidpublisher.Order
+		if c.total != nil {
+			order = &androidpublisher.Order{OrderId: "GPA.9", Total: c.total}
+		}
+		g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{prod: prod, order: order, orderErr: c.orderErr}}
+		p, err := g.Lookup(context.Background(), Ref{Kind: KindProduct, ID: "tok"})
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if p.Currency != c.currency || p.PriceMilli != c.milli {
+			t.Fatalf("%s: %s %d", c.name, p.Currency, p.PriceMilli)
+		}
 	}
 }
 
@@ -147,6 +202,12 @@ func TestGoogleSubscriptionStatus(t *testing.T) {
 				AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: autoRenew}}}}
 	}
 	ctx := context.Background()
+	// 이미 확인된 구독은 그렇게 표시된다
+	acked := sub("SUBSCRIPTION_STATE_ACTIVE", true)
+	acked.AcknowledgementState = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
+	if p, _ := (&Google{api: fakeGoogleAPI{sub: acked}}).Subscription(ctx, "tok"); !p.Acknowledged {
+		t.Fatal("확인된 구독이 미확인으로 나옴")
+	}
 	// 유예 중: 구글이 늘려 준 만료 시각이 유예의 끝이다
 	p, err := (&Google{api: fakeGoogleAPI{sub: sub("SUBSCRIPTION_STATE_IN_GRACE_PERIOD", true)}}).Subscription(ctx, "tok")
 	if err != nil || p.State != StatePaid || !p.AutoRenew || !p.GraceUntil.Equal(p.ExpiresAt) || p.OriginalTransactionID != "tok" {
@@ -239,5 +300,90 @@ func TestGoogleParseNotice(t *testing.T) {
 		if _, err := g.ParseNotice([]byte(body)); err == nil {
 			t.Errorf("본문 %q가 통과", body)
 		}
+	}
+}
+
+func TestGoogleVerify(t *testing.T) {
+	g := &Google{packageName: "app.covebook"}
+	if ref, err := g.Verify(KindProduct, "tok"); err != nil || ref != (Ref{Kind: KindProduct, ID: "tok"}) {
+		t.Fatalf("%+v %v", ref, err)
+	}
+	if _, err := g.Verify(KindProduct, ""); !errors.Is(err, ErrBadProof) {
+		t.Fatalf("빈 토큰: %v", err)
+	}
+}
+
+// 통신 오류 메시지에 구매 토큰이 남지 않는다. 구글 API 주소에는 토큰이 들어 있고 토큰은 구매 증거다.
+func TestGoogleErrorsHideToken(t *testing.T) {
+	const token = "secret-purchase-token"
+	netErr := &url.Error{Op: "Get", URL: "https://androidpublisher.googleapis.com/x/tokens/" + token, Err: errors.New("context deadline exceeded")}
+	ctx := context.Background()
+	var calls []string
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{err: netErr, calls: &calls}}
+	_, lookupErr := g.Lookup(ctx, Ref{Kind: KindSubscription, ID: token})
+	_, productErr := g.Lookup(ctx, Ref{Kind: KindProduct, ID: token})
+	confirmErr := g.Confirm(ctx, Ref{Kind: KindProduct, ID: token}, "shelf", true)
+	for name, err := range map[string]error{"구독 조회": lookupErr, "상품 조회": productErr, "확인": confirmErr} {
+		if err == nil || strings.Contains(err.Error(), token) {
+			t.Errorf("%s 오류에 토큰이 남음: %v", name, err)
+		}
+		if err != nil && !strings.Contains(err.Error(), "deadline") {
+			t.Errorf("%s 오류에서 원인이 사라짐: %v", name, err)
+		}
+	}
+}
+
+func TestGoogleRefund(t *testing.T) {
+	var calls []string
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{calls: &calls}}
+	if err := g.Refund(context.Background(), "GPA.1"); err != nil || len(calls) != 1 || calls[0] != "refund app.covebook GPA.1" {
+		t.Fatalf("환불 요청: %v %v", calls, err)
+	}
+	// 주문 ID가 없으면(프로모션 코드 구매) 부르지 않는다
+	if err := g.Refund(context.Background(), ""); err == nil || len(calls) != 1 {
+		t.Fatalf("주문 ID 없으면 오류: %v %v", calls, err)
+	}
+}
+
+// 요금제 변경을 다음 결제일로 미루면 항목이 2개 온다. 만료가 늦은 새 요금제를 쓴다(이슈 #33)
+func TestGoogleSubscriptionDeferredChange(t *testing.T) {
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{sub: &androidpublisher.SubscriptionPurchaseV2{
+		SubscriptionState: "SUBSCRIPTION_STATE_ACTIVE", StartTime: "2026-11-18T03:00:00Z",
+		LineItems: []*androidpublisher.SubscriptionPurchaseLineItem{
+			{ProductId: "plus", ExpiryTime: "2026-12-18T03:00:00Z", LatestSuccessfulOrderId: "GPA.1",
+				OfferDetails: &androidpublisher.OfferDetails{BasePlanId: "monthly"}, AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: false}},
+			// 미뤄진 새 요금제는 아직 결제 전이라 주문 ID가 없다
+			{ProductId: "plus", ExpiryTime: "2027-12-18T03:00:00Z",
+				OfferDetails: &androidpublisher.OfferDetails{BasePlanId: "yearly"}, AutoRenewingPlan: &androidpublisher.AutoRenewingPlan{AutoRenewEnabled: true}},
+		},
+	}}}
+	p, err := g.Lookup(context.Background(), Ref{Kind: KindSubscription, ID: "tok"})
+	if err != nil {
+		t.Fatalf("항목 2개를 받지 못함: %v", err)
+	}
+	// 주문 ID는 주문 ID가 있는 옛 항목의 것(원장 키가 구매 토큰으로 바뀌지 않게)
+	if p.PlanID != "yearly" || !p.AutoRenew || p.ExpiresAt.Year() != 2027 || p.TransactionID != "GPA.1" {
+		t.Fatalf("새 요금제를 고르지 않음: %+v", p)
+	}
+}
+
+// 환불은 revoke=true로 부른다. 소비하지 않은 선반을 revoke 없이 환불하면 구매가 남아 다시 살 수 없다
+func TestGoogleRefundRevokes(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	svc, err := androidpublisher.NewService(context.Background(), option.WithEndpoint(srv.URL), option.WithoutAuthentication(), option.WithHTTPClient(srv.Client()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := &Google{packageName: "app.covebook", api: googleClient{svc: svc}}
+	if err := g.Refund(context.Background(), "GPA.1"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "POST ") || !strings.Contains(got, "/orders/GPA.1:refund") || !strings.Contains(got, "revoke=true") {
+		t.Fatalf("환불 요청: %s", got)
 	}
 }

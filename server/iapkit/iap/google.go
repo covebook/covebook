@@ -6,13 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/awa/go-iap/playstore"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 )
 
 // googleAPI는 go-iap의 구글 클라이언트에서 우리가 쓰는 메서드만 고른 것이다.
@@ -22,7 +27,13 @@ type googleAPI interface {
 	AcknowledgeSubscription(ctx context.Context, packageName, subscriptionID, token string, req *androidpublisher.SubscriptionPurchasesAcknowledgeRequest) error
 	AcknowledgeProduct(ctx context.Context, packageName, productID, token, developerPayload string) error
 	ConsumeProduct(ctx context.Context, packageName, productID, token string) error
+	VoidedPurchases(ctx context.Context, packageName string, startTime, endTime, maxResult int64, token string, startIndex int64, productType playstore.VoidedPurchaseType) (*androidpublisher.VoidedPurchasesListResponse, error)
+	Refund(ctx context.Context, packageName, orderID string) error
+	GetOrder(ctx context.Context, packageName, orderID string) (*androidpublisher.Order, error)
 }
+
+// googleOrderTimeout은 금액을 받으려는 주문 조회(orders.get)의 제한 시간이다. 금액은 없어도 되므로 구매 조회보다 짧게 둔다
+const googleOrderTimeout = 3 * time.Second
 
 type Google struct {
 	api         googleAPI
@@ -36,10 +47,58 @@ func NewGoogle(serviceAccountJSON []byte, packageName string) (*Google, error) {
 	if err != nil {
 		return nil, fmt.Errorf("google 클라이언트: %w", err)
 	}
-	return &Google{api: c, packageName: packageName}, nil
+	// go-iap의 Refund는 revoke를 넘기지 않아 환불만은 같은 키로 만든 서비스로 직접 부른다(googleClient.Refund).
+	// go-iap와 같은 방법(10초 HTTP 제한)으로 만든다
+	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Timeout: 10 * time.Second})
+	conf, err := google.JWTConfigFromJSON(serviceAccountJSON, androidpublisher.AndroidpublisherScope)
+	if err != nil {
+		return nil, fmt.Errorf("google 클라이언트: %w", err)
+	}
+	svc, err := androidpublisher.NewService(ctx, option.WithHTTPClient(conf.Client(ctx)))
+	if err != nil {
+		return nil, fmt.Errorf("google 클라이언트: %w", err)
+	}
+	return &Google{api: googleClient{Client: c, svc: svc}, packageName: packageName}, nil
 }
 
-func (g *Google) Route() Route { return RouteGoogle }
+// googleClient는 go-iap 클라이언트에 환불만 바꿔 끼운 것이다.
+type googleClient struct {
+	*playstore.Client
+	svc *androidpublisher.Service
+}
+
+// Refund는 orders.refund를 revoke=true로 부른다. 우리가 환불하는 한 번 사는 상품 거래는 둘로 나뉜다
+//   - 상한 넘김: 이미 소비했다. revoke는 할 일이 없다(소비한 상품은 개발자가 처리한다는 것이 구글 설명)
+//   - 대상 모름, 주인 없음: 소비하지 않았다. revoke 없이 환불만 하면 구매가 사용자 소유로 남아 같은 상품을 다시 살 수 없다
+//     (ADR-0002 표 "받지 않은 구글 구매 (#27)"의 사고 사례)
+func (c googleClient) Refund(ctx context.Context, packageName, orderID string) error {
+	return c.svc.Orders.Refund(packageName, orderID).Revoke(true).Context(ctx).Do()
+}
+
+func (g *Google) Route() Route  { return RouteGoogle }
+func (g *Google) AppID() string { return g.packageName }
+
+// Refund는 주문을 환불하고 구매를 거둔다(orders.refund, revoke=true. googleClient.Refund).
+// 우리 서버가 주지 않은 거래만 환불하므로 거둘 것은 없다. revoke는 소비하지 않은 구매의 소유를 풀려는 것이다.
+func (g *Google) Refund(ctx context.Context, orderID string) error {
+	if orderID == "" {
+		return errors.New("google: 주문 ID가 없는 구매는 환불할 수 없다")
+	}
+	if err := g.api.Refund(ctx, g.packageName, orderID); err != nil {
+		return fmt.Errorf("google 환불 %s: %w", orderID, err)
+	}
+	return nil
+}
+
+const googleAcknowledged = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
+
+// Verify는 구매 토큰을 그대로 조회 대상으로 쓴다. 토큰이 비밀 값이라 따로 확인할 서명이 없다.
+func (g *Google) Verify(kind Kind, proof string) (Ref, error) {
+	if proof == "" {
+		return Ref{}, fmt.Errorf("google: %w", ErrBadProof)
+	}
+	return Ref{Kind: kind, ID: proof}, nil
+}
 
 // Lookup은 구매 토큰으로 묻는다. 구독과 한 번 사는 상품은 조회 주소가 달라 ref.Kind로 가른다.
 func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
@@ -49,15 +108,45 @@ func (g *Google) Lookup(ctx context.Context, ref Ref) (Purchase, error) {
 		if err != nil {
 			return Purchase{}, googleErr(err)
 		}
-		return g.fromSubscription(ref.ID, s)
+		p, err := g.fromSubscription(ref.ID, s)
+		if err == nil {
+			g.fillPrice(ctx, &p)
+		}
+		return p, err
 	case KindProduct:
-		p, err := g.api.VerifyProductV2(ctx, g.packageName, ref.ID)
+		r, err := g.api.VerifyProductV2(ctx, g.packageName, ref.ID)
 		if err != nil {
 			return Purchase{}, googleErr(err)
 		}
-		return g.fromProduct(ref.ID, p)
+		p, err := g.fromProduct(ref.ID, r)
+		if err == nil {
+			g.fillPrice(ctx, &p)
+		}
+		return p, err
 	}
 	return Purchase{}, fmt.Errorf("google: 모르는 상품 종류 %q", ref.Kind)
+}
+
+// fillPrice는 주문 조회(orders.get, 2025-05 출시)로 실제 결제 금액을 채운다(2026-11-26 결정, ADR-0003 L17).
+// 구매 조회(purchases.*v2)에는 금액이 없다. total은 세금과 할인을 반영해 구매자가 낸 금액이다.
+// 지급 판단에는 쓰지 않으므로 실패해도 구매는 그대로 돌려준다. 결제가 끝난 거래만, 주문 ID가 있을 때만 묻는다(프로모션 코드 구매는 주문 ID가 없다).
+// 서비스 계정에 "재무 데이터 보기" 권한이 없으면 403이 온다. 금액이 계속 비면 이 로그를 본다
+func (g *Google) fillPrice(ctx context.Context, p *Purchase) {
+	if p.State != StatePaid || p.TransactionID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, googleOrderTimeout)
+	defer cancel()
+	o, err := g.api.GetOrder(ctx, g.packageName, p.TransactionID)
+	if err != nil {
+		log.Printf("google order price unavailable: product=%s err=%v", p.ProductID, err)
+		return
+	}
+	if o == nil || o.Total == nil || o.Total.CurrencyCode == "" {
+		return
+	}
+	p.Currency = o.Total.CurrencyCode
+	p.PriceMilli = o.Total.Units*1000 + o.Total.Nanos/1_000_000
 }
 
 // googleErr는 "그런 구매 없음"(404, 410)을 ErrNotFound로 바꾼다. 나머지는 통신·권한 문제로 둔다.
@@ -66,15 +155,31 @@ func googleErr(err error) error {
 	if errors.As(err, &ge) && (ge.Code == http.StatusNotFound || ge.Code == http.StatusGone) {
 		return fmt.Errorf("google: %w", ErrNotFound)
 	}
-	return fmt.Errorf("google 구매 조회: %w", err)
+	return fmt.Errorf("google 구매 조회: %w", scrubURL(err))
+}
+
+// scrubURL은 통신 오류에서 요청 주소를 뺀다. 구글 API 주소에는 구매 토큰이 들어 있고,
+// 구매 토큰은 그 자체가 구매 증거라 로그나 DB에 남으면 안 된다(남의 구독을 복원으로 가져갈 수 있다).
+func scrubURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s 요청 실패: %w", ue.Op, ue.Err)
+	}
+	return err
 }
 
 func (g *Google) fromSubscription(token string, s *androidpublisher.SubscriptionPurchaseV2) (Purchase, error) {
-	// 우리 구독은 상품 1개라 항목도 1개다. 다르면 설정이 바뀐 것이니 지급하지 않고 멈춘다.
-	if len(s.LineItems) != 1 {
-		return Purchase{}, fmt.Errorf("google 구독: 항목이 %d개", len(s.LineItems))
+	// 보통 항목은 1개다. 요금제 변경을 다음 결제일로 미루면(DEFERRED) 옛 요금제(자동 갱신 꺼짐)와 새 요금제가 함께 온다.
+	// 만료가 가장 늦은 항목을 지금 구독으로 본다. 둘 다 같은 plus라 권한은 같고, 만료·요금제·자동 갱신 표시만 새 것을 따른다
+	if len(s.LineItems) == 0 {
+		return Purchase{}, errors.New("google 구독: 항목이 없음")
 	}
-	item := s.LineItems[0]
+	item, latest := s.LineItems[0], time.Time{}
+	for _, it := range s.LineItems {
+		if t, err := rfcTime(it.ExpiryTime); err == nil && t.After(latest) {
+			item, latest = it, t
+		}
+	}
 	started, err := rfcTime(s.StartTime)
 	if err != nil {
 		return Purchase{}, fmt.Errorf("google 구독 시작 시각: %w", err)
@@ -83,13 +188,24 @@ func (g *Google) fromSubscription(token string, s *androidpublisher.Subscription
 	if err != nil {
 		return Purchase{}, fmt.Errorf("google 구독 만료 시각: %w", err)
 	}
+	// 미뤄진 새 요금제 항목은 아직 결제 전이라 주문 ID(latestSuccessfulOrderId)가 없다(구글 문서). 비면 주문 ID가 있는 항목의 것을 쓴다.
+	// 빈 값이면 원장 키가 구매 토큰으로 바뀌어 구매 내역에 같은 기간 줄이 하나 더 생긴다(코드 리뷰 #43-2)
+	order := item.LatestSuccessfulOrderId
+	for _, it := range s.LineItems {
+		if order != "" {
+			break
+		}
+		order = it.LatestSuccessfulOrderId
+	}
 	p := Purchase{
 		Route:                 RouteGoogle,
-		TransactionID:         item.LatestSuccessfulOrderId,
+		TransactionID:         order,
 		OriginalTransactionID: token,
 		BundleID:              g.packageName, // 응답에 패키지 이름이 없다. 우리 패키지로 물어서 받은 답이다
 		ProductID:             item.ProductId,
 		State:                 subscriptionState(s.SubscriptionState),
+		Acknowledged:          s.AcknowledgementState == googleAcknowledged,
+		LinkedID:              s.LinkedPurchaseToken,
 		Env:                   EnvProduction,
 		PurchasedAt:           started,
 		ExpiresAt:             expires,
@@ -141,9 +257,13 @@ func (g *Google) fromProduct(token string, r *androidpublisher.ProductPurchaseV2
 		ProductID:             r.ProductLineItem[0].ProductId,
 		AccountToken:          r.ObfuscatedExternalAccountId,
 		State:                 state,
+		Acknowledged:          r.AcknowledgementState == googleAcknowledged,
 		Env:                   EnvProduction,
 		PurchasedAt:           bought,
 		Country:               Country(r.RegionCode),
+	}
+	if d := r.ProductLineItem[0].ProductOfferDetails; d != nil {
+		p.Quantity = int(d.Quantity)
 	}
 	if r.TestPurchaseContext != nil {
 		p.Env = EnvSandbox
@@ -196,7 +316,7 @@ func (g *Google) Confirm(ctx context.Context, ref Ref, productID string, consume
 		return fmt.Errorf("google 확인: 종류 %q, 소비 %v는 맞지 않는 조합", ref.Kind, consume)
 	}
 	if err != nil {
-		return fmt.Errorf("google 확인 %s: %w", productID, err)
+		return fmt.Errorf("google 확인 %s: %w", productID, scrubURL(err))
 	}
 	return nil
 }
@@ -212,15 +332,15 @@ func (g *Google) ParseNotice(body []byte) (Notice, error) {
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(body, &push); err != nil || push.Message.MessageID == "" {
-		return Notice{}, errors.New("google 알림: 본문 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 본문: %w", ErrBadNotice)
 	}
 	raw, err := base64.StdEncoding.DecodeString(push.Message.Data)
 	if err != nil {
-		return Notice{}, errors.New("google 알림: data를 풀 수 없음")
+		return Notice{}, fmt.Errorf("google 알림 data: %w", ErrBadNotice)
 	}
 	var d playstore.DeveloperNotificationV2
 	if err = json.Unmarshal(raw, &d); err != nil {
-		return Notice{}, errors.New("google 알림: 내용 형식이 다름")
+		return Notice{}, fmt.Errorf("google 알림 내용: %w", ErrBadNotice)
 	}
 	n := Notice{Route: RouteGoogle, ID: push.Message.MessageID}
 	if ms, e := strconv.ParseInt(d.EventTimeMillis, 10, 64); e == nil {
