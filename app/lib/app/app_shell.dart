@@ -172,7 +172,7 @@ class _AppShellState extends State<AppShell> {
   void _dropCover() {
     _coverTimer?.cancel();
     shelfReady.removeListener(_shelfChanged);
-    startStep.value = 3;
+    startStep.value = 4;
     if (mounted && _cover) setState(() => _cover = false);
   }
 
