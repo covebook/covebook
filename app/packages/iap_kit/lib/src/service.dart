@@ -366,7 +366,7 @@ class IapService extends ChangeNotifier {
     switch (d.status) {
       case PurchaseStatus.pending:
         // 결제가 아직 끝나지 않았다(편의점 결제, 보호자 승인 등). 끝나면 스토어가 다시 알려 주고 그때 서버에 낸다.
-        // 결제 의도는 지우지 않는다. 앱을 닫아도 서버가 스토어 알림과 의도를 맞춰 대상을 찾는다(Rules.Keep, 기본 4일).
+        // 결제 의도는 지우지 않는다. 앱을 닫아도 서버가 스토어 알림과 의도를 맞춰 대상을 찾는다(Rules.Keep, 기본 8일).
         // 버튼을 풀어 화면을 떠날 수 있게 한다
         _done(IapResult.pending, IapKit.text('pending'));
         return;
