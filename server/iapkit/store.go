@@ -806,12 +806,19 @@ func iapReleaseReservation(ctx context.Context, q dbtx, user int64, id string) e
 	return err
 }
 
+// iapIntentLead는 결제 의도를 남긴 뒤 결제가 끝나기까지 봐주는 시간이다. 애플 보호자 승인(24시간), 구글 현금 결제(최대 48시간 안내)를 덮는다.
+// 이보다 먼저 남긴 의도는 번호 없이는 쓰지 않는다(앱이 꺼져 지우지 못하고 남은 며칠 전 의도가 지금 결제를 가져가지 않게)
+const iapIntentLead = 72 * time.Hour
+
 // iapIntentTarget은 이 거래를 위해 남긴 결제 의도를 찾는다(D1). 찾으면 그 의도의 번호와 대상, true를 준다.
 //  1. reservation: 앱이 결제 직전에 받아 제출에 붙인 번호. 이 유저의 것이고 결제보다 먼저 남긴 것만 쓴다
 //     (앱이 끝내지 못한 옛 거래를 지금 번호와 함께 내도, 옛 거래가 지금 결제의 의도를 가져가지 않게)
-//  2. 번호가 없거나 맞지 않으면: 보관 시간 안에서 결제보다 먼저 남긴 의도 중 수량이 같은 것, 없으면 수량이 다른 것의 가장 새것
-//     (스토어 알림이 먼저 온 경우, 앱이 꺼져 번호를 잃은 경우, 늦게 끝난 결제).
-//     수량이 달라도 쓰는 까닭: 모른다고 두면 환불로 간다. 수량이 커서 상한을 넘으면 iapSettleCap이 주지 않고 환불한다
+//  2. 번호가 없거나 맞지 않으면(스토어 알림이 먼저 온 경우, 앱이 꺼져 번호를 잃은 경우, 늦게 끝난 결제):
+//     결제 전 iapIntentLead 안에 남긴 의도를 본다. 수량이 같은 것들, 없으면 전부를 한 묶음으로 보고
+//     - 묶음의 대상이 모두 같으면 가장 새것(같은 해에 여러 번 결제를 시작했어도 대상은 하나다)
+//     - 대상이 다른 의도가 섞여 있으면 모른다. 알림이 정한 대상은 뒤에 바꾸지 않으므로(iapSetTarget) 추측하지 않고,
+//     앱이 번호나 대상을 붙여 낼 때까지 둔다(두 기기에서 다른 해를 동시에 사는 경우)
+//     - 수량이 달라도 쓰는 까닭: 모른다고 두면 환불로 간다. 상한을 넘으면 iapSettleCap이 주지 않고 환불한다
 //
 // 스토어와 우리 시계의 차이를 1분 봐준다. purchasedAt이 0이면 시각을 보지 않는다. 지우지는 않는다(쓴 쪽이 iapReleaseReservation으로 지운다)
 func iapIntentTarget(ctx context.Context, q dbtx, user int64, reservation string, units int, purchasedAt time.Time) (id, target string, known bool, err error) {
@@ -827,14 +834,43 @@ func iapIntentTarget(ctx context.Context, q dbtx, user int64, reservation string
 			return "", "", false, err
 		}
 	}
-	err = q.QueryRow(ctx, `SELECT id::text, target FROM iap_reservations
+	rows, err := q.Query(ctx, `SELECT id::text, target, units = $2 FROM iap_reservations
 		WHERE user_id=$1 AND keep_until > now()
-			AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz + interval '1 minute')
-		ORDER BY units = $2 DESC, created_at DESC, id DESC LIMIT 1`, user, units, at).Scan(&id, &target)
-	if errors.Is(err, pgx.ErrNoRows) {
+			AND ($3::timestamptz IS NULL OR created_at BETWEEN $3::timestamptz - make_interval(secs => $4) AND $3::timestamptz + interval '1 minute')
+		ORDER BY units = $2 DESC, created_at DESC, id DESC LIMIT 20`, user, units, at, iapIntentLead.Seconds())
+	if err != nil {
+		return "", "", false, err
+	}
+	type cand struct {
+		id, target string
+		same       bool
+	}
+	var found []cand
+	for rows.Next() {
+		var c cand
+		if err = rows.Scan(&c.id, &c.target, &c.same); err != nil {
+			rows.Close()
+			return "", "", false, err
+		}
+		found = append(found, c)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return "", "", false, err
+	}
+	if len(found) == 0 {
 		return "", "", false, nil
 	}
-	return id, target, err == nil, err
+	// 같은 수량이 있으면 그 묶음만(앞에 모여 있다), 없으면 전부. 묶음 안의 대상이 하나여야 쓴다
+	for _, c := range found {
+		if c.same != found[0].same {
+			break
+		}
+		if c.target != found[0].target {
+			return "", "", false, nil
+		}
+	}
+	return found[0].id, found[0].target, true, nil
 }
 
 // iapTokenOwner는 계정 연결 값을 발급받은 유저다. 모르는 값이면 0이다

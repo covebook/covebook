@@ -101,10 +101,12 @@ func TestIAPAccountToken(t *testing.T) {
 }
 
 // 결제 의도: 대상은 계정 연결 값이 아니라 서버에 남긴 의도로 찾는다(D1, 2026-11-27).
-// 앱이 붙인 번호가 먼저, 없거나 맞지 않으면 결제보다 먼저 남긴 의도 중 같은 수량, 그다음 다른 수량의 가장 새것
+// 앱이 붙인 번호가 먼저. 없거나 맞지 않으면 결제 전 72시간 안에 남긴 의도 중 같은 수량(없으면 전부)을 보고,
+// 그 대상이 하나로 모이면 가장 새것, 갈리면 모름(추측해서 틀린 해에 넣지 않는다)
 func TestIAPIntentTarget(t *testing.T) {
 	ctx, db := iapTestDB(t)
 	user, other := iapTestUser(t, ctx, db), iapTestUser(t, ctx, db)
+	stale, same := iapTestUser(t, ctx, db), iapTestUser(t, ctx, db)
 	intent := func(u int64, target string, units int, ago time.Duration) iapReservation {
 		t.Helper()
 		tx, err := db.Begin(ctx)
@@ -128,6 +130,9 @@ func TestIAPIntentTarget(t *testing.T) {
 	a := intent(user, "2026", 1, 10*time.Minute)
 	b := intent(user, "2027", 1, 5*time.Minute)
 	c := intent(user, "2025", 3, 6*time.Minute)
+	old := intent(stale, "2024", 1, 4*24*time.Hour) // 앱이 꺼져 지우지 못하고 남은 며칠 전 의도
+	intent(same, "2026", 1, 10*time.Minute)
+	s2 := intent(same, "2026", 1, 5*time.Minute)
 	now := time.Now()
 	for _, tc := range []struct {
 		name        string
@@ -140,15 +145,20 @@ func TestIAPIntentTarget(t *testing.T) {
 	}{
 		{"번호가 먼저", user, a.ID, 1, now, "2026", a.ID},
 		{"번호는 대문자여도", user, strings.ToUpper(a.ID), 1, now, "2026", a.ID},
-		{"번호가 없으면 같은 수량의 가장 새것", user, "", 1, now, "2027", b.ID},
+		{"같은 수량 의도의 대상이 갈리면(2026, 2027) 모름", user, "", 1, now, "", ""},
 		{"결제보다 뒤에 남긴 의도는 쓰지 않는다", user, "", 1, now.Add(-7 * time.Minute), "2026", a.ID},
 		{"수량이 다르면 다른 의도", user, "", 3, now, "2025", c.ID},
-		{"같은 수량이 없으면 수량이 다른 가장 새것", user, "", 2, now, "2027", b.ID},
+		{"같은 수량이 없고 의도의 대상이 갈리면 모름", user, "", 2, now, "", ""},
 		{"결제보다 뒤의 번호는 쓰지 않고 수량으로 찾는다", user, b.ID, 1, now.Add(-7 * time.Minute), "2026", a.ID},
 		{"앞선 의도가 하나도 없으면 모름", user, a.ID, 1, now.Add(-20 * time.Minute), "", ""},
 		{"남의 번호는 쓰지 않는다", other, a.ID, 1, now, "", ""},
 		{"모양이 틀린 번호", user, "x", 3, now, "2025", c.ID},
-		{"결제 시각을 모르면 가장 새것", user, "", 1, time.Time{}, "2027", b.ID},
+		{"결제 시각을 몰라도 대상이 갈리면 모름", user, "", 1, time.Time{}, "", ""},
+		{"대상이 하나면 가장 새것", same, "", 1, now, "2026", s2.ID},
+		{"대상이 하나면 수량이 달라도", same, "", 3, now, "2026", s2.ID},
+		{"결제 72시간보다 먼저 남긴 의도는 번호 없이 쓰지 않는다", stale, "", 1, now, "", ""},
+		{"늦게 끝난 결제(결제 시각이 의도 이틀 뒤)는 찾는다", stale, "", 1, now.Add(-2 * 24 * time.Hour), "2024", old.ID},
+		{"번호가 있으면 오래된 의도도 쓴다", stale, old.ID, 1, now, "2024", old.ID},
 	} {
 		id, got, known, err := iapIntentTarget(ctx, db, tc.user, tc.reservation, tc.units, tc.at)
 		if err != nil || got != tc.want || known != (tc.want != "") || id != tc.id {

@@ -333,7 +333,7 @@ func (s *Kit) iapRelease(w http.ResponseWriter, r *http.Request) error {
 //
 // target은 대상이 있는 한 번 사는 상품에만 쓴다(Rules.TargetRequired). 어느 대상의 구매인지는 이 순서로 정한다(iapIntentTarget).
 //  1. reservation: 이 유저의 결제 의도이고 결제보다 먼저 남긴 것이면 그 대상
-//  2. 결제 의도 중 수량이 같고 결제보다 먼저 남긴 가장 새것(번호를 잃었거나 다른 계정이 결제한 경우)
+//  2. 결제 전 72시간 안의 결제 의도가 한 대상으로 모이면 그 대상(번호를 잃었거나 다른 계정이 결제한 경우). 갈리면 모름
 //  3. target: 위 둘이 대상을 모를 때(앱 밖에서 산 구매 등)
 //
 // 이미 대상이 정해진 거래(알림으로 먼저 들어온 것)는 바꾸지 않는다. 셋 다 없으면 거래는 기록하고 422 iap_target_missing이다.

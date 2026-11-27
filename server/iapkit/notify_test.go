@@ -829,3 +829,32 @@ func TestIAPRefundNoOrderIDGivesUp(t *testing.T) {
 		t.Fatalf("주문 ID 없는 넘은 거래: 시도 %d, 다음 바퀴에 다시 뽑힘 %d건", att, len(rows))
 	}
 }
+
+// 두 기기에서 다른 해를 동시에 사려는 중에 한쪽 알림이 먼저 오면, 서버는 어느 해인지 추측하지 않는다.
+// 넣지도 소비하지도 않고 기다렸다가, 앱이 의도 번호를 붙여 내면 그 해에 넣는다(알림이 정한 대상은 뒤에 바꿀 수 없어서)
+func TestIAPNotifyAmbiguousIntentWaitsForApp(t *testing.T) {
+	e := newIAPEnv(t)
+	token, _ := e.user()
+	_, tablet := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2026)})
+	_, phone := e.call("POST", "/iap/intent", token, map[string]any{"target": iapY(2027)})
+	if tablet["reservation"] == nil || phone["reservation"] == nil {
+		t.Fatalf("의도: %v %v", tablet, phone)
+	}
+	id := iapTestID(t, "tablet")
+	e.google.Purchases[id] = e.shelfPurchase(id, tablet["token"].(string))
+	e.notify("google", iap.Notice{ID: iapTestID(t, "n"), Type: "product/1", Target: &iap.Ref{Kind: iap.KindProduct, ID: id}}, "Bearer pubsub")
+	e.sweep()
+	body := e.me(token)
+	if shelvesIn(body, 2026) != 0 || shelvesIn(body, 2027) != 0 {
+		t.Fatalf("알림만으로 추측해 넣음: %v", body)
+	}
+	for _, c := range e.google.Confirmed {
+		if c == id {
+			t.Fatal("대상을 모르는데 소비함")
+		}
+	}
+	code, out := e.call("POST", "/iap/purchases", token, map[string]any{"route": "google", "productId": e.shelf, "proof": id, "reservation": tablet["reservation"]})
+	if code != 200 || shelvesIn(out, 2026) != 2 || shelvesIn(out, 2027) != 0 {
+		t.Fatalf("번호를 붙여 내면 2026년: %d %v", code, out)
+	}
+}
