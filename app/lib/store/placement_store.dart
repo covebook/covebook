@@ -186,6 +186,16 @@ class PlacementStore {
     return true;
   }
 
+  /// 쓸 수 있는 칸(allowed)보다 아래의 선반을 닫는다(환불로 구매한 칸이 줄었을 때, ADR-0002 D13).
+  /// 그 선반의 책은 책장에서 빼 내 책에 보관하고, 칸은 아직 안 연 선반처럼 잠긴 모양으로 돌아간다. 옮긴 책 수를 돌려준다
+  Future<int> closeShelvesBeyondLimit(int allowed) async {
+    final l = layout;
+    final next = l == null ? null : closeShelvesBeyond(l, allowed);
+    if (l == null || next == null) return 0;
+    final moved = next.drawer.length - l.drawer.length;
+    return await commit(next) ? moved : 0;
+  }
+
   /// 선반 한 칸 더 열기(맨 끝에 빈 선반)
   Future<bool> addShelf() async {
     final l = layout;

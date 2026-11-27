@@ -27,7 +27,8 @@ class AlertButton {
 }
 
 /// stacked: 버튼을 늘 세로로 쌓는다(지금 앱 Dialog처럼: 주요 → 보조 → 맨 아래 글자 버튼)
-Future<void> appAlert(BuildContext context, String title, [String? message, List<AlertButton>? buttons, bool cancelable = true, bool stacked = false]) async {
+/// top: 제목 위에 두는 작은 그림(결제 완료의 체크 표시). 화면 읽기는 건너뛴다. 그림이 있으면 그림·제목·본문을 가운데로 모은다
+Future<void> appAlert(BuildContext context, String title, [String? message, List<AlertButton>? buttons, bool cancelable = true, bool stacked = false, Widget? top]) async {
   final list = buttons == null || buttons.isEmpty ? const [AlertButton('확인')] : buttons;
   final cancel = list.where((b) => b.style == AlertStyle.cancel).firstOrNull;
   final dismissTo = cancel ?? (list.length == 1 ? list.first : null);
@@ -40,18 +41,19 @@ Future<void> appAlert(BuildContext context, String title, [String? message, List
     barrierColor: AppColors.scrim,
     transitionDuration: const Duration(milliseconds: 180),
     transitionBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-    pageBuilder: (ctx, _, _) => _AlertPage(title: title, message: message, list: list, cancel: cancel, dismissTo: dismissTo, closable: closable, stacked: stacked),
+    pageBuilder: (ctx, _, _) => _AlertPage(title: title, message: message, list: list, cancel: cancel, dismissTo: dismissTo, closable: closable, stacked: stacked, top: top),
   );
   (picked ?? dismissTo)?.onPress?.call();
 }
 
 class _AlertPage extends StatefulWidget {
-  const _AlertPage({required this.title, required this.message, required this.list, required this.cancel, required this.dismissTo, required this.closable, required this.stacked});
+  const _AlertPage({required this.title, required this.message, required this.list, required this.cancel, required this.dismissTo, required this.closable, required this.stacked, this.top});
   final String title;
   final String? message;
   final List<AlertButton> list;
   final AlertButton? cancel, dismissTo;
   final bool closable, stacked;
+  final Widget? top;
 
   @override
   State<_AlertPage> createState() => _AlertPageState();
@@ -163,10 +165,11 @@ class _AlertPageState extends State<_AlertPage> with SingleTickerProviderStateMi
             // 설명이 길면 스크롤(AlertDialog · ConfirmDialog '긴 설명 사용하기')
             Flexible(
               child: SingleChildScrollView(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Semantics(header: true, child: WordText(widget.title, style: AppType.heading)),
+                child: Column(crossAxisAlignment: widget.top != null ? CrossAxisAlignment.center : CrossAxisAlignment.start, children: [
+                  if (widget.top != null) Padding(padding: const EdgeInsets.only(bottom: Space.item), child: ExcludeSemantics(child: widget.top)),
+                  Semantics(header: true, child: WordText(widget.title, style: AppType.heading, textAlign: widget.top != null ? TextAlign.center : null)),
                   if (widget.message != null && widget.message!.isNotEmpty)
-                    Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText(widget.message!, style: AppType.dialogBody)),
+                    Padding(padding: const EdgeInsets.only(top: Space.s), child: WordText(widget.message!, style: AppType.dialogBody, textAlign: widget.top != null ? TextAlign.center : null)),
                 ]),
               ),
             ),

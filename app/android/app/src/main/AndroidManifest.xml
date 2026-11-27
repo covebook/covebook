@@ -10,12 +10,23 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <!-- Android 13+: 환경음 알림(잠금 화면에서 멈춤·재생). 처음 소리를 켤 때 묻는다 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 기기 예약 알림(연 구독 갱신 전 안내, flutter_local_notifications): 기기를 다시 켜면 예약을 되살린다. 정확한 시각 알람은 쓰지 않는다 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:networkSecurityConfig="@xml/network_security_config"
         android:label="책장 한켠"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:exported="true"

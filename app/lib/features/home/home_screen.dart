@@ -13,7 +13,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding, Ticker;
-import 'package:flutter/foundation.dart' show listEquals, setEquals;
+import 'package:flutter/foundation.dart' show listEquals, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction, OrdinalSortKey, SemanticsService;
 
@@ -24,6 +24,10 @@ import '../../ui/alert.dart' show appAlert;
 import '../../ui/feedback.dart' show errorText, showToast;
 import '../../ui/kit.dart' show Btn, Pressable, Shape, Space, contentMax, showSheet;
 import 'locked_rows.dart';
+import '../../store/entitlement_store.dart';
+import '../book/place_books.dart' show enforceShelfLimit;
+import '../iap/shelf_purchase_sheet.dart' show showShelfPurchase;
+import 'lock_icon.dart';
 import 'book_sheet.dart';
 import '../settings/settings_screen.dart' show openProfile;
 import 'decorate_panel.dart';
@@ -1911,6 +1915,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     LibraryModel.instance.addListener(_libraryChanged);
     Onboarding.instance.addListener(_onbChanged);
     BookcaseStore.instance.addListener(_bookcasesChanged);
+    // 환불로 쓸 수 있는 선반 칸이 줄면 그 칸을 닫는다(책은 내 책에 보관)
+    if (iapOn) EntitlementStore.instance.addListener(_entitlementChanged);
     if (!BookcaseStore.instance.loaded) BookcaseStore.instance.load();
     _loadSnap();
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
@@ -2118,14 +2124,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     if (_pendingFocus != null) WidgetsBinding.instance.addPostFrameCallback((_) => _tryFocus());
   }
 
+  void _entitlementChanged() {
+    enforceShelfLimit().catchError((Object _) => 0);
+  }
+
   // 잠긴 선반 시트(지금 앱 LockedShelfSheet): 세 칸까지는 바로 열고, 그 위는 유료 예정이라 준비 중으로 알린다(2026-11-15 사용자 결정).
   // '무료로'는 쓰지 않는다(QA: 곧 돈 받겠다는 뜻으로 읽혔다). 남은 칸 수를 알린다
   void _openLocked() {
     final shelves = PlacementStore.instance.layout?.shelves.length ?? _rowSpots.length - _lockedCount;
-    final free = openableShelfCount(shelves);
+    // 결제를 켠 빌드는 구매한 칸만큼 더 열 수 있다. 꺼진 빌드는 지금처럼 무료 칸까지
+    final paid = iapOn ? EntitlementStore.instance.shelves : 0;
+    final free = openableShelfCount(shelves, paid);
+    if (free == 0 && iapOn && purchasableShelfCount(paid) > 0) {
+      // 쓸 수 있는 칸을 다 열었고 살 수 있는 칸이 남았다: 구매 시트. 사고 나면 이어서 선반을 연다
+      showShelfPurchase(context).then((bought) {
+        if (bought && mounted) _openLocked();
+      });
+      return;
+    }
     if (free == 0) {
-      // 다음 행동이 없는 안내라 시트 대신 확인창(DESIGN 5-1). 문구는 그대로(결제 고지 기준 확인 필요)
-      appAlert(context, '선반 더 열기', '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.');
+      // 다음 행동이 없는 안내라 시트 대신 확인창(DESIGN 5-1)
+      appAlert(
+        context,
+        '선반 더 열기',
+        iapOn
+            ? '선반 $shelfSlots칸을 모두 열었어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.'
+            : '선반은 $freeShelfSlots칸까지 쓸 수 있어요. 더 여는 기능은 준비하고 있어요.\n책장에 없는 책은 내 책에 그대로 보관돼요.',
+      );
       return;
     }
     showSheet<void>(
@@ -2216,6 +2241,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     _coachCover.dispose();
     _coachSheet.dispose();
     BookcaseStore.instance.removeListener(_bookcasesChanged);
+    if (iapOn) EntitlementStore.instance.removeListener(_entitlementChanged);
     if (_decorating) MiniTimerPlace.instance.setHidden(false);
     for (final i in _atlases) {
       i.dispose();
@@ -2482,7 +2508,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                                     excludeSemantics: true,
                                     child: Pressable(
                                       onPress: _openLocked,
-                                      child: const Center(child: _LockIcon()),
+                                      child: const Center(child: LockIcon()),
                                     ),
                                   ),
                                 ),
@@ -2973,11 +2999,18 @@ class _Header extends StatelessWidget {
               child: OverflowBox(
                 minHeight: Space.touch + _HeaderIcons.slopY * 2,
                 maxHeight: Space.touch + _HeaderIcons.slopY * 2,
-                child: _HeaderIcons(items: [
-                  ('decorate', '꾸미기', onDecorate),
-                  ('add', '책장에 꽂기', onAdd ?? () => openAddBook(context)),
-                  ('profile', '내 정보', () => openProfile(context)),
-                ]),
+                // 알림함에 안 읽은 결제 고지가 있으면 '내 정보'에 점을 찍는다(ADR-0003 L8: 앱을 열면 볼 수 있어야 한다)
+                child: ListenableBuilder(
+                  listenable: EntitlementStore.instance,
+                  builder: (context, _) => _HeaderIcons(
+                    dot: iapOn && EntitlementStore.instance.unreadNotices > 0 ? 2 : null,
+                    items: [
+                      ('decorate', '꾸미기', onDecorate),
+                      ('add', '책장에 꽂기', onAdd ?? () => openAddBook(context)),
+                      ('profile', '내 정보', () => openProfile(context)),
+                    ],
+                  ),
+                ),
               ),
             ),
         ],
@@ -2988,10 +3021,20 @@ class _Header extends StatelessWidget {
 }
 
 /// 머리 아이콘 줄: 아이콘마다 누르는 칸 48×48(Space.hit, 2026-11-16 QA 영숙 F12), 가운데 사이 _headerPitch.
+/// 시험에서 머리줄 아이콘만 그려 보는 입구(새 알림 점 확인용)
+@visibleForTesting
+Widget headerIconsPreview({bool unread = false}) => _HeaderIcons(
+      dot: unread ? 2 : null,
+      items: const [('decorate', '꾸미기', null), ('add', '책 추가', null), ('profile', '내 정보', null)],
+    );
+
 /// 칸 사이 빈 곳은 가까운 아이콘이 받는다. 화면 읽기 칸도 48×48
 class _HeaderIcons extends StatefulWidget {
-  const _HeaderIcons({required this.items});
+  const _HeaderIcons({required this.items, this.dot});
   final List<(String, String, VoidCallback?)> items;
+
+  /// 새 알림 점을 찍을 아이콘 순번(없으면 null)
+  final int? dot;
 
   /// 머리줄 높이(44) 밖으로 넓힌 누르는 자리(위아래)
   static const slopY = (Space.hit - Space.touch) / 2;
@@ -3027,12 +3070,25 @@ class _HeaderIconsState extends State<_HeaderIcons> {
               child: Center(child: Image.asset('assets/header/${it.$1}.png', width: _headerArt, height: _headerArt, excludeFromSemantics: true)),
             ),
           ),
+          if (widget.dot == i)
+            Positioned(
+              left: i * _headerPitch + Space.hit / 2 + _headerArt / 2 - 13,
+              top: Space.hit / 2 - _headerArt / 2 + 3,
+              child: IgnorePointer(
+                // 새 알림 점: 위험 색 토큰. 테두리는 머리 그림과 떼어 보이게 하는 밝은 띠(자물쇠 구멍과 같은 값)
+                child: Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(color: AppColors.danger, shape: BoxShape.circle, border: Border.all(color: const Color(0xFFF4F3F2), width: 1.5)),
+                ),
+              ),
+            ),
           Positioned(
             left: i * _headerPitch,
             top: 0,
             width: Space.hit,
             height: Space.hit,
-            child: Semantics(container: true, button: true, label: it.$2, onTap: it.$3, child: const SizedBox.expand()),
+            child: Semantics(container: true, button: true, label: widget.dot == i ? '${it.$2}, 새 알림 있음' : it.$2, onTap: it.$3, child: const SizedBox.expand()),
           ),
         ],
         Positioned.fill(
@@ -3051,40 +3107,6 @@ class _HeaderIconsState extends State<_HeaderIcons> {
       ]),
     );
   }
-}
-
-/// 잠긴 칸 자물쇠(지금 앱 TabIcons LockIcon 32×40, 색 #3F4347·구멍 #F4F3F2)
-class _LockIcon extends StatelessWidget {
-  const _LockIcon();
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(size: const Size(32, 40), painter: _LockPainter());
-}
-
-class _LockPainter extends CustomPainter {
-  static const _ink = Color(0xFF3F4347), _hole = Color(0xFFF4F3F2);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final shackle = Path()
-      ..moveTo(8.5, 19)
-      ..lineTo(8.5, 11.5)
-      ..arcToPoint(const Offset(23.5, 11.5), radius: const Radius.circular(7.5))
-      ..lineTo(23.5, 19);
-    canvas.drawPath(
-      shackle,
-      Paint()
-        ..color = _ink
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.6,
-    );
-    canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(2.5, 16.5, 27, 22), const Radius.circular(5.5)), Paint()..color = _ink);
-    canvas.drawCircle(const Offset(16, 25.5), 3.1, Paint()..color = _hole);
-    canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(14.5, 25.5, 3, 6.5), const Radius.circular(1.5)), Paint()..color = _hole);
-  }
-
-  @override
-  bool shouldRepaint(_LockPainter old) => false;
 }
 
 /// 바뀐 기둥 둘레 여유(설계 단위): 갈피 탭·윤곽 빛·둥근 모서리 몫

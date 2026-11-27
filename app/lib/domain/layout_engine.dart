@@ -1133,6 +1133,20 @@ EditResult moveToShelf(ShelfLayout layout, BookMap books, String bookId, String 
   return moveBook(layout, books, bookId, DropTarget.insert(shelfId, count));
 }
 
+/// 위에서부터 keep칸만 남기고 그 아래 선반을 닫는다(환불로 구매한 칸이 줄었을 때). 닫힌 선반의 책은 책장에 없는 책(서랍)으로 옮긴다.
+/// 남는 선반의 책은 건드리지 않는다. 닫을 선반이 없으면 null
+ShelfLayout? closeShelvesBeyond(ShelfLayout layout, int keep) {
+  final shelves = sortedShelves(layout);
+  if (keep < 0 || shelves.length <= keep) return null;
+  final closed = {for (final s in shelves.skip(keep)) s.id};
+  final moved = [for (final p in layout.placements) if (closed.contains(p.shelfId)) p.bookId];
+  return normalize(ShelfLayout(
+    shelves.take(keep).toList(),
+    [for (final p in layout.placements) if (!closed.contains(p.shelfId)) p],
+    [...moved, ...layout.drawer],
+  ));
+}
+
 ShelfLayout addShelfTo(ShelfLayout layout, String id) => normalize(ShelfLayout([...layout.shelves, Shelf(id, layout.shelves.length)], layout.placements, layout.drawer));
 
 /// 끄는 동안 놓을 자리: 눕힌 책(더미) 가운데 절반 위면 쌓기, 그 밖은 그 자리에 끼우기(0.5DU 단위)

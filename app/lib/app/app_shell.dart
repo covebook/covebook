@@ -10,6 +10,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/library.dart';
+import '../features/book/place_books.dart' show enforceShelfLimit;
+import '../features/iap/notice.dart' show checkIapNotice;
+import '../features/iap/subscription_screen.dart' show iapPriceOf;
+import '../services/renewal_reminder.dart' show syncRenewalReminder;
+import '../store/entitlement_store.dart' show EntitlementStore;
 import '../domain/reading.dart' show FinishDraft, withJosa;
 import '../features/book/my_books_tab.dart' show MyBooksTab;
 import '../features/community/community_screens.dart' show watchCommunityOpen;
@@ -22,6 +27,7 @@ import '../services/ambient.dart';
 import '../services/cover_colors.dart';
 import '../services/error_text.dart';
 import '../services/sync.dart';
+import '../services/iap.dart';
 import '../services/warmup.dart';
 import '../store/finish_reading.dart' show resumeReading, saveDraftAsIs, settleLeftoverReading;
 import '../store/bookcase_store.dart';
@@ -134,6 +140,18 @@ class _AppShellState extends State<AppShell> {
         books.watch();
         // 서버 동기화(서버 주소가 있는 빌드만): 연도 책장 확인 뒤에 시작한다(받는 도중의 서재로 한 해를 남기지 않게)
         SyncService.instance.start();
+        // 결제를 켠 빌드: 스토어가 주는 거래를 듣기 시작한다(끝내지 않은 거래가 여기서 다시 온다)
+        // 서버에서 상태를 받았으면, 지난번과 달라진 것(결제 실패, 만료, 환불)을 한 번 알린다
+        IapService.instance.start().then((_) {
+          if (!mounted || !IapService.instance.synced) return;
+          // 환불로 구매한 선반 칸이 줄었으면 먼저 그 칸을 닫고, 달라진 것을 알린다
+          enforceShelfLimit().catchError((Object _) => 0).whenComplete(() {
+            if (mounted) checkIapNotice(context);
+          });
+          // 연 구독이면 갱신 전 기기 알림을 지금 상태에 맞게 다시 건다(L9)
+          final sub = EntitlementStore.instance.subscription;
+          syncRenewalReminder(price: sub == null ? null : iapPriceOf(IapService.instance, sub));
+        });
         watchCommunityOpen();
         // 표지 색·두께·갈피 색 맞추기는 켠 뒤 조금 있다 뒤에서(지금 앱 _layout: 3초 뒤)
         Future<void>.delayed(const Duration(seconds: 3), () => backfillCoverColors().catchError((Object e) {
