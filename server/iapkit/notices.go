@@ -92,6 +92,27 @@ func iapNoteProductGrant(ctx context.Context, q dbtx, user int64, p iap.Purchase
 	})
 }
 
+// iapNoteOverCapRow는 원장 줄을 읽어 넘김 고지(T15)를 쓴다. 제출이 아니라 환불 되돌림으로 넘은 경우에 쓴다(스토어 응답 없이 원장만 있음).
+// 같은 거래의 넘김 고지가 이미 있으면 쓰지 않는다(dedupe)
+func iapNoteOverCapRow(ctx context.Context, q dbtx, user int64, route iap.Route, key string) error {
+	var productID, env string
+	var target *string
+	var units *int
+	if err := q.QueryRow(ctx, `SELECT b.product_id, b.env, b.target, p.units FROM iap_purchases b
+		JOIN iap_products p ON p.route=b.route AND p.product_id=b.product_id
+		WHERE b.route=$1 AND b.transaction_id=$2`, string(route), key).Scan(&productID, &env, &target, &units); err != nil {
+		return err
+	}
+	params := map[string]any{"route": string(route), "productId": productID, "autoRefund": false}
+	if target != nil {
+		params["target"] = *target
+	}
+	if units != nil {
+		params["units"] = *units
+	}
+	return iapWriteNotice(ctx, q, user, noticeProductOverCap, iap.Env(env), iapOverCapDedupe(route, key), params)
+}
+
 // iapOverCapDedupe는 넘김 고지의 유일 키다. 거래마다 한 번이다.
 func iapOverCapDedupe(route iap.Route, key string) string {
 	return noticeProductOverCap + ":" + string(route) + ":" + key

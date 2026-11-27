@@ -286,6 +286,11 @@ func (g *Google) fromProduct(token string, r *androidpublisher.ProductPurchaseV2
 	}
 	if d := r.ProductLineItem[0].ProductOfferDetails; d != nil {
 		p.Quantity = int(d.Quantity)
+		// 소비한 구매는 확인을 마친 것이다(소비가 확인을 겸한다). 이미 소비한 구매에 확인·소비를 다시 요청하면
+		// 구글이 400 invalidPurchaseState로 거절하므로, 부르는 쪽이 다시 부르지 않게 확인됨으로 본다
+		if d.ConsumptionState == "CONSUMPTION_STATE_CONSUMED" {
+			p.Acknowledged = true
+		}
 	}
 	if r.TestPurchaseContext != nil {
 		p.Env = EnvSandbox

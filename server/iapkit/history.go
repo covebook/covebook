@@ -3,6 +3,7 @@ package iapkit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -237,7 +238,7 @@ func (s *Kit) iapApplyVoided(ctx context.Context, store iap.Store, v iap.VoidedP
 		if key == "" {
 			continue
 		}
-		c, err := iapRevokePurchase(ctx, s.DB, store.Route(), key, at)
+		c, _, err := s.iapApplyPurchaseState(ctx, store.Route(), key, iap.StateRevoked, at)
 		if err != nil {
 			log.Printf("iap voided apply failed: route=%s err=%v", store.Route(), err)
 			return changed
@@ -259,19 +260,40 @@ func (s *Kit) iapApplyVoided(ctx context.Context, store iap.Store, v iap.VoidedP
 
 // iapBacklog는 밀린 일의 숫자다(이슈 #39). 계속 크면 알림이 안 오거나 스토어 조회가 실패하고 있다는 신호다.
 type iapBacklog struct {
-	PendingNotices         int   `json:"pendingNotifications"`     // 받았지만 아직 처리하지 않은 알림
-	FailedNotices          int   `json:"failedNotifications"`      // 처리에 실패해 다시 시도할 알림
-	Unconfirmed            int   `json:"unconfirmedPurchases"`     // 지급했는데 스토어 확인을 못 마친 구매(구글은 3일 안에 해야 한다). 일부러 소비하지 않은 대상 모르는 거래는 noTarget으로 따로 센다
-	OldestPendingSecs      int64 `json:"oldestPendingSeconds"`     // 가장 오래 기다린 알림의 나이
-	Subscriptions          int   `json:"activeSubscriptions"`      // 지금 유효한 구독 1건(운영 환경)
-	RevokedPurchases       int   `json:"revokedPurchases30Days"`   // 최근 30일에 환불된 거래
-	OverCap                int   `json:"overCap"`                  // 대상의 상한을 넘게 사서 주지 않은 거래 중 돈이 아직 돌아가지 않은 것(운영 환경). 애플 거래와 구글 환불 요청 실패(D1)
-	OverCapRefunded        int   `json:"overCapRefunded"`          // 넘게 산 구글 거래 중 서버가 환불을 요청한 것(운영 환경)
-	OverCapApple           int   `json:"overCapApple"`             // 넘게 산 애플 거래 중 아직 환불되지 않은 것(운영 환경). 개발자가 환불할 수 없어 사용자가 애플에 요청해야 한다
-	OldestUnconfirmedSecs  int64 `json:"oldestUnconfirmedSeconds"` // 확인 못 한 구글 구매 중 가장 오래된 것의 나이(대상 모르는 거래는 일부러 안 하므로 뺌). 3일(259200초)이 지나면 구글이 환불한다. 하루를 넘으면 사람이 본다
-	SandboxPurchases30Days int   `json:"sandboxPurchases30Days"`   // 운영 서버가 받은 최근 30일 샌드박스 거래(심사·TestFlight). 갑자기 늘면 무료 누출을 의심한다(D15)
-	NoTarget               int   `json:"noTarget"`                 // 주지 않은 거래(대상 모름, 주인 없음) 중 환불을 요청하지 못한 것(운영 환경). 구글은 대조가 2일 뒤 환불하고, 애플은 사용자가 요청해야 한다
-	NoPlan                 int   `json:"noPlan"`                   // 이용 중인 운영 구독 중 요금제 주기(iap_plans)를 모르는 것. 0이 아니면 연 구독의 갱신 예정 고지(T4)가 나가지 않으니 iap_plans에 줄을 넣는다
+	PendingNotices         int   `json:"pendingNotifications"`      // 받았지만 아직 처리하지 않은 알림
+	FailedNotices          int   `json:"failedNotifications"`       // 처리에 실패해 다시 시도할 알림
+	Unconfirmed            int   `json:"unconfirmedPurchases"`      // 지급했는데 스토어 확인을 못 마친 구매(구글은 3일 안에 해야 한다). 일부러 소비하지 않은 대상 모르는 거래는 noTarget으로 따로 센다
+	OldestPendingSecs      int64 `json:"oldestPendingSeconds"`      // 가장 오래 기다린 알림의 나이
+	Subscriptions          int   `json:"activeSubscriptions"`       // 지금 유효한 구독 1건(운영 환경)
+	RevokedPurchases       int   `json:"revokedPurchases30Days"`    // 최근 30일에 환불된 거래
+	OverCap                int   `json:"overCap"`                   // 대상의 상한을 넘게 사서 주지 않은 거래 중 돈이 아직 돌아가지 않은 것(운영 환경). 애플 거래와 구글 환불 요청 실패(D1)
+	OverCapRefunded        int   `json:"overCapRefunded"`           // 넘게 산 구글 거래 중 서버가 환불을 요청한 것(운영 환경)
+	OverCapApple           int   `json:"overCapApple"`              // 넘게 산 애플 거래 중 아직 환불되지 않은 것(운영 환경). 개발자가 환불할 수 없어 사용자가 애플에 요청해야 한다
+	OldestUnconfirmedSecs  int64 `json:"oldestUnconfirmedSeconds"`  // 확인 못 한 구글 구매 중 가장 오래된 것의 나이(대상 모르는 거래는 일부러 안 하므로 뺌). 3일(259200초)이 지나면 구글이 환불한다. 하루를 넘으면 사람이 본다
+	SandboxPurchases30Days int   `json:"sandboxPurchases30Days"`    // 운영 서버가 받은 최근 30일 샌드박스 거래(심사·TestFlight). 갑자기 늘면 무료 누출을 의심한다(D15)
+	NoTarget               int   `json:"noTarget"`                  // 주지 않은 거래(대상 모름, 주인 없음) 중 환불을 요청하지 못한 것(운영 환경). 구글은 대조가 2일 뒤 환불하고, 애플은 사용자가 요청해야 한다
+	NoPlan                 int   `json:"noPlan"`                    // 이용 중인 운영 구독 중 요금제 주기(iap_plans)를 모르는 것. 0이 아니면 연 구독의 갱신 예정 고지(T4)가 나가지 않으니 iap_plans에 줄을 넣는다
+	RefundsGaveUp          int   `json:"refundsGaveUp"`             // 서버가 환불 요청을 그만둔 주지 않은 거래(시도 상한 20번, 주문 ID 없음 포함, 운영 환경). 돈이 돌아가지 않았으니 사람이 환불한다
+	NoticesGaveUp          int   `json:"notificationsGaveUp30Days"` // 8일 동안 다시 해도 처리하지 못해 그만둔 알림(최근 30일). 원문이 남아 있으니 원인을 고친 뒤 다시 처리한다
+}
+
+// iapAlertUnconfirmedSecs는 확인 못 한 구글 구매를 경보로 올리는 나이다. 3일(72시간)이 지나면 구글이 환불하므로 하루를 남기고 알린다
+const iapAlertUnconfirmedSecs = 48 * 3600
+
+// iapAlerts는 사람이 봐야 하는 밀린 일을 돌려준다. 없으면 빈 목록이다.
+// 로그에 "iap alert:"로 남기므로, 로그 기반 경보(로그 검색·알림)를 이 문자열에 걸면 된다
+func iapAlerts(b iapBacklog) []string {
+	var out []string
+	if b.OldestUnconfirmedSecs > iapAlertUnconfirmedSecs {
+		out = append(out, fmt.Sprintf("google purchase unconfirmed for %dh (auto refund at 72h)", b.OldestUnconfirmedSecs/3600))
+	}
+	if b.RefundsGaveUp > 0 {
+		out = append(out, fmt.Sprintf("%d refunds gave up (refund manually)", b.RefundsGaveUp))
+	}
+	if b.NoticesGaveUp > 0 {
+		out = append(out, fmt.Sprintf("%d notifications gave up after 8 days (fix and reprocess)", b.NoticesGaveUp))
+	}
+	return out
 }
 
 func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
@@ -291,9 +313,13 @@ func iapBacklogNow(ctx context.Context, q dbtx) (b iapBacklog, err error) {
 			WHERE route='google' AND confirmed_at IS NULL AND state='paid' AND NOT (kind='product' AND target IS NULL)), 0)::bigint,
 		(SELECT count(*) FROM iap_purchases WHERE env='sandbox' AND purchased_at > now() - interval '30 days'),
 		(SELECT count(*) FROM iap_subscriptions s WHERE s.state='paid' AND s.env='production' AND coalesce(s.grace_until, s.expires_at) > now()
-			AND NOT EXISTS(SELECT 1 FROM iap_plans pl WHERE pl.route=s.route AND pl.product_id=s.product_id AND pl.plan_id=s.plan_id))`).
+			AND NOT EXISTS(SELECT 1 FROM iap_plans pl WHERE pl.route=s.route AND pl.product_id=s.product_id AND pl.plan_id=s.plan_id)),
+		(SELECT count(*) FROM iap_purchases WHERE kind='product' AND state='paid' AND env='production' AND refund_requested_at IS NULL
+			AND refund_attempts >= 20 AND (over_cap OR target IS NULL OR user_id IS NULL)),
+		(SELECT count(*) FROM iap_notifications WHERE result='failed' AND received_at <= now() - interval '8 days' AND received_at > now() - interval '30 days')`).
 		Scan(&b.PendingNotices, &b.FailedNotices, &b.Unconfirmed, &b.OldestPendingSecs, &b.Subscriptions, &b.RevokedPurchases,
-			&b.OverCap, &b.OverCapRefunded, &b.OverCapApple, &b.NoTarget, &b.OldestUnconfirmedSecs, &b.SandboxPurchases30Days, &b.NoPlan)
+			&b.OverCap, &b.OverCapRefunded, &b.OverCapApple, &b.NoTarget, &b.OldestUnconfirmedSecs, &b.SandboxPurchases30Days, &b.NoPlan,
+			&b.RefundsGaveUp, &b.NoticesGaveUp)
 	return
 }
 
@@ -304,8 +330,22 @@ func (s *Kit) iapLogSweep(ctx context.Context, res iapSweepResult) {
 		log.Printf("iap backlog query failed: %v", err)
 		return
 	}
-	quiet := res == iapSweepResult{} && b.PendingNotices == 0 && b.FailedNotices == 0 && b.Unconfirmed == 0
 	now := time.Now()
+	// 경보는 조건이 이어지는 동안 한 시간에 한 번 남긴다(1분마다 같은 경보가 쌓이지 않게)
+	if alerts := iapAlerts(b); len(alerts) > 0 {
+		s.iapMu.Lock()
+		due := now.Sub(s.iapAlertedAt) >= time.Hour
+		if due {
+			s.iapAlertedAt = now
+		}
+		s.iapMu.Unlock()
+		if due {
+			for _, a := range alerts {
+				log.Printf("iap alert: %s", a)
+			}
+		}
+	}
+	quiet := res == iapSweepResult{} && b.PendingNotices == 0 && b.FailedNotices == 0 && b.Unconfirmed == 0
 	s.iapMu.Lock()
 	skip := quiet && now.Sub(s.iapLoggedAt) < time.Hour
 	if !skip {

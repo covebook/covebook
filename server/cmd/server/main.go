@@ -20,6 +20,9 @@ func normalizeDatabaseURL(url string) string {
 	return url
 }
 
+// defaultMaxConns는 DATABASE_URL에 pool_max_conns가 없을 때의 연결 풀 크기다.
+const defaultMaxConns = 10
+
 func main() {
 	ctx := context.Background()
 	url := os.Getenv("DATABASE_URL")
@@ -27,10 +30,20 @@ func main() {
 		log.Fatal("DATABASE_URL is required")
 	}
 	url = normalizeDatabaseURL(url)
-	db, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		// pgx parse errors may contain the original URL, including its password.
 		log.Fatal("DATABASE_URL is invalid; check its format")
+	}
+	// 연결 풀 크기를 정해 둔다. 기본값은 max(4, CPU 수)라 작은 컨테이너에서는 4개다.
+	// 결제 트랜잭션이 잠금을 기다리는 동안(최대 5초) 다른 요청이 쓸 연결이 모자라지 않게 늘린다.
+	// DB의 max_connections(PostgreSQL 기본 100)를 넘지 않는 선에서, 주소에 pool_max_conns가 있으면 그것을 따른다
+	if !strings.Contains(url, "pool_max_conns") {
+		cfg.MaxConns = defaultMaxConns
+	}
+	db, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		log.Fatal("database pool could not be created")
 	}
 	defer db.Close()
 	if err = db.Ping(ctx); err != nil {
