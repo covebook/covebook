@@ -124,11 +124,12 @@ if (n != null) {
 | `pending` | 결제 대기(편의점 결제, 보호자 승인) |
 | `checking` | 서버가 202(결제 확인 중) |
 | `not_paid` | 스토어 오류 |
+| `no_result` | 결제창에서 돌아왔는데 30초 안에 스토어 결과가 오지 않음. 버튼 잠금을 푼다(결과가 늦게 와도 처리한다) |
 | `submit_failed` | 서버에 닿지 못함 |
 | `restored`, `nothing_to_restore`, `restore_failed` | 구매 복원 |
 | `expired` | 만료된 구독을 냄 |
 | `over_cap` | 다른 기기에서 먼저 상한까지 사서 이번 결제가 반영되지 않음(T15) |
-| `unfinished_cleared`, `unfinished_left` | iOS 끝내지 않은 지난 거래 |
+| `unfinished_cleared`, `unfinished_left` | 끝내지 않은 지난 거래를 먼저 냄. iOS는 같은 상품에 끝내지 않은 거래가 있을 때, 안드로이드는 결제가 스토어 오류로 끝났는데 서버가 소비하지 못한 지난 구매가 있을 때(`cleared`만) |
 
 서버가 문구를 정하는 오류(상한, 대상 모름, 결제한 계정 탈퇴 등)는 서버 `Rules.Messages`에서 바꾼다.
 

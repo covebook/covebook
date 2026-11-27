@@ -35,6 +35,9 @@ class IapService extends ChangeNotifier {
   AppLifecycleListener? _life;
   DateTime? _lastResubmit;
 
+  /// 결제창에서 돌아왔는데 스토어 결과가 오지 않을 때 버튼 잠금을 푸는 타이머(_watchBusy)
+  Timer? _busyTimer;
+
   /// 계정 세대. reset()마다 오른다. 비동기 일은 시작할 때 값을 잡아 두고, 끝났을 때 값이 다르면(그사이 계정이 바뀌었으면)
   /// 앞 계정의 응답을 지금 계정의 상태에 넣지 않는다
   int _epoch = 0;
@@ -87,16 +90,32 @@ class IapService extends ChangeNotifier {
     if (first) _sub = _store.purchaseStream.listen(_onPurchases, onError: (Object _) {});
     await EntitlementStore.instance.restore();
     await refresh();
-    if (Platform.isAndroid) {
-      unawaited(_resubmitAndroid());
-      // 다시 앞으로 올 때도 묻는다(결제 대기가 앱 밖에서 끝난 경우 등). 결제창에서 돌아올 때는 구매 스트림이 처리하므로 건너뛴다
-      if (first) {
-        _life = AppLifecycleListener(onResume: () {
-          if (!busy) unawaited(_resubmitAndroid());
-        });
-      }
+    if (Platform.isAndroid) unawaited(_resubmitAndroid());
+    if (first) {
+      _life = AppLifecycleListener(onResume: () {
+        // 결제창에서 돌아왔다: 스토어 결과는 구매 스트림이 준다. 끝내 오지 않으면 버튼이 잠긴 채 남지 않게 지켜본다
+        if (busy) {
+          _watchBusy();
+          return;
+        }
+        // 안드로이드: 다시 앞으로 올 때도 묻는다(결제 대기가 앱 밖에서 끝난 경우 등)
+        if (Platform.isAndroid) unawaited(_resubmitAndroid());
+      });
     }
   }
+
+  /// 결제창이 닫히고 앱이 앞으로 왔는데 [_busyTimeout] 안에 스토어 결과(구매 스트림)가 오지 않으면 버튼 잠금을 푼다.
+  /// 결과가 늦게 와도 구매 스트림이 그대로 처리한다(서버 제출, 결과 문구). 서버에 내는 중이면 풀지 않는다
+  void _watchBusy() {
+    _busyTimer?.cancel();
+    final epoch = _epoch;
+    _busyTimer = Timer(_busyTimeout, () {
+      if (!busy || epoch != _epoch || _submitting > 0) return;
+      _done(IapResult.retryLater, IapKit.text('no_result'));
+    });
+  }
+
+  static const _busyTimeout = Duration(seconds: 30);
 
   /// 로그아웃·계정 전환 때(local_reset) 앞 계정의 값을 비운다. 특히 synced: 남아 있으면 새 계정의 상태를 받기 전에
   /// 비워진 수량(0)으로 앱이 산 것을 닫는 일(책장 한켠: enforceShelfLimit)이 돈다. 스토어 듣기는 그대로 둔다(앱 실행당 한 번)
@@ -114,6 +133,7 @@ class IapService extends ChangeNotifier {
     _target = null;
     _reservation = null;
     _lastResubmit = null;
+    _busyTimer?.cancel();
     unawaited(_clearBuying()); // 앞 계정의 결제다
     notifyListeners();
   }
@@ -121,6 +141,7 @@ class IapService extends ChangeNotifier {
   @override
   void dispose() {
     _life?.dispose();
+    _busyTimer?.cancel();
     unawaited(_sub?.cancel());
     super.dispose();
   }
@@ -128,19 +149,23 @@ class IapService extends ChangeNotifier {
   /// 안드로이드: 결제는 됐는데 서버가 아직 확인(소비)하지 못한 구매를 스토어에 물어 다시 낸다.
   /// 구매 스트림은 앱이 떠 있을 때만 와서, 제출이 실패한 채 앱이 꺼지면 다시 오지 않는다. 3일 안에 확인하지 않으면 구글이 환불한다.
   /// 복원(restore)으로 내지 않는다. 다른 계정의 구독을 이 계정으로 옮기지 않게
-  Future<void> _resubmitAndroid() async {
+  /// force는 1분 제한을 건너뛴다(결제가 "이미 가진 상품"으로 실패했을 때). 다시 낸 구매가 있으면 true
+  Future<bool> _resubmitAndroid({bool force = false}) async {
     final now = DateTime.now();
-    if (_lastResubmit != null && now.difference(_lastResubmit!) < const Duration(minutes: 1)) return;
+    if (!force && _lastResubmit != null && now.difference(_lastResubmit!) < const Duration(minutes: 1)) return false;
     _lastResubmit = now;
+    var sent = false;
     try {
       final past = await _store.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>().queryPastPurchases();
       for (final p in past.pastPurchases) {
         if (p.status != PurchaseStatus.purchased || p.billingClientPurchase.isAcknowledged) continue;
         await _submit(p, restore: false);
+        sent = true;
       }
     } catch (_) {
       // 스토어에 닿지 못했다. 다음 실행에 다시 본다
     }
+    return sent;
   }
 
   /// 서버에서 내 상태와 상품 목록을 받고, 스토어에서 그 상품의 가격을 받는다
@@ -403,7 +428,14 @@ class IapService extends ChangeNotifier {
       case PurchaseStatus.error:
         if (Platform.isIOS && d.pendingCompletePurchase) await _store.completePurchase(d);
         if (_forgetBuying(d.productID)) unawaited(_release());
-        if (!_othersBusy(d.productID)) _done(IapResult.retryLater, IapKit.text('not_paid'));
+        if (_othersBusy(d.productID)) return;
+        // 안드로이드: 서버가 아직 소비하지 못한 같은 상품의 지난 구매가 있으면 구글이 새 결제를 "이미 가진 상품"으로 거절한다.
+        // "결제가 이뤄지지 않았어요"만 보이면 돈이 나갔다고 오해하고, 복구는 앱을 다시 켤 때까지 돌지 않는다. 바로 꺼내 서버에 다시 낸다
+        if (Platform.isAndroid && await _resubmitAndroid(force: true)) {
+          _done(IapResult.retryLater, IapKit.text('unfinished_cleared'));
+          return;
+        }
+        _done(IapResult.retryLater, IapKit.text('not_paid'));
         return;
       case PurchaseStatus.purchased:
       case PurchaseStatus.restored:
@@ -494,6 +526,7 @@ class IapService extends ChangeNotifier {
   }
 
   void _done(IapResult r, String? message) {
+    _busyTimer?.cancel();
     busy = false;
     lastResult = r;
     lastMessage = message;
