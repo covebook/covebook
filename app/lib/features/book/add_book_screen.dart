@@ -35,9 +35,10 @@ import 'import_list_screen.dart' show openImportList;
 import 'place_books.dart';
 
 /// 책 추가 열기. q: 바로 검색, title: 직접 입력 확인 단계로. pick: 책 고르기에서 '새 책 등록'으로 왔다(추가한 책 id를 돌려준다).
-/// fromList: 바코드 · 목록 가져오기에서 못 찾은 한 권을 넣으러 왔다(한 권만 · 끝나면 그 목록으로 돌아가 id를 돌려준다: 찾아 둔 목록이 사라지지 않게)
-Future<String?> openAddBook(BuildContext context, {String? q, String? title, bool pick = false, bool fromList = false}) => Navigator.of(context, rootNavigator: true)
-    .push<String>(MaterialPageRoute(settings: const RouteSettings(name: '/book/add'), builder: (_) => AddBookScreen(q: q, title: title, pick: pick, fromList: fromList)));
+/// fromList: 바코드 · 목록 가져오기에서 못 찾은 한 권을 넣으러 왔다(한 권만 · 끝나면 그 목록으로 돌아가 id를 돌려준다: 찾아 둔 목록이 사라지지 않게).
+/// hold: 첫 책 꽂기(2026-11-27): 책장에 진열하지 않고 내 책에만 넣고 결과 시트 없이 바로 그 책 id를 들고 돌아간다(책장 화면이 '책장에 꽂기'로 이어 받는다)
+Future<String?> openAddBook(BuildContext context, {String? q, String? title, bool pick = false, bool fromList = false, bool hold = false}) => Navigator.of(context, rootNavigator: true)
+    .push<String>(MaterialPageRoute(settings: const RouteSettings(name: '/book/add'), builder: (_) => AddBookScreen(q: q, title: title, pick: pick, fromList: fromList, hold: hold)));
 
 class _Draft {
   _Draft(this.source);
@@ -72,9 +73,9 @@ class _FindMemory {
 }
 
 class AddBookScreen extends StatefulWidget {
-  const AddBookScreen({super.key, this.q, this.title, this.pick = false, this.fromList = false});
+  const AddBookScreen({super.key, this.q, this.title, this.pick = false, this.fromList = false, this.hold = false});
   final String? q, title;
-  final bool pick, fromList;
+  final bool pick, fromList, hold;
 
   @override
   State<AddBookScreen> createState() => _AddBookScreenState();
@@ -198,7 +199,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
       // 책장 쪽 책 목록에 새 책을 넣고 놓는다
       await PlacementStore.instance.reload();
       if (!mounted) return;
-      if (keep) {
+      if (keep || widget.hold) {
         await PlacementStore.instance.addToDrawer(id);
       } else {
         final r = await placeWithChoice(context, [id]);
@@ -206,6 +207,11 @@ class _AddBookScreenState extends State<AddBookScreen> {
       }
     } catch (e) {
       debugPrint('[add] 책장에 놓지 못했어요: $e');
+    }
+    // 첫 책 꽂기: 결과 시트 없이 책을 들고 책장으로(거기서 '책장에 꽂기'가 이어진다)
+    if (widget.hold) {
+      if (mounted) Navigator.of(context).pop(id);
+      return;
     }
     if (mounted) await _showDone(id, placed);
     if (mounted) setState(() => _saving = false);
@@ -377,8 +383,9 @@ class _AddBookScreenState extends State<AddBookScreen> {
           title: '장정 미리보기',
           // 화면 아래 주요 단추는 xlarge(DESIGN 5-2)
           footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Btn(label: '추가하고 책장에 진열', size: 'xlarge', busy: _saving, onPress: () => _add()),
-            SubAction(label: '보관만 하기', disabled: _saving, onPress: () => _add(keep: true)),
+            // 첫 책 꽂기는 책장에 놓기를 책장 화면에서 한다: 단추는 추가만
+            Btn(label: widget.hold ? '이 장정으로 추가' : '추가하고 책장에 진열', size: 'xlarge', busy: _saving, onPress: () => _add()),
+            if (!widget.hold) SubAction(label: '보관만 하기', disabled: _saving, onPress: () => _add(keep: true)),
           ]),
           children: [
             BindingEditor(
@@ -402,7 +409,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
         initial: widget.q,
         notice: _notice,
         // 바코드 · 목록 가져오기에서 한 권을 넣으러 왔을 때도 한 권만(여러 권 고르기 · 다른 입구 없음)
-        pick: widget.pick || widget.fromList,
+        pick: widget.pick || widget.fromList || widget.hold,
         onPick: _fromCandidate,
         onManual: (q) => _toConfirm(_manualDraft(q)),
         onAddMany: _addMany,

@@ -444,3 +444,34 @@ class BookRecordView extends StatelessWidget {
     ]);
   }
 }
+
+/// 독서 기록 한 줄(책 줄 BookRow 작게 40): 시간대 · 오른쪽 읽은 시간(일시정지가 있었으면 아래 '일시정지 시간 제외'). 누르면 [onPress](기록 수정).
+/// 통계 캘린더의 그날 기록과 읽기 탭의 다른 날 기록이 같은 줄을 쓴다(2026-11-26)
+class SessionRow extends StatelessWidget {
+  const SessionRow({super.key, required this.lib, required this.session, required this.onPress});
+  final Library lib;
+  final Session session;
+  final VoidCallback onPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = session;
+    final name = bookTitle(lib, s.myBookId) ?? NoBookCover.name;
+    final range = timeRange(s.startedAt, s.endedAt);
+    final pause = hasPause(s);
+    final w = BookRow.coverWidth(BookRowSize.small);
+    final id = s.myBookId;
+    return BookRow(
+      cover: id != null && lib.books.containsKey(id) ? LinkedCover(lib: lib, id: id, width: w) : NoBookCover(width: w),
+      title: name,
+      meta: range,
+      label: [name, range, formatDurationShort(s.durationMs), if (pause) '일시정지 시간 제외'].join(', '),
+      onPress: onPress,
+      trailing: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+        Text(formatDurationShort(s.durationMs), style: AppType.recordDuration),
+        // 공통 규칙 9장: 일시정지를 뺀 시간 표시는 '일시정지 시간 제외' 한 말('실제 독서'였다)
+        if (pause) Text('일시정지 시간 제외', style: AppType.caption),
+      ]),
+    );
+  }
+}

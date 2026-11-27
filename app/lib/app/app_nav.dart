@@ -62,6 +62,15 @@ class AppNav extends ChangeNotifier {
     goTab(AppTab.records);
   }
 
+  /// 통계 탭 캘린더에서 보여 줄 날(YYYY-MM-DD, 통계 탭이 읽고 비운다)
+  String? calendarDay;
+
+  /// 통계 탭 캘린더의 그날로(독서를 끝낸 알림의 '달력에서 보기'): 모든 책 · 그달 · 그날을 고른다
+  void goCalendar(String day) {
+    calendarDay = day;
+    goTab(AppTab.stats);
+  }
+
   /// 읽기 탭으로 가서 그 책을 맨 앞에(시작은 재생을 눌러서)
   void goRead(String bookId) {
     readBook = bookId;

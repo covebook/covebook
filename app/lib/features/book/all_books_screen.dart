@@ -319,18 +319,20 @@ class _AllBooksScreenState extends State<AllBooksScreen> {
                 Expanded(child: Text('책 ${rows.length}권', style: AppType.sub, maxLines: 1, overflow: TextOverflow.ellipsis)),
                 Transform.translate(
                   offset: const Offset(10, 0),
-                  child: Row(children: [
-                    // 검색(검색 중에는 맨 위 검색칸이 있어 없다) · 보기 전환 · 필터 · ＋(머리줄 아이콘과 같은 공용 HeadIcon 회색)
-                    if (!_searching) IconBtn(label: '내 책 검색', onPress: () => setState(() => _searching = true), child: const HeadIcon('Search')),
+                  // 나란한 아이콘은 IconRow(가운데 사이 40, 2026-11-26 사용자 '아이콘 같은 라인에 있으면 사이 간격이 큰 거 같아': 48이었다)
+                  child: IconRow(children: [
+                    // 검색(검색 중에는 맨 위 검색칸이 있어 없다) · 보기 전환 · 필터 · ＋(공용 HeadIcon 회색). 개수 줄이라 그림은 IconSize.count 20
+                    // (기록 탭 개수 줄과 같게, 2026-11-26 사용자 '갈피 4개 라인에 있는 아이(콘)가 좀 크지 않나')
+                    if (!_searching) IconBtn(label: '내 책 검색', onPress: () => setState(() => _searching = true), child: const HeadIcon('Search', size: IconSize.count)),
                     // 보기 바꾸기 단추 하나: 지금 격자면 목록 아이콘, 목록이면 격자 아이콘(누르면 그 보기로).
                     // 지금 보기 아이콘까지 두 개 두면 '이미 격자인데 격자 표시가 왜 있냐'(2026-11-19 사용자). 색은 옅은 회색(2026-11-18)
                     IconBtn(
                       label: _grid ? '목록으로 보기' : '표지 격자로 보기',
                       onPress: () => setState(() => _lastGrid = _grid = !_grid),
-                      child: HeadIcon(_grid ? 'ListIcon' : 'LayoutGrid'),
+                      child: HeadIcon(_grid ? 'ListIcon' : 'LayoutGrid', size: IconSize.count),
                     ),
-                    FilterIcon(active: conditions.isNotEmpty, onPress: onFilter),
-                    IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const HeadIcon('Plus')),
+                    FilterIcon(active: conditions.isNotEmpty, onPress: onFilter, size: IconSize.count),
+                    IconBtn(label: '책 추가', onPress: () => openAddBook(context), child: const HeadIcon('Plus', size: IconSize.count)),
                   ]),
                 ),
               ]),

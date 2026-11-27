@@ -93,19 +93,32 @@ void main() {
             child: Scaffold(body: Align(alignment: Alignment.bottomCenter, child: child)),
           ),
         );
-    Widget panel({double scale = 1, ValueChanged<SpineLook>? onSpine, VoidCallback? onBinding}) => host(
+    Widget panel({
+      double scale = 1,
+      ValueChanged<SpineLook>? onSpine,
+      VoidCallback? onBinding,
+      Pose pose = Pose.upright,
+      double turn = 0,
+      ValueChanged<StandLean>? onLean,
+      ValueChanged<Pose>? onPose,
+      ({bool left, bool right}) canLean = (left: true, right: true),
+    }) =>
+        host(
           DecoratePanel(
             title: '작별하지 않는다',
-            pose: Pose.upright,
+            pose: pose,
             lean: 0,
-            canLean: (left: true, right: true),
+            canLean: canLean,
             msg: null,
             spin: 0,
             spinMax: 30,
             spinRange: null,
+            turn: turn,
+            turnRange: (lo: 0, hi: 90),
+            onTurn: (_) {},
             depth: (lo: -20.0, hi: 20.0, z: 0.0, back: 20.0),
-            onPose: (_) {},
-            onLean: (_) {},
+            onPose: onPose ?? (_) {},
+            onLean: onLean ?? (_) {},
             onSpin: (_) {},
             onDepth: (_) {},
             spine: SpineLook.color,
@@ -139,15 +152,16 @@ void main() {
       expect(find.text('실물'), findsNothing);
     });
 
-    testWidgets('고른 책: 위치, 각도 | 디자인 전환 칸, 디자인에서 책 옆면(단색 | 실물 | 겹무늬, 2026-11-25 측면 → 실물) · 이 책 꾸미기(2026-11-23 이름)', (tester) async {
+    testWidgets('고른 책: 배치 | 디자인 전환 칸(2026-11-26 \'위치, 각도\' → \'배치\'), 디자인에서 책 옆면(단색 | 실물 | 겹무늬, 2026-11-25 측면 → 실물) · 이 책 꾸미기(2026-11-23 이름)', (tester) async {
       final picked = <SpineLook>[];
       var binding = 0;
       await tester.pumpWidget(panel(onSpine: picked.add, onBinding: () => binding++));
-      expect(find.text('위치, 각도'), findsOneWidget);
+      expect(find.text('배치'), findsOneWidget);
+      expect(find.text('위치, 각도'), findsNothing);
       expect(find.text('실물'), findsNothing);
       await tester.tap(find.text('디자인'));
       await tester.pump();
-      expect(find.text('앞뒤'), findsNothing);
+      expect(find.text('앞뒤 위치'), findsNothing);
       expect(find.text('책 옆면'), findsOneWidget);
       expect(find.textContaining('모든 책'), findsNothing, reason: '고른 책에만 걸려 적용 범위 글이 없다');
       for (final o in ['단색', '실물', '겹무늬']) {
@@ -163,21 +177,25 @@ void main() {
     });
 
     for (final scale in [1.0, 1.15, 1.3, 2.0]) {
-      testWidgets('글씨 $scale배 360 폭: 전환 칸 \'위치, 각도\'가 칸 안에 다 보이고, 이 책 꾸미기 줄은 이름 · 설명(오른쪽)이 한 줄', (tester) async {
+      testWidgets('글씨 $scale배 360 폭: 전환 칸 \'배치\'가 칸 안에 다 보이고, 배치 줄 이름이 한 줄, 이 책 꾸미기 줄은 이름 · 설명(오른쪽)이 한 줄', (tester) async {
         tester.view.physicalSize = const Size(1080, 2400);
         tester.view.devicePixelRatio = 3;
         addTearDown(tester.view.reset);
         await tester.pumpWidget(panel(scale: scale));
         // 고른 칸(굵게)일 때 글자 폭이 칸 안쪽(양옆 4)보다 좁다
-        final cell = find.ancestor(of: find.text('위치, 각도'), matching: find.byType(Container)).first;
-        final text = tester.renderObject<RenderParagraph>(find.text('위치, 각도'));
+        final cell = find.ancestor(of: find.text('배치'), matching: find.byType(Container)).first;
+        final text = tester.renderObject<RenderParagraph>(find.text('배치'));
         expect(text.didExceedMaxLines, isFalse);
         // 1.3배까지는 한 줄로 다 들어간다(2배는 두 줄로 접힌다)
         if (scale <= 1.3) expect(text.getMaxIntrinsicWidth(double.infinity), lessThanOrEqualTo(tester.getSize(cell).width - 8));
         // 제목이 오른쪽 칸 때문에 세 글자도 안 남지 않는다(1배: 같은 줄, 조금 키운 글씨 · 큰 글씨: 다른 줄)
         final title = find.text(keepAll('작별하지 않는다'));
         expect(tester.getSize(title).width, greaterThan(22 * scale * 3 - 1));
-        if (scale == 1.0) expect((tester.getCenter(title).dy - tester.getCenter(find.text('위치, 각도')).dy).abs(), lessThan(4), reason: '기본 글씨는 같은 줄');
+        if (scale == 1.0) expect((tester.getCenter(title).dy - tester.getCenter(find.text('배치')).dy).abs(), lessThan(4), reason: '기본 글씨는 같은 줄');
+        // 줄 이름('앞뒤 위치')은 한 줄로 다 보인다(이름 칸 폭을 글자 크기대로 잰다)
+        for (final n in ['돌리기', '앞뒤 위치', '기대기']) {
+          expect(tester.getSize(find.text(n)).height, lessThan(22.5 * scale * 1.5), reason: '$n 한 줄');
+        }
         await tester.tap(find.text('디자인'));
         await tester.pump();
         // 이름 · 설명 둘 다 한 줄, 설명은 같은 줄 오른쪽(2026-11-24 사용자 '왼쪽 사진처럼 우측에 있게 하고 한 줄로': 이름 아래였다).
@@ -208,16 +226,47 @@ void main() {
       expect(find.text('선반'), findsNothing);
     });
 
-    testWidgets('고른 책: 순서 줄·자리 표시 없이 앞뒤·기대기, 2배 글자에서 라벨이 넘치지 않는다', (tester) async {
+    testWidgets('고른 책: 순서 줄·자리 표시 없이 돌리기 · 앞뒤 위치 · 기대기, 2배 글자에서 라벨이 넘치지 않는다', (tester) async {
       await tester.pumpWidget(panel(scale: 2));
       expect(tester.takeException(), isNull);
       expect(find.text(keepAll('작별하지 않는다')), findsOneWidget);
-      expect(find.text('책등'), findsOneWidget);
-      expect(find.text('앞뒤'), findsOneWidget);
+      expect(find.text('세우기'), findsOneWidget);
+      expect(find.text('앞뒤 위치'), findsOneWidget);
       expect(find.text('기대기'), findsOneWidget);
       expect(find.text('순서'), findsNothing);
       expect(find.textContaining('번째 선반'), findsNothing);
       expect(find.bySemanticsLabel('왼쪽으로 한 칸 옮기기'), findsNothing);
+    });
+
+    testWidgets('2026-11-26 시안: 세우기 | 눕히기, 돌리기 30°(0 책등 ~ 90 표지), 앞뒤 위치 \'N mm\', 기대기 똑바로 | 왼쪽 | 오른쪽 | 뒤로', (tester) async {
+      final leans = <StandLean>[];
+      final poses = <Pose>[];
+      await tester.pumpWidget(panel(pose: Pose.front, turn: 30, onLean: leans.add, onPose: poses.add, canLean: (left: false, right: true)));
+      expect(tester.takeException(), isNull);
+      for (final t in ['세우기', '눕히기', '돌리기', '앞뒤 위치', '기대기', '기본', '왼쪽', '오른쪽', '뒤']) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+      for (final t in ['책등', '표지', '눕힘', '자세', '회전', '바로']) {
+        expect(find.text(t), findsNothing, reason: t);
+      }
+      expect(find.text('30°'), findsOneWidget, reason: '0부터인 막대라 부호 없이');
+      expect(find.textContaining(' mm'), findsOneWidget);
+      expect(find.bySemanticsLabel('돌리기'), findsWidgets, reason: '줄 이름과 막대 이름');
+      // 표지가 앞인 책도 세운 책: 세우기를 다시 눌러도 자세를 바꾸지 않고(부르는 쪽이 거른다) 눕히기는 눕힘
+      await tester.tap(find.text('눕히기'));
+      expect(poses, [Pose.horizontal]);
+      await tester.tap(find.text('뒤'));
+      await tester.tap(find.text('오른쪽'));
+      await tester.tap(find.text('왼쪽'));
+      expect(leans, [StandLean.back, StandLean.right], reason: '기댈 옆 책이 없는 왼쪽은 흐리게(눌러도 그대로)');
+    });
+
+    testWidgets('눕힌 책: 기대기 없이 돌리기(가운데 0, 부호 있는 값)', (tester) async {
+      await tester.pumpWidget(panel(pose: Pose.horizontal));
+      expect(find.text('기대기'), findsNothing);
+      expect(find.text('돌리기'), findsOneWidget);
+      expect(find.text('0°'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

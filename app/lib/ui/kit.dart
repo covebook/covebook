@@ -218,6 +218,10 @@ abstract final class IconSize {
   /// 머리줄 아이콘(HeadIcon · FilterIcon) 24: TDS Icon Button iconSize 기본값
   static const head = 24.0;
 
+  /// 개수 줄(목록 위 '갈피 N개' · '책 N권' 줄) 아이콘 20: 머리줄보다 한 단계 작게
+  /// (2026-11-26 사용자 '갈피 4개 라인에 있는 아이(콘)가 좀 크지 않나': 머리줄과 같은 24라 작은 '갈피 4개' 글자 옆에서 커 보였다)
+  static const count = 20.0;
+
   /// 이미 넣음 체크(AddedMark) 20 · 굵기 2, 고른 원 안 흰 체크 굵기 3
   static const mark = 20.0, markStroke = 2.0, checkStroke = 3.0;
 
@@ -225,7 +229,7 @@ abstract final class IconSize {
   static const small = 18.0;
 
   static const all = <String, double>{
-    'base': base, 'chevron': chevron, 'head': head, 'back': back, 'stroke': stroke, 'mark': mark, 'markStroke': markStroke, 'checkStroke': checkStroke, 'small': small,
+    'base': base, 'chevron': chevron, 'head': head, 'count': count, 'back': back, 'stroke': stroke, 'mark': mark, 'markStroke': markStroke, 'checkStroke': checkStroke, 'small': small,
   };
 }
 
@@ -297,16 +301,54 @@ class Chevron extends StatelessWidget {
 /// 머리줄 아이콘(검색 · + · 공유 · 더 보기 · 필터 · 보기 바꾸기): TDS Icon Button iconSize 기본 24 · 선 1.6 · 회색 [AppColors.icon]
 /// (아이콘 색 기본값은 공식 없음 → 지금 앱 '우측 상단 아이콘 회색', 2026-11-18 사용자 · 11-18 '아이콘 색 좀 연하게, 통일')
 class HeadIcon extends StatelessWidget {
-  const HeadIcon(this.name, {super.key, this.color = AppColors.icon});
+  const HeadIcon(this.name, {super.key, this.color = AppColors.icon, this.size = IconSize.head});
   final String name;
   final Color color;
 
+  /// 머리줄 24, 개수 줄은 IconSize.count 20
+  final double size;
+
   @override
-  Widget build(BuildContext context) => LucideIcon(name, size: IconSize.head, color: color);
+  Widget build(BuildContext context) => LucideIcon(name, size: size, color: color);
 }
 
-/// 머리줄 아이콘 사이(4)
-const headIconGap = Space.xs;
+/// 한 줄에 나란한 아이콘 단추의 가운데 사이 40: 그림 24 + 사이 16(Space.l). 전에는 누르는 칸 48 + 4 = 52(그림 사이 28)였다
+const iconPitch = IconSize.head + Space.l;
+
+/// 한 줄에 나란한 아이콘 단추(머리줄 · 개수 줄의 검색 · ＋ · 보기 · 거르기 · 공유 · 더 보기): 아이콘 가운데 사이 [iconPitch].
+/// 누르는 칸은 높이 48 그대로, 옆으로는 이웃과 가운데에서 나눠 겹치지 않는다(안쪽 단추 폭 40). 줄 양끝 단추는 바깥쪽 반(24)을 그대로 가져
+/// 줄 전체의 바깥 끝은 48 칸 단추를 늘어놓을 때와 같다(줄 끝 맞춤 Transform 값을 바꾸지 않는다). 눌림 원(48)은 칸 밖으로 그대로 그린다
+class IconRow extends StatelessWidget {
+  const IconRow({super.key, required this.children});
+
+  /// [IconBtn](또는 IconBtn을 그리는 부품: FilterIcon 등)
+  final List<Widget> children;
+
+  /// 아이콘 n개 줄의 폭
+  static double widthOf(int n) => n <= 0 ? 0 : iconPitch * (n - 1) + Space.hit;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = children.length;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (var i = 0; i < n; i++)
+        _IconSlot(
+          before: i == 0 ? Space.hit / 2 : iconPitch / 2,
+          after: i == n - 1 ? Space.hit / 2 : iconPitch / 2,
+          child: children[i],
+        ),
+    ]);
+  }
+}
+
+/// IconRow 안 단추 하나의 누르는 칸: 아이콘 가운데에서 왼쪽 [before], 오른쪽 [after]
+class _IconSlot extends InheritedWidget {
+  const _IconSlot({required this.before, required this.after, required super.child});
+  final double before, after;
+
+  @override
+  bool updateShouldNotify(_IconSlot old) => old.before != before || old.after != after;
+}
 
 /// 머리카락 선(화면 화소 1개): 가로선 · 세로선
 class Hairline extends StatelessWidget {
@@ -1123,6 +1165,31 @@ class _IconBtnState extends State<IconBtn> {
   @override
   Widget build(BuildContext context) {
     final on = !widget.disabled;
+    // IconRow 안이면 누르는 칸을 이웃과 나눈 폭으로(아이콘 가운데는 칸 왼쪽에서 before), 아니면 48×48
+    final slot = context.dependOnInheritedWidgetOfExactType<_IconSlot>();
+    final box = widget.outlined
+        ? SizedBox(
+            width: Space.hit,
+            height: Space.hit,
+            child: Center(
+              child: Container(
+                width: ControlSize.iconBox,
+                height: ControlSize.iconBox,
+                decoration: BoxDecoration(
+                  color: _down && on ? AppColors.greyOpacity100 : null,
+                  borderRadius: BorderRadius.circular(Shape.button),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Center(child: widget.child),
+              ),
+            ),
+          )
+        : Container(
+            width: Space.hit,
+            height: Space.hit,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: _down && on ? AppColors.greyOpacity100 : null),
+            child: Center(child: widget.child),
+          );
     return Semantics(
       container: true,
       button: true,
@@ -1138,28 +1205,14 @@ class _IconBtnState extends State<IconBtn> {
           onTapCancel: on ? () => setState(() => _down = false) : null,
           onTapUp: on ? (_) => setState(() => _down = false) : null,
           onTap: on ? widget.onPress : null,
-          child: widget.outlined
-              ? SizedBox(
-                  width: Space.hit,
+          child: slot == null
+              ? box
+              : SizedBox(
+                  width: slot.before + slot.after,
                   height: Space.hit,
-                  child: Center(
-                    child: Container(
-                      width: ControlSize.iconBox,
-                      height: ControlSize.iconBox,
-                      decoration: BoxDecoration(
-                        color: _down && on ? AppColors.greyOpacity100 : null,
-                        borderRadius: BorderRadius.circular(Shape.button),
-                        border: Border.all(color: AppColors.line),
-                      ),
-                      child: Center(child: widget.child),
-                    ),
-                  ),
-                )
-              : Container(
-                  width: Space.hit,
-                  height: Space.hit,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: _down && on ? AppColors.greyOpacity100 : null),
-                  child: Center(child: widget.child),
+                  child: Stack(clipBehavior: Clip.none, children: [
+                    Positioned(left: slot.before - Space.hit / 2, top: 0, width: Space.hit, height: Space.hit, child: box),
+                  ]),
                 ),
         ),
       ),
@@ -2040,9 +2093,12 @@ class Tabs<T> extends StatelessWidget {
 
 /// 필터 아이콘: 누르면 필터 시트. 걸러진 상태면 테마색 점
 class FilterIcon extends StatelessWidget {
-  const FilterIcon({super.key, required this.onPress, this.active = false});
+  const FilterIcon({super.key, required this.onPress, this.active = false, this.size = IconSize.head});
   final VoidCallback onPress;
   final bool active;
+
+  /// 그림 크기(머리줄 24, 개수 줄 IconSize.count 20). 걸러진 상태 점은 그림 오른쪽 위 모서리에 붙는다
+  final double size;
 
   @override
   Widget build(BuildContext context) => IconBtn(
@@ -2052,11 +2108,11 @@ class FilterIcon extends StatelessWidget {
           width: Space.touch,
           height: Space.touch,
           child: Stack(children: [
-            const Center(child: LucideIcon('SlidersHorizontal', size: IconSize.head, color: AppColors.icon)),
+            Center(child: LucideIcon('SlidersHorizontal', size: size, color: AppColors.icon)),
             if (active)
               Positioned(
-                top: 9,
-                right: 7,
+                top: (Space.touch - size) / 2 - 1,
+                right: (Space.touch - size) / 2 - 3,
                 child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle)),
               ),
           ]),

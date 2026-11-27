@@ -1,7 +1,9 @@
 // 홈 화면(책장 탭): 서재를 읽어 줄마다 굽고(담아 둔 그림이 있으면 그대로) 실제 책장을 그린다. 지금 앱 features/home/HomeScreen을 옮기는 중.
 // 머리줄·하단바 덮개·책장 그림까지. 측정: 켤 때마다 logcat에 [flbake] 줄마다·[fltotal] 합, 제목을 길게 누르면 다시 굽는다
-// 2026-11-24 사용자 시안: 머리 '+'는 책장에 꽂기 시트(place_sheet.dart, 표지를 끌어 원하는 자리에 꽂는다. 책 추가 화면은 시트의 '목록 보기'),
-// 책을 끄는 동안 아래 흰 X(빼기 자리, RemoveZone)에 놓으면 책장에서 뺀다
+// 2026-11-24 사용자 시안: 머리 '+'는 책장에 꽂기 시트(place_sheet.dart, 표지를 끌어 원하는 자리에 꽂는다. 책 추가 화면은 시트의 '새 책 찾기'),
+// 책을 끄는 동안 아래 흰 X(빼기 자리, RemoveZone)에 놓으면 책장에서 뺀다.
+// 2026-11-27 사용자 첫 책 꽂기 안내: 빈 책장이면 하단 탭 위에 '첫 책 꽂기'(책 고르기 · 검색 → 책을 들고 돌아와 꽂기 시트, 그 표지만 밝게 first_book_coach.dart).
+// 첫 책이 놓이면 안내를 끝내고 적어 둔다(store/onboarding_store.dart)
 library;
 
 import 'dart:async';
@@ -20,7 +22,7 @@ import '../../services/qa_probe.dart';
 import '../../services/cover_colors.dart';
 import '../../ui/alert.dart' show appAlert;
 import '../../ui/feedback.dart' show errorText, showToast;
-import '../../ui/kit.dart' show Btn, Pressable, Shape, Space, showSheet;
+import '../../ui/kit.dart' show Btn, Pressable, Shape, Space, contentMax, showSheet;
 import 'locked_rows.dart';
 import '../../store/entitlement_store.dart';
 import '../book/place_books.dart' show enforceShelfLimit;
@@ -35,7 +37,7 @@ import '../../domain/bookcase.dart' show Bookcase;
 import '../../store/bookcase_store.dart';
 import '../../app/app_shell.dart' show tabBarHidden;
 import '../../app/app_nav.dart' show AppNav, AppTab;
-import '../../app/startup.dart' show shelfReady;
+import '../../app/startup.dart' show shelfReady, startStep;
 import '../../domain/geometry.dart' show maxFrontSpin, maxSpin;
 import '../../domain/layout.dart' show ShelfLayout, placementOf, shelfItems, sortedShelves;
 import '../../domain/book3_physics.dart' show fromPlaced;
@@ -82,6 +84,15 @@ import '../../ui/theme.dart';
 import '../../ui/a11y_text.dart';
 import '../book/add_book_screen.dart' show openAddBook;
 import '../book/binding_screen.dart' show openBindingEditor;
+import '../book/place_books.dart' show keptTitle, placeWithChoice;
+import '../bookmark/book_picker.dart' show pickBook;
+import '../../store/onboarding_store.dart';
+import '../../store/reading_store.dart' show ReadingStore;
+import '../../store/mini_timer_store.dart' show miniTimerSpace;
+import 'first_book_coach.dart';
+import 'first_mark_sheet.dart';
+import '../../ui/book_cover.dart' show bookTitle;
+import '../bookmark/new_bookmark_screen.dart' show openNewBookmark;
 
 /// 앱이 깨어난 때(main이 채운다). 켜고 책장이 다 될 때까지를 잰다
 DateTime bootAt = DateTime.now();
@@ -151,6 +162,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     double spin,
     double spinMax,
     ({double lo, double hi})? spinRange,
+    double turn,
+    ({double lo, double hi})? turnRange,
     ({double lo, double hi, double z, double back}) depth,
   })? _panel;
 
@@ -373,6 +386,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     return _atlases.isNotEmpty &&
         !_decorating &&
         !_placeOpen &&
+        // 첫 책 꽂기 단추가 하단 탭 바로 위에 있는 동안은 내리지 않는다
+        !(Onboarding.instance.active && _shelfEmpty) &&
         _drag == null &&
         _grab == null &&
         !_pinching &&
@@ -421,6 +436,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void _closePlace() {
     if (!_placeOpen) return;
     if (_sheetDrag) _cancelDrag();
+    // 시트를 닫으면(손잡이 · 아래로 밀기 · 뒤로) 첫 책 안내도 걷는다. 책장이 아직 비었으면 '첫 책 꽂기'로 다시 한다
+    _stopCoach();
     setState(() => _placeOpen = false);
     if (!_decorating) {
       tabBarHidden.value = false;
@@ -429,11 +446,238 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     }
   }
 
-  /// 시트에 보일 책: 책장에 놓을 수 있는 내 책(숨긴 책 · 예시 책 빼고)
+  /// 시트에 보일 책: 책장에 놓을 수 있는 내 책(숨긴 책 · 예시 책 빼고). 첫 책 안내로 들고 온 책이 맨 앞
   List<PlaceItem> _placeItems() {
     final s = PlacementStore.instance, l = s.layout, lib = LibraryModel.instance.lib;
     final ids = [for (final id in s.books.keys) if (lib.books[id] case final b? when b.hiddenAt == null) id];
-    return placeItems(lib, ids, (id) => l != null && placementOf(l, id) != null, placedNow: _placedNow);
+    return placeItems(lib, ids, (id) => l != null && placementOf(l, id) != null, placedNow: _placedNow, lead: _coachId);
+  }
+
+  /// 시트 표지를 한 번 눌렀다: 자동 자리에 꽂는다(책 추가의 '책장에 진열'과 같은 규칙, 자리가 모자라면 선반 열기 · 보관을 묻는다)
+  bool _placing = false;
+  Future<void> _tapPlace(String id) async {
+    if (_placing || _drag != null) return;
+    _placing = true;
+    final onb = Onboarding.instance.active;
+    try {
+      final r = await placeWithChoice(context, [id]);
+      if (!mounted) return;
+      if (r.placed == 0) {
+        // 무료 칸이 다 차 보관했다(고른 것이 아니라 알린다). '보관만 하기'를 골랐으면 그대로 시트에 남는다
+        if (r.full) showToast(context, '${keptTitle(full: true)}.');
+        return;
+      }
+      // 놓은 책은 바로 보이게(끌어 놓을 때와 같다): 새로 굽기가 끝날 때까지 확정 배치로 미리 그린다
+      final l = PlacementStore.instance.layout;
+      final to = l == null ? null : placementOf(l, id)?.shelfId;
+      if (l != null && to != null) _showPreview(l, {to}, key: 'placed:${DateTime.now().microsecondsSinceEpoch}', bake: false);
+      if (onb) {
+        _firstPlaced(id);
+      } else {
+        setState(() => _placedNow
+          ..remove(id)
+          ..add(id));
+      }
+    } catch (e) {
+      if (mounted) appAlert(context, '책장에 꽂지 못했어요', '책은 내 책에 그대로 있어요. ${errorText(e)}');
+    } finally {
+      _placing = false;
+    }
+  }
+
+  // ---------- 첫 책 꽂기 안내(2026-11-27 사용자) ----------
+  /// 고르고 돌아온 책: 책장에 꽂기 시트에서 이 표지만 밝게 비우고 글 · 화살표로 가리킨다
+  String? _coachId;
+
+  /// 그 표지와 시트의 화면 자리: 화면을 그린 뒤 열쇠로 재고, 안내 중에는 잠깐마다 다시 잰다(시트가 자리 잡거나 옆으로 넘겨도 따라간다).
+  /// 그릴 때 알리는 방식은 시트가 처음 자리 잡기 전 자리에 머물러 구멍이 표지 왼쪽으로 비켜 있었다(2026-11-27 에뮬)
+  final _coachCover = ValueNotifier<Rect?>(null);
+  final _coachSheet = ValueNotifier<Rect?>(null);
+  final _coachCoverKey = GlobalKey(debugLabel: 'coach-cover');
+  final _coachSheetKey = GlobalKey(debugLabel: 'coach-sheet');
+  Timer? _coachTimer;
+
+  Rect? _rectOf(GlobalKey k) {
+    final o = k.currentContext?.findRenderObject();
+    return o is RenderBox && o.attached && o.hasSize ? o.localToGlobal(Offset.zero) & o.size : null;
+  }
+
+  void _measureCoach() {
+    if (!mounted || _coachId == null) {
+      _coachTimer?.cancel();
+      _coachTimer = null;
+      return;
+    }
+    _coachCover.value = _rectOf(_coachCoverKey);
+    _coachSheet.value = _rectOf(_coachSheetKey);
+  }
+
+  /// 첫 책 안내 겹을 걷는다(시트를 닫거나 · 꽂거나 · 꾸미기로 갈 때)
+  void _stopCoach() {
+    _coachId = null;
+    _coachTimer?.cancel();
+    _coachTimer = null;
+  }
+
+  /// 지금 책장에 꽂힌 책이 하나도 없다
+  bool get _shelfEmpty {
+    final l = PlacementStore.instance.layout;
+    return l != null && l.placements.isEmpty;
+  }
+
+  /// 안내 겹을 보이나: 들고 온 책이 아직 책장에 없고 시트가 열려 있고 끄는 중이 아닐 때(끌기를 시작하면 바로 걷는다)
+  bool get _coachOn {
+    final id = _coachId, l = PlacementStore.instance.layout;
+    return id != null && Onboarding.instance.active && _placeOpen && !_decorating && _drag == null && l != null && placementOf(l, id) == null;
+  }
+
+  void _onbChanged() {
+    if (!mounted) return;
+    setState(() {});
+    // 안내를 막 시작했으면 내려가 있던 하단 탭을 올린다('첫 책 꽂기'는 탭 바로 위, 안내 중에는 내리지 않는다)
+    if (Onboarding.instance.active) IdleBars.instance.poke();
+  }
+
+  /// 책장을 새로 읽을 때마다: 처음이면 안내를 할지 정하고(책이 이미 있으면 안 한다), 안내 중 책장에 책이 생기면(다른 화면 · 동기화) 끝낸다
+  void _syncOnboarding(Library lib) {
+    final ob = Onboarding.instance, l = PlacementStore.instance.layout;
+    if (l == null) return;
+    if (!ob.loaded) {
+      // 첫 갈피 차례에서 앱을 껐으면 책장이 보이고 잠깐 뒤 다시 띄운다
+      ob.load(anyBooks: lib.books.isNotEmpty || l.placements.isNotEmpty).then((_) {
+        if (mounted && ob.markBook != null) _offerMarkSoon();
+      }).ignore();
+      return;
+    }
+    if (ob.active && l.placements.isNotEmpty) {
+      // 다른 길(책 추가의 '책장에 진열' · 동기화)로 책이 생겼다: 한 권이면 그 책으로 첫 갈피 차례, 여러 권이면 끝
+      ob.finish(l.placements.length == 1 ? l.placements.first.bookId : null);
+      _stopCoach();
+      if (ob.markBook != null) _offerMarkSoon();
+    }
+  }
+
+  /// '첫 책 꽂기': 내 책이 비었으면 책 검색으로, 있으면 책 고르기(+ 새 책 등록)로. 고른 책을 들고 돌아와 책장에 꽂기 시트를 연다.
+  /// 고르기를 닫으면 그대로(단추가 남아 다시 한다)
+  Future<void> _firstBook() async {
+    await LibraryModel.instance.load();
+    if (!mounted) return;
+    final lib = LibraryModel.instance.lib;
+    String? id;
+    if (!lib.books.values.any((b) => b.hiddenAt == null)) {
+      id = await openAddBook(context, hold: true);
+    } else {
+      final r = await pickBook(context, lib, addNew: true, holdNew: true);
+      id = r.picked ? r.id : null;
+    }
+    if (id == null || !mounted || !Onboarding.instance.active) return;
+    // 책장 쪽 책 목록에 없으면(다른 화면에서 막 넣은 책) 다시 읽는다
+    if (!PlacementStore.instance.books.containsKey(id)) await PlacementStore.instance.reload();
+    if (!mounted) return;
+    final l = PlacementStore.instance.layout;
+    if (l != null && placementOf(l, id) != null) return;
+    _coachCover.value = null;
+    _coachSheet.value = null;
+    _coachId = id;
+    await _openPlace();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureCoach());
+    _coachTimer?.cancel();
+    _coachTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _measureCoach());
+  }
+
+  /// 첫 책이 책장에 놓였다: 첫 책 차례를 끝내 적어 두고(다시 띄우지 않는다) 시트를 내리고 그 책을 보여 준다(그 줄로 넘기고 잠깐 윤곽 빛).
+  /// 놓은 선반을 잠깐 그대로 보여 준 뒤 첫 갈피 차례(2026-11-27 사용자 '꽂은 뒤에는 선반이 잠깐 그대로 보여야 내가 놓은 느낌이 살아')
+  void _firstPlaced(String id) {
+    Onboarding.instance.finish(id);
+    _stopCoach();
+    _closePlace();
+    if (!mounted) return;
+    _pendingFocus = id;
+    _tryFocus();
+    _markShown = DateTime.now();
+    _offerMarkSoon(_markPause);
+  }
+
+  // ---------- 첫 갈피(첫 안내 마지막 차례, 2026-11-27 사용자) ----------
+  /// 첫 책을 꽂은 뒤 선반을 그대로 보여 주는 시간(윤곽 빛 2.5초 안)
+  static const _markPause = Duration(milliseconds: 1800);
+  Timer? _markTimer;
+  bool _markOpen = false;
+
+  /// 책장이 (다른 탭 · 화면 · 시트 없이) 보이기 시작한 때: 그로부터 [_markPause] 뒤에 띄운다
+  DateTime? _markShown;
+
+  void _offerMarkSoon([Duration d = const Duration(milliseconds: 800)]) {
+    _markTimer?.cancel();
+    _markTimer = Timer(d, _offerMark);
+  }
+
+  /// 첫 갈피 시트: 책장 탭이 앞에 있고 위에 다른 화면 · 시트가 없고 책장을 다 그렸을 때만(아니면 조금 있다 다시 본다).
+  /// 그 책이 없어졌거나 책장에서 뺐거나 이미 갈피가 있으면 이 차례는 끝낸다
+  Future<void> _offerMark() async {
+    final ob = Onboarding.instance, id = ob.markBook, model = LibraryModel.instance;
+    if (id == null || !mounted || _markOpen) return;
+    if (!model.loaded) return _offerMarkSoon();
+    final lib = model.lib, l = PlacementStore.instance.layout;
+    final b = lib.books[id];
+    if (b == null || b.hiddenAt != null || (l != null && placementOf(l, id) == null) || lib.bookmarks.values.any((m) => m.myBookId == id)) {
+      ob.finishMark();
+      return;
+    }
+    final visible = l != null && MiniTimerPlace.instance.tab == '/' && ModalRoute.of(context)?.isCurrent != false && !_placeOpen && !_decorating && _drag == null;
+    if (!visible) {
+      _markShown = null;
+      return _offerMarkSoon();
+    }
+    final wait = _markPause - DateTime.now().difference(_markShown ??= DateTime.now());
+    if (wait > Duration.zero) return _offerMarkSoon(wait);
+    // 굽는 중이면 다 그린 뒤에(올라오는 갈피가 새 그림 위에 보이게)
+    if (_busy || _case == null) return _offerMarkSoon(const Duration(milliseconds: 300));
+    _markOpen = true;
+    final pick = await showFirstMarkSheet(context, title: bookTitle(lib, id) ?? '이 책');
+    _markOpen = false;
+    ob.finishMark();
+    if (!mounted || pick == null) return;
+    if (pick.write) {
+      await openNewBookmark(context, book: id);
+      return;
+    }
+    final line = pick.line;
+    if (line == null) return;
+    _riseWant = (id: id, at: DateTime.now());
+    _pendingFocus = id;
+    _tryFocus();
+    try {
+      await model.addBookmark(myBookId: id, text: line);
+      if (mounted) showToast(context, '첫 갈피를 꽂았어요.', action: '보기', onAction: () => AppNav.instance.goBookmarks(id));
+    } catch (e) {
+      _riseWant = null;
+      if (mounted) appAlert(context, '갈피를 꽂지 못했어요', errorText(e));
+    }
+  }
+
+  /// 갈피 올리기: 갈피를 꽂은 책. 새로 구운 줄에 그 책 갈피가 들어오면(_run) 바탕 그림에서 그 탭만 빼고(_riseId) 위 겹이 책 속에서 올린다
+  ({String id, DateTime at})? _riseWant;
+  String? _riseId;
+  late final AnimationController _rise = AnimationController(vsync: this, duration: const Duration(milliseconds: 650))
+    ..addStatusListener((s) {
+      if (s == AnimationStatus.completed && mounted) setState(() => _riseId = null);
+    });
+  late final Animation<double> _riseCurve = CurvedAnimation(parent: _rise, curve: Curves.easeOutCubic);
+
+  /// 새 줄 목록에 그 책의 갈피(빛 값까지)가 있다
+  bool _hasRibbon(List<RowCase> rows, String id) => rows.any((r) {
+        final k = r.books.indexWhere((b) => b.id == id);
+        return k >= 0 && k < r.looks.length && r.looks[k].ribbons > 0 && r.tabLoss[id] != null;
+      });
+
+  /// 선반 판 띠(화면 y): 안내 글이 가리지 않게 피한다. 판 앞면과 바로 아래 그늘까지
+  List<({double top, double bottom})> _plankBands() {
+    final g = _geom;
+    if (g == null) return const [];
+    final off = _scroll.hasClients ? _scroll.offset : 0.0;
+    return [for (final r in g.geo) (top: g.contentTop + r.baseline - off - Space.xs, bottom: g.contentTop + r.top + r.height - off + Space.s)];
   }
 
   /// 화면 좌표 → 책장 그림 좌표(스크롤 몫 포함, 끌기 좌표)
@@ -488,6 +732,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
   void _startDecorate() {
     if (_decorating) return;
     _placeOpen = false;
+    _stopCoach();
     _decorating = true;
     _decoTab = DecorateTab.books;
     _decoUndo.clear();
@@ -522,25 +767,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       setState(() => _panel = null);
       return;
     }
-    // 기울이면 실제로 기대는지(닿을 곳이 없으면 바로 선다). 그 선반만 풀어 본다
+    final fs = p.pose == Pose.front ? frontStateOf(l, s.books, id) : null;
+    final lying = p.pose == Pose.horizontal || (fs != null && fs.state.pitch >= 89.95);
+    // 기울이면 실제로 기대는지(닿을 곳이 없으면 바로 선다). 그 선반만 풀어 본다. 표지가 앞인 책은 책등이 앞으로 세운 뒤 기댈 수 있는지
+    // (기대기 왼쪽 · 오른쪽을 고르면 책등이 앞으로 선다, 2026-11-26)
+    final up = p.pose == Pose.upright ? l : (lying ? null : setPose(l, s.books, id, Pose.upright).layout);
     bool can(int d) {
-      if (p.pose != Pose.upright) return false;
-      if (p.tilt.sign == d) return true;
-      final r = setTilt(l, s.books, id, tiltToward(d));
-      return r.ok && (placementOf(resolveLeans(r.layout!, s.books, p.shelfId), id)?.tilt ?? 0) != 0;
+      final q = up == null ? null : placementOf(up, id);
+      if (up == null || q == null) return false;
+      if (q.tilt.sign == d) return true;
+      final r = setTilt(up, s.books, id, tiltToward(d));
+      return r.ok && (placementOf(resolveLeans(r.layout!, s.books, q.shelfId), id)?.tilt ?? 0) != 0;
     }
 
-    final fs = p.pose == Pose.front ? frontStateOf(l, s.books, id) : null;
+    // 세운 책 돌리기(0° 책등이 앞 ~ 90° 표지가 앞)와 갈 수 있는 범위: 책등 자세는 표지 쪽으로 닿는 데까지, 표지 자세는 돌림 범위를 각으로(0°는 책등 자세로 바꿀 수 있을 때)
+    final turn = fs != null ? standTurnOf(fs.state.spin) : 0.0;
+    ({double lo, double hi})? turnRange;
+    if (!lying && p.stackId == null) {
+      if (p.pose == Pose.upright) {
+        final t = setStandTurn(l, s.books, id, standTurnMax);
+        final f = t.ok ? frontStateOf(t.layout!, s.books, id) : null;
+        turnRange = (lo: 0, hi: f == null ? 0 : math.min(standTurnMax, standTurnOf(f.state.spin)));
+      } else if (fs != null) {
+        final sr = spinRangeOf(l, s.books, id);
+        final back = setStandTurn(l, s.books, id, 0).ok;
+        if (sr != null) {
+          turnRange = (
+            lo: back ? 0 : math.max(0.0, math.min(turn, standTurnOf(sr.hi))),
+            hi: math.min(standTurnMax, math.max(math.min(turn, standTurnMax), standTurnOf(sr.lo))),
+          );
+        }
+      }
+    }
     setState(() => _panel = (
           title: s.books[id]?.title ?? '',
-          pose: p.pose == Pose.front && (p.pitch ?? 0) >= 89.95 ? Pose.horizontal : p.pose,
+          pose: lying ? Pose.horizontal : p.pose,
           lean: p.tilt.sign,
           canLean: (left: can(-1), right: can(1)),
           leanDeg: p.leanAngle?.abs(),
           frontPitch: fs?.state.pitch,
           spin: fs?.state.spin ?? p.spin ?? 0,
           spinMax: p.pose == Pose.front ? maxFrontSpin : maxSpin,
-          spinRange: spinRangeOf(l, s.books, id),
+          spinRange: lying ? spinRangeOf(l, s.books, id) : null,
+          turn: turn,
+          turnRange: turnRange,
           depth: reachableDepth(l, s.books, id),
         ));
   }
@@ -576,16 +846,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     _apply(op(l, s.books, id));
   }
 
+  /// 세우기(Pose.upright, 책등이 앞부터) | 눕히기(Pose.horizontal). 이미 세운 책(표지가 앞이어도)은 세우기를 다시 눌러도 그대로
   void _editPose(Pose pose) {
-    if (_panel?.pose != pose) _edit((l, b, id) => setPose(l, b, id, pose));
+    final now = _panel?.pose;
+    if (now == pose || (pose == Pose.upright && now == Pose.front)) return;
+    _edit((l, b, id) => setPose(l, b, id, pose));
   }
 
-  void _editLean(int d) {
-    if (_panel?.lean != d) _edit((l, b, id) => setTilt(l, b, id, tiltToward(d)));
+  /// 세운 책 기대기(2026-11-26 사용자 시안 '똑바로 | 왼쪽 | 오른쪽 | 뒤로'): 왼쪽 · 오른쪽은 책등이 앞으로 서서 옆 책에(표지가 앞이면 먼저 책등이 앞으로),
+  /// 뒤로는 표지가 앞으로 서서 뒤 벽에(책등이 앞이면 먼저 표지가 앞으로), 똑바로는 기대지 않기. 한 번의 편집(되돌리기 한 번)
+  void _editLean(StandLean v) {
+    final p = _panel;
+    if (p == null) return;
+    _edit((l, b, id) {
+      switch (v) {
+        case StandLean.straight:
+          if (p.pose == Pose.front) return p.frontPitch != null && p.frontPitch! > 0.5 ? setFrontLean(l, b, id, false) : const EditResult.fail('no-change');
+          return p.lean != 0 ? setTilt(l, b, id, 0) : const EditResult.fail('no-change');
+        case StandLean.left || StandLean.right:
+          final d = v == StandLean.left ? -1 : 1;
+          if (p.pose == Pose.upright) return p.lean != d ? setTilt(l, b, id, tiltToward(d)) : const EditResult.fail('no-change');
+          final up = setPose(l, b, id, Pose.upright);
+          if (!up.ok) return up;
+          final t = setTilt(up.layout!, b, id, tiltToward(d));
+          return t.ok ? t : up;
+        case StandLean.back:
+          if (p.pose == Pose.front) return p.frontPitch != null && p.frontPitch! > 0.5 ? const EditResult.fail('no-change') : setFrontLean(l, b, id, true);
+          final front = setPose(l, b, id, Pose.front);
+          if (!front.ok) return front;
+          final leaned = setFrontLean(front.layout!, b, id, true);
+          return leaned.ok ? leaned : front;
+      }
+    });
   }
 
-  /// 표지 책 기대기: 바로 | 뒤로(뒤 벽에 기대기)
-  void _editFrontLean(bool back) => _edit((l, b, id) => setFrontLean(l, b, id, back));
+  /// 세운 책 돌리기(0° 책등이 앞 ~ 90° 표지가 앞, layout_engine setStandTurn)
+  void _editTurn(double deg) => _edit((l, b, id) => setStandTurn(l, b, id, deg));
 
   void _editSpin(double deg) => _edit((l, b, id) {
         if (placementOf(l, id)?.pose != Pose.front) return setSpin(l, b, id, deg);
@@ -823,6 +1119,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
 
   Future<void> _endDrag() async {
     final d = _drag;
+    // 첫 책 안내 중이었는지는 놓기 전에 본다(저장하면 책장을 다시 읽으며 안내가 먼저 끝날 수 있다)
+    final onb = Onboarding.instance.active;
     final remove = d != null && d.shelfId.isNotEmpty && (_overRemove || _isOverRemove(_dragGlobal));
     _stopAutoScroll();
     if (d == null) return;
@@ -852,6 +1150,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         ..add(d.id);
     }
     if (mounted && l != null && to != null) _showPreview(l, {d.shelfId, to}, key: 'dropped:${DateTime.now().microsecondsSinceEpoch}', bake: false);
+    // 첫 책 안내 중 시트에서 끌어 꽂았다: 안내 끝(시트를 내리고 그 책을 보인다)
+    if (mounted && d.shelfId.isEmpty && to != null && onb) _firstPlaced(d.id);
   }
 
   /// 빼기 자리에 놓았다: 책장에서 뺀다(책은 내 책에 남는다. 책 시트 '책장에서 빼기'와 같다). 토스트로 되돌린다
@@ -1190,12 +1490,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       spin: p.spin,
       spinMax: p.spinMax,
       spinRange: p.spinRange,
+      turn: p.turn,
+      turnRange: p.turnRange,
+      onTurn: _editTurn,
       depth: p.depth,
       onPose: _editPose,
       onLean: _editLean,
       leanDeg: p.leanDeg,
       frontBack: p.frontPitch == null ? null : p.frontPitch! > 0.5,
-      onFrontLean: _editFrontLean,
       onSpin: _editSpin,
       onDepth: _editDepth,
       spine: id == null ? SpineLook.color : spineLooks.of(id),
@@ -1417,7 +1719,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
         _rowSigs.length != p.rows.length) {
       return null;
     }
-    final changed = [for (var i = 0; i < _rowSigs.length; i++) if (_rowSigs[i] != _frozenSigs[i]) i];
+    // 갈피 올리기로 뺐던(또는 뺄) 탭이 있는 줄도 다시 그린다
+    bool hid(RowCase r) => f.hideRibbon != p.hideRibbon && r.books.any((b) => b.id == f.hideRibbon || b.id == p.hideRibbon);
+    final changed = [for (var i = 0; i < _rowSigs.length; i++) if (_rowSigs[i] != _frozenSigs[i] || hid(p.rows[i])) i];
     return changed.length * 2 > _rowSigs.length ? null : changed;
   }
 
@@ -1521,6 +1825,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       painter.bottomInset,
       painter.viewport,
       painter.frostedFrom,
+      painter.hideRibbon,
       w,
       h,
     );
@@ -1608,6 +1913,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     spineLooks.addListener(_spineLookChanged);
     focusBookOnShelf.addListener(_focusBook);
     LibraryModel.instance.addListener(_libraryChanged);
+    Onboarding.instance.addListener(_onbChanged);
     BookcaseStore.instance.addListener(_bookcasesChanged);
     // 환불로 쓸 수 있는 선반 칸이 줄면 그 칸을 닫는다(책은 내 책에 보관)
     if (iapOn) EntitlementStore.instance.addListener(_entitlementChanged);
@@ -1688,6 +1994,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     await prepareFirstShelf();
     final lib = await loadLibrary();
     PlacementStore.instance.adopt(lib);
+    _syncOnboarding(lib);
+    // 로딩 화면 글: 서재를 다 읽고 책장을 그리기 시작한다('책을 진열하는 중' → '책장을 정리하는 중')
+    if (startStep.value == 2) startStep.value = 3;
     _loadCovers([for (final b in lib.books) ?b.coverArtUri]);
     // 못 받은 표지는 잠시 뒤 다시(앞서 걸어 둔 다시 받기가 있으면 그대로)
     _coverRetry ??= Timer(const Duration(seconds: 30), _retryCovers);
@@ -1786,7 +2095,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
       _libBooks = lib.books;
       _state = '${_runs.length}번째';
       _busy = false;
+      // 갈피 올리기: 꽂은 갈피가 이번 줄에 들어왔으면 바탕에서 그 탭만 빼고 위 겹이 올린다(동작 줄이기면 그냥 제자리에 보인다)
+      final want = _riseWant;
+      if (want != null && DateTime.now().difference(want.at) < const Duration(seconds: 15) && _hasRibbon(c.rows, want.id)) {
+        _riseWant = null;
+        if (!_reduceMotion) {
+          _riseId = want.id;
+          _rise.value = 0;
+        }
+      }
     });
+    // 새 바탕 그림이 한 번 그려지고(그 프레임은 무겁다) 윤곽 빛 넘기기가 끝난 뒤 올린다
+    if (_riseId != null && !_rise.isAnimating) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => Timer(const Duration(milliseconds: 350), () {
+            if (mounted && _riseId != null && !_rise.isAnimating) _rise.forward(from: 0);
+          }));
+    }
     // 새 그림이 나왔으니 미리 보기는 걷는다(미리 보는 줄은 지난 그림의 자리를 쓰고 있었다). 끄는 중이면 다음 손가락 움직임에 다시 만든다
     _dragTarget = null;
     _dropCache.clear();
@@ -1910,6 +2234,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
     spineLooks.removeListener(_spineLookChanged);
     focusBookOnShelf.removeListener(_focusBook);
     LibraryModel.instance.removeListener(_libraryChanged);
+    Onboarding.instance.removeListener(_onbChanged);
+    _coachTimer?.cancel();
+    _markTimer?.cancel();
+    _rise.dispose();
+    _coachCover.dispose();
+    _coachSheet.dispose();
     BookcaseStore.instance.removeListener(_bookcasesChanged);
     if (iapOn) EntitlementStore.instance.removeListener(_entitlementChanged);
     if (_decorating) MiniTimerPlace.instance.setHidden(false);
@@ -1981,6 +2311,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                       only: const {0},
                       wallOnly: true,
                     );
+                    final shelf = ShelfPainter(
+                      rows: _moving(_shown?.rows ?? _case!.rows),
+                      atlases: _shown?.atlases ?? _atlases,
+                      rowSpots: _shown?.spots ?? _rowSpots,
+                      spaces: _spaces,
+                      photos: _photos,
+                      bookKeys: _shown?.bookKeys ?? _bookKeys,
+                      keys: _shown?.keys ?? _keys,
+                      contentTop: contentTop,
+                      bottomInset: bottomInset,
+                      viewport: box.maxHeight,
+                      frostedFrom: lockedFrom,
+                      look: '${skinChoice.key}|${spineLooks.key}',
+                      hideRibbon: _riseId,
+                    );
                     return Stack(children: [
                     ClipRect(
                     clipper: _BelowTop(pad.top),
@@ -2003,25 +2348,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                               Positioned.fill(
                                 child: RepaintBoundary(
                                   child: _shelfLayer(
-                                    ShelfPainter(
-                                      rows: _moving(_shown?.rows ?? _case!.rows),
-                                      atlases: _shown?.atlases ?? _atlases,
-                                      rowSpots: _shown?.spots ?? _rowSpots,
-                                      spaces: _spaces,
-                                      photos: _photos,
-                                      bookKeys: _shown?.bookKeys ?? _bookKeys,
-                                      keys: _shown?.keys ?? _keys,
-                                      contentTop: contentTop,
-                                      bottomInset: bottomInset,
-                                      viewport: box.maxHeight,
-                                      frostedFrom: lockedFrom,
-                                      look: '${skinChoice.key}|${spineLooks.key}',
-                                    ),
+                                    shelf,
                                     Size(box.maxWidth, height),
                                     MediaQuery.devicePixelRatioOf(context),
                                   ),
                                 ),
                               ),
+                              // 첫 갈피가 책 속에서 올라온다(바탕 그림은 그 탭을 빼고 그렸다). 다 올라오면 바탕에 다시 넣는다
+                              if (_riseId case final rid?)
+                                Positioned.fill(
+                                  key: const ValueKey('rise'),
+                                  child: IgnorePointer(child: RepaintBoundary(child: CustomPaint(painter: _RisePainter(shelf, rid, _riseCurve)))),
+                                ),
                               // 고른 책 윤곽 빛(지금 앱 SelectGlow): 바깥으로 흰 얇은 선과 좁은 그림자 번짐, 책 면은 덮지 않고 바닥 면 아래로 새지 않는다
                               // 겹쳐 그리는 것은 있다 없다 하므로 키를 단다(없으면 아래 누르기 층이 새로 만들어져 끌던 손가락이 끊긴다)
                               if (_drag == null ? _outlineOf(_decorating ? _editId : _popId) : null case final path?)
@@ -2300,21 +2638,63 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
                 child: _decoBottom(),
               ),
           ],
+          // 첫 책 꽂기(2026-11-27 사용자): 빈 책장이면 선반 아래 · 하단 탭 바로 위에 갈색 단추. 책장은 평소처럼 밝고 다른 탭도 그대로 누른다.
+          // 작은 타이머가 떠 있으면 그 위로
+          if (Onboarding.instance.active && ready && _shelfEmpty && !_decorating && !_placeOpen && _drag == null)
+            ListenableBuilder(
+              listenable: ReadingStore.instance,
+              builder: (context, _) => Positioned(
+                key: const ValueKey('first-book'),
+                left: Space.page,
+                right: Space.page,
+                bottom: pad0.bottom + TabBarStyle.gap + TabBarStyle.height + Space.l + (ReadingStore.instance.active != null ? miniTimerSpace : 0),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: contentMax),
+                    // 폭 가득(화면 아래 주요 단추, DESIGN 5-2)
+                    child: SizedBox(width: double.infinity, child: Btn(label: '첫 책 꽂기', size: 'xlarge', onPress: _firstBook)),
+                  ),
+                ),
+              ),
+            ),
           if (_placeOpen && !_decorating)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              child: PlaceSheet(
-                lib: LibraryModel.instance.lib,
-                items: _placeItems(),
-                hidden: _sheetDrag,
-                onDragStart: _sheetDragStart,
-                onDragMove: _sheetDragMove,
-                onDragEnd: _endDrag,
-                onDragCancel: _cancelDrag,
-                onList: () => openAddBook(context),
-                onClose: _closePlace,
+              child: KeyedSubtree(
+                key: _coachSheetKey,
+                child: PlaceSheet(
+                  lib: LibraryModel.instance.lib,
+                  items: _placeItems(),
+                  hidden: _sheetDrag,
+                  onDragStart: _sheetDragStart,
+                  onDragMove: _sheetDragMove,
+                  onDragEnd: _endDrag,
+                  onDragCancel: _cancelDrag,
+                  onList: () => openAddBook(context),
+                  onClose: _closePlace,
+                  onPlace: _tapPlace,
+                  spot: _coachId == null ? null : (id: _coachId!, key: _coachCoverKey),
+                ),
+              ),
+            ),
+          // 첫 책 안내 겹(맨 위, 누르기는 아래로 지나간다): 화면 전체 반투명 차콜 + 들고 온 책 표지만 원래 밝기, 흰 글 · 화살표
+          if (_coachOn)
+            Positioned.fill(
+              key: const ValueKey('first-book-coach'),
+              child: ListenableBuilder(
+                listenable: Listenable.merge([_coachCover, _coachSheet]),
+                builder: (context, _) {
+                  final t = _coachCover.value, sheet = _coachSheet.value;
+                  if (t == null || sheet == null) return const SizedBox.shrink();
+                  return TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: _reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
+                    builder: (context, a, child) => Opacity(opacity: a, child: child),
+                    child: FirstBookCoach(target: t, top: pad.top + homeHeaderHeight, floor: sheet.top - Space.s, blocked: _plankBands()),
+                  );
+                },
               ),
             ),
           if (_drag != null && _drag!.shelfId.isNotEmpty)
@@ -2342,6 +2722,20 @@ class _BelowTop extends CustomClipper<Rect> {
   Rect getClip(Size size) => Rect.fromLTRB(0, top, size.width, size.height);
   @override
   bool shouldReclip(_BelowTop old) => old.top != top;
+}
+
+/// 첫 갈피 올리기 겹: 책장 그림과 같은 자리에 그 책 갈피 탭만 그린다(ShelfPainter.paintRibbon)
+class _RisePainter extends CustomPainter {
+  _RisePainter(this.shelf, this.id, this.rise) : super(repaint: rise);
+  final ShelfPainter shelf;
+  final String id;
+  final Animation<double> rise;
+
+  @override
+  void paint(Canvas canvas, Size size) => shelf.paintRibbon(canvas, size, id, rise.value);
+
+  @override
+  bool shouldRepaint(_RisePainter old) => !identical(old.shelf.rows, shelf.rows) || old.id != id;
 }
 
 class GlowPainter extends CustomPainter {
@@ -2561,7 +2955,7 @@ class _Header extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onDecorate;
 
-  /// '+': 책장에 꽂기 시트(2026-11-24 사용자. 책 추가 화면은 시트의 '목록 보기')
+  /// '+': 책장에 꽂기 시트(2026-11-24 사용자. 책 추가 화면은 시트의 '새 책 찾기')
   final VoidCallback? onAdd;
 
   /// 꾸미는 동안은 오른쪽 아이콘을 숨긴다(지금 앱 editing ? null)
@@ -2815,7 +3209,11 @@ class ShelfPainter extends CustomPainter {
     this.look = '',
     this.only,
     this.wallOnly = false,
+    this.hideRibbon,
   });
+
+  /// 이 책의 갈피 탭은 그리지 않는다(첫 갈피가 책 위로 올라오는 동안 위 겹이 따로 그린다, paintRibbon)
+  final String? hideRibbon;
 
   /// 이 차례 줄만 그린다(null이면 모두). 끄는 동안 굳힌 그림 위에 바뀐 줄만 덧그릴 때
   final Set<int>? only;
@@ -2853,6 +3251,7 @@ class ShelfPainter extends CustomPainter {
         frostedFrom: frostedFrom,
         look: look,
         only: only,
+        hideRibbon: hideRibbon,
       );
 
   /// base 값으로 그린 바탕 그림과 이 값으로 그린 그림이 다른 곳(그리는 면 px 네모들, rows 줄만 본다).
@@ -2935,6 +3334,7 @@ class ShelfPainter extends CustomPainter {
         frostedFrom: frostedFrom,
         look: look,
         only: rows,
+        hideRibbon: hideRibbon,
       );
 
   /// 스킨·책 옆면(그릴 때 셰이더 값으로 읽는다): 바뀌면 굽기를 기다리지 않고 지난 그림 위에 새 색으로 바로 다시 그린다
@@ -3035,9 +3435,36 @@ class ShelfPainter extends CustomPainter {
         wallAbove: i == 0 ? (contentY + r.top) / m.scale * 1.2 + headDu : 0,
         wallBelow: i == rows.length - 1 ? (y1 - r.top - r.height) / m.scale * 1.2 + headDu : 0,
         wallOnly: wallOnly,
+        hideRibbon: hideRibbon,
       );
       canvas.restore();
       if (contentY + y0 > size.height) break;
+    }
+  }
+
+  /// 갈피 올리기(첫 갈피, 2026-11-27): 그 책의 갈피 탭만 rise(0 → 1)만큼 책 속에서 올려 그린다. 줄 그리기와 같은 자리 · 같은 잘림(윗선반 판 뒤로)
+  void paintRibbon(Canvas canvas, Size size, String id, double rise) {
+    final tab = _tab;
+    if (tab == null) return;
+    final m = makeMetrics(size.width);
+    final cam = Cam(viewPitchMin);
+    final contentY = contentTop;
+    final geo = computeRows(rows.length, m.scale, viewportHeight: (viewport ?? size.height) - contentY, bottomInset: bottomInset, real: math.min(rows.length, frostedFrom));
+    Affine pxOf(RowGeom r) => Affine(m.scale, m.originX + sideMargin * m.scale, contentY + r.baseline);
+    for (var i = 0; i < rows.length && i < geo.length && i < frostedFrom; i++) {
+      final row = rows[i];
+      final k = row.books.indexWhere((b) => b.id == id);
+      if (k < 0) continue;
+      if (k >= row.looks.length) return;
+      final r = geo[i];
+      final (y0, y1) = _band(i, r, m.scale, size.height);
+      canvas.save();
+      final area = Path()..addRect(Rect.fromLTRB(0, contentY + y0, size.width, contentY + y1));
+      final up = i > 0 ? plankOutlinePath((v) => toPx(cam, pxOf(geo[i - 1]), v), m.scale) : null;
+      canvas.clipPath(up == null ? area : Path.combine(PathOperation.difference, area, up));
+      drawRibbons(canvas, tab, cam, pxOf(r), row.env.u, row.books[k], row.looks[k], row.tabLoss[id], rise: rise);
+      canvas.restore();
+      return;
     }
   }
 
@@ -3054,5 +3481,6 @@ class ShelfPainter extends CustomPainter {
       old.frostedFrom != frostedFrom ||
       old.look != look ||
       old.wallOnly != wallOnly ||
+      old.hideRibbon != hideRibbon ||
       !setEquals(old.only, only);
 }

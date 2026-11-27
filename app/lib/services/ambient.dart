@@ -92,6 +92,9 @@ class Ambient extends ChangeNotifier {
   }
 
   Future<void> play(String id) async {
+    // 장면을 바꾸는 동안(옛 소리 멈춤 → 새 플레이어 준비)의 '멈춤'도 앱이 부른 것: 새 플레이어가 처음 '안 나는 중'을 알려
+    // 밖에서 멈춘 것으로 읽혀 독서 타이머가 멈췄다(2026-11-27 에뮬: 장면을 넘기면 일시정지). 다 켤 때까지 넉넉히 막고 켠 뒤 1초로 줄인다
+    _selfUntil = DateTime.now().add(const Duration(seconds: 10));
     try {
       _want(true);
       await initAmbientBackground();
@@ -126,6 +129,7 @@ class Ambient extends ChangeNotifier {
       error = null;
       notifyListeners();
     } catch (e) {
+      _self();
       error = '소리를 재생하지 못했어요. ${errorText(e)}';
       playing = false;
       notifyListeners();

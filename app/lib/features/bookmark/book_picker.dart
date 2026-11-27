@@ -33,7 +33,8 @@ const _searchFrom = 5;
 /// - books: 고를 책(순서 그대로). 없으면 숨기지 않은 내 책 전부(최근 읽은 책 먼저). meta: 책 줄 둘째 줄(없으면 '저자 | 읽기 상태')
 /// - all: 맨 위 '모든 책' 줄(고르면 null, allSub는 그 아래 작은 글). allowNone: '책 없이 읽기' 줄
 /// - addNew: 맨 위 '+ 새 책 등록'(책 추가로 갔다가 등록한 책을 고른 것으로 돌아온다). 책을 기록에 잇는 고르기(갈피 · 감상 · 읽기 장면 · 독서 끝 · 기록 수정)는
-///   모두 켠다(2026-11-21 사용자 '여기는 왜 책 추가 없어'). 이미 있는 기록을 거르는 고르기(기록 탭 · 통계)는 끈다
+///   모두 켠다(2026-11-21 사용자 '여기는 왜 책 추가 없어'). 이미 있는 기록을 거르는 고르기(기록 탭 · 통계)는 끈다.
+///   holdNew: 새로 등록한 책을 책장에 진열하지 않고 들고 온다(첫 책 꽂기, openAddBook hold)
 Future<({bool picked, String? id})> pickBook(
   BuildContext context,
   Library lib, {
@@ -45,6 +46,7 @@ Future<({bool picked, String? id})> pickBook(
   bool all = false,
   String? allSub,
   String? description,
+  bool holdNew = false,
 }) async {
   final r = await showSheet<({bool picked, String? id})>(
     context,
@@ -66,7 +68,7 @@ Future<({bool picked, String? id})> pickBook(
     ),
   );
   if (r?.id == _addNew && context.mounted) {
-    final id = await openAddBook(context, pick: true);
+    final id = await openAddBook(context, pick: !holdNew, hold: holdNew);
     return id != null ? (picked: true, id: id) : (picked: false, id: null);
   }
   return r ?? (picked: false, id: null);

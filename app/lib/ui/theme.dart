@@ -75,6 +75,9 @@ abstract final class AppColors {
   static const pressDim = Color(0x2E000000);
   static const star = Color(0xFFA8865F);
   static const scrim = Color(0x5C191F28);
+
+  /// 첫 책 안내 덮개: 화면 전체 반투명 차콜(grey900 45%). 표지 자리만 비워 원래 밝기로 보이고, 책장 · 선반 결은 뒤로 비친다(2026-11-27 사용자)
+  static const coachScrim = Color(0x73191F28);
   static const tabInk = Color(0xFF000000);
   static const tabInkSoft = Color(0xFF787676);
 
@@ -111,6 +114,7 @@ abstract final class AppColors {
     'greyBackground': (greyBackground, '구간을 나누는 띠(Border height16)'),
     'star': (star, '별점'),
     'scrim': (scrim, '시트 · 확인창 뒤 막'),
+    'coachScrim': (coachScrim, '첫 책 안내 덮개(grey900 45%, 표지 자리만 비움)'),
     'tabInk': (tabInk, '하단 탭 고른 아이콘'),
     'tabInkSoft': (tabInkSoft, '하단 탭 안 고른 아이콘'),
     'toast': (toast, '토스트(짧은 알림) 바탕'),

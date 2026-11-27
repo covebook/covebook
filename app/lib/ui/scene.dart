@@ -294,6 +294,7 @@ void drawRow(
   double wallAbove = 0,
   double wallBelow = 0,
   bool wallOnly = false,
+  String? hideRibbon,
 }) {
   // 구멍 밖 평평한 벽만(상태 표시줄 칸처럼 책장 밖 띠를 같은 벽으로 이을 때)
   if (wallOnly) {
@@ -418,8 +419,8 @@ void drawRow(
     final look = row.looks.length > i ? row.looks[i] : null;
     final photo = look?.coverUri == null ? null : photos[look!.coverUri];
     drawBook(canvas, book, c, px, row.env.u, b, albedo, spots3, atlas, seedOf(b.id), look: look, glyphs: glyphs, photo: photo, key: bookKeys[b.id]);
-    // 갈피 탭(책 위에, 같은 차례)
-    if (tab != null && look != null) drawRibbons(canvas, tab, c, px, row.env.u, b, look, row.tabLoss[b.id]);
+    // 갈피 탭(책 위에, 같은 차례). hideRibbon: 그 책 탭은 위 겹이 올라오는 모습으로 따로 그린다(첫 갈피, home_screen 갈피 올리기)
+    if (tab != null && look != null && b.id != hideRibbon) drawRibbons(canvas, tab, c, px, row.env.u, b, look, row.tabLoss[b.id]);
   }
   if (frosted) canvas.restore();
 }

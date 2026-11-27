@@ -141,10 +141,9 @@ class _CommunityTabState extends State<CommunityTab> {
   @override
   Widget build(BuildContext context) {
     final a = _avail;
-    // 머리줄 오른쪽: 기록 공유하기(글쓰기) · 내 공개 프로필. 머리줄 아이콘은 공용 HeadIcon(회색 · 사이 4, docs/design/DESIGN.md 6장)
-    final right = Row(mainAxisSize: MainAxisSize.min, children: [
+    // 머리줄 오른쪽: 기록 공유하기(글쓰기) · 내 공개 프로필. 머리줄 아이콘은 공용 HeadIcon, 나란히는 IconRow(가운데 사이 40, docs/design/DESIGN.md 6장)
+    final right = IconRow(children: [
       IconBtn(label: '독서 기록 공유하기', onPress: () => _go(() => openCommunityCompose(context)), child: const HeadIcon('PenLine')),
-      const SizedBox(width: headIconGap),
       IconBtn(label: '내 공개 프로필', onPress: () => _go(() => openCommunityProfile(context)), child: const HeadIcon('UserRound')),
     ]);
     if (a == null) return const Screen(title: '커뮤니티', back: false, scroll: false, children: [Loading()]);

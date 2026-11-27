@@ -10,7 +10,7 @@
 - 커밋하지 않는 것: `server/.env`, `server/.gradle`·`server/bin`·`server/build`·`server/data`.
 - 앱은 Flutter(`app/`)다. main push에 `app/**` 변경이 있으면 iOS TestFlight CI(`.github/workflows/ios-testflight.yml`)가 돈다. 결과를 확인한다.
 - main push에 `app/**` 변경이 있으면 안드로이드 Play 배포(`.github/workflows/android-flutter-play.yml`)도 자동으로 돌아 비공개 테스트(alpha)에 올라간다. 결과를 확인한다. 버전 이름은 `app/pubspec.yaml`의 `version`.
-- 서버(`server/**`) 변경은 push만으로 운영에 반영되지 않는다. KoDeploy에서 재배포해야 한다.
+- main push에 서버(`server/**`) 변경이 있으면 시험 뒤 KoDeploy로 자동 배포된다(`.github/workflows/kodeploy-server.yml`, 2026-11-25부터). 서버 PR 머지는 곧 운영 배포이고 마이그레이션도 그때 적용된다. 결과를 확인한다.
 
 ## 화면 디자인
 - Flutter 앱에서 사용자가 보는 화면, 문구, 상태 또는 조작 방식을 바꿀 때는 먼저 docs/design/DESIGN.md의 해당 절과 16장 예외를 확인하고, 기존 공용 위젯과 디자인 토큰을 사용한다.

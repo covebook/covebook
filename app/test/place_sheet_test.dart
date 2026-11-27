@@ -1,5 +1,5 @@
 // 책장에 꽂기(2026-11-24 사용자 시안): 홈 '+' 시트에서 책장에 없는 책을 끌어 원하는 자리에 꽂는다(placeFromDrawer).
-// 시트는 책장에 없는 책이 앞, 책장에 있는 책은 끝 + 표지 밑 선반 판(2026-11-25). '목록 보기'는 책 추가 화면. 책을 끌 때 아래 빼기 자리(RemoveZone: 흰 빛 + 검은 X, 2026-11-24)에 놓으면 책장에서 뺀다
+// 시트는 책장에 없는 책이 앞, 책장에 있는 책은 끝 + 표지 밑 선반 판(2026-11-25). '새 책 찾기'(2026-11-26, 전에는 '목록 보기')는 책 추가 화면. 책을 끌 때 아래 빼기 자리(RemoveZone: 흰 빛 + 검은 X, 2026-11-24)에 놓으면 책장에서 뺀다
 import 'dart:ui' as ui;
 
 import 'package:chaekjang/domain/layout.dart';
@@ -115,11 +115,11 @@ void main() {
     }
 
     for (final scale in [1.0, 1.3]) {
-      testWidgets('제목 \'책장에 꽂기\' · 오른쪽 \'목록 보기\', 책장에 있는 책은 끝 + 책장 표시, 글자 ×$scale', (t) async {
+      testWidgets('제목 \'책장에 꽂기\' · 오른쪽 \'새 책 찾기\', 책장에 있는 책은 끝 + 책장 표시, 글자 ×$scale', (t) async {
         final r = await pumpSheet(t, scale: scale);
         expect(find.text('책장에 꽂기'), findsOneWidget);
-        expect(find.text('새 책 찾기'), findsNothing);
-        await t.tap(find.text('목록 보기'));
+        expect(find.text('새 책 찾기'), findsOneWidget);
+        await t.tap(find.text('새 책 찾기'));
         expect(r.events, ['list']);
         expect(find.bySemanticsLabel('데미안, 책장에 있어요'), findsOneWidget);
         expect(find.bySemanticsLabel('싯다르타, 위로 끌어 책장에 꽂기'), findsOneWidget);

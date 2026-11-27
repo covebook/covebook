@@ -21,8 +21,6 @@ const _oldKey = 'active-reading:v1';
 const _oldPendingKey = 'finished-reading:v1';
 const _beatMs = 5000;
 
-/// 통화 등으로 소리가 이만큼 넘게 끊겼을 때만 그 시간을 넣을지 묻는다(짧은 알림음·안내 음성은 그대로 센다)
-const _askSpanMs = 30000;
 
 num _now() => DateTime.now().millisecondsSinceEpoch;
 
@@ -46,14 +44,10 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _writeTail = Future.value();
   Future<void>? _loading;
 
-  /// 통화 등으로 소리가 끊긴 동안(읽는 중이었을 때): 끝나면 넣을지 묻는다(앱 틀이 창을 띄운다)
-  /// counted: 끊긴 동안 타이머가 실제로 잰 시간(그동안 멈춰 뒀으면 그만큼 적다). 빼기는 이것만 뺀다
-  ({num start, num end, num counted})? spanGap;
-  num? _spanStart;
-
-  /// 통화 등으로 소리가 끊긴 중(읽는 중에 끊겼을 때). 이때 멈춘 소리는 타이머를 멈추지 않는다(끝나면 넣을지 묻는다)
-  bool get interrupting => _spanStart != null;
-  num _spanElapsed0 = 0;
+  /// 통화 등으로 소리가 끊기기 시작하면(읽는 중이었을 때) 그 시각으로 부른다. 앱 틀이 그 자리에서 독서를 끝내 기록한다
+  /// (2026-11-26 사용자 '전화오면 없애고 그냥 해당 책에 끊긴거까지 기록해 자꾸 쳐묻지말고'. 전에는 끝난 뒤 그동안을 넣을지 물었다).
+  /// running: 끊길 때 재는 중이었는지(밖에서 소리가 먼저 멈춰 타이머가 막 멈춘 뒤일 수 있다)
+  void Function(num at, {required bool running})? onInterrupted;
   StreamSubscription<AudioInterruptionEvent>? _interruptions;
 
   bool get running => active?.runningSince != null;
@@ -139,8 +133,6 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     final t = _now();
     active = Active(id: newId('ss'), myBookId: myBookId, startedAt: isoOf(t), accumulatedMs: 0, runningSince: t, lastBeat: t, startPage: myBookId != null ? startPage : null);
     interrupted = null;
-    spanGap = null;
-    _spanStart = null;
     notifyListeners();
     _save();
     _startBeat();
@@ -169,8 +161,6 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     active = null;
     interrupted = null;
     stale = false;
-    spanGap = null;
-    _spanStart = null;
     notifyListeners();
     await _persist(null, pending);
   }
@@ -227,35 +217,10 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  // 소리를 줄이기만 하는 것(알림음 · 길 안내)은 그대로 센다. 끊기기 시작할 때만 본다(끝날 때는 이미 기록했다)
   void _interruption(AudioInterruptionEvent e) {
-    if (e.type == AudioInterruptionType.duck) return;
-    final t = _now();
-    if (e.begin) {
-      if (running) {
-        _spanStart = t;
-        _spanElapsed0 = elapsed;
-      }
-      return;
-    }
-    final start = _spanStart;
-    _spanStart = null;
-    // 끊긴 동안 실제로 잰 시간만(통화 중 일시정지했으면 그동안은 원래 안 셌다, 2026-11-19 타이머 점검 B9: 두 번 뺐다)
-    final counted = elapsed - _spanElapsed0;
-    if (start == null || active == null || counted < _askSpanMs) return;
-    spanGap = (start: start, end: t, counted: counted);
-    notifyListeners();
-  }
-
-  /// 통화 등으로 끊긴 동안을 넣을지 답하기(넣으면 그대로 둔다)
-  void answerSpan({required bool include}) {
-    final g = spanGap;
-    spanGap = null;
-    final a = active;
-    if (g != null && a != null && !include) {
-      active = excludeSpan(a, g.counted, _now());
-      _save();
-    }
-    notifyListeners();
+    if (e.type == AudioInterruptionType.duck || !e.begin || active == null) return;
+    onInterrupted?.call(_now(), running: running);
   }
 
   /// 복구 창을 닫기(일시정지로 둠. 표시는 남겨 다음 실행에서 다시 묻는다)
@@ -266,8 +231,6 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     interrupted = null;
     pending = null;
     pendingRestored = false;
-    spanGap = null;
-    _spanStart = null;
     notifyListeners();
     await _persist(null, null);
   }
@@ -285,8 +248,6 @@ class ReadingStore extends ChangeNotifier with WidgetsBindingObserver {
     final p = wholeSeconds(finishActive(a, _now(), endAt));
     active = null;
     interrupted = null;
-    spanGap = null;
-    _spanStart = null;
     pending = p;
     pendingRestored = false;
     notifyListeners();
