@@ -759,6 +759,11 @@ func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref)
 		}
 		return "", err
 	}
+	// 제출 경로와 같다: 수량 구매(2개 이상)는 1칸 값만 주지 않게 받지 않는다. 기록하지 않고 소비하지 않으니 구글이 3일 뒤 환불한다
+	if p.Quantity > 1 {
+		log.Printf("iap quantity purchase rejected: route=%s product=%s quantity=%d", route, p.ProductID, p.Quantity)
+		return "받지 않는 거래: 수량 구매", nil
+	}
 	user, err := iapUserByToken(ctx, s.DB, p.AccountToken)
 	if err != nil {
 		return "", err

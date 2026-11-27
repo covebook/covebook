@@ -109,12 +109,14 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 | `IAP_ENABLED` | `1`이면 켠다. 꺼져 있으면 경로도 정기 처리도 없다(`StoresFromEnv`가 nil) |
 | `IAP_APPLE_KEY_P8`, `IAP_APPLE_KEY_ID`, `IAP_APPLE_ISSUER_ID`, `IAP_APPLE_BUNDLE_ID` | App Store Server API 키. 넷 다 있어야 애플 경로가 생긴다 |
 | `IAP_GOOGLE_KEY_JSON`, `IAP_GOOGLE_PACKAGE` | Google Play Developer API 서비스 계정 키와 패키지 이름 |
-| `IAP_GOOGLE_PUSH_AUDIENCE`, `IAP_GOOGLE_PUSH_EMAIL` | 구글 알림(Pub/Sub 푸시)의 OIDC 토큰 확인 값. 없으면 구글 알림 경로를 열지 않는다 |
+| `IAP_GOOGLE_PUSH_AUDIENCE`, `IAP_GOOGLE_PUSH_EMAIL` | 구글 알림(Pub/Sub 푸시)의 OIDC 토큰 확인 값. 없으면 구글 알림 경로를 열지 않고 경보(`configProblems`)를 남긴다 |
 | `IAP_ALLOW_SANDBOX` | `1`이면 샌드박스 거래에도 지급(TestFlight, 심사). 매출 집계에서는 빠진다 |
 | `IAP_SELLER_JSON` | 앱에 보일 사업자 정보 JSON(`name, owner, address, phone, email, bizNo, saleNo, host`). 공개 저장소에 적지 않는다 |
 | `IAP_RENEWAL_NOTICE_DAYS` | 연 구독 갱신 예정 고지를 며칠 전에 쓸지(2~60, 기본 14) |
 
 키 값은 저장소·이슈·PR에 적지 않는다. 배포 환경에만 둔다.
+
+스토어 설정은 스토어마다 따로 본다. 한 스토어의 값이 일부만 있거나 키 형식이 틀리면 그 스토어만 켜지지 않고, 나머지는 켜진다. 구글 키를 잘못 넣고 재배포했다고 이미 돌던 애플 결제까지 꺼지면 돈을 낸 사용자의 제출이 모두 실패하기 때문이다. 틀린 설정은 켤 때 `iap alert:` 로그로 남고, 대조가 돌 때마다 한 시간에 한 번 다시 알리며, `/admin/iap/stats`의 `configProblems`에 나온다.
 
 ## API
 
@@ -187,6 +189,8 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 5. 대상을 끝내 모르는 거래(2일 뒤)와 주인 없는 거래를 환불한다
 6. 연 구독의 갱신 예정 고지를 쓴다(6시간에 한 번)
 
+구독 재조회는 만료가 다가온 구독(10분에 한 번), 만료 뒤 60일 안의 구독(하루에 한 번), 그리고 만료 전인 유효·환불 구독(하루에 한 번)을 고른다. 마지막 것은 환불·환불 되돌림 알림을 놓쳤을 때를 위해서다. 실패한 알림은 시도할수록 간격을 늘려 30일까지 다시 한다.
+
 한 바퀴는 2분이 기준이다. 단계마다 마감 시각(`iapSweepStages`, 시작부터 30·60·80·95·115초)이 있어 느린 스토어가 앞 단계를 붙잡아도 뒤 단계가 돈다. 마감에 걸린 건은 다음 바퀴에 이어서 한다. 마감은 새 일을 시작하지 않게만 하고, 이미 시작한 환불 요청·스토어 확인과 그 기록은 끝까지 한다(최대 15초 넘김).
 
 스토어가 한도 초과(429, 구글은 403의 한도 사유도)로 답하면 그 경로는 `Retry-After`까지 부르지 않는다(`iap.RateLimitError`, `iap.Rester`). 쉬는 동안 건너뛴 건과 처리 도중 한도에 걸린 건은 시도 횟수를 쓰지 않는다. 목록 조회(애플 알림 이력, 구글 무효 구매 목록)의 한도는 구매 조회·확인과 따로 센다(`iap.ListRester`). 목록이 쉬어도 결제 제출은 막히지 않고, 쉬는 동안 건너뛴 메우기는 쉬기가 끝난 다음 바퀴에 바로 돈다. 요약 로그의 `resting`은 건너뛴 건, `cut`은 마감에 걸린 단계 수다.
@@ -197,7 +201,11 @@ INSERT INTO iap_plans (route, product_id, plan_id, period) VALUES ('google', 'pr
 |---|---|---|
 | 구글 구매 미확인 | 확인 못 한 구글 구매가 48시간을 넘김(72시간이면 구글이 환불) | 구글 API 상태·키를 본다 |
 | 환불 포기 | 주지 않은 거래의 환불 요청이 20번 실패했거나 주문 ID가 없음(`refundsGaveUp`) | 콘솔에서 직접 환불한다 |
-| 알림 포기 | 8일 동안 처리하지 못한 알림(`notificationsGaveUp30Days`) | 원인을 고치고 다시 처리한다 |
+| 알림 실패 지속 | 8일 넘게 처리하지 못한 알림(`notificationsGaveUp30Days`). 앱이 제출하기 전에 환불된 구글 거래의 알림은 할 일이 없어 뺀다 | 30일 전에 원인(키·권한)을 고친다. 고치면 다음 재시도에서 반영된다 |
+| 알림 처리 멈춤 | 한 번도 처리하지 않은 알림이 2시간을 넘음(`oldestUnprocessedSeconds`) | 대조가 도는지(로그의 `iap sweep:`) 본다 |
+| 설정 문제 | 틀린 스토어 설정, 구글 알림 인증 없음(`configProblems`) | 환경 변수를 고치고 재배포한다 |
+
+경보는 종류마다 따로 한 시간에 한 번 남긴다. 대조 안에서 남기므로 대조 자체가 멈추면 경보도 멈춘다. 그것은 바깥에서 `/admin/iap/stats`를 주기적으로 보는 것으로 잡는다.
 
 ## 시험
 

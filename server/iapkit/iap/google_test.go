@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/awa/go-iap/playstore"
 	"google.golang.org/api/androidpublisher/v3"
@@ -385,5 +386,25 @@ func TestGoogleRefundRevokes(t *testing.T) {
 	}
 	if !strings.HasPrefix(got, "POST ") || !strings.Contains(got, "/orders/GPA.1:refund") || !strings.Contains(got, "revoke=true") {
 		t.Fatalf("환불 요청: %s", got)
+	}
+}
+
+// 구글 구독 갱신 거래의 구매일은 처음 구독한 날이 아니라 그 회차 주문의 시각이다
+func TestGoogleRenewalPurchaseDate(t *testing.T) {
+	sub := &androidpublisher.SubscriptionPurchaseV2{StartTime: "2025-01-10T00:00:00Z", SubscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
+		LineItems: []*androidpublisher.SubscriptionPurchaseLineItem{{ProductId: "plus", ExpiryTime: "2027-01-10T00:00:00Z", LatestSuccessfulOrderId: "GPA.1..1"}}}
+	order := &androidpublisher.Order{OrderId: "GPA.1..1", CreateTime: "2026-01-10T00:00:05Z"}
+	g := &Google{packageName: "app.covebook", api: fakeGoogleAPI{sub: sub, order: order}}
+	p, err := g.Lookup(context.Background(), Ref{Kind: KindSubscription, ID: "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2026, 1, 10, 0, 0, 5, 0, time.UTC); !p.PurchasedAt.Equal(want) {
+		t.Fatalf("갱신 구매일 %v (기대 %v)", p.PurchasedAt, want)
+	}
+	// 주문 조회에 실패하면 시작일이 남는다
+	g = &Google{packageName: "app.covebook", api: fakeGoogleAPI{sub: sub, orderErr: errors.New("403")}}
+	if p, err = g.Lookup(context.Background(), Ref{Kind: KindSubscription, ID: "tok"}); err != nil || p.PurchasedAt.Year() != 2025 {
+		t.Fatalf("주문 실패 때 구매일 %v %v", p.PurchasedAt, err)
 	}
 }
