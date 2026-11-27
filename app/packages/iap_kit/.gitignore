@@ -1,0 +1,4 @@
+# 생성물. 라이브러리 패키지라 pubspec.lock도 올리지 않는다(판은 앱의 pubspec.lock이 정한다)
+.dart_tool/
+build/
+pubspec.lock

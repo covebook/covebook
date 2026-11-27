@@ -24,6 +24,7 @@ import 'ui/bake.dart';
 import 'store/mini_timer_store.dart';
 import 'ui/kit.dart' show KeyboardRefocusGuard, Shape, Space;
 import 'ui/theme.dart';
+import 'services/iap.dart' show configureIap;
 
 /// 시험 빌드 전용 프록시(예: --dart-define=QA_PROXY=127.0.0.1:8899 + adb reverse): 인터넷이 끊긴 에뮬레이터에서 표지·책 검색을 호스트로 보낸다. 출시 빌드는 비어 있다
 const _qaProxy = String.fromEnvironment('QA_PROXY');
@@ -40,6 +41,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // 인터넷 연결 확인(서버 있는 빌드만): 앱 화면보다 먼저 등록해 막혀 있는 동안 기기 뒤로를 먼저 받는다(app/net_gate.dart)
   NetStatus.instance.start();
+  // 결제 키트에 서버 호출·저장소·문구를 넣는다(결제가 꺼진 빌드면 키트가 아무 일도 하지 않는다)
+  configureIap();
   // 시작 화면부터 그린다: 아래 준비가 몇 초 걸려 그동안 흰 화면만 보였다(지난 책장 사진이 있으면 그 사진)
   final snap = await usableSnapshot(homeSnapshotFile);
   startedWithSnapshot = snap != null;

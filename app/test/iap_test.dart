@@ -82,8 +82,8 @@ ProductDetails _detail(String id, String title, String price) =>
 void _reset() {
   final e = EntitlementStore.instance;
   e
-    ..plus = false
-    ..shelvesByYear = const {}
+    ..entitlements = const {}
+    ..unitsByTarget = const {}
     ..subscription = null
     ..products = const []
     ..seller = const {}
@@ -109,7 +109,7 @@ void main() {
     expect(iapShouldFinish(status: 422, code: 'iap_purchase_rejected'), isTrue);
     expect(iapShouldFinish(status: 422, code: 'iap_sandbox_not_allowed'), isTrue);
     // 연도를 모르는 선반 거래: 서버가 소비하지 않고 돌려준다(연도와 함께 다시 내면 칸을 준다). 우리 상품 테이블에 없는 상품: 우리 설정 문제
-    expect(iapShouldFinish(status: 422, code: 'iap_shelf_year_missing'), isFalse);
+    expect(iapShouldFinish(status: 422, code: 'iap_target_missing'), isFalse);
     expect(iapShouldFinish(status: 422, code: 'iap_unknown_product'), isFalse);
     // 다시 낼 수 있어야 하는 것: 결제 대기, 스토어 확인 실패, 요청 많음, 서버 오류, 없는 거래, 증거 확인 실패
     for (final (status, code) in [(202, ''), (503, 'iap_store_unavailable'), (429, 'iap_too_many'), (500, 'internal_error'), (404, 'iap_purchase_not_found'), (422, 'iap_bad_proof'), (401, 'unauthorized')]) {
@@ -136,30 +136,31 @@ void main() {
   test('서버 응답 반영: 있는 칸만 바꾸고, 날짜는 받은 값 그대로', () {
     final e = EntitlementStore.instance;
     e.apply({
-      'plus': true,
-      'shelvesByYear': {'${liveShelfYear()}': 2, '2025': 1, 'x': 3, '2024': 0},
+      'entitlements': ['plus'],
+      'unitsByTarget': {'${liveShelfYear()}': 2, '2025': 1, 'x': 3, '2024': 0},
       'accountToken': 'a-token',
       'routes': ['apple', 'google'],
       'products': [
-        {'route': 'apple', 'productId': 'shelf', 'kind': 'product', 'shelves': 1},
+        {'route': 'apple', 'productId': 'shelf', 'kind': 'product', 'units': 1},
         {'route': 'apple', 'productId': 'plus', 'kind': 'subscription', 'entitlement': 'plus'},
         '깨진 줄',
       ],
       'subscription': {'route': 'apple', 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true, 'expiresAt': '2027-01-18T03:00:00Z'},
     }, save: false);
     expect((e.plus, e.shelves, e.accountToken, e.products.length), (true, 2, 'a-token', 2));
-    // 연도 책장마다 따로: 깨진 연도와 0칸은 버린다
+    // 연도 책장마다 따로: 0칸은 버리고, 연도가 아닌 대상('x')은 칸 계산에서 빠진다
     expect(e.shelvesByYear, {liveShelfYear(): 2, 2025: 1});
-    expect((e.shelvesFor(2025), e.shelvesFor(2023), e.shelvesTotal), (1, 0, 3));
+    expect((e.shelvesFor(2025), e.shelvesFor(2023), e.shelvesTotal, e.unitsFor('x')), (1, 0, 3, 3));
     expect(e.subscription!.expiresAt, DateTime.utc(2027, 1, 18, 3));
     expect(e.subscription!.statusLabel, '이용 중');
     // 구매 응답에는 계정 연결 값과 상품 목록이 없다. 그대로 남아야 한다
-    e.apply({'status': 'granted', 'plus': false, 'shelvesByYear': {'${liveShelfYear()}': 3}, 'subscription': null}, save: false);
+    e.apply({'status': 'granted', 'entitlements': <String>[], 'unitsByTarget': {'${liveShelfYear()}': 3}, 'subscription': null}, save: false);
     expect((e.plus, e.shelves, e.accountToken, e.products.length, e.subscription), (false, 3, 'a-token', 2, null));
     expect(e.shelvesFor(2025), 0); // 받은 표로 통째로 바꾼다
-    // 연도를 모르는 옛 서버의 숫자는 지금 책장의 칸으로 본다
-    e.apply({'shelves': 1}, save: false);
-    expect(e.shelvesByYear, {liveShelfYear(): 1});
+    // 키트는 대상을 문자열로 둔다. 연도가 아닌 대상은 책장 한켠의 칸 계산에서 빠진다
+    e.apply({'unitsByTarget': {'x': 1}}, save: false);
+    expect((e.unitsFor('x'), e.shelvesTotal), (1, 0));
+    expect(e.shelvesByYear, isEmpty); // 레코드 안의 Map은 내용으로 비교되지 않아 따로 본다
   });
 
   test('구독 상태 표시: 이용 중, 해지 예약, 결제 확인 필요, 끝남', () {
@@ -181,7 +182,7 @@ void main() {
 
   testWidgets('구독 관리: 이용 중', (t) async {
     EntitlementStore.instance.apply({
-      'plus': true,
+      'entitlements': ['plus'],
       'subscription': {'route': iapRoute, 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true, 'expiresAt': '2027-01-18T03:00:00Z'},
     }, save: false);
     IapService.instance.details = {'plus': _detail('plus', '책장 한켠 플러스 (월)', '스토어 가격')};
@@ -199,7 +200,7 @@ void main() {
 
   testWidgets('구독 관리: 해지 예약은 끝나는 날을 알리고 결제 금액을 보이지 않는다', (t) async {
     EntitlementStore.instance.apply({
-      'plus': true,
+      'entitlements': ['plus'],
       'subscription': {'route': iapRoute, 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': false, 'expiresAt': '2027-01-18T03:00:00Z'},
     }, save: false);
     IapService.instance.details = {'plus': _detail('plus', '책장 한켠 플러스 (월)', '스토어 가격')};
@@ -213,7 +214,7 @@ void main() {
 
   testWidgets('구독 관리: 결제 실패 유예 중이면 유예가 끝나는 날과 결제 수단 확인을 알린다', (t) async {
     EntitlementStore.instance.apply({
-      'plus': true,
+      'entitlements': ['plus'],
       'subscription': {
         'route': iapRoute, 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true,
         'expiresAt': '2027-01-18T03:00:00Z', 'graceUntil': '2027-02-03T03:00:00Z',
@@ -241,7 +242,7 @@ void main() {
     EntitlementStore.instance.apply({
       'accountToken': 'a-token',
       'products': [
-        {'route': iapRoute, 'productId': 'shelf', 'kind': 'product', 'shelves': 1},
+        {'route': iapRoute, 'productId': 'shelf', 'kind': 'product', 'units': 1},
       ],
     }, save: false);
     IapService.instance.details = {'shelf': _detail('shelf', '추가 선반', '스토어 가격')};
@@ -344,7 +345,7 @@ void main() {
   testWidgets('구독 결제 화면: 이미 구독 중이면 구독 버튼이 없다', (t) async {
     plans();
     EntitlementStore.instance.apply({
-      'plus': true,
+      'entitlements': ['plus'],
       'subscription': {'route': iapRoute == 'apple' ? 'google' : 'apple', 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true, 'expiresAt': '2027-01-18T03:00:00Z'},
     }, save: false);
     await _pump(t, const PlanScreen());
@@ -366,7 +367,7 @@ void main() {
   });
 
   test('구매 내역 한 줄: 서버 값 그대로, 금액은 있을 때만', () {
-    final a = IapHistoryItem.from({'route': 'apple', 'productId': 'shelf', 'kind': 'product', 'state': 'paid', 'purchasedAt': '2026-11-19T03:00:00Z', 'shelves': 1, 'currency': 'USD', 'priceMilli': 1234500})!;
+    final a = IapHistoryItem.from({'route': 'apple', 'productId': 'shelf', 'kind': 'product', 'state': 'paid', 'purchasedAt': '2026-11-19T03:00:00Z', 'units': 1, 'currency': 'USD', 'priceMilli': 1234500})!;
     expect((a.name, a.stateLabel, a.price), ('추가 선반 1칸', '결제 완료', '1,234.5 USD'));
     final b = IapHistoryItem.from({'route': 'google', 'productId': 'plus', 'kind': 'subscription', 'state': 'revoked', 'purchasedAt': '2026-11-19T03:00:00Z', 'revokedAt': '2026-11-20T03:00:00Z'})!;
     expect((b.name, b.stateLabel, b.price), ('책장 한켠 플러스', '환불됨', null));
@@ -476,14 +477,13 @@ void main() {
     });
   }
 
-  test('기기에 남긴 plus는 스토어가 준 만료(유예 포함)까지만 믿는다', () {
+  test('기기에 남긴 권한(plus)은 스토어가 준 만료(유예 포함)까지만 믿는다', () {
     final now = DateTime.utc(2026, 11, 26, 12);
     IapSubscription? sub(String expires, [String? grace]) => IapSubscription.from({'expiresAt': expires, 'graceUntil': grace});
-    expect(iapCachedPlusValid(plus: true, subscription: sub('2026-11-27T00:00:00Z'), now: now), isTrue);
-    expect(iapCachedPlusValid(plus: true, subscription: sub('2026-11-26T00:00:00Z'), now: now), isFalse);
-    expect(iapCachedPlusValid(plus: true, subscription: sub('2026-11-26T00:00:00Z', '2026-12-10T00:00:00Z'), now: now), isTrue, reason: '유예 중');
-    expect(iapCachedPlusValid(plus: true, now: now), isTrue, reason: '구독 정보가 없는 옛 사본');
-    expect(iapCachedPlusValid(plus: false, subscription: sub('2026-11-27T00:00:00Z'), now: now), isFalse);
+    expect(iapCachedEntitlementsValid(subscription: sub('2026-11-27T00:00:00Z'), now: now), isTrue);
+    expect(iapCachedEntitlementsValid(subscription: sub('2026-11-26T00:00:00Z'), now: now), isFalse);
+    expect(iapCachedEntitlementsValid(subscription: sub('2026-11-26T00:00:00Z', '2026-12-10T00:00:00Z'), now: now), isTrue, reason: '유예 중');
+    expect(iapCachedEntitlementsValid(subscription: null, now: now), isTrue, reason: '구독 정보가 없는 옛 사본');
   });
 
   group('알림함', () {
@@ -499,9 +499,9 @@ void main() {
       n(6, 'renewal_upcoming', '2027-02-15T01:00:00Z', read: true, params: {'route': iapRoute, 'productId': 'plus', 'expiresAt': '2027-03-01T00:00:00Z', 'period': 'year'}),
       n(5, 'payment_failed', '2027-01-18T03:00:00Z', params: {'route': iapRoute, 'productId': 'plus', 'graceUntil': '2027-02-03T03:00:00Z'}),
       n(4, 'cancel_scheduled', '2027-01-10T03:00:00Z', read: true, params: {'route': iapRoute, 'expiresAt': '2027-01-18T03:00:00Z'}),
-      n(3, 'shelf_refunded', '2027-01-05T03:00:00Z', read: true, params: {'route': iapRoute}),
+      n(3, 'product_refunded', '2027-01-05T03:00:00Z', read: true, params: {'route': iapRoute}),
       n(2, 'purchase_done', '2026-12-18T03:00:00Z', read: true, params: {'kind': 'subscription', 'expiresAt': '2027-01-18T03:00:00Z'}),
-      n(1, 'purchase_done', '2026-12-01T03:00:00Z', read: true, params: {'kind': 'product', 'shelves': 1}),
+      n(1, 'purchase_done', '2026-12-01T03:00:00Z', read: true, params: {'kind': 'product', 'units': 1}),
     ];
 
     test('서버 고지를 읽는다. 모르는 종류와 깨진 줄은 보이지 않는다', () {
@@ -517,7 +517,7 @@ void main() {
       expect(list[4].text!.$2, contains('결제일은 2026년 12월'));
       expect(list[3].text!.$2, contains('선반이 잠겼습니다'));
       // 칸을 연 적 없는 선반의 환불: 잠겼다고 하지 않는다
-      final unopened = n(7, 'shelf_refunded', '2027-01-06T03:00:00Z', params: {'route': iapRoute, 'opened': false}).text!.$2;
+      final unopened = n(7, 'product_refunded', '2027-01-06T03:00:00Z', params: {'route': iapRoute, 'opened': false}).text!.$2;
       expect(unopened, contains('선반을 열지 않고 환불했습니다'));
       expect(unopened, isNot(contains('잠겼습니다')));
       // 고지에 금액은 넣지 않는다(서버가 주지 않고, 금액은 결제한 스토어가 정한다)
@@ -531,7 +531,7 @@ void main() {
       expect(iapNoticeToShow([list[0], ...list.skip(2)]), isNull); // 다 읽었으면 없다
       // 해지 접수·결제 완료는 알림함에만 둔다
       expect(iapNoticeToShow([n(7, 'cancel_scheduled', '2027-01-20T00:00:00Z'), n(8, 'purchase_done', '2027-01-21T00:00:00Z')]), isNull);
-      final two = [n(10, 'expired', '2027-01-01T00:00:00Z'), n(11, 'shelf_refunded', '2027-01-02T00:00:00Z')];
+      final two = [n(10, 'expired', '2027-01-01T00:00:00Z'), n(11, 'product_refunded', '2027-01-02T00:00:00Z')];
       expect(iapNoticeToShow(two)!.id, 11);
     });
 
@@ -606,7 +606,7 @@ void main() {
     // 서버가 지급했다고 답한 순간
     IapService.instance.lastResult = IapResult.granted;
     EntitlementStore.instance.apply({
-      'plus': true,
+      'entitlements': ['plus'],
       'subscription': {'route': iapRoute, 'productId': 'plus', 'state': 'paid', 'active': true, 'autoRenew': true, 'expiresAt': '2027-01-18T03:00:00Z'},
     }, save: false);
     await t.pumpAndSettle();
@@ -652,8 +652,8 @@ void main() {
   });
 
   test('선반 상품: 그 해에 산 칸과 합쳐 3칸을 넘는 상품은 팔지 않는다(3칸 묶음은 산 칸이 없는 해에만)', () {
-    const one = IapProduct(route: 'apple', productId: 'shelf1', kind: 'product', shelves: 1);
-    const three = IapProduct(route: 'apple', productId: 'shelf3', kind: 'product', shelves: 3);
+    const one = IapProduct(route: 'apple', productId: 'shelf1', kind: 'product', units: 1);
+    const three = IapProduct(route: 'apple', productId: 'shelf3', kind: 'product', units: 3);
     const plus = IapProduct(route: 'apple', productId: 'plus', kind: 'subscription');
     List<int> offers(int paid) => [for (final p in shelfOffers(const [three, plus, one], paid: paid)) p.shelves];
     expect(offers(0), [1, 3]);
@@ -665,10 +665,10 @@ void main() {
   testWidgets('선반 구매 시트: 상품이 여럿이면 고르게 하고, 미리 골라 두지 않는다', (t) async {
     EntitlementStore.instance.apply({
       'accountToken': 'a-token',
-      'shelvesByYear': {'2025': 3}, // 지난해 책장에 산 칸은 올해 책장과 상관없다
+      'unitsByTarget': {'2025': 3}, // 지난해 책장에 산 칸은 올해 책장과 상관없다
       'products': [
-        {'route': iapRoute, 'productId': 'shelf3', 'kind': 'product', 'shelves': 3},
-        {'route': iapRoute, 'productId': 'shelf1', 'kind': 'product', 'shelves': 1},
+        {'route': iapRoute, 'productId': 'shelf3', 'kind': 'product', 'units': 3},
+        {'route': iapRoute, 'productId': 'shelf1', 'kind': 'product', 'units': 1},
       ],
     }, save: false);
     IapService.instance.details = {'shelf1': _detail('shelf1', '추가 선반', '한 칸 스토어 가격'), 'shelf3': _detail('shelf3', '추가 선반', '세 칸 스토어 가격')};
@@ -691,9 +691,9 @@ void main() {
   testWidgets('선반 구매 시트: 구매가 끝나 칸이 늘면 닫히고, 샀다고 알려 준다', (t) async {
     EntitlementStore.instance.apply({
       'accountToken': 'a-token',
-      'shelvesByYear': {'${liveShelfYear()}': 1},
+      'unitsByTarget': {'${liveShelfYear()}': 1},
       'products': [
-        {'route': iapRoute, 'productId': 'shelf', 'kind': 'product', 'shelves': 1},
+        {'route': iapRoute, 'productId': 'shelf', 'kind': 'product', 'units': 1},
       ],
     }, save: false);
     IapService.instance.details = {'shelf': _detail('shelf', '추가 선반', '스토어 가격')};
@@ -702,7 +702,7 @@ void main() {
     await t.tap(find.text('열기'));
     await t.pumpAndSettle();
     expect(find.text('구매하기'), findsOneWidget);
-    EntitlementStore.instance.apply({'status': 'granted', 'shelvesByYear': {'${liveShelfYear()}': 2}}, save: false);
+    EntitlementStore.instance.apply({'status': 'granted', 'unitsByTarget': {'${liveShelfYear()}': 2}}, save: false);
     await t.pumpAndSettle();
     expect(find.text('구매하기'), findsNothing);
     expect(bought, isTrue);
@@ -778,22 +778,22 @@ void main() {
   test('연도 책장 표시: 선반 환불·구매 고지와 구매 내역에 해가 보인다', () {
     IapNotice n(String kind, Map<String, dynamic> params) =>
         IapNotice.from({'id': 1, 'kind': kind, 'createdAt': '2026-11-19T03:00:00Z', 'params': {'route': 'apple', ...params}})!;
-    expect(n('shelf_refunded', {'year': 2026, 'revokedAt': '2026-11-19T03:00:00Z'}).text!.$2, contains('2026년 책장의 선반이 잠겼습니다'));
-    expect(n('shelf_refunded', {}).text!.$2, contains('해당 선반이 잠겼습니다'));
-    expect(n('purchase_done', {'kind': 'product', 'shelves': 3, 'year': 2027}).text!.$2, '2027년 책장의 선반 3칸을 더 열 수 있습니다. $kIapContractNote');
-    final h = IapHistoryItem.from({'route': 'apple', 'productId': 'shelf3', 'kind': 'product', 'state': 'paid', 'purchasedAt': '2026-11-19T03:00:00Z', 'shelves': 3, 'year': 2026})!;
+    expect(n('product_refunded', {'target': '2026', 'revokedAt': '2026-11-19T03:00:00Z'}).text!.$2, contains('2026년 책장의 선반이 잠겼습니다'));
+    expect(n('product_refunded', {}).text!.$2, contains('해당 선반이 잠겼습니다'));
+    expect(n('purchase_done', {'kind': 'product', 'units': 3, 'target': '2027'}).text!.$2, '2027년 책장의 선반 3칸을 더 열 수 있습니다. $kIapContractNote');
+    final h = IapHistoryItem.from({'route': 'apple', 'productId': 'shelf3', 'kind': 'product', 'state': 'paid', 'purchasedAt': '2026-11-19T03:00:00Z', 'units': 3, 'target': '2026'})!;
     expect(h.name, '2026년 책장 추가 선반 3칸');
     // 해가 바뀌어 올해 칸이 0이 돼도 상태 비교는 모든 해의 합이라 환불로 보지 않는다
-    final e = EntitlementStore.instance..apply({'shelvesByYear': {'${liveShelfYear() - 1}': 2}}, save: false);
+    final e = EntitlementStore.instance..apply({'unitsByTarget': {'${liveShelfYear() - 1}': 2}}, save: false);
     expect((e.shelves, IapSnapshot.of(e).shelves), (0, 2));
   });
 
   test('넘은 선반 결제 고지: 구글은 자동 환불, 애플은 환불 요청 안내', () {
     IapNotice n(String route, {bool auto = false}) => IapNotice.from({
           'id': 9,
-          'kind': 'shelf_over_cap',
+          'kind': 'product_over_cap',
           'createdAt': '2026-11-19T03:00:00Z',
-          'params': {'route': route, 'productId': 'shelf3', 'year': 2026, 'shelves': 3, 'autoRefund': auto},
+          'params': {'route': route, 'productId': 'shelf3', 'target': '2026', 'units': 3, 'autoRefund': auto},
         })!;
     final g = n('google', auto: true);
     expect(g.important, isTrue);
@@ -806,9 +806,9 @@ void main() {
   testWidgets('넘은 선반 결제 창(애플): 환불 요청 단추와 나중에', (t) async {
     final n = IapNotice.from({
       'id': 9,
-      'kind': 'shelf_over_cap',
+      'kind': 'product_over_cap',
       'createdAt': '2026-11-19T03:00:00Z',
-      'params': {'route': 'apple', 'productId': 'shelf1', 'year': 2026, 'shelves': 1},
+      'params': {'route': 'apple', 'productId': 'shelf1', 'target': '2026', 'units': 1},
     })!;
     await _pump(t, Scaffold(body: Builder(builder: (ctx) => Center(child: Btn(label: '열기', onPress: () => showIapNotice(ctx, n))))));
     await t.tap(find.text('열기'));

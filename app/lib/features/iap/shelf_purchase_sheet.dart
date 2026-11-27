@@ -119,7 +119,7 @@ class _ShelfPurchaseState extends State<_ShelfPurchase> {
       Padding(
         padding: const EdgeInsets.only(top: Space.s),
         child: Btn(label: _iap.busy ? '결제 확인 중' : '구매하기', size: 'l', busy: _iap.busy, disabled: _iap.busy || p == null, onPress: () {
-          if (p != null) _iap.buy(p, year: year);
+          if (p != null) _iap.buy(p, target: '$year');
         }),
       ),
     ]);

@@ -96,15 +96,16 @@ class IapNotice {
   DateTime? _date(String key) => DateTime.tryParse('${params[key]}');
 
   /// 앱을 열었을 때 창으로도 한 번 띄우는 종류(꼭 읽어야 하는 것). 나머지는 알림함에만 둔다
-  bool get important => const {'payment_failed', 'expired', 'subscription_refunded', 'shelf_refunded', 'shelf_over_cap'}.contains(kind);
+  bool get important => const {'payment_failed', 'expired', 'subscription_refunded', 'product_refunded', 'product_over_cap'}.contains(kind);
 
   /// 제목과 본문(고지 문구 T3, T7~T10). 모르는 종류는 null(새 종류를 아는 앱 버전이 나오기 전까지 보이지 않는다)
   (String, String)? get text {
     const name = '책장 한켠 플러스';
     final store = route.isEmpty ? '결제한 스토어' : storeName(route);
     final grace = _date('graceUntil'), expires = _date('expiresAt');
-    final shelves = (params['shelves'] as num?)?.toInt() ?? 0;
-    final year = (params['year'] as num?)?.toInt();
+    // 서버 키트는 선반·연도를 모른다: 수량(units)이 칸 수, 대상(target)이 연도 책장이다
+    final shelves = (params['units'] as num?)?.toInt() ?? 0;
+    final year = int.tryParse('${params['target'] ?? ''}');
     final bookcase = year == null ? '' : '$year년 책장의 ';
     final revoked = _date('revokedAt');
     final when = revoked == null ? '' : '환불일은 ${iapDate(revoked)}입니다. ';
@@ -114,14 +115,14 @@ class IapNotice {
       'expired' => ('$name 구독이 끝났습니다', '만든 책장과 기록은 그대로 있습니다. 유료 벽지와 선반 색은 기본 모양으로 보이고, 고른 설정은 저장돼 있습니다.'),
       'subscription_refunded' => ('$name 결제가 환불 처리됐습니다', '$when구독이 종료됐습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
       // 어느 해 책장인지 몰라 칸을 열지 않은 결제를 서버가 환불했다(opened=false). 잠글 선반이 없다
-      'shelf_refunded' when params['opened'] == false => ('추가 선반 결제가 환불 처리됐습니다', '$when어느 해 책장의 선반인지 확인하지 못해 선반을 열지 않고 환불했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
-      'shelf_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when${bookcase.isEmpty ? '해당 ' : bookcase}선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+      'product_refunded' when params['opened'] == false => ('추가 선반 결제가 환불 처리됐습니다', '$when어느 해 책장의 선반인지 확인하지 못해 선반을 열지 않고 환불했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
+      'product_refunded' => ('추가 선반 결제가 환불 처리됐습니다', '$when${bookcase.isEmpty ? '해당 ' : bookcase}선반이 잠겼습니다. 꽂혀 있던 책은 내 책에 보관했습니다. 환불 금액과 시기는 $store에서 확인할 수 있습니다.'),
       'renewal_upcoming' => expires == null
           ? null
           : ('$name가 ${iapDate(expires)}에 갱신됩니다', '${_price == null ? '' : '결제 예정 금액은 $_price입니다. '}$store에 등록한 결제 수단으로 결제됩니다. 계속 이용하려면 할 일이 없습니다. 갱신을 원하지 않으면 ${iapDate(expires.subtract(const Duration(days: 1)))}까지 내 정보 › 구독 관리에서 해지할 수 있습니다.'),
       'cancel_scheduled' => ('$name의 자동 갱신이 꺼졌습니다', '${expires == null ? '' : '${iapDate(expires)}까지 이용할 수 있습니다. '}이후에는 결제되지 않습니다.'),
       // 두 기기에서 함께 사서 그 해 유료 칸(3칸)을 넘었다: 칸을 열지 않고 돌려준다(고지 문구 T15, ADR-0002 D1)
-      'shelf_over_cap' => (
+      'product_over_cap' => (
           '추가 선반이 열리지 않았습니다',
           '${year == null ? '이 책장은' : '$year년 책장은'} 다른 기기에서 먼저 결제해 유료 선반 3칸이 모두 열려 있었습니다. '
               '${shelves > 0 ? '이번 결제(선반 $shelves칸)는' : '이번 결제는'} '
@@ -207,7 +208,7 @@ IapNotice iapNoticeOf(IapNoticeKind kind, IapSubscription? sub) => IapNotice(
         IapNoticeKind.paymentFailed => 'payment_failed',
         IapNoticeKind.expired => 'expired',
         IapNoticeKind.subscriptionRefunded => 'subscription_refunded',
-        IapNoticeKind.shelfRefunded => 'shelf_refunded',
+        IapNoticeKind.shelfRefunded => 'product_refunded',
       },
       params: {
         if (sub != null && kind != IapNoticeKind.shelfRefunded) ...{
@@ -232,7 +233,7 @@ Future<void> showIapNotice(BuildContext context, IapNotice n) async {
     ], true, true);
   }
   // 애플은 개발자가 환불할 수 없다: 사용자가 애플 문제 신고 페이지에서 요청한다
-  if (n.kind == 'shelf_over_cap' && n.route == 'apple') {
+  if (n.kind == 'product_over_cap' && n.route == 'apple') {
     return appAlert(context, title, message, [
       AlertButton('Apple에 환불 요청하기', onPress: () => launchUrl(appleRefundUrl, mode: LaunchMode.externalApplication).then((_) {}, onError: (_) {})),
       const AlertButton('나중에', style: AlertStyle.cancel),

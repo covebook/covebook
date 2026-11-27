@@ -42,8 +42,9 @@ class IapHistoryItem {
       state: '${j['state'] ?? ''}',
       purchasedAt: at,
       revokedAt: DateTime.tryParse('${j['revokedAt']}'),
-      shelves: (j['shelves'] as num?)?.toInt() ?? 0,
-      year: (j['year'] as num?)?.toInt(),
+      // 서버 키트의 수량(units)이 칸 수, 대상(target)이 연도 책장이다
+      shelves: (j['units'] as num?)?.toInt() ?? 0,
+      year: int.tryParse('${j['target'] ?? ''}'),
       currency: j['currency'] as String?,
       priceMilli: (j['priceMilli'] as num?)?.toInt(),
     );
