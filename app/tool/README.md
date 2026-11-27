@@ -34,7 +34,7 @@
 | `pack_uniforms.dart` | 셰이더의 낱개 uniform을 `uniform vec4 uP[N]` 하나로 묶고 자리 표(`lib/gen/packed_uniforms.g.dart`)를 쓴다(`gen_shaders.sh`가 부른다). 아이폰 Impeller Metal은 uniform마다 버퍼 칸 하나를 쓰고 칸은 31개(0~30)까지라, 48칸을 쓰던 벽·판(lit)·책(book) 셰이더가 아이폰에서 만들어지지 않았다(2026-11-25). 이미 묶인 파일은 그대로 둔다 |
 | `gen_icons.py`, `gen_ios_icons.py`, `app_icon/` | 앱 아이콘(Android · iOS) |
 | `gen_header_clay_icons.py`, `header_art/` | 머리글 입체 아이콘 그림 |
-| `make_login_shelf.py`, `login_art/` | 로그인 화면 책장 그림 |
+| `make_login_shelf.py`, `login_art/` | 로그인 · 로딩 화면 책장 그림. 정면 표지 두 장(『동백꽃』 · 『메밀꽃 필 무렵』, 보호기간이 끝난 작품)은 `login_art/make_covers.py`로 직접 그리고, 시험 서재에서 그 두 권 표지만 바꿔 찍은 사진(`login_art/home-capture.png`)을 자른다(2026-11-27: 시판본 표지는 고정 그림에 쓰지 않는다) |
 | `soften_share_shelf_shadow.py` | 공유 그림 선반 그림자 다듬기 |
 | `lucide_icons/` | 쓰는 lucide 아이콘 원본 SVG(ISC 라이선스) |
 | `qa/rn-backup.json` | 옛 앱에서 내보낸 백업 파일(옛 백업 복원 QA용) |

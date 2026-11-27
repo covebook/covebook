@@ -70,8 +70,8 @@ class StartApp extends StatelessWidget {
 class StartCover extends StatelessWidget {
   const StartCover({super.key});
 
-  /// 책장 그림(assets/login/shelf.webp) 크기
-  static const _art = Size(1080, 1121);
+  /// 책장 그림(assets/login/shelf.webp, 로그인과 같은 그림. 정면 표지는 직접 그린 『동백꽃』 · 『메밀꽃 필 무렵』) 크기
+  static const _art = Size(1080, 1122);
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
