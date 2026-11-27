@@ -1,4 +1,4 @@
-package server
+package iapkit
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/yuntyu01/chaekjang-hankyeon/server/internal/iap"
+	"github.com/yuntyu01/chaekjang-hankyeon/server/iapkit/iap"
 )
 
 // 스토어 알림 수신과 정기 대조. 근거: docs/reports/2026-11-19-iap-pitfalls.md 3-4장, 3-5장, 8-2장(T4, T5)
@@ -29,7 +29,7 @@ type iapNoticeParser interface {
 	ParseNotice(body []byte) (iap.Notice, error)
 }
 
-func (s *Server) routeIAPNotify(m *http.ServeMux) {
+func (s *Kit) routeIAPNotify(m *http.ServeMux) {
 	if _, ok := s.IAP[iap.RouteApple].(iapNoticeParser); ok {
 		m.HandleFunc("POST /iap/notifications/apple", wrap(s.iapNotify(iap.RouteApple)))
 	}
@@ -44,7 +44,7 @@ func (s *Server) routeIAPNotify(m *http.ServeMux) {
 //   - IAP_GOOGLE_PUSH_EMAIL: 푸시에 쓰는 서비스 계정 이메일
 //
 // 구글이 서명한 토큰인지, 대상이 우리인지, 그 서비스 계정이 보낸 것인지 본다.
-func (s *Server) iapGooglePushAuth() func(ctx context.Context, header string) error {
+func (s *Kit) iapGooglePushAuth() func(ctx context.Context, header string) error {
 	audience, email := strings.TrimSpace(os.Getenv("IAP_GOOGLE_PUSH_AUDIENCE")), strings.TrimSpace(os.Getenv("IAP_GOOGLE_PUSH_EMAIL"))
 	if audience == "" || email == "" {
 		return nil
@@ -74,7 +74,7 @@ func (s *Server) iapGooglePushAuth() func(ctx context.Context, header string) er
 	}
 }
 
-func (s *Server) iapNotify(route iap.Route) handler {
+func (s *Kit) iapNotify(route iap.Route) handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		ctx := r.Context()
 		if route == iap.RouteGoogle {
@@ -126,7 +126,7 @@ func (s *Server) iapNotify(route iap.Route) handler {
 	}
 }
 
-func (s *Server) iapWakeUp() {
+func (s *Kit) iapWakeUp() {
 	select {
 	case s.iapWake <- struct{}{}:
 	default:
@@ -135,7 +135,7 @@ func (s *Server) iapWakeUp() {
 
 // StartIAPWorker는 알림 처리와 대조를 뒤에서 돌린다. 1분마다, 그리고 새 알림이 오면 바로 돈다.
 // 서버가 여러 대여도 한 번에 한 곳만 돌게 DB 자문 락을 잡는다.
-func (s *Server) StartIAPWorker(ctx context.Context) {
+func (s *Kit) StartIAPWorker(ctx context.Context) {
 	if len(s.IAP) == 0 {
 		return
 	}
@@ -156,7 +156,7 @@ func (s *Server) StartIAPWorker(ctx context.Context) {
 
 // iapSweepSafely는 한 번 돌리되, 그 안에서 패닉이 나도 서버 전체가 죽지 않게 한다.
 // 고루틴의 패닉은 잡지 않으면 프로세스를 내린다. 스토어가 보낸 예상 밖의 값 하나로 서버가 죽으면 안 된다.
-func (s *Server) iapSweepSafely(ctx context.Context) {
+func (s *Kit) iapSweepSafely(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("iap sweep panic: %v", r)
@@ -169,32 +169,37 @@ func (s *Server) iapSweepSafely(ctx context.Context) {
 	}
 }
 
-const iapSweepLockKey = 987614003 // migrate.go가 987614002를 쓴다
+// iapSweepLock은 정기 대조를 한 서버에서만 돌리는 잠금의 이름이다. 숫자 대신 이름에서 키를 만들어(hashtextextended)
+// 키트를 붙인 앱이 쓰는 다른 advisory lock 숫자와 겹치지 않게 한다.
+const iapSweepLock = "iapkit.sweep"
 
-func (s *Server) iapSweepLocked(ctx context.Context) error {
+func (s *Kit) iapSweepLocked(ctx context.Context) error {
 	conn, err := s.DB.Acquire(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Release()
 	var got bool
-	if err = conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", iapSweepLockKey).Scan(&got); err != nil || !got {
+	if err = conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtextextended($1, 0))", iapSweepLock).Scan(&got); err != nil || !got {
 		return err // 다른 곳에서 돌고 있으면 이번에는 건너뛴다
 	}
-	defer conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", iapSweepLockKey)
-	_, err = s.iapSweep(ctx)
+	defer conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtextextended($1, 0))", iapSweepLock)
+	res, err := s.iapSweep(ctx)
+	s.iapLogSweep(ctx, res)
 	return err
 }
 
 // iapSweepResult는 한 번 돌면서 한 일이다. 숫자가 계속 크면 알림이 안 오고 있다는 신호다(이슈 #39).
 type iapSweepResult struct {
 	Notices, NoticesFailed, Confirmed, Refreshed int
-	Refunds                                      int // 칸을 주지 않은 선반 거래(3칸 넘김, 연도 모름, 주인 없음)의 환불을 요청해 성공한 수(구글)
+	Backfilled, Voided                           int // 스토어의 목록으로 메운 알림, 반영한 환불
+	Renewals                                     int // 새로 쓴 갱신 예정 고지
+	Refunds                                      int // 주지 않은 거래(상한 넘김, 대상 모름, 주인 없음)의 환불을 요청해 성공한 수(구글)
 }
 
-// iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 알림 처리, 만료가 다가온 구독 재확인.
+// iapSweep은 밀린 일을 한 번 처리한다: 스토어 확인 재시도, 빠진 알림·환불 메우기, 알림 처리, 만료가 다가온 구독 재확인.
 // 순서: 기한이 있는 것(구글 확인 3일)을 가장 먼저 한다. 한 단계가 실패해도 다음 단계는 돈다.
-func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
+func (s *Kit) iapSweep(ctx context.Context) (iapSweepResult, error) {
 	var res iapSweepResult
 	var firstErr error
 	keep := func(err error) {
@@ -233,7 +238,23 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		})
 	}
 
-	// 2. 3칸을 넘게 산 선반 거래 중 환불 요청을 못 마친 것(구글). 처음 요청은 제출·알림 처리에서 한다
+	// 2. 스토어의 목록으로 빠진 알림과 환불을 메운다(6시간에 한 번). 넣은 알림은 바로 아래에서 처리된다
+	s.iapCatchUp(ctx, &res)
+	// 3. 밀린 알림
+	notices, err := iapPendingNotifications(ctx, s.DB, 100)
+	keep(err)
+	for _, n := range notices {
+		result, note := s.iapProcessNoticeSafely(ctx, n)
+		if result == "failed" {
+			res.NoticesFailed++
+			log.Printf("iap notification failed (will retry): route=%s id=%s err=%s", n.Route, n.ID, note)
+		} else {
+			res.Notices++
+		}
+		keep(iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note))
+	}
+
+	// 4. 상한을 넘게 산 거래 중 환불 요청을 못 마친 것(구글). 처음 요청은 제출·알림 처리에서 한다
 	var refunders []string
 	for route, store := range s.IAP {
 		if _, ok := store.(iap.Refunder); ok {
@@ -262,18 +283,18 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			}
 		})
 	}
-	// 연도를 끝내 모르는 선반(2일 뒤)과 주인 없는 선반. 앱이 연도와 함께 다시 낼 시간을 준 뒤 구글 3일 자동 환불보다 먼저 한다.
-	// 환불하는 순간 앱이 연도를 붙여 내 칸을 받았어도, 구글 환불 알림(voided)이 와서 칸을 회수한다
-	yearless, err := iapYearlessToRefund(ctx, s.DB, refunders, 50)
+	// 대상을 끝내 모르는 거래(2일 뒤)와 주인 없는 거래. 앱이 대상과 함께 다시 낼 시간을 준 뒤 구글 3일 자동 환불보다 먼저 한다.
+	// 환불하는 순간 앱이 대상을 붙여 내 받았어도, 구글 환불 알림(voided)이 와서 회수한다
+	ungranted, err := iapUngrantedToRefund(ctx, s.DB, refunders, 50)
 	keep(err)
-	for _, o := range yearless {
-		iapSafely("yearless refund", func() {
+	for _, o := range ungranted {
+		iapSafely("ungranted refund", func() {
 			store := s.IAP[o.Route]
 			storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 			p, e := store.Lookup(storeCtx, iap.Ref{Kind: iap.KindProduct, ID: o.Key})
 			cancel()
 			if e != nil {
-				log.Printf("iap yearless refund: lookup failed route=%s err=%v", o.Route, e)
+				log.Printf("iap ungranted refund: lookup failed route=%s err=%v", o.Route, e)
 				return
 			}
 			if s.iapRefundPurchase(ctx, store, o.Key, p.TransactionID) {
@@ -282,21 +303,7 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 		})
 	}
 
-	// 3. 밀린 알림
-	notices, err := iapPendingNotifications(ctx, s.DB, 100)
-	keep(err)
-	for _, n := range notices {
-		result, note := s.iapProcessNoticeSafely(ctx, n)
-		if result == "failed" {
-			res.NoticesFailed++
-			log.Printf("iap notification failed (will retry): route=%s id=%s err=%s", n.Route, n.ID, note)
-		} else {
-			res.Notices++
-		}
-		keep(iapFinishNotification(ctx, s.DB, n.Route, n.ID, result, note))
-	}
-
-	// 4. 만료가 다가왔거나 지난 구독
+	// 5. 만료가 다가왔거나 지난 구독
 	due, err := iapDueSubscriptions(ctx, s.DB, 200)
 	keep(err)
 	for _, d := range due {
@@ -319,6 +326,13 @@ func (s *Server) iapSweep(ctx context.Context) (iapSweepResult, error) {
 			keep(iapBumpSubscription(ctx, s.DB, route, original))
 		}
 	}
+
+	// 6. 곧 갱신될 연 구독에 갱신 예정 고지(T4). 5에서 만료일을 새로 받은 뒤에 본다. 6시간에 한 번
+	if now := time.Now().UTC(); s.iapRenewalDue(now) {
+		n, e := iapNoteRenewals(ctx, s.DB, now, iapRenewalNoticeDays())
+		keep(e)
+		res.Renewals = n
+	}
 	return res, firstErr
 }
 
@@ -338,7 +352,7 @@ func iapSafely(what string, fn func()) (panicked bool) {
 // iapProcessNoticeSafely는 알림 한 건의 패닉을 그 알림의 실패로 가둔다.
 // 대조 전체의 recover(iapSweepSafely)만 있으면, 패닉 난 알림은 실패로 기록되지 않아 시도 횟수가 오르지 않고
 // 다음 바퀴에도 맨 앞에 뽑혀 뒤의 알림과 4단계(만료 구독 재조회)를 매번 막는다. 실패로 남기면 다른 실패처럼 간격을 두고 다시 시도한다
-func (s *Server) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (result, note string) {
+func (s *Kit) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (result, note string) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("iap notification panic: route=%s id=%s panic=%v", n.Route, n.ID, r)
@@ -349,7 +363,7 @@ func (s *Server) iapProcessNoticeSafely(ctx context.Context, n iapNoticeRow) (re
 }
 
 // iapProcessNotice는 알림 한 건을 처리하고 결과(processed, ignored, failed)와 메모를 돌려준다.
-func (s *Server) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, note string) {
+func (s *Kit) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, note string) {
 	store := s.IAP[n.Route]
 	if store == nil {
 		return "failed", "그 경로의 스토어가 꺼져 있음"
@@ -412,7 +426,7 @@ func (s *Server) iapProcessNotice(ctx context.Context, n iapNoticeRow) (result, 
 }
 
 // iapBasics는 알림·대조로 알게 된 거래가 우리 앱의 아는 상품인지, 받아도 되는 환경인지 본다. 계정과 상태는 보지 않는다.
-func (s *Server) iapBasics(ctx context.Context, store iap.Store, p iap.Purchase) error {
+func (s *Kit) iapBasics(ctx context.Context, store iap.Store, p iap.Purchase) error {
 	products, err := iapProductSet(ctx, s.DB, store.Route())
 	if err != nil {
 		return err
@@ -424,7 +438,7 @@ func (s *Server) iapBasics(ctx context.Context, store iap.Store, p iap.Purchase)
 // iapSyncSubscription은 구독 1건을 스토어에 다시 묻고 우리 테이블을 그 답으로 맞춘다.
 //   - 줄이 있으면 상태만 고친다. 주인은 그대로다(주인은 우리 테이블이 정한다. 스토어의 계정 연결 값은 옮긴 뒤에도 옛 값이다).
 //   - 줄이 없으면(앱이 제출하기 전에 알림이 먼저 옴, 앱 밖 구매) 계정 연결 값으로 주인을 찾아 만든다. 못 찾으면 만들지 않는다.
-func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, originalID string) (string, error) {
+func (s *Kit) iapSyncSubscription(ctx context.Context, store iap.Store, originalID string) (string, error) {
 	route := store.Route()
 	storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
@@ -463,7 +477,15 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	}
 	note, granted, user := "상태 갱신", false, owner.user
 	if owner.found {
+		// 고치기 전의 값을 읽어 두고, 고친 뒤 달라진 것(유예 시작, 만료, 해지 접수, 환불)을 고지로 남긴다
+		before, e := iapSubBeforeOf(ctx, tx, route, sub.OriginalID)
+		if e != nil {
+			return "", e
+		}
 		if _, err = iapRefreshSubscription(ctx, tx, sub); err != nil {
+			return "", err
+		}
+		if err = iapNoteSubscriptionChange(ctx, tx, user, before, sub, time.Now()); err != nil {
 			return "", err
 		}
 	} else {
@@ -484,6 +506,12 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 		if _, err = iapUpsertSubscription(ctx, tx, user, sub); err != nil {
 			return "", err
 		}
+		// 알림만으로 새로 지급한 구독도 결제 완료를 알린다(T3). 뒤에 앱이 같은 거래를 제출하면 "전에 지급한 것"이라 다시 알리지 않는다
+		if cur.State == iap.StatePaid {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapGrant{}); err != nil {
+				return "", err
+			}
+		}
 		note, granted = "알림으로 새 구독 연결", true
 	}
 	if err = iapEndLinked(ctx, tx, route, cur.LinkedID, sub.OriginalID); err != nil {
@@ -492,8 +520,16 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 	// 가장 최근 거래를 원장에 남긴다(갱신 거래). 주인을 아는 경우에만.
 	key := iapTransactionKey(iap.KindSubscription, cur)
 	if user != 0 && cur.State == iap.StatePaid {
-		if _, err = iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur); err != nil {
-			return "", err
+		inserted, e := iapRecordPurchase(ctx, tx, user, iap.KindSubscription, cur, s.IAPRules.TargetRequired)
+		if e != nil {
+			return "", e
+		}
+		// 주인이 있던 구독에 처음 보는 결제 거래: 갱신(또는 요금제 변경) 결제다. 결제 완료를 알린다(T3, ADR-0003 L7 "구매·갱신 직후").
+		// 고지의 유일 키가 거래 단위라, 같은 거래를 제출 경로가 먼저 알렸어도 한 줄이다
+		if inserted && owner.found {
+			if err = iapNotePurchaseDone(ctx, tx, user, iap.KindSubscription, cur, iapGrant{}); err != nil {
+				return "", err
+			}
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -512,7 +548,7 @@ func (s *Server) iapSyncSubscription(ctx context.Context, store iap.Store, origi
 
 // iapSyncPurchase는 거래 하나를 스토어에 다시 묻고 원장의 환불 상태를 맞춘다.
 // 한 번 사는 상품이 원장에 없으면(앱이 제출하기 전에 알림이 먼저 옴) 계정 연결 값으로 주인을 찾아 지급한다.
-func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref) (string, error) {
+func (s *Kit) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.Ref) (string, error) {
 	route := store.Route()
 	storeCtx, cancel := context.WithTimeout(ctx, iapStoreTimeout)
 	defer cancel()
@@ -557,56 +593,71 @@ func (s *Server) iapSyncPurchase(ctx context.Context, store iap.Store, ref iap.R
 	if user == 0 {
 		return "주인을 모르는 구매. 앱이 제출하면 연결됨", nil
 	}
-	// 원장에 넣고, 연도를 알면 3칸을 넘는지 정하고, 그 해의 결제 중 예약 하나를 푼다(앱보다 알림이 먼저 온 경우)
+	product, err := iapFindProduct(ctx, s.DB, route, p.ProductID)
+	if err != nil {
+		return "", err
+	}
+	// 원장, 상한 넘김 판정, 결제 중 예약 풀기, 고지(T3 또는 넘김)를 한 트랜잭션에 쓴다(앱보다 알림이 먼저 온 경우)
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback(ctx)
-	inserted, err := iapRecordPurchase(ctx, tx, user, iap.KindProduct, p)
+	// 유저 줄을 잠근다. 같은 유저의 제출과 차례로 결제 의도를 보고 지운다
+	var locked int64
+	if err = tx.QueryRow(ctx, "SELECT id FROM users WHERE id=$1 FOR UPDATE", user).Scan(&locked); err != nil {
+		return "", err
+	}
+	inserted, err := iapRecordPurchase(ctx, tx, user, iap.KindProduct, p, s.IAPRules.TargetRequired)
 	if err != nil {
 		return "", err
 	}
-	// 어느 해 책장의 칸인지는 넣을 때 계정 연결 값으로 적었다(D1)
-	year, err := iapTokenYear(ctx, tx, p.AccountToken)
+	// 어느 대상의 구매인지는 결제 의도로 찾는다(D1). 결제가 늦게 끝나도 의도는 며칠 남아 있다(Rules.Keep).
+	// 대상을 모르면 주지 않았으니 결제 완료도 알리지 않는다
+	intentID, intentTarget, intentKnown, err := iapIntentTarget(ctx, tx, user, "", product.Units, p.PurchasedAt)
 	if err != nil {
 		return "", err
 	}
-	overCap := false
-	if inserted && year > 0 {
-		if overCap, err = iapSettleShelf(ctx, tx, user, route, key, s.IAPSandbox); err != nil {
+	target, known, filled, err := iapSetTarget(ctx, tx, route, key, intentTarget)
+	if err != nil {
+		return "", err
+	}
+	if intentKnown && (inserted || filled) {
+		if err = iapReleaseReservation(ctx, tx, user, intentID); err != nil {
 			return "", err
 		}
-		if err = iapReleaseOldestReservation(ctx, tx, user, year); err != nil {
+	}
+	overCap := false
+	if inserted && known {
+		if overCap, err = iapSettleCap(ctx, tx, user, route, key, s.IAPSandbox, s.IAPRules.Cap); err != nil {
+			return "", err
+		}
+		if err = iapNoteProductGrant(ctx, tx, user, p, iapGrant{Units: product.Units, Target: target, OverCap: overCap}); err != nil {
 			return "", err
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return "", err
 	}
-	// 연도를 모르면 소비하지 않는다. 앱이 연도와 함께 내면 그때 소비하고, 끝내 안 내면 구글이 3일 뒤 환불한다(제출 경로와 같다)
-	if inserted && year > 0 && !p.Acknowledged {
-		product, e := iapFindProduct(ctx, s.DB, route, p.ProductID)
-		if e != nil {
-			return "", e
-		}
-		if e = iapConfirmAfter(ctx, store, ref, p.ProductID, product.Consume); e != nil {
+	// 대상을 모르면 소비하지 않는다. 앱이 대상과 함께 내면 그때 소비하고, 끝내 안 내면 서버가 2일 뒤 환불한다(제출 경로와 같다)
+	if inserted && known && !p.Acknowledged {
+		if e := iapConfirmAfter(ctx, store, ref, p.ProductID, product.Consume); e != nil {
 			log.Printf("iap confirm failed (will retry): route=%s err=%v", route, e)
 		} else if e = iapMarkConfirmed(ctx, s.DB, route, key); e != nil {
 			log.Printf("iap confirm not recorded: route=%s err=%v", route, e)
 		}
 	}
-	if year == 0 {
-		return "연도를 모르는 선반 구매 기록. 앱이 연도와 함께 제출하면 그 해 책장에 줌", nil
+	if !known {
+		return "대상을 모르는 구매 기록. 앱이 대상과 함께 제출하면 그 대상에 줌", nil
 	}
 	if overCap {
-		log.Printf("iap shelf over cap: route=%s user=%d year=%d", route, user, year)
+		log.Printf("iap over cap: route=%s user=%d target=%s", route, user, target)
 		if s.iapRefundOverCap(ctx, store, key, p.TransactionID) {
-			return fmt.Sprintf("알림으로 새 구매 기록(%d년 책장, 3칸 넘음: 칸을 주지 않고 환불 요청)", year), nil
+			return fmt.Sprintf("알림으로 새 구매 기록(대상 %q, 상한 넘음: 주지 않고 환불 요청)", target), nil
 		}
-		return fmt.Sprintf("알림으로 새 구매 기록(%d년 책장, 3칸 넘음: 칸을 주지 않음, 환불은 사용자 요청 또는 다시 시도)", year), nil
+		return fmt.Sprintf("알림으로 새 구매 기록(대상 %q, 상한 넘음: 주지 않음, 환불은 사용자 요청 또는 다시 시도)", target), nil
 	}
-	return fmt.Sprintf("알림으로 새 구매 지급(%d년 책장)", year), nil
+	return fmt.Sprintf("알림으로 새 구매 지급(대상 %q)", target), nil
 }
 
 // iapConfirmAfter는 DB 커밋 뒤의 스토어 확인이다. 앞의 조회와 제한 시간을 나눠 쓰지 않게 새로 준다
@@ -618,7 +669,7 @@ func iapConfirmAfter(ctx context.Context, store iap.Store, ref iap.Ref, productI
 
 // iapSyncRevoked는 제출에서 스토어가 환불이라고 답한 거래를 알림 처리와 같은 길로 반영한다.
 // 요청이 끊겨도 끝까지 하도록 취소를 떼어 낸다(안의 스토어 조회는 각자 제한 시간을 둔다)
-func (s *Server) iapSyncRevoked(ctx context.Context, store iap.Store, kind iap.Kind, ref iap.Ref, originalID string) {
+func (s *Kit) iapSyncRevoked(ctx context.Context, store iap.Store, kind iap.Kind, ref iap.Ref, originalID string) {
 	c := context.WithoutCancel(ctx)
 	var note string
 	var err error

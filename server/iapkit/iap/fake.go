@@ -15,6 +15,8 @@ type Fake struct {
 	Err        error               // 값이 있으면 조회가 항상 이 오류로 실패한다(통신 장애 흉내)
 	Confirmed  []string            // Confirm이 불린 Ref.ID. 순서대로
 	ConfirmErr error               // 값이 있으면 Confirm이 실패한다
+	History    []Notice            // NoticeHistory가 돌려줄, 스토어가 보냈던 알림
+	VoidedList []VoidedPurchase    // Voided가 돌려줄, 스토어가 환불한 구매
 	PanicOn    string              // Ref.ID나 원 거래 ID가 이 값이면 조회가 패닉한다(알림 하나의 패닉이 다른 처리를 막지 않는지 보는 시험용)
 }
 
