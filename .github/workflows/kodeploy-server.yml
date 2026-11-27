@@ -48,7 +48,8 @@ jobs:
       - run: go vet ./...
       # Flyway V7→V8 시험용 빈 DB(TEST_EMPTY_DATABASE_URL)
       - run: psql "postgres://test@localhost:5432/test" -qc "CREATE DATABASE empty"
-      - run: go test ./...
+      # 캐시된 결과를 쓰지 않는다(DB 시험은 바깥 상태에 기대므로 매번 새로)
+      - run: go test -count=1 ./...
 
   deploy:
     needs: test
