@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -38,12 +39,15 @@ class IapService extends ChangeNotifier {
   /// 앞 계정의 응답을 지금 계정의 상태에 넣지 않는다
   int _epoch = 0;
 
-  /// 이번 실행에서 한 번 사는 상품을 사려고 고른 대상. 구매 제출에 같이 보낸다(서버는 계정 연결 값의 대상을 먼저 본다)
+  /// 한 번 사는 상품을 사려고 고른 대상. 구매 제출에 같이 보낸다(서버는 결제 의도의 대상을 먼저 본다)
   String? _target;
 
-  /// 결제 중 예약 번호(서버가 몇 분 동안 그 대상의 수량을 잡아 둔다. 두 기기가 함께 사서 상한을 넘지 않게).
-  /// 결제를 취소하거나 실패하면 바로 푼다. 제출하면 서버가 푼다
+  /// 결제 의도 번호(POST /iap/intent). 서버가 이 번호로 어느 대상의 구매인지 찾고, 상한이 있으면 몇 분 동안 그 수량을 잡는다.
+  /// 결제를 취소하거나 실패하면 바로 지운다. 결제 대기는 지우지 않는다(나중에 끝날 결제가 대상을 찾는다). 제출하면 서버가 지운다
   String? _reservation;
+
+  /// 기기에 남긴 지금 결제(상품, 대상, 의도 번호). 결제 중 앱이 꺼져도 다시 켰을 때 그 거래에 붙여 낸다
+  static const _buyingKey = 'iap-buying:v1';
 
   /// 지금 결제창을 띄운 상품. 예약 번호와 대상은 이 상품의 거래에만 붙인다(전에 끝내지 못한 다른 거래가 가져가지 않게)
   String? _buying;
@@ -104,6 +108,7 @@ class IapService extends ChangeNotifier {
     _target = null;
     _reservation = null;
     _lastResubmit = null;
+    unawaited(_clearBuying()); // 앞 계정의 결제다
     notifyListeners();
   }
 
@@ -168,7 +173,7 @@ class IapService extends ChangeNotifier {
   }
 
   /// plan: 구독은 고른 요금제를 넘긴다(구글은 요금제마다 스토어 상품 줄이 다르다)
-  /// target: 한 번 사는 상품이 붙을 대상(없으면 IapKit.defaultTarget). 서버가 대상마다 따로 준 계정 연결 값을 스토어에 넘긴다(ADR-0002 D1·D7)
+  /// target: 한 번 사는 상품이 붙을 대상(없으면 IapKit.defaultTarget). 서버에 결제 의도로 남기고, 스토어에는 계정마다 하나인 계정 연결 값만 넘긴다(ADR-0002 D1·D7)
   Future<void> buy(IapProduct product, {IapPlan? plan, String? target}) async {
     final d = plan?.details ?? details[product.productId];
     final once = product.kind != 'subscription';
@@ -179,7 +184,7 @@ class IapService extends ChangeNotifier {
       if (once) {
         final to = target ?? IapKit.defaultTarget();
         try {
-          final t = await targetToken(to, units: product.units);
+          final t = await intent(to, units: product.units);
           account = t?.token;
           _reservation = t?.reservation;
         } on IapApiError catch (e) {
@@ -198,6 +203,7 @@ class IapService extends ChangeNotifier {
         }
         _target = to;
         _buying = product.productId;
+        unawaited(_saveBuying());
       }
       if (account == null || account.isEmpty) {
         _done(IapResult.retryLater, IapKit.text('start_failed'));
@@ -218,6 +224,7 @@ class IapService extends ChangeNotifier {
         unawaited(_release());
         _buying = null;
         _target = null;
+        unawaited(_clearBuying());
         final cleared = await _resubmitIos();
         _done(
           IapResult.retryLater,
@@ -236,12 +243,14 @@ class IapService extends ChangeNotifier {
     if (productId != _buying) return;
     _buying = null;
     _target = null;
+    unawaited(_clearBuying());
   }
 
   void _failStart() {
     unawaited(_release());
     _buying = null;
     _target = null;
+    unawaited(_clearBuying());
     _done(IapResult.retryLater, IapKit.text('start_failed'));
   }
 
@@ -276,11 +285,12 @@ class IapService extends ChangeNotifier {
     return cleared;
   }
 
-  /// 한 번 사는 상품을 살 때 스토어에 넘길 그 대상의 계정 연결 값과 결제 중 예약 번호. 서버가 이 값으로 어느 대상의 구매인지 찾는다. 받지 못하면 null.
+  /// 한 번 사는 상품의 결제를 시작하기 직전에 서버에 결제 의도를 남긴다. 스토어에 넘길 계정 연결 값과 의도 번호를 받는다. 받지 못하면 null.
+  /// 계정 연결 값은 계정마다 하나다. 어느 대상의 구매인지는 서버가 의도로 찾는다(애플·구글 모두 이 값을 계정 식별자로 쓰라고 한다).
   /// 상한에 닿았으면 409 iap_cap_full, 다른 기기가 결제 중이라 넘칠 수 있으면 409 iap_target_busy(IapApiError로 던진다)
-  Future<({String token, String? reservation})?> targetToken(String target, {int units = 1}) async {
+  Future<({String token, String? reservation})?> intent(String target, {int units = 1}) async {
     try {
-      final res = await IapKit.call('POST', '/iap/target-token', {if (target.isNotEmpty) 'target': target, 'units': units});
+      final res = await IapKit.call('POST', '/iap/intent', {if (target.isNotEmpty) 'target': target, 'units': units});
       if (res is! Map || res['token'] is! String) return null;
       return (token: res['token'] as String, reservation: res['reservation'] is String ? res['reservation'] as String : null);
     } on IapApiError catch (e) {
@@ -291,14 +301,42 @@ class IapService extends ChangeNotifier {
     }
   }
 
-  /// 결제 중 예약을 푼다(결제를 취소·실패했을 때). 못 풀어도 서버 규칙(Rules.Hold)의 시간이 지나면 저절로 풀린다
+  /// 결제 의도를 지운다(결제를 취소·실패했을 때). 못 지워도 상한을 잡는 예약은 Rules.Hold가 지나면 풀리고, 의도는 Rules.Keep이 지나면 지워진다
   Future<void> _release() async {
     final r = _reservation;
     _reservation = null;
     if (r == null) return;
     try {
-      await IapKit.call('POST', '/iap/target-token/release', {'reservation': r});
+      await IapKit.call('POST', '/iap/intent/release', {'reservation': r});
     } catch (_) {}
+  }
+
+  Future<void> _saveBuying() async {
+    final product = _buying;
+    if (product == null) return;
+    try {
+      await IapKit.storage.set(_buyingKey, jsonEncode({'product': product, 'target': _target, 'reservation': _reservation}));
+    } catch (_) {}
+  }
+
+  Future<void> _clearBuying() async {
+    try {
+      await IapKit.storage.remove(_buyingKey);
+    } catch (_) {}
+  }
+
+  /// 기기에 남긴 결제가 이 상품의 것이면 그 대상과 의도 번호. 없거나 다른 상품이면 null
+  Future<({String? target, String? reservation})?> _savedBuying(String productId) async {
+    try {
+      final raw = await IapKit.storage.get(_buyingKey);
+      if (raw == null) return null;
+      final m = jsonDecode(raw);
+      if (m is! Map || m['product'] != productId) return null;
+      final t = m['target'], r = m['reservation'];
+      return (target: t is String ? t : null, reservation: r is String ? r : null);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 구매 복원: 스토어가 이 스토어 계정의 구매를 다시 준다. 구독이 다른 계정에 있었으면 이 계정으로 옮겨진다(D8)
@@ -328,6 +366,7 @@ class IapService extends ChangeNotifier {
     switch (d.status) {
       case PurchaseStatus.pending:
         // 결제가 아직 끝나지 않았다(편의점 결제, 보호자 승인 등). 끝나면 스토어가 다시 알려 주고 그때 서버에 낸다.
+        // 결제 의도는 지우지 않는다. 앱을 닫아도 서버가 스토어 알림과 의도를 맞춰 대상을 찾는다(Rules.Keep, 기본 4일).
         // 버튼을 풀어 화면을 떠날 수 있게 한다
         _done(IapResult.pending, IapKit.text('pending'));
         return;
@@ -361,9 +400,19 @@ class IapService extends ChangeNotifier {
     final epoch = _epoch;
     try {
       final current = d.productID == _buying;
-      // 대상: 지금 산 상품이면 고른 대상, 아니면(지난 거래를 다시 낼 때) 기본 대상. 서버는 계정 연결 값에 적힌 대상을 먼저 본다
-      final target = (current ? _target : null) ?? IapKit.defaultTarget();
-      final res = await IapKit.call('POST', '/iap/purchases', {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, if (target.isNotEmpty) 'target': target, if (current && _reservation != null) 'reservation': _reservation});
+      // 대상과 의도 번호: 지금 산 상품이면 고른 것, 아니면 기기에 남긴 그 상품의 결제(앱이 꺼졌다 켜진 경우), 둘 다 없으면 기본 대상.
+      // 서버는 의도 번호를 먼저 보고, 결제보다 뒤에 남긴 번호는 쓰지 않는다(옛 거래가 지금 결제의 번호를 가져가지 않게)
+      var target = current ? _target : null;
+      var reservation = current ? _reservation : null;
+      var saved = false;
+      if (!current) {
+        final s = await _savedBuying(d.productID);
+        if (s != null) {
+          (target, reservation, saved) = (s.target, s.reservation, true);
+        }
+      }
+      target ??= IapKit.defaultTarget();
+      final res = await IapKit.call('POST', '/iap/purchases', {'route': iapRoute, 'productId': d.productID, 'proof': proof, 'restore': restore, if (target.isNotEmpty) 'target': target, 'reservation': ?reservation});
       if (res is! Map<String, dynamic>) {
         // 202: 결제가 아직 끝나지 않았다
         return (IapResult.pending, false, IapKit.text('checking'));
@@ -374,9 +423,10 @@ class IapService extends ChangeNotifier {
       }
       EntitlementStore.instance.apply(res);
       if (current) {
-        _reservation = null; // 서버가 제출을 처리하며 예약을 풀었다
+        _reservation = null; // 서버가 제출을 처리하며 의도를 지웠다
         _buying = null;
       }
+      if (current || saved) unawaited(_clearBuying());
       if (res['overCap'] == true) {
         // 다른 기기에서 먼저 상한까지 샀다. 이번 결제는 반영하지 않고 돌려준다(자세한 안내는 알림함과 창, 고지 T15)
         return (IapResult.granted, true, IapKit.text('over_cap'));
