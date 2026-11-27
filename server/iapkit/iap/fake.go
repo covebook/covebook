@@ -11,19 +11,20 @@ import (
 
 // Fake는 시험용 Store다. 스토어에 "있는" 거래를 미리 넣어 두고 쓴다.
 type Fake struct {
-	R          Route
-	App        string              // AppID가 돌려줄 값
-	Purchases  map[string]Purchase // Ref.ID → 거래
-	Err        error               // 값이 있으면 조회가 항상 이 오류로 실패한다(통신 장애 흉내)
-	Confirmed  []string            // Confirm이 불린 Ref.ID. 순서대로
-	ConfirmErr error               // 값이 있으면 Confirm이 실패한다
-	History    []Notice            // NoticeHistory가 돌려줄, 스토어가 보냈던 알림
-	VoidedList []VoidedPurchase    // Voided가 돌려줄, 스토어가 환불한 구매
-	PanicOn    string              // Ref.ID나 원 거래 ID가 이 값이면 조회가 패닉한다(알림 하나의 패닉이 다른 처리를 막지 않는지 보는 시험용)
-	RestUntil  time.Time           // 이 시각 전에는 모든 스토어 호출이 한도 초과(RateLimitError)로 실패한다(429 흉내)
-	Calls      int                 // 스토어 API를 부른 횟수(쉬는 중에 부르지 않는지 보는 시험용)
-	Delay      time.Duration       // 조회·확인이 이만큼 걸린다(느린 스토어 흉내). ctx가 먼저 끝나면 그 오류로 실패한다
-	Limit429   time.Duration       // 값이 있으면 다음 호출이 429를 맞고 그때부터 이만큼 쉰다(처리 도중 한도에 걸리는 경우 흉내)
+	R             Route
+	App           string              // AppID가 돌려줄 값
+	Purchases     map[string]Purchase // Ref.ID → 거래
+	Err           error               // 값이 있으면 조회가 항상 이 오류로 실패한다(통신 장애 흉내)
+	Confirmed     []string            // Confirm이 불린 Ref.ID. 순서대로
+	ConfirmErr    error               // 값이 있으면 Confirm이 실패한다
+	History       []Notice            // NoticeHistory가 돌려줄, 스토어가 보냈던 알림
+	VoidedList    []VoidedPurchase    // Voided가 돌려줄, 스토어가 환불한 구매
+	PanicOn       string              // Ref.ID나 원 거래 ID가 이 값이면 조회가 패닉한다(알림 하나의 패닉이 다른 처리를 막지 않는지 보는 시험용)
+	RestUntil     time.Time           // 이 시각 전에는 모든 스토어 호출이 한도 초과(RateLimitError)로 실패한다(429 흉내)
+	ListRestUntil time.Time           // 이 시각 전에는 목록 조회(NoticeHistory, Voided)만 한도 초과로 실패한다
+	Calls         int                 // 스토어 API를 부른 횟수(쉬는 중에 부르지 않는지 보는 시험용)
+	Delay         time.Duration       // 조회·확인이 이만큼 걸린다(느린 스토어 흉내). ctx가 먼저 끝나면 그 오류로 실패한다
+	Limit429      time.Duration       // 값이 있으면 다음 호출이 429를 맞고 그때부터 이만큼 쉰다(처리 도중 한도에 걸리는 경우 흉내)
 
 	mu sync.Mutex // 위 한도 흉내 칸(RestUntil, Calls, Limit429)을 동시 요청에서 지킨다. 시험 코드는 스토어를 부르지 않는 동안에만 직접 읽고 쓴다
 }
@@ -46,6 +47,27 @@ func (f *Fake) RestingUntil() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.RestUntil
+}
+
+// ListRestingUntil은 목록 조회의 한도 초과 흉내가 언제까지인지 준다(ListRester). RestUntil도 목록을 막는다.
+func (f *Fake) ListRestingUntil() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ListRestUntil.After(f.RestUntil) {
+		return f.ListRestUntil
+	}
+	return f.RestUntil
+}
+
+// listLimited는 목록 조회용 limited다.
+func (f *Fake) listLimited() error {
+	f.mu.Lock()
+	until := f.ListRestUntil
+	f.mu.Unlock()
+	if time.Now().Before(until) {
+		return &RateLimitError{Route: f.R, Until: until}
+	}
+	return f.limited()
 }
 
 // limited는 한도 초과 흉내 중이면 오류를 준다. 아니면 호출 횟수를 센다.

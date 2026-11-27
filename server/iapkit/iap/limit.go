@@ -35,6 +35,13 @@ type Rester interface {
 	RestingUntil() time.Time
 }
 
+// ListRester는 목록 조회(애플 알림 이력, 구글 무효 구매 목록)의 쉬는 시각을 따로 알려 준다.
+// 목록 조회의 한도는 구매 한 건 조회와 따로 센다. 애플은 API마다 한도가 따로 있다(Identifying rate limits).
+// 목록 조회가 한도에 걸려도 결제 제출(구매 조회·확인)은 막지 않는다. 그 반대도 같다
+type ListRester interface {
+	ListRestingUntil() time.Time
+}
+
 // 한도에 걸렸는데 다시 부를 시각을 모르면 기다리는 시간. 쉬는 시간의 상한
 const (
 	limitDefaultRest = time.Minute
