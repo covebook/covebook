@@ -243,7 +243,7 @@ void main() {
       final poses = <Pose>[];
       await tester.pumpWidget(panel(pose: Pose.front, turn: 30, onLean: leans.add, onPose: poses.add, canLean: (left: false, right: true)));
       expect(tester.takeException(), isNull);
-      for (final t in ['세우기', '눕히기', '돌리기', '앞뒤 위치', '기대기', '똑바로', '왼쪽', '오른쪽', '뒤로']) {
+      for (final t in ['세우기', '눕히기', '돌리기', '앞뒤 위치', '기대기', '기본', '왼쪽', '오른쪽', '뒤']) {
         expect(find.text(t), findsOneWidget, reason: t);
       }
       for (final t in ['책등', '표지', '눕힘', '자세', '회전', '바로']) {
@@ -255,7 +255,7 @@ void main() {
       // 표지가 앞인 책도 세운 책: 세우기를 다시 눌러도 자세를 바꾸지 않고(부르는 쪽이 거른다) 눕히기는 눕힘
       await tester.tap(find.text('눕히기'));
       expect(poses, [Pose.horizontal]);
-      await tester.tap(find.text('뒤로'));
+      await tester.tap(find.text('뒤'));
       await tester.tap(find.text('오른쪽'));
       await tester.tap(find.text('왼쪽'));
       expect(leans, [StandLean.back, StandLean.right], reason: '기댈 옆 책이 없는 왼쪽은 흐리게(눌러도 그대로)');

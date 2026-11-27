@@ -1,7 +1,7 @@
-// 책 정보 › 책 정보 칸 맨 위 '책 소개'(2026-11-26 사용자 '책 정보에 yes24에서 책 내용 요약 있잖아 그거 넣어서 해줘').
+// 책 정보 › 책 정보 칸 맨 아래 '책 소개'(2026-11-26 사용자 '책 정보에 yes24에서 책 내용 요약 있잖아 그거 넣어서 해줘'. 2026-11-27 댓글로 맨 위에서 맨 아래로, 글은 회색 테두리 상자).
 // YES24 상품의 책 소개를 서버로 받아(services/book_search bookIntro) 원문 그대로 보인다: 고치거나 줄이지 않는다(YES24 약관: AI 변환 불가).
 // 글은 기기에 저장하지 않는다(앱이 켜져 있는 동안만 기억). 다섯 줄이 넘으면 접어 두고 '더 보기'로 편다.
-// 출처: 글 바로 아래 줄 오른쪽 'YES24 제공'(왼쪽은 '더 보기'). 상품 링크는 같은 칸 맨 아래 'YES24에서 보기' 줄이고, 그 줄이 없는 책(YES24 링크 없이 넣은 책)은 출처 자리가
+// 출처: 글 바로 아래 줄 오른쪽 'YES24 제공'(왼쪽은 '더 보기'). 상품 링크는 같은 칸 'YES24에서 보기' 줄(책 소개 바로 위)이고, 그 줄이 없는 책(YES24 링크 없이 넣은 책)은 출처 자리가
 // 'YES24에서 보기' 글자 단추(ISBN으로 찾은 YES24 검색 결과)다. 소개가 없으면(ISBN 없음 · YES24에 없음 · 소개 없음) 구역을 두지 않고,
 // 받지 못하면 구역만 실패 한 줄 + '다시 시도'(DESIGN 11장)
 library;
@@ -81,7 +81,7 @@ class _BookIntroState extends State<BookIntro> {
     if (!_done) return const SizedBox.shrink();
     if (_failed) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: Space.block),
+        padding: const EdgeInsets.only(top: Space.block),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const SectionHead(title: '책 소개'),
           EmptyLine('책 소개를 불러오지 못했어요', action: '다시 시도', onAction: _fetch),
@@ -91,12 +91,13 @@ class _BookIntroState extends State<BookIntro> {
     final text = _text;
     if (text == null) return const SizedBox.shrink();
     final style = AppType.bodySmall;
+    // 책 정보 줄 아래(맨 아래), 글은 회색 테두리 상자 안(2026-11-27 사용자 댓글 '맨 밑으로 내리고 테두리에 회색선'. 흰 화면 안 상자는 테두리 상자 OutlineBox, DESIGN 1장)
     return Padding(
-      padding: const EdgeInsets.only(bottom: Space.block),
+      padding: const EdgeInsets.only(top: Space.block),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const SectionHead(title: '책 소개'),
         const SizedBox(height: Space.s),
-        LayoutBuilder(builder: (context, c) {
+        OutlineBox(child: LayoutBuilder(builder: (context, c) {
           // 다섯 줄이 넘는지는 보이는 글자 그대로(낱말 단위 줄바꿈 keepAll) 재 본다
           final tp = TextPainter(
             text: TextSpan(text: keepAll(text), style: style),
@@ -119,7 +120,7 @@ class _BookIntroState extends State<BookIntro> {
                 TextLink(label: 'YES24에서 보기', soft: true, end: true, onPress: () => widget.onOpen('https://www.yes24.com/Product/Search?query=${Uri.encodeQueryComponent(widget.isbn13)}')),
             ]),
           ]);
-        }),
+        })),
       ]),
     );
   }

@@ -390,15 +390,15 @@ class _BookScreenState extends State<BookScreen> {
     );
   }
 
-  /// 책 정보 칸: 맨 위 책 소개(YES24, 2026-11-26), 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 판매처.
+  /// 책 정보 칸: 출판 · ISBN · 쪽수 · 판형 · 도서 정보 · 판매처, 맨 아래 책 소개(YES24. 2026-11-26 맨 위에 두었다가 2026-11-27 사용자 댓글 '맨 밑으로 내리고 테두리에 회색선').
   /// 책 꾸미기 줄은 내 기록 칸 맨 아래로 옮겼다(2026-11-26 사용자 '책 꾸미기는 내 기록 맨 밑에'. 그 전 2026-11-24에는 ⋯ 메뉴에서 이 칸으로)
   Widget _infoPane(Library lib, MyBook b, Edition e) {
     final pub = [?e.publisher, if (e.publishedAt != null && e.publishedAt!.length >= 4) e.publishedAt!.substring(0, 4)].where((x) => x.isNotEmpty).join(metaSep);
     final sized = e.widthMm != null && e.heightMm != null;
     final isbn = e.isbn13;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (isbn != null && isbn.isNotEmpty) BookIntro(isbn13: isbn, linked: e.link != null && e.sourceName == 'YES24', onOpen: _openLink),
       _infoRows(e, pub, sized),
+      if (isbn != null && isbn.isNotEmpty) BookIntro(isbn13: isbn, linked: e.link != null && e.sourceName == 'YES24', onOpen: _openLink),
     ]);
   }
 
