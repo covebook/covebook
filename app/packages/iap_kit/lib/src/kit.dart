@@ -72,6 +72,7 @@ const defaultMessages = <String, String>{
   'pending': '결제가 끝나면 자동으로 반영돼요. 이 화면을 닫아도 돼요.',
   'checking': '결제를 확인하고 있어요. 끝나면 자동으로 반영돼요.',
   'not_paid': '결제가 이뤄지지 않았어요.',
+  'no_result': '결제 결과를 받지 못했어요. 결제했다면 잠시 뒤 반영돼요.',
   'submit_failed': '구매를 확인하지 못했어요. 앱을 다시 켜면 이어서 확인해요.',
   'restored': '구매를 복원했어요.',
   'nothing_to_restore': '복원할 구매가 없어요.',
