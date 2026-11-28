@@ -24,6 +24,10 @@ on:
         required: false
         default: ""
         type: string
+      enable_iap:
+        description: "테스트 빌드에서 인앱 결제 화면 켜기"
+        type: boolean
+        default: false
       dry_run:
         description: "AAB 만 만들고 Play 업로드는 건너뛴다"
         required: false
@@ -114,6 +118,7 @@ jobs:
 
       - name: Build release AAB
         env:
+          IAP_ENABLED: ${{ inputs.enable_iap == true }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -121,7 +126,8 @@ jobs:
           flutter build appbundle --release \
             --build-number="$ANDROID_VERSION_CODE" \
             --build-name="$ANDROID_VERSION_NAME" \
-            --dart-define=SYNC_URL=https://covebook.kodeploy.com
+            --dart-define=SYNC_URL=https://covebook.kodeploy.com \
+            --dart-define=IAP="$IAP_ENABLED"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
